@@ -6,6 +6,7 @@ comptes Google** — Gmail, Drive, Calendar, Docs, Sheets, Tasks — **100 % en 
 > Serveur **MCP** local ([`bin/google-mcp`](bin/google-mcp)) + gateway
 > ([`gateway/`](gateway/)) pour les clients MCP. Le wrapper [`bin/gwsa`](bin/gwsa)
 > et les skills restent pour l’admin humain et Claude Code. Voir
+> [docs/architecture.md](docs/architecture.md) (référence),
 > [docs/mcp-setup.md](docs/mcp-setup.md) et [docs/threat-model.md](docs/threat-model.md).
 
 ## Architecture
@@ -194,8 +195,9 @@ ne peut pas la simuler.
 
 ### Serveur MCP (recommandé pour les données)
 
-Voir [docs/mcp-setup.md](docs/mcp-setup.md). Même binaire pour Desktop, Cursor et Code.
-Modèle de menace / Phase 2 broker : [docs/threat-model.md](docs/threat-model.md).
+Architecture et contrôles de sécurité : [docs/architecture.md](docs/architecture.md).  
+Branchement Desktop / Cursor / Code : [docs/mcp-setup.md](docs/mcp-setup.md).  
+Limites Phase 1 / broker Phase 2 : [docs/threat-model.md](docs/threat-model.md).
 
 ### Depuis Claude Code
 

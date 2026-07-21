@@ -1,5 +1,7 @@
 # Modèle de menace — google-mcp-multi-account
 
+Document frère : architecture détaillée → [architecture.md](architecture.md).
+
 ## Objectif
 
 Permettre à un ou plusieurs clients LLM (Claude Desktop, Cursor, Claude Code, …)
