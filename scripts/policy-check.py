@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Contrôleur de policy par service pour gwsa.
 
-Appelé par bin/gwsa avant TOUTE commande quand le profil possède un policy.json.
-Un service absent du policy.json = libre. Un service présent = fail closed :
+Appelé par bin/gwsa (et la gateway MCP) avant TOUTE commande quand le profil
+possède un policy.json. Default-deny : un service absent du policy.json est
+refusé (sauf passthrough auth/schema). Un service présent = fail closed :
 seules les catégories explicitement autorisées passent.
 
 policy.json (dans ~/.config/gws-accounts/<alias>/) :
@@ -42,6 +43,8 @@ VALUE_FLAGS = {
     "--services",
 }
 SERVICE_ALIASES = {"wf": "workflow", "reports": "admin-reports"}
+# Introspection / auth locale — pas des APIs données ; hors modèle policy.
+PASSTHROUGH_SERVICES = frozenset({"auth", "schema"})
 
 READ_METHODS = {
     "list", "get", "export", "download", "search", "query", "getprofile",
@@ -347,9 +350,9 @@ def main():
         return
     profile_dir, args = sys.argv[1], sys.argv[2:]
     policy_path = os.path.join(profile_dir, "policy.json")
-    # Absence de policy = service libre (gwsa n'appelle même pas le checker).
-    # Mais un policy.json PRÉSENT et illisible (tronqué, corrompu, disque plein)
-    # doit refuser — fail closed, comme promis dans le docstring — jamais s'ouvrir.
+    # Absence de policy = le checker n'est pas appelé par gwsa (profil legacy).
+    # Les profils créés via `gwsa add` reçoivent une policy prudente automatiquement.
+    # Un policy.json PRÉSENT et illisible doit refuser — fail closed.
     if not os.path.exists(policy_path):
         return
     try:
@@ -368,13 +371,22 @@ def main():
     # sinon `pol.get("gmail:v1")` = None ferait tout passer hors policy.
     raw_service = args[0].split(":", 1)[0].lower()
     service = SERVICE_ALIASES.get(raw_service, raw_service)
-    svc_pol = pol.get(service)
-    if not isinstance(svc_pol, dict):
+    if service in PASSTHROUGH_SERVICES:
         return
 
     pos = positionals_of(args[1:])
     if not pos:
         return
+
+    svc_pol = pol.get(service)
+    if not isinstance(svc_pol, dict):
+        # Default-deny : service non déclaré = refus (chat, meet, people, …).
+        deny(
+            profile_dir, args, service,
+            "service « %s » non déclaré dans la policy — refus (default-deny). "
+            "Élicitation : demander à l'utilisateur d'ajouter ce service via "
+            "l'interface admin ou policy.json" % service,
+        )
 
     if service == "drive":
         check_drive(profile_dir, svc_pol, args, pos)
@@ -385,8 +397,8 @@ def main():
     if cat is None:
         deny(profile_dir, args, service,
              "méthode « %s » non classifiable — refusée par prudence" % raw_method)
-    default = cat == "read"
-    if not svc_pol.get(cat, default):
+    # Pas de défaut « read libre » : seule une clé explicite True autorise.
+    if not svc_pol.get(cat, False):
         deny(profile_dir, args, service,
              "%s refusé·e par la policy (« %s %s »)"
              % (LABELS_FR.get(cat, cat), " ".join(resources) or service, raw_method))

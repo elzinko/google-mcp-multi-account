@@ -73,8 +73,8 @@ check 0 "gmail +triage — assistant de lecture autorisé"      gmail users mess
 check 0 "drive files list — lecture autorisée"               drive files list --params '{}'
 check 0 "keep notes create — création autorisée"             keep notes create --json '{}'
 check 0 "calendar events list — lecture autorisée"           calendar events list
-check 0 "tasks insert — service hors policy, donc libre"     tasks tasklists insert --json '{}'
-
+check 4 "tasks insert — service hors policy → default-deny"  tasks tasklists insert --json '{}'
+check 4 "chat send — service non modélisé → default-deny"    chat spaces messages create --json '{"text":"hi"}'
 check 4 "gmail messages send — ENVOI refusé"                 gmail users messages send --json '{}'
 check 4 "gmail drafts send — envoi d'un brouillon refusé"    gmail users drafts send --json '{}'
 check 4 "gmail messages delete — suppression refusée"        gmail users messages delete --params '{}'
@@ -221,6 +221,59 @@ if "$GWSA" list 2>/dev/null | grep -q "🔒"; then
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m verrou toujours présent après « unlock off »\n'
 else
   PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m « unlock off » retire bien le verrou\n'
+fi
+
+# --- 4. Gateway MCP (API locale, sans réseau / sans gws) --------------------
+
+section "Gateway — verrou + access_request (élicitation sans exécution)"
+export PYTHONPATH="$(pwd)${PYTHONPATH:+:$PYTHONPATH}"
+if python3 - <<'PY'
+import os
+from pathlib import Path
+from gateway.api import access_request, profiles_list
+from gateway.errors import GatewayError
+from gateway import api
+
+root = Path(os.environ["GWSA_ROOT"])
+alias = "testprof"
+d = root / alias
+d.mkdir(parents=True, exist_ok=True)
+(d / ".locked").write_text("")
+try:
+    (d / ".unlock-until").unlink()
+except FileNotFoundError:
+    pass
+os.environ.setdefault("GWSA_CLIENT", "test")
+
+pl = profiles_list()
+assert pl["ok"] and any(p["alias"] == alias for p in pl["profiles"]), pl
+
+r = access_request(alias, "unlock", minutes=30)
+assert r.get("elicitation") and "gwsa unlock" in r["suggested_command"], r
+assert not (d / ".unlock-until").exists(), "access_request ne doit pas déverrouiller"
+
+try:
+    api.gmail_list(alias)
+    raise SystemExit("gmail_list aurait dû refuser (locked)")
+except GatewayError as e:
+    assert e.code == "locked", e.code
+
+r2 = access_request(alias, "grant", folder="LLM", hours=4)
+assert "gwsa grant" in r2["suggested_command"] and "LLM" in r2["suggested_command"], r2
+print("ok")
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m gateway lock + access_request\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m gateway lock + access_request\n'
+fi
+
+# MCP tools/list smoke (stdio JSON-RPC, une requête)
+MCP_OUT="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | python3 -m gateway 2>/dev/null | head -1)"
+if echo "$MCP_OUT" | python3 -c 'import json,sys; r=json.load(sys.stdin); assert "gmail_list" in [t["name"] for t in r["result"]["tools"]]; assert "gmail_draft_create" in [t["name"] for t in r["result"]["tools"]]; assert not any(t["name"]=="gmail_send" for t in r["result"]["tools"])'; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m MCP tools/list (Gmail+Drive, pas de send)\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m MCP tools/list\n'
 fi
 
 # --- Bilan ------------------------------------------------------------------
