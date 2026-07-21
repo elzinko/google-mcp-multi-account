@@ -1,52 +1,56 @@
 # google-mcp-multi-account
 
-Brancher des agents LLM (Claude Code, Gemini CLI…) sur **plusieurs comptes Google** — Gmail, Drive, Calendar, Docs, Sheets, Tasks — **100 % en local**, sans rien héberger.
+Brancher des agents LLM (Claude Desktop, Cursor, Claude Code, …) sur **plusieurs
+comptes Google** — Gmail, Drive, Calendar, Docs, Sheets, Tasks — **100 % en local**.
 
-> Le nom du dépôt vient d'une première idée à base de serveur MCP. L'implémentation
-> finale n'en a pas besoin : le [Google Workspace CLI](https://github.com/googleworkspace/cli)
-> s'intègre aux agents par des *agent skills*, plus simples et plus robustes.
+> Serveur **MCP** local ([`bin/google-mcp`](bin/google-mcp)) + gateway
+> ([`gateway/`](gateway/)) pour les clients MCP. Le wrapper [`bin/gwsa`](bin/gwsa)
+> et les skills restent pour l’admin humain et Claude Code. Voir
+> [docs/mcp-setup.md](docs/mcp-setup.md) et [docs/threat-model.md](docs/threat-model.md).
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    USER["👤 Toi — approbations (élicitation)"]
-    LLM["🤖 Claude Code / autre agent LLM<br/>skills .claude/skills/gws-*"]
-    ADMIN["🖥️ Interface d'admin — admin/server.js<br/>127.0.0.1:4877 · profils · policy · zones · journal"]
-    GWSA["bin/gwsa — wrapper multi-profils<br/>verrous 🔒 · élicitation · journal d'audit"]
-    CHECK["scripts/policy-check.py<br/>policy par service · zones Drive"]
-    GWS["gws — CLI officiel Google Workspace<br/>binaire Rust 100 % local"]
-    PROFILS[("~/.config/gws-accounts/&lt;alias&gt;/<br/>credentials.enc · policy.json · session-grants.json")]
-    GOOGLE["☁️ APIs Google — Gmail · Drive · Calendar · Docs · Sheets · Tasks"]
+    USER["Humain — unlock / grant / policy"]
+    LLM["Clients LLM — Claude Desktop / Cursor / Code"]
+    MCP["bin/google-mcp — MCP stdio"]
+    GW["gateway/ — API unique broker-ready"]
+    ADMIN["admin/server.js — 127.0.0.1:4877"]
+    GWSA["bin/gwsa — multi-profils · verrous · grants"]
+    CHECK["scripts/policy-check.py — default-deny"]
+    GWS["gws — CLI Google Workspace"]
+    PROFILS["~/.config/gws-accounts/alias/"]
+    GOOGLE["APIs Google"]
 
-    USER -->|"unlock · grant · policy"| ADMIN
-    ADMIN -->|"execFile (jamais de shell)"| GWSA
-    LLM -->|"GWSA_CLIENT=claude-code gwsa &lt;alias&gt; …"| GWSA
-    GWSA -->|"vérifie avant d'exécuter"| CHECK
-    CHECK -.->|"✗ refus exit 4 → le LLM te demande"| LLM
-    GWSA -->|"GOOGLE_WORKSPACE_CLI_CONFIG_DIR"| GWS
-    GWS <--> PROFILS
-    GWS -->|"HTTPS OAuth2 — tokens chiffrés localement"| GOOGLE
+    USER --> ADMIN
+    USER --> GWSA
+    ADMIN -->|execFile| GWSA
+    LLM --> MCP --> GW
+    GW --> CHECK
+    GW -->|executor v1| GWS
+    LLM -.->|admin / legacy skills| GWSA
+    GWSA --> CHECK
+    CHECK -->|ok| GWS
+    GWS --> PROFILS
+    GWS --> GOOGLE
 ```
 
-*(Rendu nativement par GitHub et par l'interface d'admin — bouton ❓ Doc.)*
-
 **Rien ne tourne dans le cloud.** Le seul passage par la console Google Cloud est la
-création *one-shot* d'un identifiant OAuth (gratuit, aucune facturation, rien de
-déployé) — voir [docs/setup-oauth.md](docs/setup-oauth.md).
+création *one-shot* d'un identifiant OAuth — voir [docs/setup-oauth.md](docs/setup-oauth.md).
 
-**Pourquoi un wrapper ?** `gws` ne gère qu'un compte à la fois (le multi-comptes
+**Pourquoi un wrapper + gateway ?** `gws` ne gère qu'un compte à la fois (le multi-comptes
 natif a été retiré, cf. [issue #293](https://github.com/googleworkspace/cli/issues/293)).
-`gwsa` isole chaque compte dans son propre répertoire de config via la variable
-officielle `GOOGLE_WORKSPACE_CLI_CONFIG_DIR`. La clé de chiffrement reste partagée
-dans le Trousseau macOS (entrée `gws-cli`) : chaque profil a son `credentials.enc`,
-aucun conflit.
+`gwsa` / la gateway isolent chaque compte via `GOOGLE_WORKSPACE_CLI_CONFIG_DIR`.
+Phase 2 prévue : remplacer l’executor par un **broker de tokens** sans changer les tools MCP.
 
 ## Installation
 
 ```bash
 brew install googleworkspace-cli          # le CLI gws
 ln -sf "$PWD/bin/gwsa" /opt/homebrew/bin/gwsa   # le wrapper dans le PATH
+# MCP (Claude Desktop / Cursor / Code) — voir docs/mcp-setup.md
+# brancher : …/bin/google-mcp
 ```
 
 ## Setup OAuth (one-shot, ~10 min)
@@ -111,9 +115,10 @@ déclenchent une demande de permission explicite.
 ### Policy par service : qui a le droit de faire quoi
 
 Chaque profil peut porter une policy (`~/.config/gws-accounts/<alias>/policy.json`,
-appliquée par `scripts/policy-check.py` avant chaque commande). Un service absent
-de la policy est libre ; un service configuré est **fail closed** : tout ce qui
-n'est pas explicitement autorisé est refusé, méthodes inconnues comprises.
+appliquée par `scripts/policy-check.py` avant chaque commande). **Default-deny** :
+un service absent de la policy est refusé (sauf `auth` / `schema`). Un service
+configuré est fail closed : tout ce qui n'est pas explicitement autorisé est refusé.
+`gwsa add` écrit une policy prudente automatiquement.
 
 - **Drive** — par zones : lecture partout, écriture uniquement sous les dossiers
   autorisés (sous-dossiers compris — remontée des parents via l'API). Modes :
@@ -186,6 +191,11 @@ zone Drive déclenche la boîte de dialogue biométrique système
 d'Apple, 100 % local). L'approbation d'élicitation ne peut alors plus venir
 que d'un humain physiquement présent devant le Mac — un LLM (ou un script)
 ne peut pas la simuler.
+
+### Serveur MCP (recommandé pour les données)
+
+Voir [docs/mcp-setup.md](docs/mcp-setup.md). Même binaire pour Desktop, Cursor et Code.
+Modèle de menace / Phase 2 broker : [docs/threat-model.md](docs/threat-model.md).
 
 ### Depuis Claude Code
 

@@ -133,6 +133,16 @@ cmd_add() { # cmd_add <alias> [email-attendu] [options gws auth login]
     echo "       Refaire : gwsa add $alias $expected — et choisir $expected dans le navigateur." >&2
     exit 4
   fi
+  # Policy prudente par défaut (default-deny) — zones Drive vides, Gmail sans envoi.
+  if [[ ! -f "$dir/policy.json" ]]; then
+    "$SYS_PYTHON" - "$dir/policy.json" "$REPO_DIR" <<'PYEOF'
+import sys
+sys.path.insert(0, sys.argv[2])
+from gateway.default_policy import write_default_policy
+write_default_policy(sys.argv[1])
+PYEOF
+    echo "✓ Policy prudente écrite (Drive zones vides, Gmail brouillons sans envoi)."
+  fi
   echo "✓ Profil « $alias » connecté${email:+ — $email}. Test : gwsa $alias auth status"
 }
 

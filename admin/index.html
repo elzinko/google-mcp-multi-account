@@ -228,14 +228,20 @@ const GMAIL_KEYS = [["read","lecture"],["drafts","brouillons"],["send","envoi"],
 const CAL_KEYS   = [["read","lecture"],["create","création"],["update","modification"],["delete","suppression"],["share","partage"]];
 const KEEP_KEYS  = [["read","lecture"],["create","création"],["update","modification"],["delete","suppression"]];
 const PRESETS = {
-  prudent: { drive:{read:true,create:true,update:true,delete:false,share:false,zonesOnly:true},
+  prudent: { drive:{read:true,create:true,update:true,delete:false,share:false,zonesOnly:true,writeFolders:[]},
     gmail:{read:true,drafts:true,send:false,labels:true,update:false,delete:false,settings:false},
     calendar:{read:true,create:false,update:false,delete:false,share:false},
-    keep:{read:true,create:true,update:false,delete:false} },
-  lecture: { drive:{read:true,create:false,update:false,delete:false,share:false,zonesOnly:true},
+    keep:{read:true,create:true,update:false,delete:false},
+    docs:{read:true,create:false,update:false},
+    sheets:{read:true,create:false,update:false},
+    tasks:{read:true,create:false,update:false,delete:false} },
+  lecture: { drive:{read:true,create:false,update:false,delete:false,share:false,zonesOnly:true,writeFolders:[]},
     gmail:{read:true,drafts:false,send:false,labels:false,update:false,delete:false,settings:false},
     calendar:{read:true,create:false,update:false,delete:false,share:false},
-    keep:{read:true,create:false,update:false,delete:false} },
+    keep:{read:true,create:false,update:false,delete:false},
+    docs:{read:true,create:false,update:false},
+    sheets:{read:true,create:false,update:false},
+    tasks:{read:true,create:false,update:false,delete:false} },
   libre: null,
 };
 

@@ -39,7 +39,9 @@ jobs:
           fi
 
       - name: Syntaxe Python
-        run: python3 -m py_compile scripts/policy-check.py scripts/log-usage.py
+        run: |
+          python3 -m py_compile scripts/policy-check.py scripts/log-usage.py
+          python3 -m py_compile gateway/*.py
 
       - name: Syntaxe Node
         run: node --check admin/server.js
