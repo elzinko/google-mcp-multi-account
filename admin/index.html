@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gws multi-comptes — admin</title>
+<style>
+:root { --bg:#f6f5f0; --card:#fff; --txt:#222; --mut:#71706b; --line:#dedcd3;
+  --ok:#0f6e56; --okbg:#e1f5ee; --warn:#854f0b; --warnbg:#faeeda;
+  --bad:#a32d2d; --badbg:#fcebeb; --acc:#534ab7; --accbg:#eeedfe; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#1d1d1b; --card:#2a2a27; --txt:#eceae2; --mut:#a3a199; --line:#44443f;
+    --ok:#5dcaa5; --okbg:#0a3b2e; --warn:#fac775; --warnbg:#41310a;
+    --bad:#f09595; --badbg:#4a1616; --acc:#afa9ec; --accbg:#28245c; } }
+* { box-sizing:border-box; }
+body { margin:0; font:15px/1.55 -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--txt); }
+header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:16px 22px; border-bottom:1px solid var(--line); }
+h1 { font-size:19px; font-weight:600; margin:0 auto 0 0; }
+main { max-width:880px; margin:0 auto; padding:18px 22px 60px; }
+button { font:inherit; border:1px solid var(--line); background:var(--card); color:var(--txt);
+  border-radius:8px; padding:7px 13px; cursor:pointer; }
+button:hover { border-color:var(--mut); }
+button.primary { background:var(--acc); border-color:var(--acc); color:#fff; }
+button.danger  { background:var(--badbg); border-color:var(--bad); color:var(--bad); font-weight:600; }
+button.small { padding:4px 9px; font-size:13px; border-radius:6px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin:12px 0; }
+.row1 { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.alias { font-family:ui-monospace, monospace; font-weight:700; font-size:16px; }
+.email { color:var(--mut); }
+.badge { font-size:12.5px; padding:2px 9px; border-radius:99px; white-space:nowrap; }
+.b-ok   { background:var(--okbg);   color:var(--ok); }
+.b-warn { background:var(--warnbg); color:var(--warn); }
+.b-bad  { background:var(--badbg);  color:var(--bad); }
+.b-mut  { background:var(--bg); color:var(--mut); border:1px solid var(--line); }
+.chips { display:flex; gap:6px; flex-wrap:wrap; margin:9px 0 11px; }
+.chip { font-size:12.5px; background:var(--accbg); color:var(--acc); padding:2px 9px; border-radius:6px; }
+.actions { display:flex; gap:8px; flex-wrap:wrap; }
+.spacer { flex:1; }
+dialog { border:1px solid var(--line); border-radius:14px; background:var(--card); color:var(--txt);
+  max-width:660px; width:92vw; padding:20px; }
+dialog::backdrop { background:rgba(0,0,0,.45); }
+dialog h2 { margin:0 0 12px; font-size:17px; }
+label { display:block; margin:10px 0 4px; color:var(--mut); font-size:13.5px; }
+input[type=text], input[type=email], input[type=number] {
+  width:100%; font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:8px;
+  background:var(--bg); color:var(--txt); }
+fieldset { border:1px solid var(--line); border-radius:10px; margin:12px 0; padding:10px 14px; }
+legend { font-weight:600; font-size:14px; padding:0 6px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:4px 12px; }
+.grid label, .zline { display:flex; align-items:center; gap:7px; margin:3px 0; color:var(--txt); font-size:14px; }
+.zline { margin-top:9px; font-weight:600; }
+.note { font-size:12.5px; color:var(--mut); margin:6px 0 0; }
+.zone { display:flex; align-items:center; gap:8px; margin:4px 0; font-size:13.5px; }
+.zone .mono { color:var(--mut); }
+.addrow { display:flex; gap:8px; margin:6px 0 2px; align-items:center; }
+.addrow input[type=number] { width:76px; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th, td { text-align:left; padding:5px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
+.docbody { max-height:58vh; overflow:auto; font-size:14px; line-height:1.6; padding-right:6px; }
+.docbody h1 { font-size:19px; margin:14px 0 8px; } .docbody h2 { font-size:16.5px; margin:14px 0 6px; }
+.docbody h3 { font-size:15px; margin:12px 0 4px; }
+.docbody pre { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px; overflow-x:auto; font-size:12.5px; }
+.docbody code { background:var(--bg); border:1px solid var(--line); border-radius:4px; padding:0 4px; font-size:12.5px; }
+.docbody pre code { border:0; padding:0; background:none; }
+.docbody blockquote { border-left:3px solid var(--line); margin:8px 0; padding:2px 12px; color:var(--mut); }
+.docbody .mermaid { display:flex; justify-content:center; background:transparent; margin:10px 0; overflow-x:auto; }
+.pickrow { display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:7px; margin:2px 0; font-size:13.5px; }
+.pickrow:hover { background:var(--bg); }
+.pickrow .path { color:var(--mut); font-size:12px; }
+.crumb a { color:var(--acc); cursor:pointer; }
+.docbody ul { margin:6px 0; padding-left:22px; }
+.docbody a { color:var(--acc); }
+.tabs { display:flex; gap:8px; margin-bottom:10px; }
+#toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--txt);
+  color:var(--bg); padding:9px 16px; border-radius:9px; opacity:0; transition:opacity .25s; pointer-events:none; max-width:80vw; }
+.mtop { margin-top:14px; display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🗂️ gws multi-comptes — admin</h1>
+  <button class="primary" onclick="openAdd()">＋ Connecter un compte</button>
+  <button onclick="lockAll()">🔒 Tout verrouiller</button>
+  <button onclick="openLog()">📓 Journal</button>
+  <button onclick="openDoc()">❓ Doc</button>
+</header>
+<main>
+  <p class="note">Profils = comptes Google connectés localement (tokens chiffrés dans
+  <span class="mono">~/.config/gws-accounts/&lt;alias&gt;/</span>). Un profil 🔒 refuse toute commande
+  tant que tu ne l'as pas déverrouillé — l'« accès sur demande » que les LLM doivent te demander.
+  La policy limite ce que chaque profil peut faire ; pour Drive, l'écriture se fait par
+  <b>zones</b> : permanentes (policy) ou temporaires (élicitation, <span class="mono">gwsa grant</span>).</p>
+  <div id="cards"></div>
+</main>
+
+<dialog id="dAdd">
+  <h2>Connecter un compte Google</h2>
+  <label>Alias du profil (court, sans espace)</label>
+  <input type="text" id="addAlias" placeholder="ex. zebra">
+  <label>Adresse Gmail attendue (vérifiée après connexion)</label>
+  <input type="email" id="addEmail" placeholder="ex. troiszebres@gmail.com">
+  <p class="note">Un onglet Google s'ouvre : <b>choisis bien ce compte-là</b> (présélectionné),
+  écran « app non validée » → Paramètres avancés → Accéder, puis accepte. Mauvais compte = refus automatique.</p>
+  <p class="note mono" id="addStatus"></p>
+  <div class="mtop"><button onclick="dAdd.close()">Fermer</button>
+  <button class="primary" id="addGo" onclick="doAdd()">Lancer la connexion</button></div>
+</dialog>
+
+<dialog id="dUnlock">
+  <h2>Déverrouiller <span id="unlockAlias" class="mono"></span></h2>
+  <p class="note">Fenêtre temporaire (reverrouillage automatique) ou retrait du verrou.</p>
+  <div class="mtop" style="justify-content:flex-start">
+    <button onclick="doUnlock(30)">30 min</button>
+    <button onclick="doUnlock(60)">1 h</button>
+    <button onclick="doUnlock(240)">4 h</button>
+    <button class="danger" onclick="doUnlock('off')">Retirer le verrou</button>
+  </div>
+  <div class="mtop"><button onclick="dUnlock.close()">Annuler</button></div>
+</dialog>
+
+<dialog id="dRevoke">
+  <h2>⛔ Révoquer <span id="revokeAlias" class="mono"></span></h2>
+  <p class="note">Les tokens sont supprimés de ce Mac : tous les LLM perdent immédiatement
+  l'accès à ce compte. (Révocable aussi côté Google : myaccount.google.com → Sécurité.)</p>
+  <label>Tape l'alias pour confirmer</label>
+  <input type="text" id="revokeConfirm" placeholder="alias">
+  <div class="mtop"><button onclick="dRevoke.close()">Annuler</button>
+  <button class="danger" onclick="doRevoke()">Révoquer définitivement</button></div>
+</dialog>
+
+<dialog id="dPolicy">
+  <h2>Policy — <span id="polAlias" class="mono"></span></h2>
+  <div class="tabs">
+    <button class="small" onclick="applyPreset('prudent')">Préréglage prudent (reco)</button>
+    <button class="small" onclick="applyPreset('lecture')">Tout lecture seule</button>
+    <button class="small" onclick="applyPreset('libre')">Tout libre</button>
+  </div>
+  <fieldset><legend>Drive</legend>
+    <div class="grid" id="pDrive"></div>
+    <label class="zline"><input type="checkbox" id="pZonesOnly" onchange="toggleZonesBox()"> écritures uniquement dans les zones autorisées</label>
+    <div id="zonesBox">
+      <div class="addrow"><span class="note" style="margin:0" id="zonesSummary">—</span>
+        <button class="small" onclick="openZones()">📁 Gérer les zones…</button></div>
+      <p class="note">Sans zone active, le LLM ne peut écrire nulle part sur Drive : il doit te
+      demander une autorisation (élicitation), que tu peux limiter dans le temps.</p>
+    </div>
+  </fieldset>
+  <fieldset><legend>Gmail</legend>
+    <div class="grid" id="pGmail"></div>
+    <p class="note">« brouillons » sans « envoi » = le LLM prépare, tu envoies.</p>
+  </fieldset>
+  <fieldset><legend>Agenda</legend><div class="grid" id="pCalendar"></div></fieldset>
+  <fieldset><legend>Keep <span class="badge b-warn">expérimental</span></legend>
+    <div class="grid" id="pKeep"></div>
+    <p class="note">Nécessite le scope Keep au login (reconnexion) ; API parfois réservée aux comptes Workspace.</p>
+  </fieldset>
+  <p class="note">Docs, Sheets, Tasks : libres tant qu'ils ne sont pas dans la policy.
+  Un service configuré est <b>fail closed</b> : tout ce qui n'est pas coché est refusé.</p>
+  <div class="mtop"><button onclick="dPolicy.close()">Annuler</button>
+  <button class="primary" onclick="savePolicy()">Enregistrer</button></div>
+</dialog>
+
+<dialog id="dZones">
+  <h2>📁 Zones d'écriture — <span id="zonesAlias" class="mono"></span></h2>
+  <p class="note"><b>Permanentes</b> (policy — restent jusqu'à retrait) :</p>
+  <div id="permZones"></div>
+  <p class="note"><b>Temporaires</b> (élicitation — expirent automatiquement, le LLM devra redemander) :</p>
+  <div id="tmpZones"></div>
+  <div class="mtop"><button onclick="dZones.close()">Fermer</button>
+  <button class="primary" onclick="openAddFolder()">＋ Ajouter un dossier…</button></div>
+</dialog>
+
+<dialog id="dAddFolder">
+  <h2>Ajouter un dossier autorisé</h2>
+  <div class="tabs">
+    <button class="small" onclick="afMode('search')">🔍 Rechercher par nom</button>
+    <button class="small" onclick="afMode('browse')">📂 Parcourir Mon Drive</button>
+  </div>
+  <div id="afSearch">
+    <div class="addrow"><input type="text" id="afQuery" placeholder="Nom (ou début du nom) du dossier">
+      <button class="small" onclick="afDoSearch()">Rechercher</button></div>
+    <div id="afResults" class="note">Tape un nom — s'il y a plusieurs correspondances, tu choisiras dans la liste (avec le chemin complet).</div>
+  </div>
+  <div id="afBrowse" style="display:none">
+    <p class="note crumb" id="afCrumb"></p>
+    <div id="afList" style="max-height:30vh;overflow:auto"></div>
+  </div>
+  <div class="addrow" style="margin-top:12px"><span>Dossier choisi : <b id="afChosen">aucun</b></span></div>
+  <div class="addrow">
+    <label style="margin:0"><input type="radio" name="afDur" value="temp" checked> temporaire</label>
+    <input type="number" id="afHours" value="8" min="1" max="168"> h
+    <label style="margin:0"><input type="radio" name="afDur" value="perm"> permanent</label>
+  </div>
+  <div class="mtop"><button onclick="dAddFolder.close()">Annuler</button>
+  <button class="primary" onclick="afConfirm()">Autoriser (sous-dossiers inclus)</button></div>
+</dialog>
+
+<dialog id="dLog">
+  <h2>Journal des accès</h2>
+  <p class="note">Qui (client LLM via <span class="mono">GWSA_CLIENT</span>), quel compte, quelle commande, décision.</p>
+  <div style="max-height:55vh;overflow:auto"><table id="logTable">
+    <thead><tr><th>Quand</th><th>Client</th><th>Compte</th><th>Commande</th><th>Décision</th></tr></thead>
+    <tbody></tbody></table></div>
+  <div class="mtop"><button onclick="dLog.close()">Fermer</button></div>
+</dialog>
+
+<dialog id="dDoc">
+  <h2>Documentation</h2>
+  <div class="tabs">
+    <button class="small" onclick="showDoc('readme')">Installation & usage (README)</button>
+    <button class="small" onclick="showDoc('oauth')">Setup OAuth (console Google)</button>
+  </div>
+  <div class="docbody" id="docBody"></div>
+  <div class="mtop"><button onclick="dDoc.close()">Fermer</button></div>
+</dialog>
+
+<div id="toast"></div>
+
+<script src="/vendor/mermaid.min.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const H = { "Content-Type": "application/json", "X-GWSA-Admin": "1" };
+let PROFILES = [], DOCS = null, polTarget = null, unlockTarget = null, revokeTarget = null;
+
+const DRIVE_KEYS = [["read","lecture"],["create","création"],["update","modification"],["delete","suppression"],["share","partage"]];
+const GMAIL_KEYS = [["read","lecture"],["drafts","brouillons"],["send","envoi"],["labels","libellés"],["update","modification"],["delete","suppression"],["settings","réglages"]];
+const CAL_KEYS   = [["read","lecture"],["create","création"],["update","modification"],["delete","suppression"],["share","partage"]];
+const KEEP_KEYS  = [["read","lecture"],["create","création"],["update","modification"],["delete","suppression"]];
+const PRESETS = {
+  prudent: { drive:{read:true,create:true,update:true,delete:false,share:false,zonesOnly:true},
+    gmail:{read:true,drafts:true,send:false,labels:true,update:false,delete:false,settings:false},
+    calendar:{read:true,create:false,update:false,delete:false,share:false},
+    keep:{read:true,create:true,update:false,delete:false} },
+  lecture: { drive:{read:true,create:false,update:false,delete:false,share:false,zonesOnly:true},
+    gmail:{read:true,drafts:false,send:false,labels:false,update:false,delete:false,settings:false},
+    calendar:{read:true,create:false,update:false,delete:false,share:false},
+    keep:{read:true,create:false,update:false,delete:false} },
+  libre: null,
+};
+
+async function api(path, opts) {
+  const r = await fetch(path, { headers: H, ...opts });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.status);
+  return j;
+}
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.style.opacity = 1; setTimeout(() => t.style.opacity = 0, 3000); }
+function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+
+function normDrive(d) {
+  if (!d) return null;
+  if ("mode" in d) {
+    if (d.mode === "readonly") return { read:true, create:false, update:false, delete:false, share:false, zonesOnly:false, writeFolders:[], writeFolderNames:{} };
+    if (d.mode === "restricted") return { read:true, create:true, update:true, delete:false, share:false, zonesOnly:true, writeFolders:d.writeFolders||[], writeFolderNames:d.writeFolderNames||{} };
+    return null;
+  }
+  return { read:true, create:false, update:false, delete:false, share:false, zonesOnly:true, writeFolders:[], writeFolderNames:{}, ...d };
+}
+
+function summary(p) {
+  const chips = [];
+  const d = normDrive(p.policy && p.policy.drive);
+  if (d) {
+    const w = [d.create && "création", d.update && "modif", d.delete && "suppr"].filter(Boolean);
+    let txt = "Drive : lecture" + (w.length ? " + " + w.join("/") : " seule");
+    if (w.length && d.zonesOnly) {
+      const nz = (d.writeFolders || []).length, ng = (p.grants || []).length;
+      txt += " en zones (" + nz + (ng ? " + " + ng + " temp" : "") + ")";
+    }
+    chips.push('<span class="chip">' + txt + "</span>");
+  }
+  const g = p.policy && p.policy.gmail;
+  if (g) chips.push('<span class="chip">Gmail : ' + [g.read && "lecture", g.drafts && "brouillons", g.send ? "envoi" : "sans envoi", g.delete && "suppression"].filter(Boolean).join(" + ") + "</span>");
+  const c = p.policy && p.policy.calendar;
+  if (c) chips.push('<span class="chip">Agenda : ' + [c.read && "lecture", c.create && "création", c.update && "modif", c.delete && "suppr"].filter(Boolean).join(" + ") + "</span>");
+  const k = p.policy && p.policy.keep;
+  if (k) chips.push('<span class="chip">Keep : ' + [k.read && "lecture", k.create && "création", k.update && "modif", k.delete && "suppr"].filter(Boolean).join(" + ") + "</span>");
+  for (const s of ["docs", "sheets", "tasks"]) if (p.policy && p.policy[s]) chips.push('<span class="chip">' + s + " : configuré</span>");
+  if (!chips.length) chips.push('<span class="chip">tous services : libres</span>');
+  return chips;
+}
+
+function render() {
+  const el = $("cards");
+  if (!PROFILES.length) { el.innerHTML = '<div class="card">Aucun profil — clique « Connecter un compte ».</div>'; return; }
+  el.innerHTML = PROFILES.map((p) => {
+    const lockBadge = !p.locked ? '<span class="badge b-mut">déverrouillé en permanence</span>'
+      : p.unlockedForMin > 0 ? '<span class="badge b-warn">🔓 encore ' + p.unlockedForMin + " min</span>"
+      : '<span class="badge b-bad">🔒 accès sur demande</span>';
+    const state = p.connected ? '<span class="badge b-ok">connecté</span>' : '<span class="badge b-mut">non connecté</span>';
+    const lockBtns = !p.locked ? '<button class="small" onclick="act(\'' + p.alias + "','lock')\">🔒 Verrouiller</button>"
+      : '<button class="small" onclick="openUnlock(\'' + p.alias + "')\">🔓 Déverrouiller…</button>" +
+        (p.unlockedForMin > 0 ? '<button class="small" onclick="act(\'' + p.alias + "','lock')\">🔒 Reverrouiller</button>" : "");
+    return '<div class="card"><div class="row1"><span class="alias">' + p.alias + "</span>" +
+      '<span class="email">' + (p.email || "—") + "</span>" + state + lockBadge + "</div>" +
+      '<div class="chips">' + summary(p).join("") + "</div>" +
+      '<div class="actions">' + lockBtns +
+      '<button class="small" onclick="openPolicy(\'' + p.alias + "')\">⚙️ Policy…</button>" +
+      (p.connected ? "" : '<button class="small" onclick="reconnect(\'' + p.alias + "')\">↻ Reconnecter</button>") +
+      '<span class="spacer"></span>' +
+      '<button class="small danger" onclick="openRevoke(\'' + p.alias + "')\">⛔ Révoquer</button>" +
+      "</div></div>";
+  }).join("");
+}
+
+let LAST = "";
+async function refresh() {
+  try {
+    const profiles = (await api("/api/profiles")).profiles;
+    PROFILES = profiles;
+    const j = JSON.stringify(profiles);
+    if (j !== LAST) { LAST = j; render(); }
+  } catch (e) { toast("Erreur : " + e.message); }
+}
+
+async function act(alias, action, body) {
+  try { await api("/api/profiles/" + alias + "/" + action, { method: "POST", body: JSON.stringify(body || {}) }); await refresh(); }
+  catch (e) { toast("Erreur : " + e.message); }
+}
+function openUnlock(alias) { unlockTarget = alias; $("unlockAlias").textContent = alias; dUnlock.showModal(); }
+async function doUnlock(v) {
+  await act(unlockTarget, "unlock", { minutes: v });
+  dUnlock.close();
+  toast(v === "off" ? "🔓 verrou retiré de " + unlockTarget : "🔓 " + unlockTarget + " déverrouillé " + v + " min");
+}
+async function lockAll() { try { await api("/api/lockall", { method: "POST", body: "{}" }); toast("🔒 Tous les profils sont verrouillés"); refresh(); } catch (e) { toast("Erreur : " + e.message); } }
+function openRevoke(alias) { revokeTarget = alias; $("revokeAlias").textContent = alias; $("revokeConfirm").value = ""; dRevoke.showModal(); }
+async function doRevoke() {
+  if ($("revokeConfirm").value.trim() !== revokeTarget) return toast("Alias saisi ≠ « " + revokeTarget + " » — révocation annulée");
+  await act(revokeTarget, "revoke");
+  dRevoke.close(); toast("⛔ " + revokeTarget + " révoqué");
+}
+function reconnect(alias) { $("addAlias").value = alias; $("addEmail").value = ""; $("addStatus").textContent = ""; dAdd.showModal(); }
+
+function openAdd() { $("addAlias").value = ""; $("addEmail").value = ""; $("addStatus").textContent = ""; dAdd.showModal(); }
+async function doAdd() {
+  const alias = $("addAlias").value.trim(), email = $("addEmail").value.trim();
+  if (!alias) return toast("Alias requis");
+  $("addGo").disabled = true; $("addStatus").textContent = "Lancement…";
+  try {
+    const r = await api("/api/add", { method: "POST", body: JSON.stringify({ alias, email }) });
+    if (r.error) throw new Error(r.error);
+    window.open(r.url, "_blank");
+    $("addStatus").textContent = "Onglet Google ouvert — termine la connexion là-bas…";
+    const poll = setInterval(async () => {
+      const l = (await api("/api/authlog/" + alias)).lines.join("\n");
+      if (l.includes("✓ Profil")) { clearInterval(poll); $("addStatus").textContent = "✓ Connecté !"; refresh(); }
+      if (l.includes("MAUVAIS COMPTE")) { clearInterval(poll); $("addStatus").textContent = "✗ Mauvais compte choisi — relance la connexion."; }
+    }, 2000);
+  } catch (e) { $("addStatus").textContent = "Erreur : " + e.message; }
+  $("addGo").disabled = false;
+}
+
+function grid(el, keys, rules) {
+  el.innerHTML = keys.map(([k, lbl]) =>
+    '<label><input type="checkbox" data-k="' + k + '"' + (rules && rules[k] ? " checked" : "") + ">" + lbl + "</label>").join("");
+}
+function gridValues(el) {
+  const o = {};
+  el.querySelectorAll("input[data-k]").forEach((i) => o[i.dataset.k] = i.checked);
+  return o;
+}
+function prof() { return PROFILES.find((x) => x.alias === polTarget) || {}; }
+function toggleZonesBox() { $("zonesBox").style.display = $("pZonesOnly").checked ? "" : "none"; }
+function updateZonesSummary() {
+  const p = prof();
+  const d = normDrive(p.policy && p.policy.drive) || { writeFolders: [] };
+  const n = (d.writeFolders || []).length, m = (p.grants || []).length;
+  $("zonesSummary").textContent = (n || m)
+    ? n + " permanente" + (n > 1 ? "s" : "") + " · " + m + " temporaire" + (m > 1 ? "s" : "")
+    : "aucune zone autorisée pour l'instant";
+}
+function renderZonesLists() {
+  const p = prof();
+  const d = normDrive(p.policy && p.policy.drive) || { writeFolders: [], writeFolderNames: {} };
+  const names = d.writeFolderNames || {};
+  $("permZones").innerHTML = (d.writeFolders || []).map((id) =>
+    '<div class="zone">📁 <b>' + esc(names[id] || id) + '</b> <span class="mono">' + esc(id.slice(0, 14)) + '…</span>' +
+    ' <button class="small" onclick="rmZone(\'' + id + '\')">✕</button></div>').join("") ||
+    '<div class="note">— aucune</div>';
+  $("tmpZones").innerHTML = (p.grants || []).map((g) =>
+    '<div class="zone">🕐 <b>' + esc(g.name || g.id) + '</b> <span class="mono">encore ' +
+    Math.floor(g.minutesLeft / 60) + "h" + String(g.minutesLeft % 60).padStart(2, "0") + '</span>' +
+    ' <button class="small" onclick="rmGrant(\'' + g.id + '\')">✕</button></div>').join("") ||
+    '<div class="note">— aucune en cours</div>';
+}
+function openZones() {
+  $("zonesAlias").textContent = polTarget;
+  renderZonesLists();
+  dZones.showModal();
+}
+function fillPolicyForm(pol) {
+  const p = prof();
+  const cur = pol !== undefined ? pol : (p.policy || null);
+  const d = (cur && normDrive(cur.drive)) || null;
+  grid($("pDrive"), DRIVE_KEYS, d || { read: true, create: true, update: true, delete: true, share: true });
+  $("pZonesOnly").checked = d ? !!d.zonesOnly : false;
+  grid($("pGmail"), GMAIL_KEYS, cur && cur.gmail ? cur.gmail : { read: true, drafts: true, send: true, labels: true, update: true, delete: true, settings: true });
+  grid($("pCalendar"), CAL_KEYS, cur && cur.calendar ? cur.calendar : { read: true, create: true, update: true, delete: true, share: true });
+  grid($("pKeep"), KEEP_KEYS, cur && cur.keep ? cur.keep : { read: true, create: true, update: true, delete: true });
+  updateZonesSummary();
+  toggleZonesBox();
+}
+function openPolicy(alias) {
+  polTarget = alias;
+  const p = prof();
+  $("polAlias").textContent = alias + (p.email ? " — " + p.email : "");
+  fillPolicyForm(undefined);
+  dPolicy.showModal();
+}
+function applyPreset(name) {
+  fillPolicyForm(PRESETS[name]);
+  toast(name === "libre" ? "Tout libre — Enregistrer pour supprimer la policy" : "Préréglage appliqué — Enregistrer pour valider");
+}
+async function rmZone(id) {
+  try { await api("/api/profiles/" + polTarget + "/drive-folder-remove", { method: "POST", body: JSON.stringify({ id }) });
+    toast("Zone retirée"); await refresh(); renderZonesLists(); updateZonesSummary(); }
+  catch (e) { toast("Erreur : " + e.message); }
+}
+async function rmGrant(id) {
+  try { await api("/api/profiles/" + polTarget + "/grant-revoke", { method: "POST", body: JSON.stringify({ id }) });
+    toast("Autorisation révoquée"); await refresh(); renderZonesLists(); updateZonesSummary(); }
+  catch (e) { toast("Erreur : " + e.message); }
+}
+
+let afSel = null, afCrumbs = [];
+function openAddFolder() {
+  afSel = null; afCrumbs = [{ id: "root", name: "Mon Drive" }];
+  $("afChosen").textContent = "aucun";
+  $("afQuery").value = ""; $("afResults").innerHTML = "Tape un nom — s'il y a plusieurs correspondances, tu choisiras dans la liste (avec le chemin complet).";
+  afMode("search");
+  dAddFolder.showModal();
+}
+function afMode(m) {
+  $("afSearch").style.display = m === "search" ? "" : "none";
+  $("afBrowse").style.display = m === "browse" ? "" : "none";
+  if (m === "browse") afLoad();
+}
+function afSelect(id, name, path) {
+  afSel = { id, name };
+  $("afChosen").textContent = name + (path ? " (" + path + ")" : "");
+}
+async function afDoSearch() {
+  const q = $("afQuery").value.trim();
+  if (!q) return;
+  $("afResults").innerHTML = "Recherche…";
+  try {
+    const { results } = await api("/api/profiles/" + polTarget + "/search?q=" + encodeURIComponent(q));
+    $("afResults").innerHTML = results.length ? results.map((r) =>
+      '<div class="pickrow">📁 <b>' + esc(r.name) + '</b> <span class="path">' + esc(r.path) + '</span>' +
+      '<span class="spacer"></span><button class="small" onclick="afSelect(\'' + r.id + "','" + esc(r.name).replace(/'/g, "\\'") + "','" + esc(r.path).replace(/'/g, "\\'") + '\')">Choisir</button></div>').join("")
+      : '<div class="note">Aucun dossier trouvé pour « ' + esc(q) + ' ».</div>';
+  } catch (e) { $("afResults").innerHTML = '<div class="note">Erreur : ' + esc(e.message) + "</div>"; }
+}
+async function afLoad() {
+  const cur = afCrumbs[afCrumbs.length - 1];
+  $("afCrumb").innerHTML = afCrumbs.map((c, i) =>
+    i === afCrumbs.length - 1 ? "<b>" + esc(c.name) + "</b>" : '<a onclick="afJump(' + i + ')">' + esc(c.name) + "</a>").join(" / ");
+  $("afList").innerHTML = "Chargement…";
+  try {
+    const { folders } = await api("/api/profiles/" + polTarget + "/browse?parent=" + encodeURIComponent(cur.id));
+    const rows = folders.map((f) =>
+      '<div class="pickrow">📁 <b>' + esc(f.name) + "</b><span class=\"spacer\"></span>" +
+      '<button class="small" onclick="afOpen(\'' + f.id + "','" + esc(f.name).replace(/'/g, "\\'") + '\')">Ouvrir</button>' +
+      '<button class="small" onclick="afSelect(\'' + f.id + "','" + esc(f.name).replace(/'/g, "\\'") + '\')">Choisir</button></div>');
+    $("afList").innerHTML = rows.join("") || '<div class="note">Aucun sous-dossier ici.</div>';
+  } catch (e) { $("afList").innerHTML = '<div class="note">Erreur : ' + esc(e.message) + "</div>"; }
+}
+function afOpen(id, name) { afCrumbs.push({ id, name }); afLoad(); }
+function afJump(i) { afCrumbs = afCrumbs.slice(0, i + 1); afLoad(); }
+async function afConfirm() {
+  if (!afSel) return toast("Choisis d'abord un dossier");
+  const dur = document.querySelector('input[name="afDur"]:checked').value;
+  try {
+    let r;
+    if (dur === "perm") {
+      r = await api("/api/profiles/" + polTarget + "/drive-folder", { method: "POST", body: JSON.stringify({ target: afSel.id }) });
+    } else {
+      const h = Math.min(168, Math.max(1, parseInt($("afHours").value, 10) || 8));
+      r = await api("/api/profiles/" + polTarget + "/grant", { method: "POST", body: JSON.stringify({ target: afSel.id, hours: h }) });
+    }
+    dAddFolder.close();
+    toast(r.out || "Dossier autorisé");
+    await refresh(); renderZonesLists(); updateZonesSummary();
+  } catch (e) { toast("Erreur : " + e.message); }
+}
+async function savePolicy() {
+  await refresh();
+  const p = prof();
+  const curD = normDrive(p.policy && p.policy.drive);
+  const drive = gridValues($("pDrive"));
+  drive.zonesOnly = $("pZonesOnly").checked;
+  drive.writeFolders = (curD && curD.writeFolders) || [];
+  drive.writeFolderNames = (curD && curD.writeFolderNames) || {};
+  const gmail = gridValues($("pGmail")), cal = gridValues($("pCalendar")), keep = gridValues($("pKeep"));
+  const allTrue = (o) => Object.entries(o).every(([k, v]) => v === true);
+  const driveFree = drive.read && drive.create && drive.update && drive.delete && drive.share && !drive.zonesOnly;
+  let policy = {};
+  if (!driveFree) policy.drive = drive;
+  if (!allTrue(gmail)) policy.gmail = gmail;
+  if (!allTrue(cal)) policy.calendar = cal;
+  if (!allTrue(keep)) policy.keep = keep;
+  if (!Object.keys(policy).length) policy = null;
+  try { await api("/api/profiles/" + polTarget + "/policy", { method: "POST", body: JSON.stringify({ policy }) });
+    dPolicy.close(); toast("Policy enregistrée"); refresh(); }
+  catch (e) { toast("Erreur : " + e.message); }
+}
+
+function mdToHtml(md) {
+  const codes = [];
+  md = md.replace(/```([\w-]*)\n([\s\S]*?)```/g, (_, lang, c) => { codes.push({ lang, c }); return "\x00" + (codes.length - 1) + "\x00"; });
+  md = esc(md);
+  md = md.replace(/^######? (.+)$/gm, "<h3>$1</h3>")
+         .replace(/^#### (.+)$/gm, "<h3>$1</h3>")
+         .replace(/^### (.+)$/gm, "<h3>$1</h3>")
+         .replace(/^## (.+)$/gm, "<h2>$1</h2>")
+         .replace(/^# (.+)$/gm, "<h1>$1</h1>")
+         .replace(/^---+$/gm, "<hr>")
+         .replace(/^&gt; ?(.*)$/gm, "<blockquote>$1</blockquote>")
+         .replace(/^[*-] (.+)$/gm, "<li>$1</li>")
+         .replace(/^\d+\. (.+)$/gm, "<li>$1</li>");
+  md = md.replace(/(<li>[\s\S]*?<\/li>)(?!\s*<li>)/g, "<ul>$1</ul>");
+  md = md.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+         .replace(/\*([^*\n]+)\*/g, "<i>$1</i>")
+         .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+         .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  md = md.split(/\n{2,}/).map((b) => /^\s*<(h\d|ul|pre|blockquote|hr)/.test(b.trim()) ? b : "<p>" + b.replace(/\n/g, "<br>") + "</p>").join("\n");
+  return md.replace(/\x00(\d+)\x00/g, (_, i) => codes[+i].lang === "mermaid"
+    ? '<div class="mermaid">' + esc(codes[+i].c) + "</div>"
+    : "<pre><code>" + esc(codes[+i].c) + "</code></pre>");
+}
+
+async function openLog() {
+  try {
+    const { entries } = await api("/api/log");
+    $("logTable").querySelector("tbody").innerHTML = entries.length ? entries.map((e) =>
+      "<tr><td class=mono>" + (e.ts || "").replace("T", " ").slice(0, 19) + "</td><td>" + esc(e.client || "") +
+      "</td><td class=mono>" + esc(e.alias || "") + "</td><td class=mono>" + esc((e.cmd || "").slice(0, 90)) +
+      "</td><td>" + (e.decision === "refus" ? '<span class="badge b-bad">refus</span>' : '<span class="badge b-ok">ok</span>') +
+      (e.reason ? '<div class="note">' + esc(e.reason) + "</div>" : "") + "</td></tr>").join("")
+      : '<tr><td colspan=5>Journal vide pour l\'instant.</td></tr>';
+    dLog.showModal();
+  } catch (e) { toast("Erreur : " + e.message); }
+}
+let mmdSeq = 0;
+async function showDoc(which) {
+  if (!DOCS) DOCS = await api("/api/doc");
+  $("docBody").innerHTML = mdToHtml(DOCS[which] || "*(vide)*");
+  if (window.mermaid) {
+    mermaid.initialize({ startOnLoad: false, theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default" });
+    for (const node of document.querySelectorAll("#docBody .mermaid")) {
+      const src = node.textContent;
+      try { const { svg } = await mermaid.render("mmd" + (++mmdSeq), src); node.innerHTML = svg; }
+      catch (e) { node.innerHTML = '<span class="note">diagramme non rendu : ' + esc(String(e.message || e).slice(0, 200)) + "</span>"; }
+    }
+  }
+}
+async function openDoc() { await showDoc("readme"); dDoc.showModal(); }
+
+refresh();
+setInterval(refresh, 8000);
+</script>
+</body>
+</html>

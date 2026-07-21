@@ -1,0 +1,15 @@
+# Jamais de secrets dans le repo — les credentials vivent dans ~/.config/gws-accounts/
+client_secret*.json
+*credentials*.json
+*.token
+token*.json
+.env
+.env.*
+
+# Divers
+.DS_Store
+node_modules/
+
+# Artefacts Python (py_compile / CI)
+__pycache__/
+*.pyc

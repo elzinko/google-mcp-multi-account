@@ -1,0 +1,392 @@
+#!/usr/bin/env bash
+# gwsa — multi-comptes pour le Google Workspace CLI (gws)
+#
+# Le CLI gws ne gère qu'un seul compte à la fois (le support natif a été retiré,
+# cf. https://github.com/googleworkspace/cli/issues/293). Ce wrapper isole chaque
+# compte dans son propre répertoire de configuration via la variable officielle
+# GOOGLE_WORKSPACE_CLI_CONFIG_DIR. La clé de chiffrement des tokens est partagée
+# (entrée Trousseau « gws-cli », globale par utilisateur macOS) : chaque profil
+# possède son credentials.enc, déchiffré par la même clé maître — pas de conflit.
+#
+# Usage :
+#   gwsa add <alias> [email-attendu] [options login]  Créer un profil et connecter un compte
+#   gwsa list                                         Lister les profils et leur état
+#   gwsa lock <alias>                                 Verrouiller un profil (accès sur demande)
+#   gwsa unlock <alias> [minutes]                     Déverrouiller temporairement (défaut 60 min)
+#   gwsa policy <alias> [show|mode <m>|allow <dossier>|revoke <id>|clear]
+#                                                     Zones d'écriture Drive PERMANENTES
+#   gwsa grant <alias> <dossier> [heures]             Autorisation Drive TEMPORAIRE (défaut 8 h)
+#   gwsa grant <alias> revoke <folderId>              Révoquer une autorisation temporaire
+#   gwsa grants <alias> [clear]                       Lister/vider les autorisations temporaires
+#   gwsa strongauth on|off|status                     Exiger Touch ID / mdp macOS pour unlock & grant
+#   gwsa remove <alias>                               Déconnecter et supprimer un profil
+#   gwsa <alias> <commande gws…>                      Exécuter gws sur le compte <alias>
+#
+# Exemples :
+#   gwsa add perso                     # scopes par défaut : Gmail (lecture/écriture),
+#                                      # Drive, Calendar, Docs, Sheets, Slides, Tasks
+#   gwsa add lecture-seule --readonly
+#   gwsa perso gmail users messages list --params '{"userId":"me","maxResults":5}'
+#   gwsa perso workflow +agenda
+set -euo pipefail
+
+GWSA_ROOT="${GWSA_ROOT:-$HOME/.config/gws-accounts}"
+MASTER_SECRET="$GWSA_ROOT/client_secret.json"
+
+usage() { awk 'NR==1{next} !/^#/{exit} {sub(/^# ?/,""); print}' "$0"; }
+
+resolve_repo_dir() { # suit le symlink éventuel (ex. /opt/homebrew/bin/gwsa) jusqu'au repo
+  local src="$0"
+  while [[ -L "$src" ]]; do src="$(readlink "$src")"; done
+  ( cd "$(dirname "$src")/.." && pwd )
+}
+REPO_DIR="$(resolve_repo_dir)"
+POLICY_CHECKER="$REPO_DIR/scripts/policy-check.py"
+USAGE_LOGGER="$REPO_DIR/scripts/log-usage.py"
+
+# Interpréteurs en chemin ABSOLU, jamais résolus via le PATH.
+# Le contrôleur de policy et le cérémonial Touch ID sont les deux garde-fous du
+# projet : les invoquer via le PATH les rendrait triviaux à neutraliser (un faux
+# `python3` renvoyant 0 en tête de PATH désactive silencieusement TOUTE la policy).
+# /usr/bin est protégé par SIP : y écrire exige root, ce que le modèle de menace
+# ne concède pas. Volontairement NON surchargeable par variable d'environnement —
+# une telle porte rouvrirait exactement le trou qu'on ferme ici.
+SYS_PYTHON="/usr/bin/python3"
+SYS_SWIFT="/usr/bin/swift"
+[[ -x "$SYS_PYTHON" ]] || { echo "gwsa : interpréteur système introuvable ($SYS_PYTHON) — installer les outils en ligne de commande : xcode-select --install" >&2; exit 3; }
+
+die() { echo "gwsa : $*" >&2; exit 3; }
+
+check_alias() {
+  [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] \
+    || die "alias invalide « $1 » (lettres, chiffres, - et _ uniquement)"
+  case "$1" in
+    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth) die "« $1 » est un mot réservé" ;;
+  esac
+}
+
+resolve_folder() { # resolve_folder <dir> <idOuNom> → "id<TAB>nom" (die si introuvable/ambigu)
+  local dir="$1" target="$2"
+  if [[ "$target" =~ ^[A-Za-z0-9_-]{20,}$ ]]; then
+    local name
+    name="$(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws drive files get --params "{\"fileId\":\"$target\",\"fields\":\"name\"}" 2>/dev/null \
+      | "$SYS_PYTHON" -c 'import json,sys; print(json.load(sys.stdin).get("name",""))' 2>/dev/null || true)"
+    printf '%s\t%s' "$target" "${name:-$target}"
+    return 0
+  fi
+  local esc; esc="${target//\'/\\\'}"
+  GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws drive files list --params "{\"q\":\"name='$esc' and mimeType='application/vnd.google-apps.folder' and trashed=false\",\"fields\":\"files(id,name)\"}" 2>/dev/null \
+    | "$SYS_PYTHON" -c '
+import json, sys
+f = json.load(sys.stdin).get("files", [])
+if len(f) == 1:
+    sys.stdout.write(f[0]["id"] + "\t" + f[0]["name"])
+' || true
+}
+
+is_locked() { # is_locked <dir> — vrai si verrouillé ET pas de déverrouillage en cours
+  [[ -f "$1/.locked" ]] || return 1
+  local until_ts; until_ts="$(cat "$1/.unlock-until" 2>/dev/null || echo 0)"
+  [[ "$(date +%s)" -ge "$until_ts" ]]
+}
+
+require_strong_auth() { # require_strong_auth <raison> — Touch ID/mot de passe si activé
+  [[ -f "$GWSA_ROOT/.strong-auth" ]] || return 0
+  [[ -x "$SYS_SWIFT" ]] \
+    || die "authentification forte activée mais $SYS_SWIFT indisponible (installer : xcode-select --install)"
+  "$SYS_SWIFT" "$REPO_DIR/scripts/touchid.swift" "$1" \
+    || die "authentification forte refusée — action annulée"
+}
+
+profile_dir() { printf '%s/%s' "$GWSA_ROOT" "$1"; }
+
+# Scopes par défaut : lecture/écriture Workspace, sans aucun scope RESTRICTED —
+# indispensables avec une app OAuth non vérifiée (sinon : 403 restricted_client).
+# Passer ces scopes explicitement évite aussi le sélecteur interactif de gws,
+# dont le pré-cochage embarque des scopes restreints qui font échouer le login.
+DEFAULT_SCOPES="https://www.googleapis.com/auth/drive,https://www.googleapis.com/auth/spreadsheets,https://www.googleapis.com/auth/gmail.modify,https://www.googleapis.com/auth/calendar,https://www.googleapis.com/auth/documents,https://www.googleapis.com/auth/presentations,https://www.googleapis.com/auth/tasks"
+
+profile_email() { # profile_email <dir> — email du compte connecté (vide sinon)
+  GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$1" gws auth status 2>/dev/null \
+    | grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]+' | head -1 || true
+}
+
+cmd_add() { # cmd_add <alias> [email-attendu] [options gws auth login]
+  local alias="$1"; shift
+  check_alias "$alias"
+  local expected=""
+  if [[ "${1:-}" == *@* ]]; then expected="$1"; shift; fi
+  [[ -f "$MASTER_SECRET" ]] \
+    || die "client_secret.json introuvable dans $GWSA_ROOT — suivre d'abord docs/setup-oauth.md"
+  local dir; dir="$(profile_dir "$alias")"
+  mkdir -p "$dir"
+  cp "$MASTER_SECRET" "$dir/client_secret.json"
+  echo "→ Connexion du profil « $alias »${expected:+ (compte attendu : $expected)} : choisir le bon compte Google dans le navigateur…"
+  if [[ $# -eq 0 ]]; then
+    GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws auth login --scopes "$DEFAULT_SCOPES"
+  else
+    GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws auth login "$@"
+  fi
+  local email; email="$(profile_email "$dir")"
+  if [[ -n "$expected" && -n "$email" && "$email" != "$expected" ]]; then
+    echo "gwsa : ✗ MAUVAIS COMPTE pour « $alias » : connecté avec $email au lieu de $expected." >&2
+    echo "       Refaire : gwsa add $alias $expected — et choisir $expected dans le navigateur." >&2
+    exit 4
+  fi
+  echo "✓ Profil « $alias » connecté${email:+ — $email}. Test : gwsa $alias auth status"
+}
+
+cmd_list() {
+  local found=0 dir alias email state
+  if [[ -d "$GWSA_ROOT" ]]; then
+    for dir in "$GWSA_ROOT"/*/; do
+      [[ -d "$dir" ]] || continue
+      found=1
+      alias="$(basename "$dir")"
+      if [[ -f "$dir/credentials.enc" ]]; then
+        email="$(profile_email "$dir")"
+        state="connecté${email:+ — $email}"
+      else
+        state="non connecté (relancer : gwsa add $alias)"
+      fi
+      if [[ -f "$dir/.locked" ]]; then
+        if is_locked "$dir"; then
+          state="$state · 🔒 verrouillé"
+        else
+          until_ts="$(cat "$dir/.unlock-until" 2>/dev/null || echo 0)"
+          state="$state · 🔓 encore $(( (until_ts - $(date +%s)) / 60 )) min"
+        fi
+      fi
+      printf '  %-16s %s\n' "$alias" "$state"
+    done
+  fi
+  [[ $found -eq 1 ]] || echo "Aucun profil. Commencer par : gwsa add <alias>"
+}
+
+cmd_lock() {
+  local alias="$1"; check_alias "$alias"
+  local dir; dir="$(profile_dir "$alias")"
+  [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+  touch "$dir/.locked"; rm -f "$dir/.unlock-until"
+  echo "🔒 Profil « $alias » verrouillé — accès sur demande uniquement (gwsa unlock $alias [minutes])"
+}
+
+cmd_unlock() {
+  local alias="$1"; shift || true
+  check_alias "$alias"
+  local mins="${1:-60}"
+  # Valider la durée AVANT tout court-circuit : une saisie invalide doit être
+  # rejetée même si le profil n'est pas verrouillé (sinon « unlock x abc »
+  # passait pour un no-op silencieux au lieu d'une erreur).
+  [[ "$mins" == "off" || ( "$mins" =~ ^[0-9]+$ && "$mins" -ge 1 ) ]] \
+    || die "durée invalide « $mins » (minutes entières ≥ 1, ou « off » pour retirer le verrou)"
+  local dir; dir="$(profile_dir "$alias")"
+  [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+  [[ -f "$dir/.locked" ]] || { echo "Profil « $alias » non verrouillé — rien à faire."; return 0; }
+  require_strong_auth "déverrouiller le profil Google « $alias »"
+  if [[ "$mins" == "off" ]]; then
+    rm -f "$dir/.locked" "$dir/.unlock-until"
+    echo "🔓 Verrou retiré : « $alias » est déverrouillé en permanence."
+    return 0
+  fi
+  [[ "$mins" =~ ^[0-9]+$ && "$mins" -ge 1 ]] || die "durée invalide « $mins » (minutes entières, ou « off » pour retirer le verrou)"
+  echo "$(( $(date +%s) + mins * 60 ))" > "$dir/.unlock-until"
+  echo "🔓 Profil « $alias » déverrouillé pour $mins min (reverrouillage automatique ensuite)."
+}
+
+cmd_policy() { # gwsa policy <alias> [show|mode <m>|allow <idOuNom>|revoke <id>|clear]
+  local alias="$1"; shift
+  check_alias "$alias"
+  local dir; dir="$(profile_dir "$alias")"
+  [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+  local P="$dir/policy.json" action="${1:-show}"
+  case "$action" in
+    show)
+      if [[ -f "$P" ]]; then "$SYS_PYTHON" -m json.tool "$P"; else echo "Aucune policy — mode open (écriture Drive libre)."; fi ;;
+    mode)
+      local m="${2:-}"
+      case "$m" in open|readonly|restricted) ;; *) die "mode invalide « ${m:-∅} » (open|readonly|restricted)" ;; esac
+      "$SYS_PYTHON" - "$P" "$m" <<'PYEOF'
+import json, os, sys
+path, mode = sys.argv[1], sys.argv[2]
+d = json.load(open(path)) if os.path.exists(path) else {}
+d.setdefault("drive", {})["mode"] = mode
+json.dump(d, open(path, "w"), indent=2)
+PYEOF
+      echo "✓ mode Drive de « $alias » : $m" ;;
+    allow)
+      local target="${2:-}"; [[ -n "$target" ]] || die "usage : gwsa policy $alias allow <nomDeDossier|folderId>"
+      local resolved fid fname
+      resolved="$(resolve_folder "$dir" "$target")"
+      fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
+      [[ -n "$fid" ]] || die "dossier « $target » introuvable ou ambigu — donne son ID (fin de l'URL du dossier dans Drive)"
+      "$SYS_PYTHON" - "$P" "$fid" "$fname" <<'PYEOF'
+import json, os, sys
+path, fid, fname = sys.argv[1], sys.argv[2], sys.argv[3]
+d = json.load(open(path)) if os.path.exists(path) else {}
+drv = d.setdefault("drive", {})
+drv.pop("mode", None)
+drv.setdefault("read", True)
+drv.setdefault("create", True)
+drv.setdefault("update", True)
+drv.setdefault("delete", False)
+drv.setdefault("share", False)
+drv["zonesOnly"] = True
+wf = drv.setdefault("writeFolders", [])
+if fid not in wf:
+    wf.append(fid)
+drv.setdefault("writeFolderNames", {})[fid] = fname
+json.dump(d, open(path, "w"), indent=2)
+PYEOF
+      echo "✓ « $alias » : écriture autorisée en permanence sous « $fname » ($fid) et ses sous-dossiers" ;;
+    revoke)
+      local rid="${2:-}"; [[ -n "$rid" ]] || die "usage : gwsa policy $alias revoke <folderId>"
+      [[ -f "$P" ]] || die "aucune policy pour « $alias »"
+      "$SYS_PYTHON" - "$P" "$rid" <<'PYEOF'
+import json, sys
+path, rid = sys.argv[1], sys.argv[2]
+d = json.load(open(path))
+drv = d.get("drive", {})
+wf = drv.get("writeFolders", [])
+if rid in wf:
+    wf.remove(rid)
+drv.get("writeFolderNames", {}).pop(rid, None)
+json.dump(d, open(path, "w"), indent=2)
+PYEOF
+      echo "✓ dossier $rid retiré des zones permanentes de « $alias »" ;;
+    clear)
+      if [[ -f "$P" ]]; then
+        "$SYS_PYTHON" - "$P" <<'PYEOF'
+import json, os, sys
+path = sys.argv[1]
+d = json.load(open(path))
+d.pop("drive", None)
+if d:
+    json.dump(d, open(path, "w"), indent=2)
+else:
+    os.remove(path)
+PYEOF
+      fi
+      echo "✓ policy Drive supprimée — Drive de « $alias » repasse en mode open (autres services inchangés)." ;;
+    *) die "action inconnue « $action » (show|mode|allow|revoke|clear)" ;;
+  esac
+}
+
+cmd_grant() { # gwsa grant <alias> <dossierIdOuNom> [heures] | gwsa grant <alias> revoke <folderId>
+  local alias="$1"; shift
+  check_alias "$alias"
+  local dir; dir="$(profile_dir "$alias")"
+  [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+  local G="$dir/session-grants.json"
+  [[ $# -ge 1 ]] || die "usage : gwsa grant $alias <dossier> [heures] | gwsa grant $alias revoke <folderId>"
+  if [[ "$1" == "revoke" ]]; then
+    local rid="${2:-}"; [[ -n "$rid" ]] || die "usage : gwsa grant $alias revoke <folderId>"
+    [[ -f "$G" ]] || { echo "Aucune autorisation temporaire pour « $alias »."; return 0; }
+    "$SYS_PYTHON" - "$G" "$rid" <<'PYEOF'
+import json, sys
+path, rid = sys.argv[1], sys.argv[2]
+d = json.load(open(path))
+d["drive"] = [e for e in d.get("drive", []) if e.get("id") != rid]
+json.dump(d, open(path, "w"), indent=2)
+PYEOF
+    echo "✓ autorisation temporaire $rid révoquée."
+    return 0
+  fi
+  local target="$1" hours="${2:-8}"
+  [[ "$hours" =~ ^[0-9]+$ && "$hours" -ge 1 && "$hours" -le 168 ]] \
+    || die "durée invalide « $hours » (heures entières, 1 à 168)"
+  local resolved fid fname
+  resolved="$(resolve_folder "$dir" "$target")"
+  fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
+  [[ -n "$fid" ]] || die "dossier « $target » introuvable ou ambigu — donne son ID (fin de l'URL du dossier dans Drive)"
+  require_strong_auth "autoriser l'écriture Drive sous « $fname » ($alias, ${hours} h)"
+  "$SYS_PYTHON" - "$G" "$fid" "$fname" "$hours" <<'PYEOF'
+import json, os, sys, time
+path, fid, fname, hours = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
+d = json.load(open(path)) if os.path.exists(path) else {}
+now = time.time()
+drv = [e for e in d.get("drive", []) if e.get("expiresAt", 0) > now and e.get("id") != fid]
+drv.append({"id": fid, "name": fname, "grantedAt": int(now), "expiresAt": int(now + hours * 3600)})
+d["drive"] = drv
+json.dump(d, open(path, "w"), indent=2)
+PYEOF
+  echo "🕐 « $alias » : écriture autorisée sous « $fname » ($fid) pendant $hours h (sous-dossiers inclus, expiration automatique)."
+}
+
+cmd_grants() { # gwsa grants <alias> [clear]
+  local alias="$1"; shift || true
+  check_alias "$alias"
+  local dir; dir="$(profile_dir "$alias")"
+  [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+  local G="$dir/session-grants.json"
+  if [[ "${1:-}" == "clear" ]]; then
+    rm -f "$G"; echo "✓ autorisations temporaires de « $alias » vidées."
+    return 0
+  fi
+  [[ -f "$G" ]] || { echo "Aucune autorisation temporaire — par défaut le LLM ne peut écrire nulle part sur Drive (mode zones)."; return 0; }
+  "$SYS_PYTHON" - "$G" <<'PYEOF'
+import json, sys, time
+d = json.load(open(sys.argv[1]))
+now = time.time()
+active = [e for e in d.get("drive", []) if e.get("expiresAt", 0) > now]
+if not active:
+    print("Aucune autorisation temporaire active.")
+for e in active:
+    mins = int((e["expiresAt"] - now) / 60)
+    print("  🕐 %s (%s) — encore %dh%02d" % (e.get("name", "?"), e["id"], mins // 60, mins % 60))
+PYEOF
+}
+
+cmd_remove() {
+  local alias="$1"
+  check_alias "$alias"
+  local dir; dir="$(profile_dir "$alias")"
+  [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+  GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws auth logout >/dev/null 2>&1 || true
+  rm -rf "$dir"
+  echo "✓ Profil « $alias » supprimé."
+}
+
+main() {
+  [[ $# -ge 1 ]] || { usage; exit 3; }
+  case "$1" in
+    -h|--help|help) usage ;;
+    add)    shift; [[ $# -ge 1 ]] || die "usage : gwsa add <alias> [email-attendu] [options gws auth login]"; cmd_add "$@" ;;
+    list)   shift; [[ $# -eq 0 ]] || die "« gwsa list » ne prend aucun argument (reçu : $*)"; cmd_list ;;
+    lock)   shift; [[ $# -eq 1 ]] || die "usage : gwsa lock <alias>"; cmd_lock "$@" ;;
+    unlock) shift; [[ $# -ge 1 && $# -le 2 ]] || die "usage : gwsa unlock <alias> [minutes|off]"; cmd_unlock "$@" ;;
+    policy) shift; [[ $# -ge 1 ]] || die "usage : gwsa policy <alias> [show|mode|allow|revoke|clear]"; cmd_policy "$@" ;;
+    grant)  shift; [[ $# -ge 1 ]] || die "usage : gwsa grant <alias> <dossier> [heures]"; cmd_grant "$@" ;;
+    grants) shift; [[ $# -ge 1 && $# -le 2 ]] || die "usage : gwsa grants <alias> [clear]"; cmd_grants "$@" ;;
+    strongauth)
+      shift
+      [[ $# -le 1 ]] || die "usage : gwsa strongauth on|off|status"
+      case "${1:-status}" in
+        on)  touch "$GWSA_ROOT/.strong-auth"; echo "🔐 Authentification forte ACTIVÉE : unlock et grant exigeront Touch ID / mot de passe macOS." ;;
+        off) require_strong_auth "désactiver l'authentification forte gwsa"; rm -f "$GWSA_ROOT/.strong-auth"; echo "Authentification forte désactivée." ;;
+        status) [[ -f "$GWSA_ROOT/.strong-auth" ]] && echo "🔐 activée" || echo "désactivée" ;;
+        *) die "usage : gwsa strongauth on|off|status" ;;
+      esac ;;
+    remove) shift; [[ $# -eq 1 ]] || die "usage : gwsa remove <alias>"; cmd_remove "$@" ;;
+    *)
+      local alias="$1"; shift
+      check_alias "$alias"
+      [[ $# -ge 1 ]] || die "usage : gwsa $alias <commande gws…> (ex. : gwsa $alias auth status)"
+      local dir; dir="$(profile_dir "$alias")"
+      [[ -d "$dir" ]] || die "profil inconnu « $alias » — le créer avec : gwsa add $alias"
+      if is_locked "$dir"; then
+        die "profil « $alias » verrouillé 🔒 — accès sur demande : l'utilisateur doit d'abord exécuter « gwsa unlock $alias [minutes] »"
+      fi
+      if [[ -f "$dir/policy.json" ]]; then
+        [[ -f "$POLICY_CHECKER" ]] || die "policy.json présent mais contrôleur absent ($POLICY_CHECKER)"
+        "$SYS_PYTHON" "$POLICY_CHECKER" "$dir" "$@" || exit $?
+      fi
+      if [[ -f "$USAGE_LOGGER" ]]; then
+        "$SYS_PYTHON" "$USAGE_LOGGER" "$GWSA_ROOT" "$alias" "$@" >/dev/null 2>&1 || true
+      fi
+      GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" exec gws "$@"
+      ;;
+  esac
+}
+
+main "$@"

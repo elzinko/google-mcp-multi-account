@@ -1,0 +1,62 @@
+name: CI
+
+# Frugalité (repo potentiellement privé = minutes facturées) :
+#   - rien sur push de branche : la CI part sur PR vers main, ou à la demande
+#   - paths-ignore : un changement purement documentaire ne déclenche rien
+#   - concurrency : un nouveau push annule le run précédent de la même PR
+#   - timeout-minutes partout : garde-fou anti-runaway
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Syntaxe + tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntaxe bash
+        run: |
+          bash -n bin/gwsa
+          for f in scripts/*.sh; do bash -n "$f"; done
+
+      - name: shellcheck (erreurs bloquantes uniquement)
+        run: |
+          if command -v shellcheck >/dev/null 2>&1; then
+            shellcheck -S error bin/gwsa scripts/*.sh
+          else
+            echo "::warning::shellcheck absent de ce runner — étape sautée"
+          fi
+
+      - name: Syntaxe Python
+        run: python3 -m py_compile scripts/policy-check.py scripts/log-usage.py
+
+      - name: Syntaxe Node
+        run: node --check admin/server.js
+
+      - name: Tests (policy + garde-fous gwsa)
+        run: ./scripts/test.sh
+
+  # Runner macOS = 10x le coût d'un runner Linux : jamais automatique.
+  # Déclenchement manuel, ou label "macos" posé sur la PR.
+  swift:
+    name: Compilation du helper Touch ID (macOS)
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'macos')
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: swiftc --parse
+        run: xcrun -sdk macosx swiftc -parse scripts/touchid.swift

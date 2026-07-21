@@ -1,0 +1,25 @@
+# Configuration act — valider la CI en local avant de pousser.
+#   act -l                            liste les jobs
+#   act --dryrun                      parse sans exécuter
+#   act workflow_dispatch -j checks   lance le job de tests
+
+# Apple Silicon : les runners GitHub sont linux/amd64. Sans ça, la plupart des
+# images d'action échouent en « exec format error ».
+--container-architecture linux/amd64
+
+# Images runner épinglées (variante « act » : légère, suffisante ici — ce projet
+# n'utilise pas actions/setup-node, qui exigerait la variante « full »).
+-P ubuntu-latest=catthehacker/ubuntu:act-22.04
+-P ubuntu-22.04=catthehacker/ubuntu:act-22.04
+-P ubuntu-24.04=catthehacker/ubuntu:act-24.04
+
+# Docker n'a pas d'image macOS : le job Swift s'exécute sur l'hôte (donc sans
+# isolation, et uniquement si tu es bien sur un Mac).
+-P macos-latest=-self-hosted
+
+# Réutilise le container entre deux runs (cache apt/pip) : 60 s -> 10 s.
+# Reset : docker rm -f $(docker ps -aq -f name=act-)
+--reuse
+
+# Pas de --secret-file/--var-file : cette CI n'a besoin d'aucun secret
+# (tests hermétiques, aucun compte Google réel, aucun appel réseau).
