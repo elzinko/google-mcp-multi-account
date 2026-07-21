@@ -70,9 +70,10 @@ flowchart TD
   GWS --> Google
 ```
 
-**Broker-ready :** les tools MCP et `gateway.api` sont stables. Seul
-[`gateway/executor.py`](../gateway/executor.py) doit changer en Phase 2
-(broker de tokens — **non implémenté**).
+**Broker Phase 2 A :** `gateway/executor.py` parle au daemon
+[`bin/google-broker`](../bin/google-broker) (auto-start). Seul le broker exécute
+`gws`. Les credentials restent sous `~/.config/gws-accounts/` (pas encore de vault —
+fiche 0003).
 
 ---
 
@@ -85,7 +86,8 @@ flowchart TD
 | `api.py` | Contrat public : `profiles_list`, `gmail_*`, `drive_*`, `access_request` |
 | `profiles.py` | Alias, lock, listage profils |
 | `policy.py` | Appelle `policy-check.py` + journal `usage.jsonl` |
-| `executor.py` | **v1** : `subprocess` → `gws` avec `GOOGLE_WORKSPACE_CLI_CONFIG_DIR` |
+| `executor.py` | **Phase 2 A** : client RPC vers le broker (plus d’appel `gws` ici) |
+| `broker_server.py` | Daemon `127.0.0.1:4878` — lock + policy + `gws` |
 | `default_policy.py` | JSON « prudent » écrit à `gwsa add` |
 | `mcp_server.py` | Adaptateur MCP stdio (JSON-RPC newline-delimited, **stdlib only**) |
 | `errors.py` | `GatewayError` (`locked`, `policy`, `alias`, …) |
@@ -205,9 +207,10 @@ données uniquement via MCP.
 
 | Phase | État | Contenu |
 |-------|------|---------|
-| **1** | **Déployée** (merge `main`) | MCP + gateway + default-deny + docs |
-| **2** | Non faite | Broker : credentials hors périmètre agent ; remplacer `executor.py` |
-| **3** (idée) | Non faite | Élicitation signée Secure Enclave (fiche features/0001) |
+| **1** | **Déployée** | MCP + gateway + default-deny + docs |
+| **2 A** | **Déployée (ce chantier)** | Broker loopback : `bin/google-broker` / auto-start ; `executor.py` = client RPC ; `gws` seulement dans le broker |
+| **2.1** | Fiche [0003](../features/0003-vault-credentials-hors-perimetre-agent.md) | Vault credentials hors périmètre agent |
+| **3** (idée) | Fiche [0001](../features/0001-elicitation-signee-strongauth-v2.md) | Élicitation signée Secure Enclave |
 
 ---
 
@@ -215,8 +218,9 @@ données uniquement via MCP.
 
 ```text
 bin/google-mcp          # entrée MCP stdio
+bin/google-broker       # daemon Phase 2 A (gws)
 bin/gwsa                 # CLI multi-comptes
-gateway/                 # API + MCP + executor v1
+gateway/                 # API + MCP + executor RPC + broker_server
 scripts/policy-check.py  # enforcement policy
 scripts/log-usage.py     # journal ok
 scripts/touchid.swift    # strongauth

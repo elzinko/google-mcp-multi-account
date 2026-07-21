@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# google-broker — daemon local Phase 2 A (seul process autorisé à parler à gws pour le MCP).
+set -euo pipefail
+src="$0"
+while [[ -L "$src" ]]; do src="$(readlink "$src")"; done
+REPO="$(cd "$(dirname "$src")/.." && pwd)"
+export PYTHONPATH="${REPO}${PYTHONPATH:+:$PYTHONPATH}"
+PYTHON="/usr/bin/python3"
+[[ -x "$PYTHON" ]] || PYTHON="$(command -v python3)"
+cd "$REPO"
+exec "$PYTHON" -m gateway.broker_server "$@"

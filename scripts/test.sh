@@ -276,6 +276,66 @@ else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m MCP tools/list\n'
 fi
 
+section "Broker Phase 2 A — ping + refus locked via RPC"
+if python3 - <<'PY'
+import json, os, socket, threading, time
+from pathlib import Path
+
+os.environ["GWSA_BROKER_PORT"] = "4879"  # port de test isolé
+from gateway.broker_server import (
+    BrokerHandler, ThreadedTCPServer, ensure_token, handle_exec, broker_port,
+)
+from gateway.errors import GatewayError
+
+root = Path(os.environ["GWSA_ROOT"])
+alias = "testprof"
+d = root / alias
+d.mkdir(parents=True, exist_ok=True)
+(d / ".locked").write_text("")
+try:
+    (d / ".unlock-until").unlink()
+except FileNotFoundError:
+    pass
+
+tok = ensure_token()
+BrokerHandler.expected_token = tok
+srv = ThreadedTCPServer(("127.0.0.1", broker_port()), BrokerHandler)
+t = threading.Thread(target=srv.serve_forever, daemon=True)
+t.start()
+time.sleep(0.05)
+
+def rpc(obj):
+    data = (json.dumps(obj) + "\n").encode()
+    with socket.create_connection(("127.0.0.1", broker_port()), timeout=2) as s:
+        s.sendall(data)
+        buf = b""
+        while b"\n" not in buf:
+            buf += s.recv(65536)
+    return json.loads(buf.split(b"\n", 1)[0])
+
+r = rpc({"token": tok, "cmd": "ping"})
+assert r.get("ok"), r
+r2 = rpc({"token": tok, "cmd": "exec", "alias": alias, "args": ["gmail", "users", "messages", "list"], "client": "test"})
+assert r2.get("ok") is False and r2.get("code") == "locked", r2
+r3 = rpc({"token": "bad", "cmd": "ping"})
+assert r3.get("ok") is False and r3.get("code") == "auth", r3
+
+# handle_exec direct aussi
+try:
+    handle_exec(alias, ["gmail", "users", "messages", "list"], "test")
+    raise SystemExit("attendu locked")
+except GatewayError as e:
+    assert e.code == "locked", e.code
+
+srv.shutdown()
+print("ok")
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m broker ping + locked + token\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m broker ping + locked + token\n'
+fi
+
 # --- Bilan ------------------------------------------------------------------
 
 printf '\n\033[1mBilan : %d réussis, %d échoués\033[0m\n' "$PASS" "$FAIL"

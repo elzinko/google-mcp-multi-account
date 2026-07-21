@@ -43,7 +43,8 @@ création *one-shot* d'un identifiant OAuth — voir [docs/setup-oauth.md](docs/
 **Pourquoi un wrapper + gateway ?** `gws` ne gère qu'un compte à la fois (le multi-comptes
 natif a été retiré, cf. [issue #293](https://github.com/googleworkspace/cli/issues/293)).
 `gwsa` / la gateway isolent chaque compte via `GOOGLE_WORKSPACE_CLI_CONFIG_DIR`.
-Phase 2 prévue : remplacer l’executor par un **broker de tokens** sans changer les tools MCP.
+Phase 2 A : broker local (`bin/google-broker`) — seul process MCP qui exécute `gws`.
+Vault credentials (hors périmètre agent) = fiche backlog 0003, plus tard.
 
 ## Installation
 
@@ -197,7 +198,7 @@ ne peut pas la simuler.
 
 Architecture et contrôles de sécurité : [docs/architecture.md](docs/architecture.md).  
 Branchement Desktop / Cursor / Code : [docs/mcp-setup.md](docs/mcp-setup.md).  
-Limites Phase 1 / broker Phase 2 : [docs/threat-model.md](docs/threat-model.md).
+Limites / broker Phase 2 A / vault 2.1 : [docs/threat-model.md](docs/threat-model.md).
 
 ### Depuis Claude Code
 
