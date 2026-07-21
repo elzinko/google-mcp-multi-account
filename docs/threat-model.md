@@ -1,5 +1,7 @@
 # Modèle de menace — google-mcp-multi-account
 
+Document frère : architecture détaillée → [architecture.md](architecture.md).
+
 ## Objectif
 
 Permettre à un ou plusieurs clients LLM (Claude Desktop, Cursor, Claude Code, …)
@@ -45,16 +47,21 @@ utilisables par `gws` hors gateway.
   lecture/écriture de `~/.config/gws-accounts/`.
 - Ne pas mettre `gws` dans le PATH de l’agent si possible ; l’humain garde `gwsa` pour l’admin.
 
-## Phase 2 (prévue, non implémentée) — broker de tokens
+## Phase 2 A (actuelle) — broker loopback
 
-Remplacer `gateway/executor.py` (subprocess `gws`) par un process local qui :
+- MCP → gateway → **broker** (`127.0.0.1:4878`, token `~/.config/gws-accounts/.broker-token`) → `gws`.
+- Auto-start du broker au premier tool MCP si besoin (`bin/google-broker`).
+- Le broker re-applique lock + policy avant `gws`.
 
-1. détient seul les credentials ;
-2. applique policy/lock/grants ;
-3. appelle Google ;
+## Phase 2 A — ce qui n’est **pas** encore garanti
 
-sans laisser les tokens ni un `gws` utile dans le périmètre de l’agent.
-L’API `gateway.api` et les tools MCP restent stables — seul l’executor change.
+Les credentials restent dans `~/.config/gws-accounts/`. Un agent avec shell libre
+peut toujours appeler `gws` directement. Mitigation : restreindre le shell ;
+évolution = vault ([features/0003](../features/0003-vault-credentials-hors-perimetre-agent.md)).
+
+## Phase 2.1 (prévue) — vault
+
+Credentials hors lecture agent ; seule la socket broker reste utile.
 
 ## Phase 1 — profils legacy
 

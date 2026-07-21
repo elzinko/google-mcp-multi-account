@@ -5,8 +5,7 @@ import json
 from typing import Any, Optional
 
 from .errors import GatewayError
-from .executor import run_gws
-from .policy import check_policy, log_ok
+from .executor import run_via_broker
 from .profiles import list_profiles as _list_profiles
 from .profiles import require_unlocked, validate_alias
 
@@ -16,11 +15,9 @@ def profiles_list() -> dict[str, Any]:
 
 
 def _run(alias: str, gws_args: list[str], timeout: int = 60) -> Any:
-    d = require_unlocked(alias)
-    check_policy(d, gws_args)
-    result = run_gws(str(d), gws_args, timeout=timeout)
-    log_ok(alias, gws_args)
-    return result
+    # Fail-fast local ; le broker re-vérifie lock + policy puis exécute gws.
+    require_unlocked(alias)
+    return run_via_broker(alias, gws_args, timeout=timeout)
 
 
 def gmail_list(

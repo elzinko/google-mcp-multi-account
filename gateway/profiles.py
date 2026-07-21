@@ -4,13 +4,14 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
 
 from .config import ALIAS_RE, RESERVED, gwsa_root, profile_dir
 from .errors import GatewayError
-from .executor import run_gws
 
 
 def validate_alias(alias: str) -> str:
@@ -54,27 +55,12 @@ def require_unlocked(alias: str) -> Path:
 
 
 def _profile_email(dir_path: Path) -> str:
-    try:
-        data = run_gws(str(dir_path), ["auth", "status"], timeout=15)
-        text = data.get("raw", "") if isinstance(data, dict) else str(data)
-        if not text and isinstance(data, dict):
-            text = json.dumps(data)
-        m = re.search(
-            r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]+",
-            text if isinstance(text, str) else json.dumps(data),
-        )
-        return m.group(0) if m else ""
-    except GatewayError:
-        # auth status peut renvoyer du texte non-JSON — retomber sur subprocess brut
-        pass
-    env = dict(os.environ)
-    env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] = str(dir_path)
-    import shutil
-    import subprocess
-
+    """Lecture email via gws direct (admin / listage) — hors chemin broker MCP."""
     gws = shutil.which("gws")
     if not gws:
         return ""
+    env = dict(os.environ)
+    env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] = str(dir_path)
     try:
         r = subprocess.run(
             [gws, "auth", "status"],
