@@ -85,9 +85,8 @@ fiche 0003).
 |--------|----------------|
 | `api.py` | Contrat public : `profiles_list`, `gmail_*`, `drive_*`, `access_request` |
 | `profiles.py` | Alias, lock, listage profils |
-| `policy.py` | Appelle `policy-check.py` + journal `usage.jsonl` |
 | `executor.py` | **Phase 2 A** : client RPC vers le broker (plus d’appel `gws` ici) |
-| `broker_server.py` | Daemon `127.0.0.1:4878` — lock + policy + `gws` |
+| `broker_server.py` | Daemon `127.0.0.1:4878` — lock + policy (`policy-check.py`) + journal + `gws` |
 | `default_policy.py` | JSON « prudent » écrit à `gwsa add` |
 | `mcp_server.py` | Adaptateur MCP stdio (JSON-RPC newline-delimited, **stdlib only**) |
 | `errors.py` | `GatewayError` (`locked`, `policy`, `alias`, …) |
