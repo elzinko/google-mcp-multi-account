@@ -65,4 +65,6 @@ Pour l'état complet (quels comptes manquent + la commande par compte) :
 `./scripts/provision-gcp.sh status`. `gwsa add` affiche aussi la commande
 automatiquement si le compte fraîchement connecté n'a pas le rôle. Pour tout
 réparer d'un coup, proposer à l'utilisateur `./scripts/provision-gcp.sh
-sync-iam` (idempotent, confirmation par compte — ne jamais le lancer soi-même).
+sync-iam` (idempotent, confirmation par compte — ne jamais le lancer soi-même),
+**ou** le panneau **🩺 Setup** de l'interface admin (bouton « Réparer l'accès » —
+c'est l'humain qui clique ; le LLM n'y a pas accès et ne le fait jamais).

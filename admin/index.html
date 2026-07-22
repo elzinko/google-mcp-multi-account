@@ -86,6 +86,7 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
   <button class="primary" onclick="openAdd()">＋ Connecter un compte</button>
   <button onclick="lockAll()">🔒 Tout verrouiller</button>
   <button onclick="openLog()">📓 Journal</button>
+  <button onclick="openSetup()">🩺 Setup</button>
   <button onclick="openDoc()">❓ Doc</button>
 </header>
 <main>
@@ -208,6 +209,12 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
   <div class="mtop"><button onclick="dLog.close()">Fermer</button></div>
 </dialog>
 
+<dialog id="dSetup">
+  <h2>🩺 Santé du setup</h2>
+  <div class="docbody" id="setupBody">Chargement…</div>
+  <div class="mtop"><button onclick="dSetup.close()">Fermer</button></div>
+</dialog>
+
 <dialog id="dDoc">
   <h2>Documentation</h2>
   <div class="tabs">
@@ -257,6 +264,48 @@ async function api(path, opts) {
   return j;
 }
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.style.opacity = 1; setTimeout(() => t.style.opacity = 0, 3000); }
+
+async function openSetup() { $("setupBody").innerHTML = "Chargement…"; dSetup.showModal(); await renderSetup(); }
+async function renderSetup() {
+  let r;
+  try { r = await api("/api/setup"); }
+  catch (e) { $("setupBody").innerHTML = '<p class="note">Erreur : ' + esc(e.message) + "</p>"; return; }
+  if (!r.ok) { $("setupBody").innerHTML = '<p class="note">' + esc(r.error || "indisponible") + "</p>"; return; }
+  const s = r.setup;
+  const BADGE = { ok: '<span class="badge b-ok">accès OK</span>',
+                  missing: '<span class="badge b-bad">sans rôle IAM</span>',
+                  unknown: '<span class="badge b-mut">non vérifié</span>' };
+  const rows = (s.accounts || []).map((a) =>
+    '<div class="zone"><b>' + esc(a.alias) + '</b> <span class="mono">' +
+    esc(a.email || "?") + "</span> " + (BADGE[a.iam] || esc(a.iam)) + "</div>").join("");
+  const missing = (s.accounts || []).filter((a) => a.iam === "missing");
+  const head = '<p class="note">Projet : <span class="mono">' + esc(s.project_id || "?") +
+    "</span> · " + (s.published ? "app publiée" : "app non publiée") + "</p>";
+  let action;
+  if (missing.length) {
+    action = '<div class="mtop" style="justify-content:flex-start">' +
+      '<button class="primary" id="syncBtn" onclick="doSyncIam()">🔧 Réparer l\'accès (' +
+      missing.length + ")</button></div>" +
+      '<p class="note">Accorde le rôle <span class="mono">serviceUsageConsumer</span> aux comptes ci-dessus ' +
+      "(Touch ID si l'authentification forte est activée). Requiert que ta session <span class=\"mono\">gcloud</span> " +
+      "active soit le propriétaire du projet.</p>";
+  } else if (s.iam_checked) {
+    action = '<p class="note">✓ Tous les comptes connectés ont accès au projet.</p>';
+  } else {
+    action = '<p class="note">Accès IAM non vérifiable ici (gcloud non connecté). En terminal : ' +
+      '<span class="mono">./scripts/provision-gcp.sh status</span>.</p>';
+  }
+  $("setupBody").innerHTML = head + (rows || '<p class="note">Aucun compte connecté.</p>') + action;
+}
+async function doSyncIam() {
+  const btn = $("syncBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "Réparation… (Touch ID ?)"; }
+  try { const r = await api("/api/sync-iam", { method: "POST", body: "{}" });
+    toast(r.ok ? "✓ Accès IAM réparé (propagation ~2 min)" : "Échec — voir le détail"); }
+  catch (e) { toast("Erreur : " + e.message); }
+  await renderSetup();
+  refresh();
+}
 function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 
 function normDrive(d) {

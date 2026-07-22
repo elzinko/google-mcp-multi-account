@@ -24,6 +24,8 @@
 set -euo pipefail
 
 GWSA_ROOT="${GWSA_ROOT:-$HOME/.config/gws-accounts}"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SYS_SWIFT="/usr/bin/swift"
 STATE_FILE="$GWSA_ROOT/provision.env"
 SECRET_DEST="$GWSA_ROOT/client_secret.json"
 APP_NAME="gws CLI perso"
@@ -71,6 +73,14 @@ done
 
 # ── helpers gcloud ───────────────────────────────────────────────
 have_gcloud() { command -v gcloud >/dev/null 2>&1; }
+
+require_strong_auth() { # require_strong_auth <raison> — Touch ID/mdp macOS si strongauth activé
+  [[ -f "$GWSA_ROOT/.strong-auth" ]] || return 0
+  [[ -x "$SYS_SWIFT" ]] \
+    || die "authentification forte activée mais $SYS_SWIFT indisponible (xcode-select --install)"
+  "$SYS_SWIFT" "$REPO_ROOT/scripts/touchid.swift" "$1" \
+    || die "authentification forte refusée — action annulée"
+}
 
 active_account() {
   gcloud auth list --filter=status:ACTIVE --format="value(account)" 2>/dev/null | head -1
@@ -121,7 +131,6 @@ iam_profile_states() { # <project> → lignes « alias<TAB>email<TAB>ok|missing|
 if [[ "$MODE" == "status" ]]; then
   # Vue machine : même état, en JSON (contrat du tool MCP setup_status).
   if [[ -n "$JSON_OUT" ]]; then
-    REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
     # -W ignore::RuntimeWarning : gateway/__init__ importe déjà setup_status via
     # api, d'où un warning runpy inoffensif sur le double-chargement en -m.
     exec env PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}" \
@@ -176,6 +185,8 @@ if [[ "$MODE" == "sync-iam" ]]; then
   PROJECT_ID=""; load_state
   [[ -n "${PROJECT_ID:-}" ]] || die "aucun projet provisionné ($STATE_FILE absent) — lance d'abord ./scripts/provision-gcp.sh"
   echo "   Projet : $PROJECT_ID · propriétaire actif : $ACCOUNT"
+  # Mutation IAM = même barrière physique que unlock/grant.
+  require_strong_auth "autoriser sync-iam — accorder le rôle IAM sur « $PROJECT_ID »"
   granted=0; already=0
   while IFS=$'\t' read -r alias_name pemail state; do
     case "$state" in
