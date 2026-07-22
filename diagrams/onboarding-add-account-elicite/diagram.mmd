@@ -1,0 +1,19 @@
+sequenceDiagram
+    autonumber
+    actor Toi
+    participant LLM as LLM (Desktop/Code)
+    participant MCP as MCP google-mcp
+    participant GWSA as gwsa (terminal)
+    participant Google
+
+    Toi->>LLM: « connecte ce compte »
+    LLM->>MCP: access_request add_account
+    MCP-->>LLM: commande suggérée (rien d'exécuté)
+    LLM-->>Toi: propose « gwsa add … »
+    Toi->>GWSA: exécute la commande
+    GWSA->>Toi: exige Touch ID
+    GWSA->>Google: ouvre le consentement OAuth
+    Toi->>Google: choisit le compte, accepte
+    Google-->>GWSA: renvoie le token (chiffré local)
+    GWSA->>Google: sonde l'accès projet (lecture)
+    GWSA-->>Toi: OK + policy prudente — ou commande IAM à faire
