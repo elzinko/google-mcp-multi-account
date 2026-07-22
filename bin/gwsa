@@ -118,6 +118,10 @@ cmd_add() { # cmd_add <alias> [email-attendu] [options gws auth login]
   if [[ "${1:-}" == *@* ]]; then expected="$1"; shift; fi
   [[ -f "$MASTER_SECRET" ]] \
     || die "client_secret.json introuvable dans $GWSA_ROOT — suivre d'abord docs/setup-oauth.md"
+  # Connecter un compte élargit la surface d'accès : même barrière biométrique
+  # que unlock/grant quand strongauth est activée (après le check du secret,
+  # pour qu'un environnement de test sans secret n'atteigne jamais Touch ID).
+  require_strong_auth "connecter un nouveau compte Google « $alias »${expected:+ ($expected)}"
   local dir; dir="$(profile_dir "$alias")"
   mkdir -p "$dir"
   cp "$MASTER_SECRET" "$dir/client_secret.json"
