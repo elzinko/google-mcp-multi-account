@@ -5,7 +5,7 @@ type: feature
 priority: P2
 version:
 epic:
-status: idea
+status: in-progress
 ready:
 pr:
 created: 2026-07-22
@@ -36,11 +36,15 @@ Réorganiser sans rien perdre :
 
 ## Critères d'acceptation
 
-- [ ] Un nouveau venu lit UNIQUEMENT le quickstart et aboutit à un setup
-      fonctionnel (les 2 gestes console restant guidés par le script).
-- [ ] Aucune information actuelle perdue (déplacée, pas supprimée).
-- [ ] README ≤ ~120 lignes ; liens vers docs/ pour chaque sujet déplacé.
-- [ ] `tests/manuels/` et CLAUDE.md pointent toujours juste.
+- [x] Un nouveau venu lit UNIQUEMENT le **Quickstart (3 étapes)** en tête et
+      aboutit à un setup fonctionnel (les 2 gestes console restant guidés par
+      le script ; l'étape 3 s'appuie sur `setup_status`, fiche 0009).
+- [x] Aucune information perdue : usage/verrous/admin/strongauth → `docs/usage.md` ;
+      policy/zones/grants → `docs/policies.md` ; sécurité/limites condensées avec
+      lien threat-model. Liens internes tous vérifiés.
+- [x] README **116 lignes** (était 270) ; un lien vers docs/ par sujet déplacé.
+- [x] `tests/manuels/` et CLAUDE.md pointent toujours juste (sections Tests et
+      liens inchangés).
 
 ## Notes
 
