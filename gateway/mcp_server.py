@@ -156,18 +156,20 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "access_request",
         "description": (
-            "Demande d'élicitation humaine : kind=unlock (profil verrouillé) ou "
-            "kind=grant (zone Drive temporaire). N'exécute PAS unlock/grant — "
-            "renvoie la commande exacte à faire exécuter par l'utilisateur."
+            "Demande d'élicitation humaine : kind=unlock (profil verrouillé), "
+            "kind=grant (zone Drive temporaire) ou kind=add_account (connecter un "
+            "nouveau compte Google — alias inexistant + email requis). N'exécute "
+            "RIEN — renvoie la commande exacte à faire exécuter par l'utilisateur."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "alias": {"type": "string"},
-                "kind": {"type": "string", "enum": ["unlock", "grant"]},
+                "kind": {"type": "string", "enum": ["unlock", "grant", "add_account"]},
                 "folder": {"type": "string", "description": "Nom ou ID dossier (si grant)"},
                 "hours": {"type": "integer", "default": 8, "description": "Durée grant"},
                 "minutes": {"type": "integer", "default": 60, "description": "Durée unlock"},
+                "email": {"type": "string", "description": "Adresse Gmail à connecter (si add_account)"},
             },
             "required": ["alias", "kind"],
             "additionalProperties": False,
@@ -213,6 +215,7 @@ DISPATCH: dict[str, Callable] = {
         folder=kw.get("folder") or "",
         hours=int(kw.get("hours") or 8),
         minutes=int(kw.get("minutes") or 60),
+        email=kw.get("email") or "",
     ),
 }
 
