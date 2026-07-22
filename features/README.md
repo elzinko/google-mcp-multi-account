@@ -6,10 +6,10 @@
 | # | Titre | Type | Prio | Statut | PR |
 |---|-------|------|------|--------|----|
 | 0004 | Broker daemon local Phase 2 A — gws derrière socket loopback | feature | P1 | 🟠 in-progress |  |
-| 0005 | Onboarding des comptes — chaîne complète élicitée (IAM compris), drift visible | feature | P1 | 🟠 in-progress |  |
-| 0007 | Provisioning GCP idempotent/déclaratif — durcir provision-gcp.sh ou passer à Terraform | feature | P2 | 🟠 in-progress |  |
-| 0008 | Connexion dynamique d'un nouveau compte via élicitation forte (access_request kind=add_account) | feature | P2 | 🟠 in-progress |  |
-| 0011 | `gwsa admin` — démarrer/arrêter l'interface web en un geste, proposé par l'élicitation | feature | P2 | 🟠 in-progress |  |
+| 0005 | Onboarding des comptes — chaîne complète élicitée (IAM compris), drift visible | feature | P1 | ✅ shipped | #5 |
+| 0007 | Provisioning GCP idempotent/déclaratif — durcir provision-gcp.sh ou passer à Terraform | feature | P2 | ✅ shipped | #10 |
+| 0008 | Connexion dynamique d'un nouveau compte via élicitation forte (access_request kind=add_account) | feature | P2 | ✅ shipped | #7 |
+| 0011 | `gwsa admin` — démarrer/arrêter l'interface web en un geste, proposé par l'élicitation | feature | P2 | ✅ shipped | #9 |
 
 ## 💡 Idées (non groomées)
 
@@ -22,4 +22,4 @@
 | 0002 | Durcir le modèle de policy — décisions « default-deny » soulevées par l'audit | feature | P3 | 💡 idea |  |
 | 0003 | Vault credentials hors périmètre agent (Phase 2.1) | feature | P3 | 💡 idea |  |
 
-> Livrées (`done/`) : .
+> Livrées (`done/`) : 0005, 0007, 0008, 0011.

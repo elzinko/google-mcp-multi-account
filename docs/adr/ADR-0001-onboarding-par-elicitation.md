@@ -1,6 +1,6 @@
 # ADR-0001 : Onboarding guidé par le MCP — élicitation, jamais exécution
 
-**Statut :** Proposé
+**Statut :** Accepté
 **Date :** 2026-07-22
 **Décideurs :** Thomas (PO)
 
