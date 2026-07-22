@@ -15,9 +15,11 @@
 # Usage :
 #   ./scripts/provision-gcp.sh                             # flow complet (interactif)
 #   ./scripts/provision-gcp.sh status                      # état des lieux (lecture seule)
+#   ./scripts/provision-gcp.sh sync-iam [--yes]            # accorde le rôle IAM aux comptes connectés qui manquent
 #   ./scripts/provision-gcp.sh --confirm-account moi@gmail.com   # mode non interactif
 #
-# Idempotent : relançable sans risque, chaque étape détecte l'existant.
+# Idempotent : relançable sans risque, chaque étape détecte l'existant
+# (double exécution = zéro mutation, y compris sync-iam et la publication).
 # État persisté dans ~/.config/gws-accounts/provision.env
 set -euo pipefail
 
@@ -51,12 +53,15 @@ wait_enter() { is_tty && read -r -p "→ Appuie sur Entrée quand c'est fait… 
 # ── arguments ────────────────────────────────────────────────────
 MODE="run"
 CONFIRM_ACCOUNT=""
+CONFIRM_YES=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     status) MODE="status" ;;
+    sync-iam) MODE="sync-iam" ;;
+    --yes|-y) CONFIRM_YES=1 ;;
     --confirm-account) shift; CONFIRM_ACCOUNT="${1:-}" ;;
     --confirm-account=*) CONFIRM_ACCOUNT="${1#*=}" ;;
-    -h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "argument inconnu : $1 (voir --help)" ;;
   esac
   shift
@@ -73,7 +78,41 @@ load_state() { [[ -f "$STATE_FILE" ]] && . "$STATE_FILE" || true; }
 
 save_state() {
   mkdir -p "$GWSA_ROOT"
-  { echo "PROJECT_ID=\"$PROJECT_ID\""; echo "OWNER_ACCOUNT=\"$ACCOUNT\""; } > "$STATE_FILE"
+  { echo "PROJECT_ID=\"$PROJECT_ID\""
+    echo "OWNER_ACCOUNT=\"$ACCOUNT\""
+    echo "PUBLISHED=\"${PUBLISHED:-}\""; } > "$STATE_FILE"
+}
+
+# ── helpers IAM / comptes connectés (partagés status ↔ sync-iam) ──
+ROLE_SUC="roles/serviceusage.serviceUsageConsumer"
+
+iam_members_with_access() { # <project> → emails (minuscules) ayant owner|editor|serviceUsageConsumer
+  gcloud projects get-iam-policy "$1" \
+    --flatten="bindings[].members" \
+    --filter="bindings.role=roles/owner OR bindings.role=roles/editor OR bindings.role=$ROLE_SUC" \
+    --format="value(bindings.members)" 2>/dev/null | sed 's/^user://' | tr 'A-Z' 'a-z' || true
+}
+
+profile_email_of() { # <profile-dir> → email du compte connecté (vide sinon)
+  GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$1" gws auth status 2>/dev/null \
+    | grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]+' | head -1 || true
+}
+
+iam_profile_states() { # <project> → lignes « alias<TAB>email<TAB>ok|missing|unknown »
+  local authorized d alias_name pemail
+  authorized="$(iam_members_with_access "$1")"
+  for d in "$GWSA_ROOT"/*/; do
+    [[ -f "$d/client_secret.json" ]] || continue
+    alias_name="$(basename "$d")"
+    pemail="$(profile_email_of "$d")"
+    if [[ -z "$pemail" ]]; then
+      printf '%s\t\tunknown\n' "$alias_name"
+    elif printf '%s\n' "$authorized" | grep -qixF "$pemail"; then  # -i : emails insensibles à la casse
+      printf '%s\t%s\tok\n' "$alias_name" "$pemail"
+    else
+      printf '%s\t%s\tmissing\n' "$alias_name" "$pemail"
+    fi
+  done
 }
 
 # ── status (lecture seule) ───────────────────────────────────────
@@ -83,7 +122,7 @@ if [[ "$MODE" == "status" ]]; then
   else warn "gcloud non installé"; fi
   acct="$(have_gcloud && active_account || true)"
   [[ -n "${acct:-}" ]] && ok "compte actif : ${B}$acct${N}" || warn "aucun compte gcloud connecté"
-  PROJECT_ID=""; load_state
+  PROJECT_ID=""; PUBLISHED=""; load_state
   [[ -n "${PROJECT_ID:-}" ]] && ok "projet (état local) : $PROJECT_ID" || warn "aucun projet provisionné ($STATE_FILE absent)"
   if [[ -n "${PROJECT_ID:-}" ]] && have_gcloud && [[ -n "${acct:-}" ]]; then
     n=$(gcloud services list --enabled --project "$PROJECT_ID" --format="value(config.name)" 2>/dev/null | grep -c -F -f <(printf '%s\n' $APIS) || true)
@@ -91,32 +130,62 @@ if [[ "$MODE" == "status" ]]; then
   fi
   [[ -f "$SECRET_DEST" ]] && ok "client_secret.json en place ($SECRET_DEST)" || warn "client_secret.json absent"
 
+  [[ -n "${PUBLISHED:-}" ]] && ok "app publiée en Production (enregistré le $PUBLISHED — tokens durables)" \
+    || warn "app non publiée d'après l'état local (tokens 7 j) — relancer le flow : l'étape 7 permet de publier et de l'enregistrer"
+
   # Dérive IAM : quels comptes connectés n'ont pas le rôle serviceUsageConsumer
   # sur le projet (sinon 403 « quota project » silencieux au 1er appel — §7).
   if [[ -n "${PROJECT_ID:-}" ]] && have_gcloud && [[ -n "${acct:-}" ]]; then
     step "Comptes connectés & accès au projet (rôle IAM)"
-    authorized="$(gcloud projects get-iam-policy "$PROJECT_ID" \
-      --flatten="bindings[].members" \
-      --filter="bindings.role=roles/owner OR bindings.role=roles/editor OR bindings.role=roles/serviceusage.serviceUsageConsumer" \
-      --format="value(bindings.members)" 2>/dev/null | sed 's/^user://' || true)"
-    any_profile=""
-    for d in "$GWSA_ROOT"/*/; do
-      [[ -f "$d/client_secret.json" ]] || continue
+    any_profile=""; missing=0
+    while IFS=$'\t' read -r alias_name pemail state; do
       any_profile=1
-      alias_name="$(basename "$d")"
-      pemail="$(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$d" gws auth status 2>/dev/null \
-        | grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]+' | head -1 || true)"
-      if [[ -z "$pemail" ]]; then
-        warn "$alias_name : email indéterminé (token expiré ? → gwsa add $alias_name)"
-      elif printf '%s\n' "$authorized" | grep -qixF "$pemail"; then  # -i : emails insensibles à la casse
-        ok "$alias_name ($pemail) : accès projet OK"
-      else
-        warn "$alias_name ($pemail) : SANS rôle serviceUsageConsumer → 403 au 1er appel"
-        echo "     gcloud projects add-iam-policy-binding $PROJECT_ID --member=user:$pemail --role=roles/serviceusage.serviceUsageConsumer"
-      fi
-    done
+      case "$state" in
+        ok)      ok "$alias_name ($pemail) : accès projet OK" ;;
+        unknown) warn "$alias_name : email indéterminé (token expiré ? → gwsa add $alias_name)" ;;
+        missing)
+          missing=$((missing + 1))
+          warn "$alias_name ($pemail) : SANS rôle serviceUsageConsumer → 403 au 1er appel"
+          echo "     gcloud projects add-iam-policy-binding $PROJECT_ID --member=user:$pemail --role=$ROLE_SUC" ;;
+      esac
+    done < <(iam_profile_states "$PROJECT_ID")
     [[ -n "$any_profile" ]] || echo "  (aucun compte connecté — gwsa add <alias>)"
+    [[ "$missing" -gt 0 ]] && echo && echo "→ Tout accorder d'un coup : ${B}./scripts/provision-gcp.sh sync-iam${N}"
   fi
+  exit 0
+fi
+
+# ── sync-iam : accorder le rôle IAM aux comptes qui manquent (idempotent) ─────
+# Exécuté PAR le propriétaire du projet (sa session gcloud) — c'est donc bien
+# un geste humain, pas le LLM. add-iam-policy-binding est idempotent : relancer
+# quand tout est OK ne fait rien.
+if [[ "$MODE" == "sync-iam" ]]; then
+  step "Synchronisation des rôles IAM (serviceUsageConsumer)"
+  have_gcloud || die "gcloud requis."
+  ACCOUNT="$(active_account)"; [[ -n "$ACCOUNT" ]] || die "aucun compte gcloud actif (gcloud auth login)."
+  PROJECT_ID=""; load_state
+  [[ -n "${PROJECT_ID:-}" ]] || die "aucun projet provisionné ($STATE_FILE absent) — lance d'abord ./scripts/provision-gcp.sh"
+  echo "   Projet : $PROJECT_ID · propriétaire actif : $ACCOUNT"
+  granted=0; already=0
+  while IFS=$'\t' read -r alias_name pemail state; do
+    case "$state" in
+      ok)      already=$((already + 1)); ok "$alias_name ($pemail) : déjà OK" ;;
+      unknown) warn "$alias_name : email indéterminé — ignoré (gwsa add $alias_name)" ;;
+      missing)
+        if [[ -n "$CONFIRM_YES" ]] || { is_tty && confirm "Accorder le rôle à $alias_name ($pemail) ?"; }; then
+          if gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+               --member="user:$pemail" --role="$ROLE_SUC" --condition=None --quiet >/dev/null 2>&1; then
+            granted=$((granted + 1)); ok "$alias_name ($pemail) : rôle accordé"
+          else
+            warn "$alias_name ($pemail) : échec du binding — à faire à la main :"
+            echo "     gcloud projects add-iam-policy-binding $PROJECT_ID --member=user:$pemail --role=$ROLE_SUC"
+          fi
+        else
+          warn "$alias_name ($pemail) : ignoré (non confirmé)"
+        fi ;;
+    esac
+  done < <(iam_profile_states "$PROJECT_ID")
+  echo; ok "terminé — $granted accordé(s), $already déjà en place. Propagation ~2 min."
   exit 0
 fi
 
@@ -247,11 +316,23 @@ fi
 
 # ── 7. Publication en Production ─────────────────────────────────
 step "7/7 · Publication de l'app (évite l'expiration des tokens à 7 jours)"
-echo "   Dans la page qui s'ouvre : bouton ${B}Publish app${N} → Confirm."
-echo "   (App « non vérifiée » : normal pour un usage perso — chaque compte"
-echo "    acceptera l'avertissement une fois à la connexion.)"
-open "https://console.cloud.google.com/auth/audience?project=$PROJECT_ID" 2>/dev/null || true
-wait_enter
+if [[ -n "${PUBLISHED:-}" ]]; then
+  ok "app déjà publiée (enregistré le $PUBLISHED) — rien à faire"
+else
+  echo "   Dans la page qui s'ouvre : bouton ${B}Publish app${N} → Confirm."
+  echo "   (App « non vérifiée » : normal pour un usage perso — chaque compte"
+  echo "    acceptera l'avertissement une fois à la connexion.)"
+  open "https://console.cloud.google.com/auth/audience?project=$PROJECT_ID" 2>/dev/null || true
+  wait_enter
+  # Pas d'API publique pour lire le statut de publication → on l'enregistre
+  # déclarativement, pour que les relances (et `status`) sachent où on en est.
+  if is_tty && confirm "L'app est-elle publiée en Production (ou l'était-elle déjà) ?"; then
+    PUBLISHED="$(date +%F)"; save_state
+    ok "publication enregistrée dans $STATE_FILE"
+  else
+    warn "publication non confirmée — tokens 7 j ; relance ce script quand c'est fait."
+  fi
+fi
 
 # ── Récap ────────────────────────────────────────────────────────
 step "Terminé 🎉"
