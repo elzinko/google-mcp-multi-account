@@ -64,6 +64,9 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
 .docbody code { background:var(--bg); border:1px solid var(--line); border-radius:4px; padding:0 4px; font-size:12.5px; }
 .docbody pre code { border:0; padding:0; background:none; }
 .docbody blockquote { border-left:3px solid var(--line); margin:8px 0; padding:2px 12px; color:var(--mut); }
+.docbody table { border-collapse:collapse; margin:8px 0; font-size:13px; }
+.docbody th, .docbody td { border:1px solid var(--line); padding:4px 8px; text-align:left; vertical-align:top; }
+.docbody th { background:var(--bg); }
 .docbody .mermaid { display:flex; justify-content:center; background:transparent; margin:10px 0; overflow-x:auto; }
 .pickrow { display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:7px; margin:2px 0; font-size:13.5px; }
 .pickrow:hover { background:var(--bg); }
@@ -209,6 +212,8 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
   <h2>Documentation</h2>
   <div class="tabs">
     <button class="small" onclick="showDoc('readme')">Installation & usage (README)</button>
+    <button class="small" onclick="showDoc('schemas')">Schémas (séquences)</button>
+    <button class="small" onclick="showDoc('mcp')">Serveur MCP & tools</button>
     <button class="small" onclick="showDoc('oauth')">Setup OAuth (console Google)</button>
   </div>
   <div class="docbody" id="docBody"></div>
@@ -517,6 +522,18 @@ function mdToHtml(md) {
   const codes = [];
   md = md.replace(/```([\w-]*)\n([\s\S]*?)```/g, (_, lang, c) => { codes.push({ lang, c }); return "\x00" + (codes.length - 1) + "\x00"; });
   md = esc(md);
+  // Tableaux markdown : bloc de lignes « | … | » ; \| échappé préservé, ligne |---| ignorée.
+  md = md.replace(/(?:^\|.+\|[ \t]*(?:\n|$))+/gm, (block) => {
+    const rows = block.trim().split("\n").filter((l) => !/^\|[\s:|-]+\|$/.test(l));
+    const cells = rows.map((l) => l.replace(/\\\|/g, "\x01").replace(/^\||\|$/g, "").split("|")
+      .map((c) => c.trim().replace(/\x01/g, "|")));
+    if (cells.length < 2) return block;
+    const [head, ...body] = cells;
+    return "<table><thead><tr>" + head.map((c) => "<th>" + c + "</th>").join("")
+      + "</tr></thead><tbody>"
+      + body.map((r) => "<tr>" + r.map((c) => "<td>" + c + "</td>").join("") + "</tr>").join("")
+      + "</tbody></table>\n\n";
+  });
   md = md.replace(/^######? (.+)$/gm, "<h3>$1</h3>")
          .replace(/^#### (.+)$/gm, "<h3>$1</h3>")
          .replace(/^### (.+)$/gm, "<h3>$1</h3>")
@@ -531,7 +548,7 @@ function mdToHtml(md) {
          .replace(/\*([^*\n]+)\*/g, "<i>$1</i>")
          .replace(/`([^`\n]+)`/g, "<code>$1</code>")
          .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-  md = md.split(/\n{2,}/).map((b) => /^\s*<(h\d|ul|pre|blockquote|hr)/.test(b.trim()) ? b : "<p>" + b.replace(/\n/g, "<br>") + "</p>").join("\n");
+  md = md.split(/\n{2,}/).map((b) => /^\s*<(h\d|ul|pre|blockquote|hr|table)/.test(b.trim()) ? b : "<p>" + b.replace(/\n/g, "<br>") + "</p>").join("\n");
   return md.replace(/\x00(\d+)\x00/g, (_, i) => codes[+i].lang === "mermaid"
     ? '<div class="mermaid">' + esc(codes[+i].c) + "</div>"
     : "<pre><code>" + esc(codes[+i].c) + "</code></pre>");
