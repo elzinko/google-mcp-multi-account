@@ -2,7 +2,7 @@
 id: 0002
 title: Durcir le modèle de policy — décisions « default-deny » soulevées par l'audit
 type: feature
-priority: P3
+priority: P2
 version:
 epic:
 status: idea
@@ -20,6 +20,12 @@ Les **bugs** exploitables trouvés ont été corrigés et couverts par des tests
 **trois décisions de conception** — pas des bugs, des choix de modèle — laissées ouvertes
 parce qu'elles changent le comportement et l'UX, à trancher par l'utilisateur.
 
+**MàJ 2026-07-22 (revue backlog).** Le **point 2 est résolu** (policy prudente
+écrite par défaut à `gwsa add`), le **point 3 partiellement** (chemins absolus ;
+le reste → fiche 0001). La **décision vive restante = le point 1** : default-deny
+sur les services non modélisés. Priorité relevée **P3 → P2** — c'est un trou du
+modèle de sécurité, cœur de la proposition de valeur du projet.
+
 ## Décisions à trancher
 
 1. **Service non modélisé = libre (allow-by-default sur la dimension service).**
@@ -36,13 +42,12 @@ parce qu'elles changent le comportement et l'UX, à trancher par l'utilisateur.
    écritures), ou a minima faire échouer-fermé les services à effet externe ? Impact : UI
    admin à étendre, mental model « allowlist de restrictions » → « denylist par défaut ».
 
-2. **Aucun `policy.json` = tout ouvert.** `bin/gwsa` n'appelle le contrôleur que
-   `if [[ -f policy.json ]]` ; `cmd_add` n'en crée jamais. Un profil frais (`gwsa add`)
-   est donc **sans aucune restriction** jusqu'à ce qu'une policy soit posée. Nos 5 profils
-   actuels ont tous une policy prudente, donc pas d'exposition immédiate — mais le défaut
-   contredit un principe « secure by default ».
-   → `cmd_add` doit-il écrire une policy restrictive par défaut (lecture seule / Drive zones
-   vides) à la création ?
+2. ~~**Aucun `policy.json` = tout ouvert.**~~ **RÉSOLU (2026-07-22).** `cmd_add` écrit
+   désormais une policy prudente par défaut à la création (`gateway/default_policy.py` →
+   `write_default_policy` : Drive `zonesOnly`, Gmail sans envoi, docs/sheets/tasks lecture
+   seule). Un profil frais est restreint d'emblée. *Reste, comme fail-open résiduel : si le
+   `policy.json` est absent (supprimé à la main), `bin/gwsa` retombe en « tout ouvert » —
+   c'est la même racine que le point 1 (défaut permissif) ; à traiter avec lui.*
 
 3. ~~**`gwsa strongauth` : le cérémonial Touch ID s'appuie sur des éléments éditables par
    l'agent.**~~ **PARTIELLEMENT TRAITÉ le 2026-07-20.** `require_strong_auth` shellait vers
