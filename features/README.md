@@ -11,6 +11,10 @@
 
 | # | Titre | Type | Prio | Statut | PR |
 |---|-------|------|------|--------|----|
+| 0005 | Onboarding des comptes — chaîne complète élicitée (IAM compris), drift visible | feature | P1 | 💡 idea |  |
+| 0006 | Harnais hybride pour les tests manuels — script pour la mécanique, LLM pour la glu | feature | P2 | 💡 idea |  |
+| 0007 | Provisioning GCP idempotent/déclaratif — durcir provision-gcp.sh ou passer à Terraform | feature | P2 | 💡 idea |  |
+| 0008 | Connexion dynamique d'un nouveau compte via élicitation forte (access_request kind=add_account) | feature | P2 | 💡 idea |  |
 | 0001 | Élicitation signée — faire monter `gwsa strongauth` de la présence à la signature | feature | P3 | 💡 idea |  |
 | 0002 | Durcir le modèle de policy — décisions « default-deny » soulevées par l'audit | feature | P3 | 💡 idea |  |
 | 0003 | Vault credentials hors périmètre agent (Phase 2.1) | feature | P3 | 💡 idea |  |
