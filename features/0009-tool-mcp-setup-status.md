@@ -54,3 +54,9 @@ ni pour le dépannage. Cf. ADR-0001 (option C retenue).
   « j'aime cette idée de visualisation ») : un panneau « Setup » dans
   l'admin affichant l'état provisioning/IAM/publication — même source que
   `status --json`, deux vues.
+- **Démarrage de l'admin** (constat 2026-07-22) : aujourd'hui 100 % manuel
+  (`node admin/server.js`) — la config MCP ne lance que la gateway, qui
+  auto-démarre le broker (Popen détaché), jamais l'admin. À trancher ici :
+  laisser manuel (cycle de vie humain assumé), ou auto-démarrage launchd au
+  login. NE PAS la faire lancer par le process MCP : sa vie serait couplée
+  au client LLM, à rebours du rôle « cockpit humain ».
