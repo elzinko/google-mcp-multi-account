@@ -61,6 +61,18 @@ function gwsa(args) {
   });
 }
 
+// provision-gcp.sh — état du setup (status --json) et réparation IAM (sync-iam).
+// Mutation IAM exécutée PAR l'humain qui clique dans l'admin local (pas le LLM) :
+// même légitimité que les boutons unlock/grant, + Touch ID si strongauth (le
+// script l'exige). Timeout large : le sync-iam attend Touch ID puis gcloud.
+const PROVISION = path.join(REPO, "scripts", "provision-gcp.sh");
+function provision(args, timeout = 20000) {
+  return new Promise((resolve) => {
+    execFile(PROVISION, args, { timeout }, (err, stdout, stderr) =>
+      resolve({ code: err ? (err.code === undefined ? 1 : err.code) : 0, stdout: String(stdout), stderr: String(stderr) }));
+  });
+}
+
 // Appels Drive en LECTURE SEULE pour le sélecteur de dossiers de l'admin.
 // Passent par gws directement (panneau de l'utilisateur : le verrou 🔒, qui
 // cible les LLM via gwsa, ne s'applique pas ici).
@@ -248,6 +260,20 @@ const server = http.createServer(async (req, res) => {
         .map((l) => { try { return JSON.parse(l); } catch { return null; } })
         .filter(Boolean).reverse();
       return send(res, 200, { entries: lines });
+    }
+    if (req.method === "GET" && p === "/api/setup") {
+      const r = await provision(["status", "--json"], 30000);
+      try {
+        return send(res, 200, { ok: true, setup: JSON.parse(r.stdout) });
+      } catch {
+        return send(res, 200, { ok: false, error: "status --json indisponible (gcloud non connecté ?)", out: (r.stderr || r.stdout).slice(0, 500) });
+      }
+    }
+    if (req.method === "POST" && p === "/api/sync-iam") {
+      // Réparation IAM : accorde le rôle aux comptes manquants (idempotent).
+      // Touch ID via le script si strongauth. Timeout large (attente humaine + gcloud).
+      const r = await provision(["sync-iam", "--yes"], 120000);
+      return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).slice(-1500) });
     }
     if (req.method === "GET" && p === "/api/doc") {
       const rd = (f) => { try { return fs.readFileSync(path.join(REPO, f), "utf8"); } catch { return ""; } };
