@@ -3,268 +3,114 @@
 Brancher des agents LLM (Claude Desktop, Cursor, Claude Code, …) sur **plusieurs
 comptes Google** — Gmail, Drive, Calendar, Docs, Sheets, Tasks — **100 % en local**.
 
-> Serveur **MCP** local ([`bin/google-mcp`](bin/google-mcp)) + gateway
-> ([`gateway/`](gateway/)) pour les clients MCP. Le wrapper [`bin/gwsa`](bin/gwsa)
-> et les skills restent pour l’admin humain et Claude Code. Voir
-> [docs/architecture.md](docs/architecture.md) (référence),
-> [docs/mcp-setup.md](docs/mcp-setup.md) et [docs/threat-model.md](docs/threat-model.md).
+Serveur **MCP** local ([`bin/google-mcp`](bin/google-mcp)) + gateway
+([`gateway/`](gateway/)) pour les clients LLM ; le wrapper [`bin/gwsa`](bin/gwsa)
+et l'admin web pour l'humain. **Rien ne tourne dans le cloud** : le seul passage
+par la console Google Cloud est la création *one-shot* d'un identifiant OAuth.
 
-## Architecture
+## Quickstart (3 étapes)
+
+**1 · Provisionner le projet Google Cloud** (une fois, ~10 min) :
+
+```bash
+brew install googleworkspace-cli                 # le CLI gws
+ln -sf "$PWD/bin/gwsa" /opt/homebrew/bin/gwsa    # le wrapper dans le PATH
+./scripts/provision-gcp.sh                        # crée le projet, active les APIs, te guide
+```
+
+Le script fait tout l'automatisable et te guide pour les **deux seuls gestes que
+Google interdit d'automatiser** (créer le client OAuth *Desktop app*, publier
+l'app), puis range le `client_secret.json`. Conteneur vide, rien de déployé, 0 €.
+Détail / voie manuelle : [docs/setup-oauth.md](docs/setup-oauth.md).
+
+**2 · Brancher le serveur MCP** dans ton client LLM (une fois) — bloc de config
+pour Claude Desktop / Cursor / Claude Code : [docs/mcp-setup.md](docs/mcp-setup.md).
+
+**3 · Demander au LLM d'initialiser tes comptes.** Il lit l'état du setup (tool
+`setup_status`), te présente ce qui manque, et te propose **la commande exacte**
+pour chaque étape — c'est toi qui l'exécutes :
+
+```bash
+gwsa add perso        # navigateur → choisir le compte → accepter les accès
+gwsa add assoc        # répéter pour chaque compte · gwsa list pour voir l'état
+```
+
+> ⚠️ Chaque compte connecté (hors propriétaire du projet) doit recevoir le rôle
+> IAM `serviceUsageConsumer`, sinon `403` au 1er appel. `gwsa add` et
+> `./scripts/provision-gcp.sh status` le détectent et affichent la commande ;
+> `./scripts/provision-gcp.sh sync-iam` répare tout d'un coup. Voir
+> [setup-oauth.md §7](docs/setup-oauth.md).
+
+## Comment ça marche
+
+**Le LLM ne peut jamais élargir son propre accès.** Chaque porte — verrou de
+profil, zone d'écriture Drive, nouveau compte, rôle IAM — s'ouvre par un geste
+humain, que le LLM sait *demander* proprement (élicitation) mais jamais exécuter.
+Les quatre parcours, versionnés avec leur prose source dans [diagrams/](diagrams/) :
+
+- **[Setup initial](diagrams/onboarding-setup-initial/)** — les 3 étapes ci-dessus, le reste guidé.
+- **[Lire ses données](diagrams/lecture-donnees-elicitee/)** — verrou → unlock élicité → lecture sous policy.
+- **[Connecter un compte](diagrams/onboarding-add-account-elicite/)** — double barrière physique (Touch ID + consentement OAuth).
+- **[Réparer la dérive IAM](diagrams/onboarding-reparation-iam/)** — détection ×2, réparation humaine idempotente.
 
 ```mermaid
 flowchart TD
     USER["Humain — unlock / grant / policy"]
-    LLM["Clients LLM — Claude Desktop / Cursor / Code"]
+    LLM["Clients LLM — Desktop / Cursor / Code"]
     MCP["bin/google-mcp — MCP stdio"]
-    GW["gateway/ — API unique broker-ready"]
-    ADMIN["admin/server.js — 127.0.0.1:4877"]
-    GWSA["bin/gwsa — multi-profils · verrous · grants"]
-    CHECK["scripts/policy-check.py — default-deny"]
+    GW["gateway/ — policy + verrous, broker-ready"]
+    ADMIN["admin web — 127.0.0.1:4877"]
+    GWSA["bin/gwsa — profils · verrous · grants"]
     GWS["gws — CLI Google Workspace"]
-    PROFILS["~/.config/gws-accounts/alias/"]
     GOOGLE["APIs Google"]
-
-    USER --> ADMIN
+    USER --> ADMIN --> GWSA
     USER --> GWSA
-    ADMIN -->|execFile| GWSA
-    LLM --> MCP --> GW
-    GW --> CHECK
-    GW -->|executor v1| GWS
-    LLM -.->|admin / legacy skills| GWSA
-    GWSA --> CHECK
-    CHECK -->|ok| GWS
-    GWS --> PROFILS
-    GWS --> GOOGLE
+    LLM --> MCP --> GW --> GWSA --> GWS --> GOOGLE
 ```
 
-**Rien ne tourne dans le cloud.** Le seul passage par la console Google Cloud est la
-création *one-shot* d'un identifiant OAuth — voir [docs/setup-oauth.md](docs/setup-oauth.md).
+*Pourquoi un wrapper ?* `gws` ne gère qu'un compte à la fois (multi-comptes natif
+retiré, [issue #293](https://github.com/googleworkspace/cli/issues/293)) ; `gwsa`
+/ la gateway isolent chaque compte via `GOOGLE_WORKSPACE_CLI_CONFIG_DIR`. Un
+broker local ([`bin/google-broker`](bin/google-broker)) est le seul process qui
+exécute `gws` pour le MCP. Référence : [docs/architecture.md](docs/architecture.md).
 
-**Pourquoi un wrapper + gateway ?** `gws` ne gère qu'un compte à la fois (le multi-comptes
-natif a été retiré, cf. [issue #293](https://github.com/googleworkspace/cli/issues/293)).
-`gwsa` / la gateway isolent chaque compte via `GOOGLE_WORKSPACE_CLI_CONFIG_DIR`.
-Phase 2 A : broker local (`bin/google-broker`) — seul process MCP qui exécute `gws`.
-Vault credentials (hors périmètre agent) = fiche backlog 0003, plus tard.
+## Utiliser
 
-### Comment ça se passe, en 4 séquences
-
-L'idée en une phrase : **le LLM ne peut jamais élargir son propre accès** —
-chaque porte (verrou, zone Drive, nouveau compte, rôle IAM) s'ouvre par un
-geste humain, que le LLM sait demander proprement (élicitation). Chaque
-diagramme est versionné avec sa prose source dans [diagrams/](diagrams/) :
-
-- **[Setup initial](diagrams/onboarding-setup-initial/)** — 3 étapes
-  humaines (provisionner, brancher le MCP, « initialise mes comptes »), le
-  reste guidé.
-- **[Lire ses données](diagrams/lecture-donnees-elicitee/)** — verrou →
-  unlock élicité (Touch ID) → lecture sous policy ; l'écriture Drive suit la
-  même danse avec une zone `grant`.
-- **[Connecter un nouveau compte](diagrams/onboarding-add-account-elicite/)**
-  — élicitation à double barrière physique (Touch ID + consentement OAuth).
-- **[Réparer la dérive IAM](diagrams/onboarding-reparation-iam/)** —
-  détection par deux chemins, réparation humaine idempotente (`sync-iam`).
-
-## Installation
-
-```bash
-brew install googleworkspace-cli          # le CLI gws
-ln -sf "$PWD/bin/gwsa" /opt/homebrew/bin/gwsa   # le wrapper dans le PATH
-# MCP (Claude Desktop / Cursor / Code) — voir docs/mcp-setup.md
-# brancher : …/bin/google-mcp
-```
-
-## Setup OAuth (one-shot, ~10 min)
-
-**Voie automatique (recommandée)** — le script provisionne GCP via gcloud :
-
-```bash
-./scripts/provision-gcp.sh          # login → AFFICHE LE COMPTE ACTIF → confirme → provisionne
-./scripts/provision-gcp.sh status   # état des lieux (lecture seule)
-```
-
-Il vérifie que tu es connecté avec le **bon compte** avant d'agir, crée le
-projet (conteneur vide — rien n'est déployé, 0 €), active les 8 APIs, tente
-l'écran de consentement par API, ouvre les pages console pour les deux seuls
-gestes que Google interdit d'automatiser (client OAuth *Desktop app*,
-publication), et range tout seul le `client_secret.json` téléchargé.
-
-**Voie manuelle** — suivre [docs/setup-oauth.md](docs/setup-oauth.md), puis :
-
-```bash
-mkdir -p ~/.config/gws-accounts
-mv ~/Downloads/client_secret_*.json ~/.config/gws-accounts/client_secret.json
-```
-
-## Connexion des comptes
-
-```bash
-gwsa add perso        # ouvre le navigateur → choisir le 1er compte Google
-gwsa add assoc        # idem → choisir le 2e compte
-gwsa list             # profils et état
-```
-
-⚠️ Chaque compte connecté (hors propriétaire du projet GCP) doit recevoir le
-rôle IAM `serviceUsageConsumer`, sinon `403` au premier appel API — voir
-[docs/setup-oauth.md](docs/setup-oauth.md) §7.
-
-Scopes par défaut (lecture **et** écriture) : Gmail (`gmail.modify`), Drive,
-Calendar, Docs, Sheets, Slides, Tasks. Variantes : `gwsa add x --readonly`,
-`gwsa add x --scopes <urls>`.
-
-## Usage
-
-```bash
-gwsa perso gmail users messages list --params '{"userId":"me","maxResults":5}'
-gwsa assoc drive files list --params '{"pageSize":10}'
-gwsa perso calendar +agenda --today    # agenda du jour
-gwsa perso auth status                 # état du token
-```
-
-### Connexion sur demande (élicitation)
-
-Un profil peut être **verrouillé** : il reste connecté (token en place) mais
-refuse toute commande tant que tu ne l'as pas déverrouillé explicitement —
-le LLM qui se heurte au verrou doit te le demander.
-
-```bash
-gwsa lock zebra            # accès sur demande uniquement
-gwsa zebra gmail …         # ✗ profil verrouillé 🔒 → le LLM doit demander
-gwsa unlock zebra 30       # déverrouillé 30 min, reverrouillage automatique
-```
-
-[.claude/settings.json](.claude/settings.json) ajoute une seconde barrière,
-native Claude Code : les commandes sur les profils sensibles (et `gwsa unlock`)
-déclenchent une demande de permission explicite.
-
-### Policy par service : qui a le droit de faire quoi
-
-Chaque profil peut porter une policy (`~/.config/gws-accounts/<alias>/policy.json`,
-appliquée par `scripts/policy-check.py` avant chaque commande). **Default-deny** :
-un service absent de la policy est refusé (sauf `auth` / `schema`). Un service
-configuré est fail closed : tout ce qui n'est pas explicitement autorisé est refusé.
-`gwsa add` écrit une policy prudente automatiquement.
-
-- **Drive** — par zones : lecture partout, écriture uniquement sous les dossiers
-  autorisés (sous-dossiers compris — remontée des parents via l'API). Modes :
-  `open`, `readonly`, `restricted`.
-- **Gmail** — catégories `read`, `drafts`, `send`, `labels`, `update`, `delete`,
-  `settings`. Le combo gagnant : *brouillons sans envoi* — le LLM prépare, tu envoies.
-- **Agenda / Keep / autres** — `read`, `create`, `update`, `delete`, `share`.
-
-```bash
-gwsa policy mw allow "LLM"        # Drive : zone PERMANENTE sous le dossier « LLM »
-gwsa policy mw show               # affiche la policy complète du profil
-gwsa mw drive files create --json '{"name":"x"}'   # ✗ refusé (pas de parent autorisé)
-gwsa mw gmail users messages send --json '…'       # ✗ refusé si "send": false
-gwsa policy mw clear              # Drive repasse en open (autres services inchangés)
-```
-
-**Zones temporaires — le flux d'élicitation Drive.** Par défaut un profil en
-`zonesOnly` n'a le droit d'écrire *nulle part*. Quand un LLM veut écrire quelque
-part, il se heurte à un refus qui lui dit quoi demander ; c'est **toi** qui
-accordes, pour une durée limitée (défaut 8 h, expiration automatique — donc à
-re-demander à chaque session de travail) :
-
-```bash
-gwsa grant coloc "Compta 2026" 4   # écriture sous ce dossier pendant 4 h
-gwsa grants coloc                  # autorisations temporaires actives
-gwsa grant coloc revoke <folderId> # révoquer avant l'expiration
-```
-
-Chaque refus est journalisé et invite le LLM à *demander* l'élargissement —
-l'élicitation, encore. *Limite assumée : c'est le wrapper qui contrôle, pas
-Google — le seul verrou 100 % côté Google serait le scope `drive.file`.*
-
-### Interface d'admin web
-
-```bash
-gwsa admin                 # démarre (détaché, idempotent) + ouvre http://127.0.0.1:4877
-gwsa admin stop            # arrête ; logs dans ~/.config/gws-accounts/admin.log
-```
-
-*(équivalent manuel : `node admin/server.js` — local uniquement)*. Les
-messages d'élicitation du MCP citent la commande : n'importe quel client LLM
-sait donc te proposer de la démarrer quand elle est utile.
-
-Tout se pilote depuis le navigateur : **connecter un compte** (alias + email
-attendu — l'onglet Google s'ouvre avec le bon compte présélectionné et la
-connexion est refusée si tu choisis le mauvais), **verrouiller/déverrouiller**
-(minutes ou `off`), **éditer la policy** service par service avec préréglages
-(« prudent » : Drive zones, Gmail brouillons sans envoi, Agenda lecture, Keep
-lecture + création), **journal des accès** (qui a fait quoi sur quel compte —
-les LLM s'identifient via la variable `GWSA_CLIENT`), **doc intégrée** (❓) et
-**gros bouton Révoquer** (supprime les tokens du poste, accès coupé immédiatement).
-
-Ajout d'un dossier autorisé sans jamais saisir d'ID : **🔍 recherche par nom**
-(plusieurs correspondances → liste de choix avec le chemin complet) ou **📂
-navigation** dans Mon Drive (Ouvrir/Choisir), puis durée : temporaire (défaut
-8 h) ou permanent. *(Pourquoi des IDs en interne ? Les noms de dossiers Drive ne
-sont pas uniques et changent au gré des renommages/déplacements ; l'ID est la
-seule référence stable. L'interface fait la conversion nom → ID pour toi.)*
-
-Sécurité : serveur lié à 127.0.0.1 seulement, en-tête custom obligatoire
-(anti-CSRF), Origin contrôlée, aucune dépendance npm (mermaid vendorisé en
-local), actions déléguées à `bin/gwsa` (`execFile`, jamais de shell).
-
-### Authentification forte (Touch ID) — optionnelle
-
-```bash
-gwsa strongauth on      # unlock et grant exigeront Touch ID / Apple Watch
-gwsa strongauth status  #   (ou mot de passe de session macOS en secours)
-gwsa strongauth off     # désactivation (elle-même protégée par Touch ID)
-```
-
-Une fois activée, chaque déverrouillage de profil et chaque autorisation de
-zone Drive déclenche la boîte de dialogue biométrique système
-([scripts/touchid.swift](scripts/touchid.swift), framework LocalAuthentication
-d'Apple, 100 % local). L'approbation d'élicitation ne peut alors plus venir
-que d'un humain physiquement présent devant le Mac — un LLM (ou un script)
-ne peut pas la simuler.
-
-### Serveur MCP (recommandé pour les données)
-
-Architecture et contrôles de sécurité : [docs/architecture.md](docs/architecture.md).  
-Branchement Desktop / Cursor / Code : [docs/mcp-setup.md](docs/mcp-setup.md).  
-**Les tools exposés, par groupe** (découverte, Gmail, Drive, élicitation) :
-[docs/mcp-setup.md — tableau des tools](docs/mcp-setup.md#les-tools-exposés-par-groupe).  
-Limites / broker Phase 2 A / vault 2.1 : [docs/threat-model.md](docs/threat-model.md).
-
-### Depuis Claude Code
-
-Ouvrir une session dans ce repo : les skills `.claude/skills/gws-*` et les
-consignes [CLAUDE.md](CLAUDE.md) sont chargés automatiquement. Demander en
-langage naturel, par ex. « liste mes 5 derniers mails du compte perso ».
+- **Depuis un LLM** — les tools MCP par groupe (découverte, Gmail, Drive,
+  élicitation, diagnostic) : [docs/mcp-setup.md](docs/mcp-setup.md). En Claude
+  Code, demander en langage naturel (« liste mes 5 derniers mails du compte perso »).
+- **En ligne de commande & admin web** (`gwsa`, verrous, `gwsa admin`, Touch ID) :
+  [docs/usage.md](docs/usage.md).
+- **Le modèle de policy** (default-deny par service, zones Drive, grants) :
+  [docs/policies.md](docs/policies.md).
 
 ## Sécurité
 
-- Tokens OAuth chiffrés (AES-256-GCM) dans `~/.config/gws-accounts/<alias>/credentials.enc` ;
-  clé maître dans le Trousseau macOS. Rien de tout ça n'est dans le repo (`.gitignore`).
-- Le `client_secret.json` d'une app *Desktop* n'est pas un vrai secret au sens
-  strict, mais on le garde hors du repo par principe.
-- Les scopes par défaut excluent la suppression définitive Gmail.
+- Tokens OAuth chiffrés (AES-256-GCM) dans `~/.config/gws-accounts/<alias>/`,
+  clé maître dans le Trousseau macOS — rien de tout ça dans le repo (`.gitignore`).
+- **Default-deny** par service ; brouillons Gmail sans envoi ; scopes par défaut
+  hors suppression définitive. Détails & limites : [docs/threat-model.md](docs/threat-model.md).
+- `gwsa strongauth on` exige Touch ID (présence humaine) pour unlock / grant / add.
 
 ## Limites connues
 
-- **App OAuth « non vérifiée »** : à la première connexion de chaque compte,
-  Google affiche un avertissement → *Paramètres avancés* → *Accéder à…*. Normal
-  pour une app personnelle (< 100 utilisateurs).
-- **Mode Testing = tokens 7 jours** : tant que l'app OAuth est en statut
-  *Testing*, chaque compte doit se reconnecter tous les 7 jours. Publier l'app
-  en *Production* (voir docs/setup-oauth.md, étape 5) rend les tokens durables.
+- **App OAuth « non vérifiée »** : avertissement Google à la 1re connexion de
+  chaque compte (*Paramètres avancés* → *Accéder à…*). Normal pour une app perso.
+- **Mode Testing = tokens 7 jours** : publier l'app en *Production*
+  ([setup-oauth.md](docs/setup-oauth.md) étape 5) rend les tokens durables.
 - Quotas API gratuits largement suffisants pour un usage personnel. Coût : 0 €.
 
 ## Tests
 
 - **Automatiques** : `./scripts/test.sh` — suite hermétique (policy, wrapper,
   gateway, broker) ; aucun compte réel, aucun réseau.
-- **Manuels** : [tests/manuels/](tests/manuels/) — tests guidés avec de vrais
-  comptes, pilotés par un LLM dans une session Claude Code. Chaque test y
-  stocke son **prompt** et son **protocole** ; il suffit de dire « lance le
-  test manuel drive-2-comptes ». Prérequis : un dossier bac à sable
-  `ZZ-TESTS` à la racine des Drive concernés.
+- **Manuels** : [tests/manuels/](tests/manuels/) — guidés par un LLM sur de vrais
+  comptes ; il suffit de dire « lance le test manuel drive-2-comptes » (prérequis :
+  un dossier bac à sable `ZZ-TESTS` à la racine des Drive concernés).
 
 ## Maintenance
 
 - `./scripts/sync-skills.sh` — resynchronise les skills officiels après une MàJ de gws.
-- Suivre l'[issue #293](https://github.com/googleworkspace/cli/issues/293) : si le
-  multi-comptes natif (`--account`) revient dans gws, ce wrapper deviendra un alias trivial.
+- Si le multi-comptes natif (`--account`) revient dans gws
+  ([issue #293](https://github.com/googleworkspace/cli/issues/293)), ce wrapper
+  deviendra un alias trivial.
