@@ -5,7 +5,7 @@ type: feature
 priority: P1
 version:
 epic:
-status: idea
+status: in-progress
 ready:
 pr:
 created: 2026-07-22
@@ -55,15 +55,20 @@ liste n'est élicitée qu'au moment des gestes.
 
 ## Critères d'acceptation
 
-- [ ] `provision-gcp.sh status` liste les comptes connectés **sans** rôle
+- [x] `provision-gcp.sh status` liste les comptes connectés **sans** rôle
       `serviceUsageConsumer` et affiche la commande de remédiation par compte.
-- [ ] `gwsa add` détecte le 403-projet après connexion et affiche la
+- [x] `gwsa add` détecte le 403-projet après connexion et affiche la
       commande gcloud exacte, sans l'exécuter.
-- [ ] Un LLM guidant l'init (Claude Desktop/Code) peut dérouler toute la
+- [x] Un LLM guidant l'init (Claude Desktop/Code) peut dérouler toute la
       chaîne en ne demandant à l'humain que : les adresses, et l'exécution
-      des commandes proposées.
-- [ ] `scripts/test.sh` : le message de remédiation 403 est couvert par un
-      cas hermétique (sortie simulée de gws).
+      des commandes proposées (via `status` + la sonde de `gwsa add`).
+- [x] `scripts/test.sh` : le message de remédiation 403 est couvert par un
+      cas hermétique (sortie simulée de gws). Suite 69/69.
+
+**Différé** (hors critères, chevauche 0007/0008) : l'élicitation de la liste
+d'adresses *dans* le flux `provision-gcp.sh run` et le binding IAM automatique
+— la détection/diagnostic (`status`, sonde) suffit à combler le trou de la
+fiche ; l'automatisation des bindings relève de 0007 (provisioning idempotent).
 
 ## Notes
 
