@@ -61,6 +61,23 @@ Exemple :
 claude mcp add google-multi-account -- /ABS/PATH/google-mcp-multi-account/bin/google-mcp
 ```
 
+## Les tools exposés, par groupe
+
+| Groupe | Tool | Ce que ça fait |
+|---|---|---|
+| Découverte | `profiles_list` | Liste les profils (alias, email, verrou, policy) — toujours commencer là |
+| Gmail — lecture | `gmail_list` · `gmail_get` | Recherche puis lit les messages d'un compte |
+| Gmail — brouillon | `gmail_draft_create` | Prépare un brouillon ; **aucun tool n'envoie de mail** |
+| Drive — lecture | `drive_list` · `drive_get` | Liste / inspecte fichiers et dossiers (`webViewLink` compris) |
+| Drive — écriture zonée | `drive_create` | Crée un fichier sous un parent autorisé (policy zones + grants) |
+| Élicitation | `access_request` | kind=`unlock` \| `grant` \| `add_account` : renvoie **la commande à faire exécuter par l'humain** — n'exécute jamais rien |
+
+Chaque appel traverse la gateway (verrou + policy default-deny) puis le
+broker loopback, et tout est journalisé (`GWSA_CLIENT`). Un refus n'est
+jamais une impasse : il embarque l'élicitation à proposer — voir les
+[diagrammes de séquence](../diagrams/) (lecture, connexion de compte,
+réparation IAM).
+
 ## Smoke test manuel (sans client)
 
 ```bash

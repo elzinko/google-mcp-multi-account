@@ -46,3 +46,11 @@ ni pour le dépannage. Cf. ADR-0001 (option C retenue).
 - Découle de l'ADR-0001 ; réutilise `iam_profile_states` (0005/0007).
 - Le tool LIT ; toute mutation reste élicitée (unlock/grant/add_account/
   sync-iam). Ne pas exécuter gcloud depuis la gateway.
+- **Complémentarité avec l'admin web** (`admin/server.js`,
+  http://127.0.0.1:4877) : l'admin est le cockpit de *l'humain*
+  (visualiser + configurer : comptes, verrous, policies, zones, journal,
+  révocation) ; `setup_status` est la même visibilité pour *le LLM*.
+  Extension candidate (validée sur le principe par le PO, 2026-07-22 —
+  « j'aime cette idée de visualisation ») : un panneau « Setup » dans
+  l'admin affichant l'état provisioning/IAM/publication — même source que
+  `status --json`, deux vues.
