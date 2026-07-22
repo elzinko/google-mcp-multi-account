@@ -54,10 +54,12 @@ wait_enter() { is_tty && read -r -p "→ Appuie sur Entrée quand c'est fait… 
 MODE="run"
 CONFIRM_ACCOUNT=""
 CONFIRM_YES=""
+JSON_OUT=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     status) MODE="status" ;;
     sync-iam) MODE="sync-iam" ;;
+    --json) JSON_OUT=1 ;;
     --yes|-y) CONFIRM_YES=1 ;;
     --confirm-account) shift; CONFIRM_ACCOUNT="${1:-}" ;;
     --confirm-account=*) CONFIRM_ACCOUNT="${1#*=}" ;;
@@ -117,6 +119,14 @@ iam_profile_states() { # <project> → lignes « alias<TAB>email<TAB>ok|missing|
 
 # ── status (lecture seule) ───────────────────────────────────────
 if [[ "$MODE" == "status" ]]; then
+  # Vue machine : même état, en JSON (contrat du tool MCP setup_status).
+  if [[ -n "$JSON_OUT" ]]; then
+    REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+    # -W ignore::RuntimeWarning : gateway/__init__ importe déjà setup_status via
+    # api, d'où un warning runpy inoffensif sur le double-chargement en -m.
+    exec env PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}" \
+      /usr/bin/python3 -W ignore::RuntimeWarning -m gateway.setup_status
+  fi
   step "État du provisioning"
   if have_gcloud; then ok "gcloud installé ($(gcloud --version 2>/dev/null | head -1))"
   else warn "gcloud non installé"; fi

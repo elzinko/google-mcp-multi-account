@@ -26,9 +26,9 @@ Fichier de config (macOS) :
 }
 ```
 
-Redémarrer Claude Desktop. Tools attendus : `profiles_list`, `gmail_list`,
-`gmail_get`, `gmail_draft_create`, `drive_list`, `drive_get`, `drive_create`,
-`access_request`.
+Redémarrer Claude Desktop. Tools attendus : `profiles_list`, `setup_status`,
+`gmail_list`, `gmail_get`, `gmail_draft_create`, `drive_list`, `drive_get`,
+`drive_create`, `access_request`.
 
 ## Cursor
 
@@ -66,6 +66,7 @@ claude mcp add google-multi-account -- /ABS/PATH/google-mcp-multi-account/bin/go
 | Groupe | Tool | Ce que ça fait |
 |---|---|---|
 | Découverte | `profiles_list` | Liste les profils (alias, email, verrou, policy) — toujours commencer là |
+| Diagnostic | `setup_status` | État du setup (projet, publication, IAM par compte) + `next_actions` : commandes à proposer pour compléter/réparer (lecture seule). Guide l'onboarding, même sans shell (Desktop) |
 | Gmail — lecture | `gmail_list` · `gmail_get` | Recherche puis lit les messages d'un compte |
 | Gmail — brouillon | `gmail_draft_create` | Prépare un brouillon ; **aucun tool n'envoie de mail** |
 | Drive — lecture | `drive_list` · `drive_get` | Liste / inspecte fichiers et dossiers (`webViewLink` compris) |

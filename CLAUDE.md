@@ -10,8 +10,10 @@ Tasks) depuis des agents LLM, via le serveur MCP local (`bin/google-mcp` →
    `gmail_*`, `drive_*`). Ne pas appeler `gws` nu. Si tu utilises le shell :
    `gwsa <alias> …` uniquement — jamais
    `GOOGLE_WORKSPACE_CLI_CONFIG_DIR=… gws …` (contourne policy et verrous).
-2. Découvrir les comptes : tool `profiles_list` ou `gwsa list`. En cas de doute
-   sur le compte, demander à l'utilisateur. Connecter un **nouveau** compte :
+2. Découvrir les comptes : tool `profiles_list` ou `gwsa list`. Diagnostiquer le
+   setup (projet, publication, IAM par compte, quoi faire ensuite) : tool
+   `setup_status` (lecture seule ; ses `next_actions` sont à proposer, pas à
+   lancer). En cas de doute sur le compte, demander à l'utilisateur. Connecter un **nouveau** compte :
    tool `access_request` kind=`add_account` (email requis) → c'est l'humain qui
    exécute le `gwsa add` suggéré (Touch ID si strongauth) — jamais toi.
 3. Confirmer avec l'utilisateur avant tout envoi ou modification visible de

@@ -286,10 +286,43 @@ fi
 
 # MCP tools/list smoke (stdio JSON-RPC, une requête)
 MCP_OUT="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | python3 -m gateway 2>/dev/null | head -1)"
-if echo "$MCP_OUT" | python3 -c 'import json,sys; r=json.load(sys.stdin); names=[t["name"] for t in r["result"]["tools"]]; assert "gmail_list" in names and "gmail_draft_create" in names; assert not any(t["name"]=="gmail_send" for t in r["result"]["tools"]); ar=[t for t in r["result"]["tools"] if t["name"]=="access_request"][0]; assert "add_account" in ar["inputSchema"]["properties"]["kind"]["enum"]'; then
-  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m MCP tools/list (Gmail+Drive, pas de send)\n'
+if echo "$MCP_OUT" | python3 -c 'import json,sys; r=json.load(sys.stdin); names=[t["name"] for t in r["result"]["tools"]]; assert "gmail_list" in names and "gmail_draft_create" in names and "setup_status" in names; assert not any(t["name"]=="gmail_send" for t in r["result"]["tools"]); ar=[t for t in r["result"]["tools"] if t["name"]=="access_request"][0]; assert "add_account" in ar["inputSchema"]["properties"]["kind"]["enum"]'; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m MCP tools/list (Gmail+Drive+setup_status, pas de send)\n'
 else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m MCP tools/list\n'
+fi
+
+section "Gateway — setup_status (lecture seule, dégradation gracieuse)"
+if python3 - <<'PY'
+import os
+from pathlib import Path
+from gateway.setup_status import setup_status
+
+root = Path(os.environ["GWSA_ROOT"])
+# Profil connecté + verrouillé factice (pas de provision.env ni gcloud dans le tmp).
+d = root / "acct1"
+d.mkdir(parents=True, exist_ok=True)
+(d / "credentials.enc").write_text("x")   # marque « connecté »
+(d / ".locked").write_text("")
+try:
+    (d / ".unlock-until").unlink()
+except FileNotFoundError:
+    pass
+
+r = setup_status()
+assert r["ok"] and "accounts" in r and "next_actions" in r, r
+# Sans provision.env : projet inconnu → IAM non vérifiable, jamais d'erreur.
+assert r["project_id"] is None and r["iam_checked"] is False, r
+assert all(a["iam"] == "unknown" for a in r["accounts"]), r
+# Profil verrouillé → commande unlock proposée ; rien n'est exécuté.
+assert any("gwsa unlock acct1" in a for a in r["next_actions"]), r["next_actions"]
+assert (d / ".locked").exists() and not (d / ".unlock-until").exists(), "setup_status ne doit rien muter"
+print("ok")
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m setup_status (dégradation gracieuse + next_actions)\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m setup_status\n'
 fi
 
 section "Broker Phase 2 A — ping + refus locked via RPC"
