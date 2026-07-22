@@ -112,6 +112,10 @@ Testing) : décide-la une fois, sers-t'en deux fois.
   avec leur état d'accès au projet, et la commande de remédiation pour chacun
   de ceux qui manquent — le point d'entrée pour vérifier la dérive à tout
   moment (lecture seule).
+- `./scripts/provision-gcp.sh sync-iam` accorde le rôle à tous les comptes
+  qui manquent, en une passe **idempotente** (confirmation par compte,
+  `--yes` pour scripter) — à lancer par le propriétaire du projet, dans sa
+  session gcloud.
 
 Un LLM qui guide l'installation n'a donc qu'à lancer `status`, relayer les
 commandes affichées, et te laisser les exécuter (il ne les lance jamais

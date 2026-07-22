@@ -5,7 +5,7 @@ type: feature
 priority: P2
 version:
 epic:
-status: idea
+status: in-progress
 ready:
 pr:
 created: 2026-07-22
@@ -49,12 +49,20 @@ documenté (docs/setup-oauth.md). Ne pas viser un « tout Terraform » illusoire
 
 ## Critères d'acceptation
 
-- [ ] Voie choisie et justifiée (ADR court si Terraform).
-- [ ] `provision-gcp.sh` (ou `terraform apply`) ré-exécutable sans effet de
-      bord ni erreur — idempotence prouvée par une double exécution.
-- [ ] La frontière automatisable / manuel est explicite dans la doc.
-- [ ] Les bindings IAM de 0005 s'intègrent à la voie choisie (une seule
-      source pour « qui a le rôle »).
+- [x] Voie choisie et justifiée : **bash durci** (décision PO 2026-07-22 —
+      pas de dépendance ni tfstate ; Terraform ne couvrirait de toute façon
+      pas les 2 gestes OAuth manuels). Pas d'ADR requis (pas de Terraform).
+- [x] Idempotence prouvée par double exécution sur la zone automatisable :
+      `status` (lecture seule) et `sync-iam` (comptes en place → « déjà OK »
+      ×N, zéro mutation ; non-tty sans `--yes` = no-op). La double exécution
+      du flow interactif complet (étapes console) se re-valide au prochain
+      onboarding réel — étapes 3–6 détectaient déjà l'existant, l'étape 7
+      (publication) est désormais mémorisée (`PUBLISHED` dans provision.env).
+- [x] Frontière automatisable / manuel explicite : en-tête du script
+      (Automatisé / Guidé) + docs/setup-oauth.md.
+- [x] Bindings IAM de 0005 intégrés : `sync-iam` réutilise la même détection
+      (`iam_profile_states`) que `status` — une seule source pour « qui a le
+      rôle ».
 
 ## Notes
 
