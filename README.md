@@ -85,6 +85,10 @@ gwsa add assoc        # idem → choisir le 2e compte
 gwsa list             # profils et état
 ```
 
+⚠️ Chaque compte connecté (hors propriétaire du projet GCP) doit recevoir le
+rôle IAM `serviceUsageConsumer`, sinon `403` au premier appel API — voir
+[docs/setup-oauth.md](docs/setup-oauth.md) §7.
+
 Scopes par défaut (lecture **et** écriture) : Gmail (`gmail.modify`), Drive,
 Calendar, Docs, Sheets, Slides, Tasks. Variantes : `gwsa add x --readonly`,
 `gwsa add x --scopes <urls>`.
@@ -223,6 +227,16 @@ langage naturel, par ex. « liste mes 5 derniers mails du compte perso ».
   *Testing*, chaque compte doit se reconnecter tous les 7 jours. Publier l'app
   en *Production* (voir docs/setup-oauth.md, étape 5) rend les tokens durables.
 - Quotas API gratuits largement suffisants pour un usage personnel. Coût : 0 €.
+
+## Tests
+
+- **Automatiques** : `./scripts/test.sh` — suite hermétique (policy, wrapper,
+  gateway, broker) ; aucun compte réel, aucun réseau.
+- **Manuels** : [tests/manuels/](tests/manuels/) — tests guidés avec de vrais
+  comptes, pilotés par un LLM dans une session Claude Code. Chaque test y
+  stocke son **prompt** et son **protocole** ; il suffit de dire « lance le
+  test manuel drive-2-comptes ». Prérequis : un dossier bac à sable
+  `ZZ-TESTS` à la racine des Drive concernés.
 
 ## Maintenance
 

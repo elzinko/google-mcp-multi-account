@@ -84,3 +84,22 @@ gwsa add perso     # navigateur → choisir le compte n°1 → accepter les acc�
 gwsa add assoc     # navigateur → choisir le compte n°2 → accepter les accès
 gwsa list
 ```
+
+## 7. Multi-comptes : rôle IAM pour chaque compte connecté
+
+`gws` attache le projet GCP du `client_secret.json` comme *quota project* à
+chaque appel API. Google vérifie alors que le **compte appelant** a la
+permission `serviceusage.services.use` sur ce projet — sinon `403 Caller
+does not have required permission to use project <id>`, même avec un token
+parfaitement valide. Le compte qui a créé le projet passe ; **tous les
+autres doivent recevoir le rôle** (one-shot, gratuit, ~2 min de propagation) :
+
+```bash
+# exécuté avec le compte propriétaire du projet (gcloud auth login)
+gcloud projects add-iam-policy-binding <PROJECT_ID> \
+  --member=user:<adresse@gmail.com> --role=roles/serviceusage.serviceUsageConsumer
+```
+
+À refaire pour chaque nouveau compte connecté via `gwsa add`. C'est la même
+liste d'adresses que les *test users* de l'étape 5 (si l'app est restée en
+Testing) : décide-la une fois, sers-t'en deux fois.

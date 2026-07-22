@@ -10,6 +10,9 @@ token*.json
 .DS_Store
 node_modules/
 
+# Fichiers temporaires des tests manuels (tests/manuels/*)
+.e2e-tmp/
+
 # Artefacts Python (py_compile / CI)
 __pycache__/
 *.pyc
