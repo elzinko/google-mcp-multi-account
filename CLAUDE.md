@@ -59,4 +59,6 @@ l'utilisateur la commande `gcloud projects add-iam-policy-binding …` de
 `docs/setup-oauth.md` §7 (geste admin humain — ne jamais l'exécuter soi-même).
 Pour l'état complet (quels comptes manquent + la commande par compte) :
 `./scripts/provision-gcp.sh status`. `gwsa add` affiche aussi la commande
-automatiquement si le compte fraîchement connecté n'a pas le rôle.
+automatiquement si le compte fraîchement connecté n'a pas le rôle. Pour tout
+réparer d'un coup, proposer à l'utilisateur `./scripts/provision-gcp.sh
+sync-iam` (idempotent, confirmation par compte — ne jamais le lancer soi-même).
