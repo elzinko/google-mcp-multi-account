@@ -90,6 +90,33 @@ if [[ "$MODE" == "status" ]]; then
     echo "  APIs activées : $n/8"
   fi
   [[ -f "$SECRET_DEST" ]] && ok "client_secret.json en place ($SECRET_DEST)" || warn "client_secret.json absent"
+
+  # Dérive IAM : quels comptes connectés n'ont pas le rôle serviceUsageConsumer
+  # sur le projet (sinon 403 « quota project » silencieux au 1er appel — §7).
+  if [[ -n "${PROJECT_ID:-}" ]] && have_gcloud && [[ -n "${acct:-}" ]]; then
+    step "Comptes connectés & accès au projet (rôle IAM)"
+    authorized="$(gcloud projects get-iam-policy "$PROJECT_ID" \
+      --flatten="bindings[].members" \
+      --filter="bindings.role=roles/owner OR bindings.role=roles/editor OR bindings.role=roles/serviceusage.serviceUsageConsumer" \
+      --format="value(bindings.members)" 2>/dev/null | sed 's/^user://' || true)"
+    any_profile=""
+    for d in "$GWSA_ROOT"/*/; do
+      [[ -f "$d/client_secret.json" ]] || continue
+      any_profile=1
+      alias_name="$(basename "$d")"
+      pemail="$(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$d" gws auth status 2>/dev/null \
+        | grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]+' | head -1 || true)"
+      if [[ -z "$pemail" ]]; then
+        warn "$alias_name : email indéterminé (token expiré ? → gwsa add $alias_name)"
+      elif printf '%s\n' "$authorized" | grep -qixF "$pemail"; then  # -i : emails insensibles à la casse
+        ok "$alias_name ($pemail) : accès projet OK"
+      else
+        warn "$alias_name ($pemail) : SANS rôle serviceUsageConsumer → 403 au 1er appel"
+        echo "     gcloud projects add-iam-policy-binding $PROJECT_ID --member=user:$pemail --role=roles/serviceusage.serviceUsageConsumer"
+      fi
+    done
+    [[ -n "$any_profile" ]] || echo "  (aucun compte connecté — gwsa add <alias>)"
+  fi
   exit 0
 fi
 
