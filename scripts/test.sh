@@ -336,6 +336,38 @@ else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m broker ping + locked + token\n'
 fi
 
+# --- 5. Onboarding IAM — détecteur du 403 « quota project » (hermétique) -----
+
+section "Onboarding IAM — scripts/iam-check.py (détection 403 + remédiation)"
+IAM="scripts/iam-check.py"
+GWS_403='error[api]: Caller does not have required permission to use project gws-multi-802ec6. Grant the caller the roles/serviceusage.serviceUsageConsumer role, or a custom role with the serviceusage.services.use permission, by visiting https://console...'
+
+iam_out="$(printf '%s' "$GWS_403" | python3 "$IAM" detect alice@gmail.com 2>/dev/null)"; iam_rc=$?
+if [[ "$iam_rc" == 0 ]] \
+   && echo "$iam_out" | grep -q 'add-iam-policy-binding gws-multi-802ec6' \
+   && echo "$iam_out" | grep -q -- '--member=user:alice@gmail.com' \
+   && echo "$iam_out" | grep -q 'serviceUsageConsumer'; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m 403 détecté → commande gcloud exacte (projet + email de l'\''appelant)\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m 403 détecté → remédiation (rc=%s)\n' "$iam_rc"
+fi
+
+# Sortie normale de gws (pas de 403) → aucune remédiation, rc=1
+printf '%s' '{"files":[{"id":"x","name":"y"}]}' | python3 "$IAM" detect bob@gmail.com >/dev/null 2>&1
+if [[ $? == 1 ]]; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m sortie saine → aucune remédiation (rc=1, silencieux)\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m sortie saine devrait être silencieuse (rc=1)\n'
+fi
+
+# Usage invalide (pas d'email / mauvais verbe) → rc=2
+printf 'x' | python3 "$IAM" detect >/dev/null 2>&1
+if [[ $? == 2 ]]; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m usage invalide → rc=2\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m usage invalide devrait donner rc=2\n'
+fi
+
 # --- Bilan ------------------------------------------------------------------
 
 printf '\n\033[1mBilan : %d réussis, %d échoués\033[0m\n' "$PASS" "$FAIL"
