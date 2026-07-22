@@ -110,6 +110,7 @@ pas prouvée gênante.
 ## Scénarios validés par diagrammes de séquence
 
 - [diagrams/onboarding-setup-initial](../../diagrams/onboarding-setup-initial/) — les 3 étapes cibles
+- [diagrams/lecture-donnees-elicitee](../../diagrams/lecture-donnees-elicitee/) — le quotidien : verrou → unlock élicité → lecture sous policy (existant)
 - [diagrams/onboarding-add-account-elicite](../../diagrams/onboarding-add-account-elicite/) — connexion élicitée (existant, PR #7)
 - [diagrams/onboarding-reparation-iam](../../diagrams/onboarding-reparation-iam/) — dérive IAM : détection ×2, réparation humaine (PRs #5/#6)
 

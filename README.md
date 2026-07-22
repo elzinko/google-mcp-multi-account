@@ -46,6 +46,24 @@ natif a été retiré, cf. [issue #293](https://github.com/googleworkspace/cli/i
 Phase 2 A : broker local (`bin/google-broker`) — seul process MCP qui exécute `gws`.
 Vault credentials (hors périmètre agent) = fiche backlog 0003, plus tard.
 
+### Comment ça se passe, en 4 séquences
+
+L'idée en une phrase : **le LLM ne peut jamais élargir son propre accès** —
+chaque porte (verrou, zone Drive, nouveau compte, rôle IAM) s'ouvre par un
+geste humain, que le LLM sait demander proprement (élicitation). Chaque
+diagramme est versionné avec sa prose source dans [diagrams/](diagrams/) :
+
+- **[Setup initial](diagrams/onboarding-setup-initial/)** — 3 étapes
+  humaines (provisionner, brancher le MCP, « initialise mes comptes »), le
+  reste guidé.
+- **[Lire ses données](diagrams/lecture-donnees-elicitee/)** — verrou →
+  unlock élicité (Touch ID) → lecture sous policy ; l'écriture Drive suit la
+  même danse avec une zone `grant`.
+- **[Connecter un nouveau compte](diagrams/onboarding-add-account-elicite/)**
+  — élicitation à double barrière physique (Touch ID + consentement OAuth).
+- **[Réparer la dérive IAM](diagrams/onboarding-reparation-iam/)** —
+  détection par deux chemins, réparation humaine idempotente (`sync-iam`).
+
 ## Installation
 
 ```bash
@@ -202,6 +220,8 @@ ne peut pas la simuler.
 
 Architecture et contrôles de sécurité : [docs/architecture.md](docs/architecture.md).  
 Branchement Desktop / Cursor / Code : [docs/mcp-setup.md](docs/mcp-setup.md).  
+**Les tools exposés, par groupe** (découverte, Gmail, Drive, élicitation) :
+[docs/mcp-setup.md — tableau des tools](docs/mcp-setup.md#les-tools-exposés-par-groupe).  
 Limites / broker Phase 2 A / vault 2.1 : [docs/threat-model.md](docs/threat-model.md).
 
 ### Depuis Claude Code
