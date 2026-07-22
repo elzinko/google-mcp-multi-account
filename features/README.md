@@ -9,6 +9,7 @@
 | 0005 | Onboarding des comptes — chaîne complète élicitée (IAM compris), drift visible | feature | P1 | ✅ shipped | #5 |
 | 0007 | Provisioning GCP idempotent/déclaratif — durcir provision-gcp.sh ou passer à Terraform | feature | P2 | ✅ shipped | #10 |
 | 0008 | Connexion dynamique d'un nouveau compte via élicitation forte (access_request kind=add_account) | feature | P2 | ✅ shipped | #7 |
+| 0009 | Tool MCP `setup_status` (lecture seule) + `provision-gcp.sh status --json` | feature | P2 | ✅ shipped | #11 |
 | 0011 | `gwsa admin` — démarrer/arrêter l'interface web en un geste, proposé par l'élicitation | feature | P2 | ✅ shipped | #9 |
 
 ## 💡 Idées (non groomées)
@@ -17,9 +18,8 @@
 |---|-------|------|------|--------|----|
 | 0002 | Durcir le modèle de policy — décisions « default-deny » soulevées par l'audit | feature | P2 | 💡 idea |  |
 | 0006 | Harnais hybride pour les tests manuels — script pour la mécanique, LLM pour la glu | feature | P2 | 💡 idea |  |
-| 0009 | Tool MCP `setup_status` (lecture seule) + `provision-gcp.sh status --json` | feature | P2 | 💡 idea |  |
 | 0010 | README en quickstart 3 étapes — le détail part dans docs/ | feature | P2 | 💡 idea |  |
 | 0001 | Élicitation signée — faire monter `gwsa strongauth` de la présence à la signature | feature | P3 | 💡 idea |  |
 | 0003 | Vault credentials hors périmètre agent (Phase 2.1) | feature | P3 | 💡 idea |  |
 
-> Livrées (`done/`) : 0004, 0005, 0007, 0008, 0011.
+> Livrées (`done/`) : 0004, 0005, 0007, 0008, 0009, 0011.
