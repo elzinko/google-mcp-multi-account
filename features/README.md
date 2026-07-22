@@ -15,6 +15,8 @@
 | # | Titre | Type | Prio | Statut | PR |
 |---|-------|------|------|--------|----|
 | 0006 | Harnais hybride pour les tests manuels — script pour la mécanique, LLM pour la glu | feature | P2 | 💡 idea |  |
+| 0009 | Tool MCP `setup_status` (lecture seule) + `provision-gcp.sh status --json` | feature | P2 | 💡 idea |  |
+| 0010 | README en quickstart 3 étapes — le détail part dans docs/ | feature | P2 | 💡 idea |  |
 | 0001 | Élicitation signée — faire monter `gwsa strongauth` de la présence à la signature | feature | P3 | 💡 idea |  |
 | 0002 | Durcir le modèle de policy — décisions « default-deny » soulevées par l'audit | feature | P3 | 💡 idea |  |
 | 0003 | Vault credentials hors périmètre agent (Phase 2.1) | feature | P3 | 💡 idea |  |
