@@ -144,10 +144,39 @@ def access_request(
     folder: str = "",
     hours: int = 8,
     minutes: int = 60,
+    email: str = "",
 ) -> dict[str, Any]:
-    """Produit un message d'élicitation — n'exécute jamais unlock/grant."""
+    """Produit un message d'élicitation — n'exécute jamais unlock/grant/add."""
     validate_alias(alias)
     kind = (kind or "").lower().strip()
+    if kind == "add_account":
+        # Connexion d'un NOUVEAU compte : l'alias n'existe pas encore (validé
+        # en format seulement). Le LLM propose ; l'humain exécute gwsa add
+        # (consentement OAuth navigateur + Touch ID si strongauth).
+        if not email or "@" not in email:
+            raise GatewayError(
+                "kind=add_account nécessite email (l'adresse Gmail à connecter)",
+                code="error",
+            )
+        return {
+            "ok": True,
+            "elicitation": True,
+            "kind": "add_account",
+            "alias": alias,
+            "email": email,
+            "message": (
+                f"Connexion d'un nouveau compte demandée : « {alias} » ({email}). "
+                f"L'utilisateur doit exécuter lui-même :\n"
+                f"  gwsa add {alias} {email}\n"
+                f"(navigateur → choisir {email} → accepter ; Touch ID d'abord si "
+                f"strongauth est activé). Prérequis côté projet GCP : l'adresse doit "
+                f"être test user si l'app est en Testing, et recevoir le rôle IAM "
+                f"serviceUsageConsumer — vérifier/réparer avec "
+                f"« ./scripts/provision-gcp.sh status » puis « sync-iam » "
+                f"(docs/setup-oauth.md §7). Le LLM ne doit RIEN exécuter de tout ça."
+            ),
+            "suggested_command": f"gwsa add {alias} {email}",
+        }
     if kind == "unlock":
         mins = max(1, min(int(minutes), 1440))
         return {
@@ -188,6 +217,6 @@ def access_request(
             "suggested_command": f'gwsa grant {alias} "{folder}" {h}',
         }
     raise GatewayError(
-        "kind invalide — utiliser « unlock » ou « grant »",
+        "kind invalide — utiliser « unlock », « grant » ou « add_account »",
         code="error",
     )
