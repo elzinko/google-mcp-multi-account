@@ -20,27 +20,32 @@ Les **bugs** exploitables trouvés ont été corrigés et couverts par des tests
 **trois décisions de conception** — pas des bugs, des choix de modèle — laissées ouvertes
 parce qu'elles changent le comportement et l'UX, à trancher par l'utilisateur.
 
-**MàJ 2026-07-22 (revue backlog).** Le **point 2 est résolu** (policy prudente
-écrite par défaut à `gwsa add`), le **point 3 partiellement** (chemins absolus ;
-le reste → fiche 0001). La **décision vive restante = le point 1** : default-deny
-sur les services non modélisés. Priorité relevée **P3 → P2** — c'est un trou du
-modèle de sécurité, cœur de la proposition de valeur du projet.
+**MàJ 2026-07-22 (revue backlog, puis vérification).** Les **trois points sont
+résolus** — la fiche décrivait un état antérieur aux correctifs :
+- **Point 1** (default-deny services) : **déjà implémenté** dès le commit d'origine
+  `bfa2c32` (« add local MCP gateway **with default-deny policies** »). La revue
+  l'avait re-signalé comme « décision vive » sur la foi de cette fiche périmée ;
+  vérification faite, un service non déclaré est bien refusé (lecture comprise).
+  Ce build **verrouille le comportement par des tests** sur toute la classe
+  (chat/meet/people/slides/forms).
+- **Point 2** : résolu (policy prudente écrite par défaut à `gwsa add`).
+- **Point 3** : chemins absolus faits ; falsifiabilité de l'état des verrous →
+  fiche 0001.
 
-## Décisions à trancher
+→ Fiche **close** : plus de décision ouverte, comportement conforme au choix
+« default-deny complet » du PO (2026-07-22).
 
-1. **Service non modélisé = libre (allow-by-default sur la dimension service).**
-   `policy-check.py` : `svc_pol = pol.get(service)` ; si le service n'a pas de clé dans
-   `policy.json`, la commande passe **sans aucun contrôle**. Voulu pour docs/sheets/tasks
-   (peu risqués). Mais l'interface d'admin ne modélise que 7 services (drive, gmail,
-   calendar, keep, docs, sheets, tasks) ; or `gws` en expose ~19. Conséquence : `chat`
-   (envoi de message), `meet`, `people`, `script`, `slides`, `forms`, `workflow`,
-   `classroom`, `admin-reports` sont **impossibles à restreindre** et **silencieusement
-   libres** — y compris des actions visibles de l'extérieur (chat send), ce que la règle 3
-   de CLAUDE.md veut justement encadrer. Vérifié : avec une policy prudente,
-   `gwsa <alias> chat spaces messages create --json '{"text":"hi"}'` → autorisé.
-   → Basculer en **default-deny** (tout service non déclaré « libre » refuse au moins les
-   écritures), ou a minima faire échouer-fermé les services à effet externe ? Impact : UI
-   admin à étendre, mental model « allowlist de restrictions » → « denylist par défaut ».
+## Décisions (historique — toutes tranchées)
+
+1. ~~**Service non modélisé = libre (allow-by-default sur la dimension service).**~~
+   **RÉSOLU — était déjà default-deny.** `policy-check.py` (`main`) : `svc_pol =
+   pol.get(service)` ; si le service n'est pas un dict déclaré (et hors passthrough
+   `auth`/`schema`), la commande est **refusée** (`chat`, `meet`, `people`, `slides`,
+   `forms`, `script`… — lecture comprise). L'inquiétude « silencieusement libres » de
+   l'audit ne s'applique pas au code livré. Couverture de test ajoutée sur toute la
+   classe (2026-07-22). *Reste, purement ergonomique : l'UI admin ne modélise que 7
+   services — donc pas moyen d'AUTORISER `chat` si on le voulait ; enhancement, pas un
+   trou de sécurité (le défaut est déjà « refusé »).*
 
 2. ~~**Aucun `policy.json` = tout ouvert.**~~ **RÉSOLU (2026-07-22).** `cmd_add` écrit
    désormais une policy prudente par défaut à la création (`gateway/default_policy.py` →

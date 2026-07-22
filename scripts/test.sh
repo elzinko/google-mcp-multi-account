@@ -74,7 +74,15 @@ check 0 "drive files list — lecture autorisée"               drive files list
 check 0 "keep notes create — création autorisée"             keep notes create --json '{}'
 check 0 "calendar events list — lecture autorisée"           calendar events list
 check 4 "tasks insert — service hors policy → default-deny"  tasks tasklists insert --json '{}'
+# Default-deny sur TOUTE la classe des services non modélisés (fiche 0002 point 1).
+# Le préréglage prudent ne déclare que drive/gmail/calendar/keep : tout le reste
+# (chat, meet, people, slides, forms, script…) est refusé, lecture comprise.
 check 4 "chat send — service non modélisé → default-deny"    chat spaces messages create --json '{"text":"hi"}'
+check 4 "meet create — service non modélisé → default-deny"  meet spaces create --json '{}'
+check 4 "people create — service non modélisé → default-deny" people people createContact --json '{}'
+check 4 "slides create — service non modélisé → default-deny" slides presentations create --json '{}'
+check 4 "forms create — service non modélisé → default-deny"  forms forms create --json '{}'
+check 4 "people GET — service non modélisé refusé même en lecture" people people get --params '{"resourceName":"people/me"}'
 check 4 "gmail messages send — ENVOI refusé"                 gmail users messages send --json '{}'
 check 4 "gmail drafts send — envoi d'un brouillon refusé"    gmail users drafts send --json '{}'
 check 4 "gmail messages delete — suppression refusée"        gmail users messages delete --params '{}'
