@@ -9,6 +9,7 @@
 | 0005 | Onboarding des comptes — chaîne complète élicitée (IAM compris), drift visible | feature | P1 | 🟠 in-progress |  |
 | 0007 | Provisioning GCP idempotent/déclaratif — durcir provision-gcp.sh ou passer à Terraform | feature | P2 | 🟠 in-progress |  |
 | 0008 | Connexion dynamique d'un nouveau compte via élicitation forte (access_request kind=add_account) | feature | P2 | 🟠 in-progress |  |
+| 0011 | `gwsa admin` — démarrer/arrêter l'interface web en un geste, proposé par l'élicitation | feature | P2 | 🟠 in-progress |  |
 
 ## 💡 Idées (non groomées)
 

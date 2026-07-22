@@ -188,7 +188,7 @@ def access_request(
                 f"Le profil « {alias} » est verrouillé (accès sur demande). "
                 f"Pour autoriser l'accès pendant {mins} min, l'utilisateur doit exécuter :\n"
                 f"  gwsa unlock {alias} {mins}\n"
-                f"ou utiliser l'interface admin http://127.0.0.1:4877 "
+                f"ou utiliser l'interface admin http://127.0.0.1:4877 (démarrer : « gwsa admin ») "
                 f"(Touch ID si strongauth est activé). "
                 f"Le LLM ne doit PAS exécuter cette commande ni contourner le verrou."
             ),
@@ -211,7 +211,7 @@ def access_request(
                 f"Écriture Drive sous « {folder} » refusée sans zone active. "
                 f"Pour une autorisation temporaire ({h} h), l'utilisateur doit exécuter :\n"
                 f"  gwsa grant {alias} \"{folder}\" {h}\n"
-                f"ou via l'admin http://127.0.0.1:4877. Expiration automatique — "
+                f"ou via l'admin http://127.0.0.1:4877 (démarrer : « gwsa admin »). Expiration automatique — "
                 f"redemander à chaque session est normal."
             ),
             "suggested_command": f'gwsa grant {alias} "{folder}" {h}',

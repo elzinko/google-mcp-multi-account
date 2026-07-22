@@ -178,8 +178,13 @@ Google — le seul verrou 100 % côté Google serait le scope `drive.file`.*
 ### Interface d'admin web
 
 ```bash
-node admin/server.js       # → http://127.0.0.1:4877 (local uniquement)
+gwsa admin                 # démarre (détaché, idempotent) + ouvre http://127.0.0.1:4877
+gwsa admin stop            # arrête ; logs dans ~/.config/gws-accounts/admin.log
 ```
+
+*(équivalent manuel : `node admin/server.js` — local uniquement)*. Les
+messages d'élicitation du MCP citent la commande : n'importe quel client LLM
+sait donc te proposer de la démarrer quand elle est utile.
 
 Tout se pilote depuis le navigateur : **connecter un compte** (alias + email
 attendu — l'onglet Google s'ouvre avec le bon compte présélectionné et la

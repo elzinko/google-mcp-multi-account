@@ -191,6 +191,9 @@ rm -f "$PROFILE/policy.json"
 
 cli 3 "alias invalide (slash) rejeté"                        "bad/alias" auth status
 cli 3 "mot réservé comme alias rejeté (add list)"            add list
+cli 3 "mot réservé comme alias rejeté (add admin)"           add admin
+cli 3 "admin : arguments superflus rejetés"                  admin stop extra
+cli 0 "admin stop sans serveur → no-op sain"                 admin stop
 cli 3 "arguments superflus rejetés (list)"                   list auth status
 cli 3 "add sans argument → usage"                            add
 cli 3 "profil inconnu → erreur explicite"                    inexistant auth status

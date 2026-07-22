@@ -19,6 +19,7 @@
 #   gwsa grant <alias> revoke <folderId>              Révoquer une autorisation temporaire
 #   gwsa grants <alias> [clear]                       Lister/vider les autorisations temporaires
 #   gwsa strongauth on|off|status                     Exiger Touch ID / mdp macOS pour unlock & grant
+#   gwsa admin [stop]                                 Démarrer/arrêter l'interface web (127.0.0.1:4877)
 #   gwsa remove <alias>                               Déconnecter et supprimer un profil
 #   gwsa <alias> <commande gws…>                      Exécuter gws sur le compte <alias>
 #
@@ -61,7 +62,7 @@ check_alias() {
   [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] \
     || die "alias invalide « $1 » (lettres, chiffres, - et _ uniquement)"
   case "$1" in
-    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth) die "« $1 » est un mot réservé" ;;
+    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth|admin) die "« $1 » est un mot réservé" ;;
   esac
 }
 
@@ -361,6 +362,36 @@ for e in active:
 PYEOF
 }
 
+cmd_admin() { # gwsa admin [stop] — interface web locale (127.0.0.1:4877), détachée + idempotente
+  local action="${1:-start}" pidf="$GWSA_ROOT/.admin.pid" log="$GWSA_ROOT/admin.log"
+  case "$action" in
+    stop)
+      if [[ -f "$pidf" ]] && kill -0 "$(cat "$pidf")" 2>/dev/null; then
+        kill "$(cat "$pidf")" 2>/dev/null || true
+        rm -f "$pidf"
+        echo "✓ interface admin arrêtée."
+      else
+        rm -f "$pidf"
+        echo "Interface admin non démarrée — rien à faire."
+      fi ;;
+    start)
+      command -v node >/dev/null 2>&1 || die "node est requis pour l'interface admin — brew install node"
+      if [[ -f "$pidf" ]] && kill -0 "$(cat "$pidf")" 2>/dev/null; then
+        echo "✓ interface admin déjà en route — http://127.0.0.1:4877"
+      else
+        mkdir -p "$GWSA_ROOT"
+        nohup node "$REPO_DIR/admin/server.js" >> "$log" 2>&1 &
+        echo $! > "$pidf"
+        sleep 1
+        kill -0 "$(cat "$pidf")" 2>/dev/null \
+          || { rm -f "$pidf"; die "échec du démarrage de l'admin — voir $log"; }
+        echo "✓ interface admin démarrée (pid $(cat "$pidf"), log $log) — http://127.0.0.1:4877"
+      fi
+      open "http://127.0.0.1:4877" 2>/dev/null || true ;;
+    *) die "usage : gwsa admin [stop]" ;;
+  esac
+}
+
 cmd_remove() {
   local alias="$1"
   check_alias "$alias"
@@ -391,6 +422,7 @@ main() {
         status) [[ -f "$GWSA_ROOT/.strong-auth" ]] && echo "🔐 activée" || echo "désactivée" ;;
         *) die "usage : gwsa strongauth on|off|status" ;;
       esac ;;
+    admin)  shift; [[ $# -le 1 ]] || die "usage : gwsa admin [stop]"; cmd_admin "$@" ;;
     remove) shift; [[ $# -eq 1 ]] || die "usage : gwsa remove <alias>"; cmd_remove "$@" ;;
     *)
       local alias="$1"; shift
