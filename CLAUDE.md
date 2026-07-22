@@ -42,7 +42,18 @@ gwsa lock <alias> / gwsa unlock <alias> [min|off] # verrou « accès sur demande
 gwsa grants <alias> / gwsa grant <alias> <dossier> [h] # zones Drive temporaires
 gwsa strongauth status # Touch ID exigé pour unlock/grant ?
 ./bin/google-mcp # serveur MCP stdio (voir docs/mcp-setup.md)
+./scripts/test.sh # tests automatiques hermétiques (sans comptes réels)
 ```
+
+**Tests manuels** (comptes réels, guidés) : sur une demande type « lance un
+test manuel », lire `tests/manuels/README.md` — chaque test y stocke son
+prompt (`PROMPT.md`) et son protocole (`PROTOCOLE.md`) ; le dérouler phase
+par phase en laissant l'humain exécuter unlock/grant.
 
 Erreur `exit code 2` (auth) sur un profil → token expiré : proposer
 `gwsa add <alias>` pour reconnecter (l'app OAuth en mode Testing expire à 7 jours).
+
+Erreur `403 … required permission to use project <id>` → le compte n'a pas le
+rôle IAM `serviceUsageConsumer` sur le projet GCP de l'app OAuth : proposer à
+l'utilisateur la commande `gcloud projects add-iam-policy-binding …` de
+`docs/setup-oauth.md` §7 (geste admin humain — ne jamais l'exécuter soi-même).
