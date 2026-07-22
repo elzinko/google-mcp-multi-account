@@ -38,6 +38,10 @@ client le permet.
 - [x] `admin` est un mot réservé (pas de profil de ce nom).
 - [x] Les 3 messages d'élicitation citent la commande de démarrage.
 - [x] Tests hermétiques : mot réservé, usage, stop no-op (suite 72/72).
+- [x] Doc intégrée (❓) à jour : onglets **Schémas** (les 4 séquences rendues
+      en local via le mermaid vendorisé, assemblées depuis `diagrams/` sans
+      duplication) et **Serveur MCP & tools** (table des tools rendue —
+      support des tableaux ajouté au convertisseur). Vérifié navigateur.
 
 ## Notes
 
