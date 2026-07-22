@@ -11,7 +11,9 @@ Tasks) depuis des agents LLM, via le serveur MCP local (`bin/google-mcp` →
    `gwsa <alias> …` uniquement — jamais
    `GOOGLE_WORKSPACE_CLI_CONFIG_DIR=… gws …` (contourne policy et verrous).
 2. Découvrir les comptes : tool `profiles_list` ou `gwsa list`. En cas de doute
-   sur le compte, demander à l'utilisateur.
+   sur le compte, demander à l'utilisateur. Connecter un **nouveau** compte :
+   tool `access_request` kind=`add_account` (email requis) → c'est l'humain qui
+   exécute le `gwsa add` suggéré (Touch ID si strongauth) — jamais toi.
 3. Confirmer avec l'utilisateur avant tout envoi ou modification visible de
    l'extérieur. **Aucun tool MCP n'envoie de mail** (brouillons seulement).
 4. Ne jamais lire, afficher ou committer `~/.config/gws-accounts/` (tokens),
