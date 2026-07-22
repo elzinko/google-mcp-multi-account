@@ -103,3 +103,16 @@ gcloud projects add-iam-policy-binding <PROJECT_ID> \
 À refaire pour chaque nouveau compte connecté via `gwsa add`. C'est la même
 liste d'adresses que les *test users* de l'étape 5 (si l'app est restée en
 Testing) : décide-la une fois, sers-t'en deux fois.
+
+**L'outillage te guide** — tu n'as pas à repérer le trou à la main :
+
+- `gwsa add <alias>` fait une sonde après connexion : si le compte n'a pas le
+  rôle, il **affiche directement la commande gcloud** à faire exécuter.
+- `./scripts/provision-gcp.sh status` liste **tous** les comptes connectés
+  avec leur état d'accès au projet, et la commande de remédiation pour chacun
+  de ceux qui manquent — le point d'entrée pour vérifier la dérive à tout
+  moment (lecture seule).
+
+Un LLM qui guide l'installation n'a donc qu'à lancer `status`, relayer les
+commandes affichées, et te laisser les exécuter (il ne les lance jamais
+lui-même — geste admin, comme unlock/grant).

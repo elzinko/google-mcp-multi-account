@@ -6,12 +6,12 @@
 | # | Titre | Type | Prio | Statut | PR |
 |---|-------|------|------|--------|----|
 | 0004 | Broker daemon local Phase 2 A — gws derrière socket loopback | feature | P1 | 🟠 in-progress |  |
+| 0005 | Onboarding des comptes — chaîne complète élicitée (IAM compris), drift visible | feature | P1 | 🟠 in-progress |  |
 
 ## 💡 Idées (non groomées)
 
 | # | Titre | Type | Prio | Statut | PR |
 |---|-------|------|------|--------|----|
-| 0005 | Onboarding des comptes — chaîne complète élicitée (IAM compris), drift visible | feature | P1 | 💡 idea |  |
 | 0006 | Harnais hybride pour les tests manuels — script pour la mécanique, LLM pour la glu | feature | P2 | 💡 idea |  |
 | 0007 | Provisioning GCP idempotent/déclaratif — durcir provision-gcp.sh ou passer à Terraform | feature | P2 | 💡 idea |  |
 | 0008 | Connexion dynamique d'un nouveau compte via élicitation forte (access_request kind=add_account) | feature | P2 | 💡 idea |  |

@@ -57,3 +57,6 @@ Erreur `403 … required permission to use project <id>` → le compte n'a pas l
 rôle IAM `serviceUsageConsumer` sur le projet GCP de l'app OAuth : proposer à
 l'utilisateur la commande `gcloud projects add-iam-policy-binding …` de
 `docs/setup-oauth.md` §7 (geste admin humain — ne jamais l'exécuter soi-même).
+Pour l'état complet (quels comptes manquent + la commande par compte) :
+`./scripts/provision-gcp.sh status`. `gwsa add` affiche aussi la commande
+automatiquement si le compte fraîchement connecté n'a pas le rôle.
