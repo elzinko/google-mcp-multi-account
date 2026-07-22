@@ -5,9 +5,9 @@ type: feature
 priority: P2
 version:
 epic:
-status: idea
+status: shipped
 ready:
-pr:
+pr: "#12"
 created: 2026-07-20
 ---
 
