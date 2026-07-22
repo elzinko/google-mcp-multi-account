@@ -5,7 +5,7 @@ type: feature
 priority: P2
 version:
 epic:
-status: idea
+status: in-progress
 ready:
 pr:
 created: 2026-07-22
@@ -50,12 +50,21 @@ unlock/grant :
 
 ## Critères d'acceptation
 
-- [ ] Un LLM peut déclencher l'élicitation « connecter un nouveau compte »
-      via un tool, obtenir la commande exacte, et l'humain seul l'exécute.
-- [ ] `gwsa add` respecte `strongauth` (Touch ID) si activé.
-- [ ] Le flux rappelle le binding IAM (pas de 403 silencieux au 1er appel).
-- [ ] Décision tracée sur le multi-projet (supporté ou explicitement hors
-      périmètre v1, avec la raison).
+- [x] Un LLM peut déclencher l'élicitation « connecter un nouveau compte »
+      via un tool (`access_request` kind=`add_account`, email requis), obtenir
+      la commande exacte, et l'humain seul l'exécute. Vérifié hermétiquement :
+      aucune création de profil, refus sans email, enum exposé dans le MCP.
+- [x] `gwsa add` respecte `strongauth` (Touch ID) si activé — check placé
+      après celui du client_secret (les envs de test n'atteignent jamais la
+      boîte biométrique). Boîte réelle à constater au prochain `gwsa add`.
+- [x] Le flux rappelle le binding IAM : message d'élicitation (status /
+      sync-iam) + sonde post-connexion de `gwsa add` (0005) — pas de 403
+      silencieux au 1er appel.
+- [x] Décision multi-projet : **hors périmètre v1**. Un seul
+      `client_secret.json` partagé (`MASTER_SECRET`) = un seul projet GCP par
+      installation — suffisant pour l'usage perso visé ; un secret par profil
+      (comptes d'autres projets GCP) rejoint la fiche 0003 (vault
+      credentials), à re-trancher là-bas si le besoin devient réel.
 
 ## Notes
 
