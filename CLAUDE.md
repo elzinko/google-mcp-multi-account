@@ -36,7 +36,7 @@ Tasks) depuis des agents LLM, via le serveur MCP local (`bin/google-mcp` →
 
 ```bash
 ./scripts/provision-gcp.sh status # état du provisioning GCP (lecture seule)
-node admin/server.js # interface d'admin → http://127.0.0.1:4877
+gwsa admin # interface d'admin web → http://127.0.0.1:4877 (stop pour arrêter)
 gwsa list # profils + état
 gwsa add <alias> # connecter un nouveau compte (navigateur) + policy prudente
 gwsa <alias> auth status # état du token d'un profil

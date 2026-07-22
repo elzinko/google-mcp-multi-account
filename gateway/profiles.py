@@ -47,7 +47,7 @@ def require_unlocked(alias: str) -> Path:
         raise GatewayError(
             f"profil « {alias} » verrouillé — accès sur demande. "
             f"Demander à l'utilisateur d'exécuter « gwsa unlock {alias} [minutes] » "
-            f"ou via l'interface admin (http://127.0.0.1:4877). "
+            f"ou via l'interface admin (http://127.0.0.1:4877 — démarrer : « gwsa admin »). "
             f"Ne pas tenter de contourner (gws nu / édition de fichiers).",
             code="locked",
         )
