@@ -260,6 +260,19 @@ except GatewayError as e:
 
 r2 = access_request(alias, "grant", folder="LLM", hours=4)
 assert "gwsa grant" in r2["suggested_command"] and "LLM" in r2["suggested_command"], r2
+
+# add_account : élicitation pour un compte qui n'existe pas encore — aucune
+# création de profil, email obligatoire, prérequis IAM rappelés.
+r3 = access_request("nouveaucompte", "add_account", email="exemple@gmail.com")
+assert r3.get("elicitation") and r3["kind"] == "add_account", r3
+assert r3["suggested_command"] == "gwsa add nouveaucompte exemple@gmail.com", r3
+assert "sync-iam" in r3["message"], r3
+assert not (root / "nouveaucompte").exists(), "add_account ne doit rien créer"
+try:
+    access_request("nouveaucompte", "add_account")
+    raise SystemExit("add_account sans email aurait dû refuser")
+except GatewayError as e:
+    assert e.code == "error", e.code
 print("ok")
 PY
 then
@@ -270,7 +283,7 @@ fi
 
 # MCP tools/list smoke (stdio JSON-RPC, une requête)
 MCP_OUT="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | python3 -m gateway 2>/dev/null | head -1)"
-if echo "$MCP_OUT" | python3 -c 'import json,sys; r=json.load(sys.stdin); assert "gmail_list" in [t["name"] for t in r["result"]["tools"]]; assert "gmail_draft_create" in [t["name"] for t in r["result"]["tools"]]; assert not any(t["name"]=="gmail_send" for t in r["result"]["tools"])'; then
+if echo "$MCP_OUT" | python3 -c 'import json,sys; r=json.load(sys.stdin); names=[t["name"] for t in r["result"]["tools"]]; assert "gmail_list" in names and "gmail_draft_create" in names; assert not any(t["name"]=="gmail_send" for t in r["result"]["tools"]); ar=[t for t in r["result"]["tools"] if t["name"]=="access_request"][0]; assert "add_account" in ar["inputSchema"]["properties"]["kind"]["enum"]'; then
   PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m MCP tools/list (Gmail+Drive, pas de send)\n'
 else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m MCP tools/list\n'
