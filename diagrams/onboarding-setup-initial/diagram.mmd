@@ -1,0 +1,28 @@
+sequenceDiagram
+    autonumber
+    actor Toi
+    participant Script as provision-gcp.sh
+    participant Console as Console Google
+    participant LLM as LLM + MCP
+
+    rect rgb(230, 240, 255)
+        Note over Toi,Console: Étape 1 · le socle GCP (une fois)
+        Toi->>Script: lance le provisioning
+        Script->>Console: crée projet + active les APIs
+        Script-->>Toi: guide les 2 gestes manuels
+        Toi->>Console: client OAuth + publication
+        Console-->>Script: client_secret rangé
+    end
+
+    rect rgb(232, 250, 235)
+        Note over Toi,LLM: Étape 2 · brancher le MCP (une fois)
+        Toi->>LLM: colle la config MCP
+    end
+
+    rect rgb(255, 246, 227)
+        Note over Toi,LLM: Étape 3 · le reste, guidé
+        Toi->>LLM: « initialise mes comptes »
+        LLM->>LLM: lit l'état du setup
+        LLM-->>Toi: checklist + commande par manque
+        Toi->>Script: exécute chaque commande
+    end

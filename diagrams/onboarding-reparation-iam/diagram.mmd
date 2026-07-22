@@ -1,0 +1,20 @@
+sequenceDiagram
+    autonumber
+    actor Toi
+    participant LLM as LLM + MCP
+    participant Script as provision-gcp.sh
+    participant GCP as GCP (IAM du projet)
+
+    alt le LLM rencontre le 403
+        LLM-->>Toi: signale le 403 + commande de réparation
+    else contrôle de routine
+        Toi->>Script: status (lecture seule)
+        Script->>GCP: lit les membres IAM
+        Script-->>Toi: comptes sans rôle + suggère sync-iam
+    end
+
+    Toi->>Script: lance sync-iam
+    Script->>Toi: demande confirmation par compte
+    Script->>GCP: accorde le rôle (idempotent)
+    Script-->>Toi: bilan — « déjà OK » si rien à faire
+    Note over Toi,GCP: propagation ~2 min, puis les appels passent
