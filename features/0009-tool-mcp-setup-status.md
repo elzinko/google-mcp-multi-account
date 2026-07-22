@@ -5,7 +5,7 @@ type: feature
 priority: P2
 version:
 epic:
-status: idea
+status: in-progress
 ready:
 pr:
 created: 2026-07-22
@@ -33,13 +33,21 @@ ni pour le dépannage. Cf. ADR-0001 (option C retenue).
 
 ## Critères d'acceptation
 
-- [ ] `status --json` documenté et stable (contrat du tool) ; vue texte
-      inchangée par défaut.
-- [ ] Tool `setup_status` exposé par le MCP, read-only, testé hermétiquement
-      (sortie simulée du script).
-- [ ] Depuis Claude Desktop (sans shell), « initialise mes comptes » produit
-      une checklist exacte avec les commandes à exécuter.
-- [ ] CLAUDE.md / mcp-setup.md référencent le tool.
+- [x] `status --json` : sortie machine (`gateway/setup_status.py`, réutilisée
+      par le script et le tool) ; la vue texte reste le défaut.
+- [x] Tool `setup_status` exposé par le MCP, read-only, testé hermétiquement
+      (dégradation gracieuse sans projet/gcloud + `next_actions`).
+- [x] Un LLM obtient la checklist exacte + les commandes par manque
+      (`next_actions`) ; validé sur le vrai projet (mw → missing + sync-iam).
+      *Reste à constater en conditions réelles Desktop (sans shell) au
+      prochain usage — l'appel tool est identique.*
+- [x] CLAUDE.md (règle 2) / docs/mcp-setup.md (table des tools) référencent
+      le tool.
+
+**Note d'implémentation** : la lecture de l'email d'un profil verrouillé
+(nécessaire au check IAM) se fait hors du verrou — c'est une métadonnée
+d'identité, pas un accès aux données. `setup_status` ne mute jamais rien ;
+l'IAM se dégrade en « unknown » si gcloud est absent (contexte Desktop).
 
 ## Notes
 

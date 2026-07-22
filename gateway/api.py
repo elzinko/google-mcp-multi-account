@@ -8,6 +8,7 @@ from .errors import GatewayError
 from .executor import run_via_broker
 from .profiles import list_profiles as _list_profiles
 from .profiles import require_unlocked, validate_alias
+from .setup_status import setup_status  # noqa: F401 — re-export pour le dispatch MCP
 
 
 def profiles_list() -> dict[str, Any]:

@@ -154,6 +154,18 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "setup_status",
+        "description": (
+            "État agrégé du setup (LECTURE SEULE) : projet GCP, publication, "
+            "client_secret, et pour chaque compte connecté son accès IAM "
+            "(ok/missing/unknown). Renvoie `next_actions` : les commandes exactes "
+            "à faire exécuter par l'utilisateur pour compléter/réparer le setup "
+            "(le LLM les propose, ne les lance jamais). À utiliser pour guider "
+            "l'onboarding ou diagnostiquer un 403/verrou."
+        ),
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+    {
         "name": "access_request",
         "description": (
             "Demande d'élicitation humaine : kind=unlock (profil verrouillé), "
@@ -179,6 +191,7 @@ TOOLS: list[dict[str, Any]] = [
 
 DISPATCH: dict[str, Callable] = {
     "profiles_list": lambda **_: api.profiles_list(),
+    "setup_status": lambda **_: api.setup_status(),
     "gmail_list": lambda **kw: api.gmail_list(
         alias=kw["alias"],
         query=kw.get("query") or "",
