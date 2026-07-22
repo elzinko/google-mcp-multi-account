@@ -24,6 +24,36 @@ const BOOL_KEYS = ["read", "create", "update", "delete", "send", "drafts", "labe
 
 const emailCache = new Map();
 
+// Doc « Schémas » : assemblée depuis diagrams/*/ (triplets versionnés) — les
+// sources restent les .mmd/explanation.md du repo, rien n'est dupliqué ici.
+function buildSchemas() {
+  const dir = path.join(REPO, "diagrams");
+  const rdf = (f) => { try { return fs.readFileSync(f, "utf8"); } catch { return ""; } };
+  let slugs = [];
+  try {
+    slugs = fs.readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && fs.existsSync(path.join(dir, e.name, "diagram.mmd")))
+      .map((e) => e.name);
+  } catch { return ""; }
+  const PREF = ["onboarding-setup-initial", "lecture-donnees-elicitee",
+    "onboarding-add-account-elicite", "onboarding-reparation-iam"];
+  slugs.sort((a, b) => {
+    const ia = PREF.indexOf(a); const ib = PREF.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+  });
+  const parts = ["# Les scénarios clés, en séquence",
+    "> Schémas versionnés dans `diagrams/` (prose → mermaid → image) — rendus ici en local, sans service externe."];
+  for (const s of slugs) {
+    const m = rdf(path.join(dir, s, "meta.yaml")).match(/^title:\s*"?(.*?)"?\s*$/m);
+    parts.push("## " + ((m && m[1]) || s));
+    const expl = rdf(path.join(dir, s, "explanation.md")).trim();
+    if (expl) parts.push(expl);
+    const mmd = rdf(path.join(dir, s, "diagram.mmd")).trim();
+    if (mmd) parts.push("```mermaid\n" + mmd + "\n```");
+  }
+  return slugs.length ? parts.join("\n\n") : "";
+}
+
 function gwsa(args) {
   return new Promise((resolve) => {
     execFile(GWSA, args, { timeout: 20000 }, (err, stdout, stderr) =>
@@ -221,7 +251,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "GET" && p === "/api/doc") {
       const rd = (f) => { try { return fs.readFileSync(path.join(REPO, f), "utf8"); } catch { return ""; } };
-      return send(res, 200, { readme: rd("README.md"), oauth: rd("docs/setup-oauth.md") });
+      return send(res, 200, {
+        readme: rd("README.md"),
+        oauth: rd("docs/setup-oauth.md"),
+        mcp: rd("docs/mcp-setup.md"),
+        schemas: buildSchemas(),
+      });
     }
     const gm = p.match(/^\/api\/profiles\/([^/]+)\/(browse|search)$/);
     if (req.method === "GET" && gm) {
