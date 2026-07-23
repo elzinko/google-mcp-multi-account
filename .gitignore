@@ -16,3 +16,6 @@ node_modules/
 # Artefacts Python (py_compile / CI)
 __pycache__/
 *.pyc
+
+# Note de handoff ezk-archive (éphémère personnel, jamais committée)
+.claude/handoff.md
