@@ -114,6 +114,11 @@ async function folderPath(alias, id, depth = 0) {
 
 function gwsEmail(alias) {
   if (emailCache.has(alias)) return Promise.resolve(emailCache.get(alias));
+  // Métadonnée .email écrite par gwsa add/list (ADR-0002) — évite d'exécuter gws.
+  try {
+    const meta = fs.readFileSync(path.join(ROOT, alias, ".email"), "utf8").trim().split("\n")[0];
+    if (meta) { emailCache.set(alias, meta); return Promise.resolve(meta); }
+  } catch {}
   return new Promise((resolve) => {
     execFile("gws", ["auth", "status"], {
       timeout: 10000,
@@ -121,7 +126,10 @@ function gwsEmail(alias) {
     }, (err, stdout) => {
       const m = String(stdout).match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
       const email = m ? m[0] : "";
-      if (email) emailCache.set(alias, email);
+      if (email) {
+        emailCache.set(alias, email);
+        try { fs.writeFileSync(path.join(ROOT, alias, ".email"), email + "\n"); } catch {}
+      }
       resolve(email);
     });
   });
@@ -218,6 +226,7 @@ async function launchAdd(alias, email) {
   const child = spawn(GWSA, args, { detached: true, stdio: ["ignore", out, out] });
   child.unref();
   emailCache.delete(alias);
+  try { fs.unlinkSync(path.join(ROOT, alias, ".email")); } catch {}
   for (let i = 0; i < 24; i++) {
     await new Promise((r) => setTimeout(r, 500));
     const txt = fs.existsSync(logFile) ? fs.readFileSync(logFile, "utf8") : "";

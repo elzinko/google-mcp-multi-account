@@ -2,10 +2,7 @@
 from __future__ import annotations
 
 import json
-import os
 import re
-import shutil
-import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -54,28 +51,22 @@ def require_unlocked(alias: str) -> Path:
     return d
 
 
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]+")
+
+
 def _profile_email(dir_path: Path) -> str:
-    """Lecture email via gws direct (admin / listage) — hors chemin broker MCP."""
-    gws = shutil.which("gws")
-    if not gws:
-        return ""
-    env = dict(os.environ)
-    env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] = str(dir_path)
+    """Email du compte : métadonnée `.email` écrite par gwsa add/list (ADR-0002).
+
+    Jamais d'exécution gws ici — le broker est le seul exécuteur côté gateway.
+    Fichier absent (profil d'avant la fiche 0014) ou contenu non-email : chaîne
+    vide ; un passage humain `gwsa list` le renseigne.
+    """
     try:
-        r = subprocess.run(
-            [gws, "auth", "status"],
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-        m = re.search(
-            r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]+",
-            r.stdout + r.stderr,
-        )
-        return m.group(0) if m else ""
-    except Exception:
+        text = (dir_path / ".email").read_text(encoding="utf-8").strip()
+    except OSError:
         return ""
+    first = text.splitlines()[0].strip() if text else ""
+    return first if _EMAIL_RE.fullmatch(first) else ""
 
 
 def list_profiles() -> list[dict[str, Any]]:
@@ -103,9 +94,9 @@ def list_profiles() -> list[dict[str, Any]]:
             policy = json.loads((entry / "policy.json").read_text(encoding="utf-8"))
         except Exception:
             policy = None
-        email = ""
-        if connected and not is_locked(entry):
-            email = _profile_email(entry)
+        # Email lisible même verrouillé : métadonnée d'identité, pas une donnée
+        # (SECURITY.md, ADR-0002) — simple lecture de fichier, pas de gws.
+        email = _profile_email(entry) if connected else ""
         out.append({
             "alias": alias,
             "connected": connected,

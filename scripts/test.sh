@@ -333,6 +333,63 @@ else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m setup_status\n'
 fi
 
+section "Email = métadonnée .email (ADR-0002) — lisible verrouillé, sans exécuter gws"
+if python3 - <<'PY'
+import os
+from pathlib import Path
+from gateway.api import profiles_list
+from gateway.setup_status import setup_status
+
+root = Path(os.environ["GWSA_ROOT"])
+# acct1 (connecté + verrouillé, cf. section précédente) reçoit sa métadonnée.
+(root / "acct1" / ".email").write_text("alice@gmail.com\n")
+# acct2 : connecté, sans .email (profil d'avant la fiche 0014).
+d2 = root / "acct2"
+d2.mkdir(parents=True, exist_ok=True)
+(d2 / "credentials.enc").write_text("x")
+
+profs = {p["alias"]: p for p in profiles_list()["profiles"]}
+assert profs["acct1"]["locked"] and profs["acct1"]["email"] == "alice@gmail.com", profs
+assert profs["acct2"]["email"] == "", profs  # pas de fichier → vide (zéro exec gws)
+
+r = setup_status()
+accs = {a["alias"]: a for a in r["accounts"]}
+assert accs["acct1"]["email"] == "alice@gmail.com", accs  # cohérent avec profiles_list
+assert accs["acct2"]["email"] == "", accs
+# Profil sans .email → suggérer le geste humain qui la renseigne.
+assert any(a.startswith("gwsa list") for a in r["next_actions"]), r["next_actions"]
+
+# Contenu non-email → ignoré (pas de confiance aveugle dans le fichier).
+(d2 / ".email").write_text("pas-un-email\n")
+profs2 = {p["alias"]: p for p in profiles_list()["profiles"]}
+assert profs2["acct2"]["email"] == "", profs2
+print("ok")
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m email lisible verrouillé + backfill suggéré + contenu validé\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m email métadonnée .email\n'
+fi
+
+# Invariant ADR-0002 : la gateway n'exécute jamais gws elle-même — le seul
+# GOOGLE_WORKSPACE_CLI_CONFIG_DIR autorisé est celui du broker.
+if ! grep -rn "GOOGLE_WORKSPACE_CLI_CONFIG_DIR" gateway/ --include='*.py' | grep -v "broker_server.py" | grep -q .; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m invariant : aucun GOOGLE_WORKSPACE_CLI_CONFIG_DIR dans gateway/ hors broker\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m gateway/ contient un GOOGLE_WORKSPACE_CLI_CONFIG_DIR hors broker_server.py\n'
+fi
+
+# gwsa list lit .email sans gws (métadonnée posée → email affiché tel quel)
+mkdir -p "$GWSA_ROOT/emailprof"
+touch "$GWSA_ROOT/emailprof/credentials.enc"
+printf 'bob@gmail.com\n' > "$GWSA_ROOT/emailprof/.email"
+list_out="$("$GWSA" list 2>/dev/null)"   # pas de pipe direct : grep -q + pipefail = SIGPIPE
+if echo "$list_out" | grep -q 'emailprof.*bob@gmail.com'; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m gwsa list lit la métadonnée .email (aucun gws requis)\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m gwsa list devrait afficher bob@gmail.com via .email\n'
+fi
+
 section "Broker Phase 2 A — ping + refus locked via RPC"
 if python3 - <<'PY'
 import json, os, socket, threading, time

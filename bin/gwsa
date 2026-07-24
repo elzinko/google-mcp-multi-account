@@ -107,9 +107,16 @@ profile_dir() { printf '%s/%s' "$GWSA_ROOT" "$1"; }
 # dont le pré-cochage embarque des scopes restreints qui font échouer le login.
 DEFAULT_SCOPES="https://www.googleapis.com/auth/drive,https://www.googleapis.com/auth/spreadsheets,https://www.googleapis.com/auth/gmail.modify,https://www.googleapis.com/auth/calendar,https://www.googleapis.com/auth/documents,https://www.googleapis.com/auth/presentations,https://www.googleapis.com/auth/tasks"
 
-profile_email() { # profile_email <dir> — email du compte connecté (vide sinon)
-  GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$1" gws auth status 2>/dev/null \
-    | grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]+' | head -1 || true
+profile_email() { # profile_email <dir> — email du compte (métadonnée .email, sinon gws + backfill)
+  # ADR-0002 : .email est la source lue par toutes les surfaces (gateway comprise,
+  # qui elle n'exécute jamais gws). Ici, côté humain, on backfille les profils
+  # d'avant la fiche 0014 dès qu'une lecture gws aboutit.
+  local dir="$1" email
+  if [[ -s "$dir/.email" ]]; then head -1 "$dir/.email"; return 0; fi
+  email="$(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws auth status 2>/dev/null \
+    | grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]+' | head -1 || true)"
+  [[ -n "$email" ]] && printf '%s\n' "$email" > "$dir/.email"
+  printf '%s\n' "$email"
 }
 
 cmd_add() { # cmd_add <alias> [email-attendu] [options gws auth login]
@@ -132,6 +139,7 @@ cmd_add() { # cmd_add <alias> [email-attendu] [options gws auth login]
   else
     GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws auth login "$@"
   fi
+  rm -f "$dir/.email"   # l'alias a pu changer de compte : forcer une lecture fraîche
   local email; email="$(profile_email "$dir")"
   if [[ -n "$expected" && -n "$email" && "$email" != "$expected" ]]; then
     echo "gwsa : ✗ MAUVAIS COMPTE pour « $alias » : connecté avec $email au lieu de $expected." >&2
