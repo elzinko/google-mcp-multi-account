@@ -425,6 +425,95 @@ else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m usage invalide devrait donner rc=2\n'
 fi
 
+# --- 6. Branchement Claude Desktop — scripts/install-claude-desktop.sh -------
+#
+# Hermétique : jamais le vrai ~/Library/.../claude_desktop_config.json — tout se
+# passe sur des fichiers de config sous $TMP, via --config. Aucune install de
+# Claude Desktop requise.
+
+section "Branchement Claude Desktop — install-claude-desktop.sh (merge idempotent, hermétique)"
+INSTALL="scripts/install-claude-desktop.sh"
+CD="$TMP/desktop"; mkdir -p "$CD"
+
+pass() { PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m %s\n' "$1"; }
+fail() { FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m %s\n' "$1"; }
+jget() { # jget <fichier> <chemin.pointé> → imprime la valeur (vide/rc≠0 si absente)
+  python3 -c 'import json,sys
+d = json.load(open(sys.argv[1]))
+for k in sys.argv[2].split("."): d = d[k]
+print(d)' "$1" "$2" 2>/dev/null
+}
+
+# existe et exécutable
+[[ -x "$INSTALL" ]] \
+  && pass "le script existe et est exécutable" \
+  || fail "le script existe et est exécutable"
+
+# création : config absente → entrée ajoutée (command absolu + GWSA_CLIENT)
+f="$CD/create.json"
+"$INSTALL" --config "$f" >/dev/null 2>&1
+cmd="$(jget "$f" mcpServers.google-multi-account.command)"
+env_client="$(jget "$f" mcpServers.google-multi-account.env.GWSA_CLIENT)"
+[[ "$cmd" == */bin/google-mcp && "$env_client" == "claude-desktop" ]] \
+  && pass "création : fichier absent → entrée (command absolu + GWSA_CLIENT=claude-desktop)" \
+  || fail "création : fichier absent → entrée (command absolu + GWSA_CLIENT)"
+
+# préservation : autres serveurs MCP + clés annexes intacts
+f="$CD/preserve.json"
+cat > "$f" <<'JSON'
+{ "mcpServers": { "autre": { "command": "/usr/bin/foo", "args": ["--x"] } }, "globalShortcut": "Cmd+Shift+Space" }
+JSON
+"$INSTALL" --config "$f" >/dev/null 2>&1
+[[ "$(jget "$f" mcpServers.autre.command)" == "/usr/bin/foo" \
+   && "$(jget "$f" globalShortcut)" == "Cmd+Shift+Space" \
+   && -n "$(jget "$f" mcpServers.google-multi-account.command)" ]] \
+  && pass "préservation : serveur tiers + clés annexes intacts, entrée ajoutée" \
+  || fail "préservation : serveur tiers + clés annexes intacts"
+
+# idempotence : relance → aucune écriture (exit 0, contenu identique)
+before="$(cat "$f")"
+"$INSTALL" --config "$f" >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && "$before" == "$(cat "$f")" ]] \
+  && pass "idempotence : relance → aucune écriture (exit 0, contenu identique)" \
+  || fail "idempotence : relance → aucune écriture"
+
+# mise à jour de chemin + backup horodaté
+f="$CD/update.json"
+cat > "$f" <<'JSON'
+{ "mcpServers": { "google-multi-account": { "command": "/vieux/chemin/bin/google-mcp", "env": { "GWSA_CLIENT": "claude-desktop" } } } }
+JSON
+"$INSTALL" --config "$f" >/dev/null 2>&1
+newcmd="$(jget "$f" mcpServers.google-multi-account.command)"
+[[ "$newcmd" == */bin/google-mcp && "$newcmd" != *vieux* ]] \
+  && pass "mise à jour : ancien chemin remplacé par le chemin absolu courant" \
+  || fail "mise à jour : ancien chemin remplacé"
+ls "$f".bak-* >/dev/null 2>&1 \
+  && pass "backup horodaté créé avant modification" \
+  || fail "backup horodaté créé avant modification"
+
+# JSON invalide → refus (exit ≠ 0), fichier intact
+f="$CD/bad.json"
+printf '{ pas du json ' > "$f"; orig="$(cat "$f")"
+"$INSTALL" --config "$f" >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 && "$orig" == "$(cat "$f")" ]] \
+  && pass "JSON invalide → refus (exit≠0), fichier intact" \
+  || fail "JSON invalide → refus, fichier intact"
+
+# --print (dry-run) n'écrit rien
+f="$CD/dry.json"
+"$INSTALL" --print --config "$f" >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && ! -e "$f" ]] \
+  && pass "--print : dry-run n'écrit rien" \
+  || fail "--print : dry-run n'écrit rien"
+
+# fail-closed : mcpServers non-objet → refus, fichier intact (esprit default-deny)
+f="$CD/notobj.json"
+printf '{ "mcpServers": [1, 2, 3] }' > "$f"; orig="$(cat "$f")"
+"$INSTALL" --config "$f" >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 && "$orig" == "$(cat "$f")" ]] \
+  && pass "mcpServers non-objet → refus (fail-closed), fichier intact" \
+  || fail "mcpServers non-objet → refus, fichier intact"
+
 # --- Bilan ------------------------------------------------------------------
 
 printf '\n\033[1mBilan : %d réussis, %d échoués\033[0m\n' "$PASS" "$FAIL"
