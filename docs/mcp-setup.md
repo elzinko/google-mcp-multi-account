@@ -10,8 +10,17 @@ Remplace `/ABS/PATH/google-mcp-multi-account` par le chemin absolu du clone.
 
 ## Claude Desktop
 
-Fichier de config (macOS) :
-`~/Library/Application Support/Claude/claude_desktop_config.json`
+**Automatique (recommandé)** — le script résout le chemin absolu tout seul,
+fusionne l'entrée sans écraser tes autres serveurs MCP, fait un backup :
+
+```bash
+./scripts/install-claude-desktop.sh          # branche (ou met à jour)
+./scripts/install-claude-desktop.sh --print  # dry-run : montre sans écrire
+```
+
+Idempotent (relançable sans risque). Puis **redémarrer Claude Desktop**.
+
+**À la main** — éditer `~/Library/Application Support/Claude/claude_desktop_config.json` :
 
 ```json
 {
@@ -26,7 +35,7 @@ Fichier de config (macOS) :
 }
 ```
 
-Redémarrer Claude Desktop. Tools attendus : `profiles_list`, `setup_status`,
+Tools attendus (après redémarrage) : `profiles_list`, `setup_status`,
 `gmail_list`, `gmail_get`, `gmail_draft_create`, `drive_list`, `drive_get`,
 `drive_create`, `access_request`.
 
