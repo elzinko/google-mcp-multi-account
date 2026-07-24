@@ -431,6 +431,12 @@ main() {
       local dir; dir="$(profile_dir "$alias")"
       [[ -d "$dir" ]] || die "profil inconnu « $alias » — le créer avec : gwsa add $alias"
       if is_locked "$dir"; then
+        # Journaliser le refus AVANT de mourir — même trace que les refus de
+        # policy, sinon les tentatives sur profil verrouillé restent invisibles.
+        if [[ -f "$USAGE_LOGGER" ]]; then
+          GWSA_LOG_DECISION=refus GWSA_LOG_REASON=locked \
+            "$SYS_PYTHON" "$USAGE_LOGGER" "$GWSA_ROOT" "$alias" "$@" >/dev/null 2>&1 || true
+        fi
         die "profil « $alias » verrouillé 🔒 — accès sur demande : l'utilisateur doit d'abord exécuter « gwsa unlock $alias [minutes] »"
       fi
       if [[ -f "$dir/policy.json" ]]; then
