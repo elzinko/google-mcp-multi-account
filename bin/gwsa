@@ -101,10 +101,13 @@ require_strong_auth() { # require_strong_auth <raison> — Touch ID/mot de passe
 
 profile_dir() { printf '%s/%s' "$GWSA_ROOT" "$1"; }
 
-# Scopes par défaut : lecture/écriture Workspace, sans aucun scope RESTRICTED —
-# indispensables avec une app OAuth non vérifiée (sinon : 403 restricted_client).
+# Scopes par défaut : lecture/écriture Workspace. Plusieurs sont « sensibles »,
+# et deux sont « restreints » (RESTRICTED au sens de Google) : drive (Drive
+# complet) et gmail.modify. D'où une app OAuth non vérifiée — soit en mode
+# Testing (tokens 7 jours, test users), soit publiée non vérifiée : on s'épargne
+# ainsi la vérification Google + l'audit CASA qu'imposent les scopes restreints.
 # Passer ces scopes explicitement évite aussi le sélecteur interactif de gws,
-# dont le pré-cochage embarque des scopes restreints qui font échouer le login.
+# dont le pré-cochage embarque des scopes supplémentaires qui font échouer le login.
 DEFAULT_SCOPES="https://www.googleapis.com/auth/drive,https://www.googleapis.com/auth/spreadsheets,https://www.googleapis.com/auth/gmail.modify,https://www.googleapis.com/auth/calendar,https://www.googleapis.com/auth/documents,https://www.googleapis.com/auth/presentations,https://www.googleapis.com/auth/tasks"
 
 profile_email() { # profile_email <dir> — email du compte (métadonnée .email, sinon gws + backfill)
