@@ -5,7 +5,7 @@ type: refactor
 priority: P1
 version:
 epic:
-status: in-progress
+status: shipped
 ready: 2026-07-24
 pr: "#18"
 created: 2026-07-24
