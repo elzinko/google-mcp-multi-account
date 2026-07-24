@@ -110,9 +110,16 @@ DEFAULT_SCOPES="https://www.googleapis.com/auth/drive,https://www.googleapis.com
 profile_email() { # profile_email <dir> — email du compte (métadonnée .email, sinon gws + backfill)
   # ADR-0002 : .email est la source lue par toutes les surfaces (gateway comprise,
   # qui elle n'exécute jamais gws). Ici, côté humain, on backfille les profils
-  # d'avant la fiche 0014 dès qu'une lecture gws aboutit.
-  local dir="$1" email
-  if [[ -s "$dir/.email" ]]; then head -1 "$dir/.email"; return 0; fi
+  # d'avant la fiche 0014 dès qu'une lecture gws aboutit. Le cache n'est
+  # autoritatif que s'il ressemble à un email : un .email corrompu ne doit pas
+  # court-circuiter le backfill (retour Codex, PR #18), sinon il reste coincé.
+  local dir="$1" email cached
+  if [[ -s "$dir/.email" ]]; then
+    cached="$(head -1 "$dir/.email")"
+    if [[ "$cached" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]+$ ]]; then
+      printf '%s\n' "$cached"; return 0
+    fi
+  fi
   email="$(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws auth status 2>/dev/null \
     | grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]+' | head -1 || true)"
   [[ -n "$email" ]] && printf '%s\n' "$email" > "$dir/.email"

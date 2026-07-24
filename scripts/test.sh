@@ -390,6 +390,19 @@ else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m gwsa list devrait afficher bob@gmail.com via .email\n'
 fi
 
+# .email corrompu (contenu non-email) → non autoritatif : jamais affiché tel quel,
+# le backfill (gws) reprend la main (retour Codex PR #18). Hermétique : gws ne
+# fournit rien ici → aucun email affiché, mais surtout pas la valeur bidon.
+mkdir -p "$GWSA_ROOT/badmeta"
+touch "$GWSA_ROOT/badmeta/credentials.enc"
+printf 'pas-un-email\n' > "$GWSA_ROOT/badmeta/.email"
+bad_out="$("$GWSA" list 2>/dev/null)"
+if ! echo "$bad_out" | grep -q 'pas-un-email'; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m .email corrompu ignoré par gwsa list (pas de court-circuit du backfill)\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m .email corrompu ne doit pas être affiché tel quel\n'
+fi
+
 section "Broker Phase 2 A — ping + refus locked via RPC"
 if python3 - <<'PY'
 import json, os, socket, threading, time

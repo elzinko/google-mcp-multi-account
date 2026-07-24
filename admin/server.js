@@ -115,9 +115,14 @@ async function folderPath(alias, id, depth = 0) {
 function gwsEmail(alias) {
   if (emailCache.has(alias)) return Promise.resolve(emailCache.get(alias));
   // Métadonnée .email écrite par gwsa add/list (ADR-0002) — évite d'exécuter gws.
+  // Non autoritative si corrompue : un contenu non-email retombe sur le backfill
+  // (sinon un mauvais .email resterait coincé — retour Codex, PR #18).
   try {
     const meta = fs.readFileSync(path.join(ROOT, alias, ".email"), "utf8").trim().split("\n")[0];
-    if (meta) { emailCache.set(alias, meta); return Promise.resolve(meta); }
+    if (/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(meta)) {
+      emailCache.set(alias, meta);
+      return Promise.resolve(meta);
+    }
   } catch {}
   return new Promise((resolve) => {
     execFile("gws", ["auth", "status"], {
