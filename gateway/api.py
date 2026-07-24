@@ -4,11 +4,13 @@ from __future__ import annotations
 import json
 from typing import Any, Optional
 
+from .config import client_id
 from .errors import GatewayError
 from .executor import run_via_broker
 from .profiles import list_profiles as _list_profiles
 from .profiles import require_unlocked, validate_alias
 from .setup_status import setup_status  # noqa: F401 — re-export pour le dispatch MCP
+from .usage import log_usage
 
 
 def profiles_list() -> dict[str, Any]:
@@ -17,7 +19,14 @@ def profiles_list() -> dict[str, Any]:
 
 def _run(alias: str, gws_args: list[str], timeout: int = 60) -> Any:
     # Fail-fast local ; le broker re-vérifie lock + policy puis exécute gws.
-    require_unlocked(alias)
+    try:
+        require_unlocked(alias)
+    except GatewayError as e:
+        # Le refus local court-circuite le broker : journaliser ici, sinon
+        # cette tentative n'apparaîtrait nulle part dans usage.jsonl.
+        if e.code == "locked":
+            log_usage(alias, gws_args, client_id(), decision="refus", reason="locked")
+        raise
     return run_via_broker(alias, gws_args, timeout=timeout)
 
 

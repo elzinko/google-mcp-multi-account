@@ -23,9 +23,10 @@ from pathlib import Path
 from typing import Any
 
 # Réutiliser la logique gateway (lock, policy, config)
-from .config import SYS_PYTHON, POLICY_CHECKER, USAGE_LOGGER, gwsa_root
+from .config import SYS_PYTHON, POLICY_CHECKER, gwsa_root
 from .errors import GatewayError
 from .profiles import require_unlocked
+from .usage import log_usage
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 4878
@@ -115,32 +116,22 @@ def check_policy(profile_path: Path, gws_args: list[str], client: str) -> None:
         raise GatewayError(msg, code="policy")
 
 
-def log_ok(alias: str, gws_args: list[str], client: str) -> None:
-    if not USAGE_LOGGER.is_file():
-        return
-    python = SYS_PYTHON if os.path.isfile(SYS_PYTHON) else "python3"
-    env = dict(os.environ)
-    env["GWSA_CLIENT"] = client or "broker"
-    try:
-        subprocess.run(
-            [python, str(USAGE_LOGGER), str(gwsa_root()), alias, *gws_args],
-            capture_output=True,
-            env=env,
-            timeout=5,
-        )
-    except Exception:
-        pass
-
-
 def handle_exec(alias: str, args: list[str], client: str) -> Any:
     if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
         raise GatewayError("args doit être une liste de chaînes", code="error")
     if not args:
         raise GatewayError("args vide", code="error")
-    d = require_unlocked(alias)
+    try:
+        d = require_unlocked(alias)
+    except GatewayError as e:
+        # Refus de verrou tracé comme un refus de policy — sinon usage.jsonl
+        # ne voit jamais les tentatives sur profil verrouillé.
+        if e.code == "locked":
+            log_usage(alias, args, client, decision="refus", reason="locked")
+        raise
     check_policy(d, args, client)
     result = run_gws_local(d, args)
-    log_ok(alias, args, client)
+    log_usage(alias, args, client)
     return result
 
 
