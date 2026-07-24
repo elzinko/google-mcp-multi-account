@@ -105,6 +105,9 @@ exécute `gws` pour le MCP. Référence : [docs/architecture.md](docs/architectu
   ([setup-oauth.md](docs/setup-oauth.md) étape 5) rend les tokens durables.
 - Quotas API gratuits largement suffisants pour un usage personnel. Coût : 0 €.
 
+> 🔍 **Regard critique complet** (forces, limites, sécurité, position face à la
+> concurrence, risques d'obsolescence) : [docs/critique.md](docs/critique.md).
+
 ## Tests
 
 - **Automatiques** : `./scripts/test.sh` — suite hermétique (policy, wrapper,
