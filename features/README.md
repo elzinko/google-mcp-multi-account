@@ -17,6 +17,7 @@
 | 0010 | README en quickstart 3 étapes — le détail part dans docs/ | feature | P2 | ✅ shipped | #13 |
 | 0011 | `gwsa admin` — démarrer/arrêter l'interface web en un geste, proposé par l'élicitation | feature | P2 | ✅ shipped | #9 |
 | 0013 | Brancher le serveur MCP dans Claude Desktop en un geste (script idempotent) | feature | P2 | ✅ shipped | #15 |
+| 0016 | Porte d'entrée open-source — README copiable, SECURITY.md, licence MIT, badges | feature | P2 | ✅ shipped | #16 |
 
 ## 💡 Idées (non groomées)
 
@@ -26,4 +27,4 @@
 | 0001 | Élicitation signée — faire monter `gwsa strongauth` de la présence à la signature | feature | P3 | 💡 idea |  |
 | 0003 | Vault credentials hors périmètre agent (Phase 2.1) | feature | P3 | 💡 idea |  |
 
-> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015.
+> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016.
