@@ -14,6 +14,7 @@
 | 0009 | Tool MCP `setup_status` (lecture seule) + `provision-gcp.sh status --json` | feature | P2 | ✅ shipped | #11 |
 | 0010 | README en quickstart 3 étapes — le détail part dans docs/ | feature | P2 | ✅ shipped | #13 |
 | 0011 | `gwsa admin` — démarrer/arrêter l'interface web en un geste, proposé par l'élicitation | feature | P2 | ✅ shipped | #9 |
+| 0013 | Brancher le serveur MCP dans Claude Desktop en un geste (script idempotent) | feature | P2 | 🔴 todo |  |
 
 ## 💡 Idées (non groomées)
 
