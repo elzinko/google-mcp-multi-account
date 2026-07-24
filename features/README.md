@@ -15,6 +15,7 @@
 | 0010 | README en quickstart 3 étapes — le détail part dans docs/ | feature | P2 |  | ✅ shipped | #13 |
 | 0011 | `gwsa admin` — démarrer/arrêter l'interface web en un geste, proposé par l'élicitation | feature | P2 |  | ✅ shipped | #9 |
 | 0013 | Brancher le serveur MCP dans Claude Desktop en un geste (script idempotent) | feature | P2 |  | ✅ shipped | #15 |
+| 0019 | Doc de critique technique lisible (forces / limites / risques) référencée au README | feature | P2 |  | 🔴 todo |  |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)
 
