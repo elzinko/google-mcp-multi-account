@@ -63,7 +63,9 @@ def _profile_email(dir_path: Path) -> str:
     """
     try:
         text = (dir_path / ".email").read_text(encoding="utf-8").strip()
-    except OSError:
+    except (OSError, UnicodeDecodeError):
+        # Fichier absent/illisible OU octets non-UTF-8 (métadonnée corrompue) :
+        # traiter comme absent/invalide, jamais crasher (retour Codex, PR #18).
         return ""
     first = text.splitlines()[0].strip() if text else ""
     return first if _EMAIL_RE.fullmatch(first) else ""

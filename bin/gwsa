@@ -110,7 +110,7 @@ DEFAULT_SCOPES="https://www.googleapis.com/auth/drive,https://www.googleapis.com
 profile_email() { # profile_email <dir> — email du compte (métadonnée .email, sinon gws + backfill)
   # ADR-0002 : .email est la source lue par toutes les surfaces (gateway comprise,
   # qui elle n'exécute jamais gws). Ici, côté humain, on backfille les profils
-  # d'avant la fiche 0014 dès qu'une lecture gws aboutit. Le cache n'est
+  # d'avant la fiche 0015 dès qu'une lecture gws aboutit. Le cache n'est
   # autoritatif que s'il ressemble à un email : un .email corrompu ne doit pas
   # court-circuiter le backfill (retour Codex, PR #18), sinon il reste coincé.
   local dir="$1" email cached
@@ -446,6 +446,12 @@ main() {
       local dir; dir="$(profile_dir "$alias")"
       [[ -d "$dir" ]] || die "profil inconnu « $alias » — le créer avec : gwsa add $alias"
       if is_locked "$dir"; then
+        # Journaliser le refus AVANT de mourir — même trace que les refus de
+        # policy, sinon les tentatives sur profil verrouillé restent invisibles.
+        if [[ -f "$USAGE_LOGGER" ]]; then
+          GWSA_LOG_DECISION=refus GWSA_LOG_REASON=locked \
+            "$SYS_PYTHON" "$USAGE_LOGGER" "$GWSA_ROOT" "$alias" "$@" >/dev/null 2>&1 || true
+        fi
         die "profil « $alias » verrouillé 🔒 — accès sur demande : l'utilisateur doit d'abord exécuter « gwsa unlock $alias [minutes] »"
       fi
       if [[ -f "$dir/policy.json" ]]; then

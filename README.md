@@ -1,9 +1,17 @@
 # google-mcp-multi-account
 
-Brancher des agents LLM (Claude Desktop, Cursor, Claude Code, …) sur **plusieurs
-comptes Google** — Gmail, Drive, Calendar, Docs, Sheets, Tasks — **100 % en local**.
+**Brancher des agents LLM (Claude Desktop, Cursor, Claude Code, …) sur plusieurs
+comptes Google — Gmail, Drive, Calendar, Docs, Sheets, Tasks — 100 % en local.**
 
-Serveur **MCP** local ([`bin/google-mcp`](bin/google-mcp)) + gateway
+[![CI](https://github.com/elzinko/google-mcp-multi-account/actions/workflows/ci.yml/badge.svg)](https://github.com/elzinko/google-mcp-multi-account/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Sécurité](https://img.shields.io/badge/sécurité-modèle_de_menace-blue)](SECURITY.md)
+[![Local first](https://img.shields.io/badge/données-100%25_local-brightgreen)](#sécurité)
+[![macOS](https://img.shields.io/badge/macOS-Touch_ID-black?logo=apple)](docs/usage.md)
+[![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-%E2%98%95-FFDD00)](https://buymeacoffee.com/elzinko)
+
+Serveur **MCP** ([Model Context Protocol](https://modelcontextprotocol.io)) local
+([`bin/google-mcp`](bin/google-mcp)) + gateway
 ([`gateway/`](gateway/)) pour les clients LLM ; le wrapper [`bin/gwsa`](bin/gwsa)
 et l'admin web pour l'humain. **Rien ne tourne dans le cloud** : le seul passage
 par la console Google Cloud est la création *one-shot* d'un identifiant OAuth.
@@ -13,33 +21,43 @@ par la console Google Cloud est la création *one-shot* d'un identifiant OAuth.
 **1 · Provisionner le projet Google Cloud** (une fois, ~10 min) :
 
 ```bash
-brew install googleworkspace-cli                 # le CLI gws
-ln -sf "$PWD/bin/gwsa" /opt/homebrew/bin/gwsa    # le wrapper dans le PATH
-./scripts/provision-gcp.sh                        # crée le projet, active les APIs, te guide
+git clone https://github.com/elzinko/google-mcp-multi-account.git
+cd google-mcp-multi-account
+brew install googleworkspace-cli                    # le CLI gws
+ln -sf "$PWD/bin/gwsa" "$(brew --prefix)/bin/gwsa"  # le wrapper dans le PATH
+./scripts/provision-gcp.sh                          # crée le projet, active les APIs, te guide
 ```
 
 Le script fait tout l'automatisable et te guide pour les **deux seuls gestes que
 Google interdit d'automatiser** (créer le client OAuth *Desktop app*, publier
-l'app), puis range le `client_secret.json`. Conteneur vide, rien de déployé, 0 €.
+l'app), puis range le `client_secret.json`. Le projet GCP reste une coquille
+vide : rien de déployé, 0 €.
 Détail / voie manuelle : [docs/setup-oauth.md](docs/setup-oauth.md).
 
-**2 · Brancher le serveur MCP** dans ton client LLM (une fois) — bloc de config
-pour Claude Desktop / Cursor / Claude Code : [docs/mcp-setup.md](docs/mcp-setup.md).
-
-**3 · Demander au LLM d'initialiser tes comptes.** Il lit l'état du setup (tool
-`setup_status`), te présente ce qui manque, et te propose **la commande exacte**
-pour chaque étape — c'est toi qui l'exécutes :
+**2 · Brancher Claude Desktop** (une fois) :
 
 ```bash
-gwsa add perso        # navigateur → choisir le compte → accepter les accès
+./scripts/install-claude-desktop.sh
+```
+
+Le script trouve la config, ajoute l'entrée MCP sans toucher à tes autres
+serveurs, fait un backup — relançable sans risque. Puis **redémarrer Claude
+Desktop** (Cmd-Q, puis relancer — fermer la fenêtre ne suffit pas). Autres
+clients (Cursor, Claude Code) et voie manuelle : [docs/mcp-setup.md](docs/mcp-setup.md).
+
+**3 · Demander au LLM d'initialiser tes comptes** — par exemple : « fais le
+point sur mon setup Google ». Il lit l'état du setup (tool `setup_status`), te
+présente ce qui manque, et te propose **la commande exacte** pour chaque étape —
+c'est toi qui l'exécutes. Chaque compte connecté devient un **profil**, désigné
+par l'**alias** que tu choisis :
+
+```bash
+gwsa add perso        # « perso » = ton alias · navigateur → choisir le compte → accepter
 gwsa add assoc        # répéter pour chaque compte · gwsa list pour voir l'état
 ```
 
-> ⚠️ Chaque compte connecté (hors propriétaire du projet) doit recevoir le rôle
-> IAM `serviceUsageConsumer`, sinon `403` au 1er appel. `gwsa add` et
-> `./scripts/provision-gcp.sh status` le détectent et affichent la commande ;
-> `./scripts/provision-gcp.sh sync-iam` répare tout d'un coup. Voir
-> [setup-oauth.md §7](docs/setup-oauth.md).
+> Un `403` au premier appel ? Il manque un rôle IAM au compte — le setup le
+> détecte et affiche la commande exacte ([détail](docs/setup-oauth.md)).
 
 ## Comment ça marche
 
@@ -51,7 +69,7 @@ Les quatre parcours, versionnés avec leur prose source dans [diagrams/](diagram
 - **[Setup initial](diagrams/onboarding-setup-initial/)** — les 3 étapes ci-dessus, le reste guidé.
 - **[Lire ses données](diagrams/lecture-donnees-elicitee/)** — verrou → unlock élicité → lecture sous policy.
 - **[Connecter un compte](diagrams/onboarding-add-account-elicite/)** — double barrière physique (Touch ID + consentement OAuth).
-- **[Réparer la dérive IAM](diagrams/onboarding-reparation-iam/)** — détection ×2, réparation humaine idempotente.
+- **[Réparer la dérive IAM](diagrams/onboarding-reparation-iam/)** — détection par deux chemins (`403` rencontré par le LLM, ou contrôle `provision-gcp.sh status`), réparation humaine idempotente.
 
 ```mermaid
 flowchart TD
@@ -72,7 +90,8 @@ flowchart TD
 retiré, [issue #293](https://github.com/googleworkspace/cli/issues/293)) ; `gwsa`
 / la gateway isolent chaque compte via `GOOGLE_WORKSPACE_CLI_CONFIG_DIR`. Un
 broker local ([`bin/google-broker`](bin/google-broker)) est le seul process qui
-exécute `gws` pour le MCP. Référence : [docs/architecture.md](docs/architecture.md).
+exécute `gws` pour les accès aux **données** du MCP. Référence :
+[docs/architecture.md](docs/architecture.md).
 
 ## Utiliser
 
@@ -86,11 +105,23 @@ exécute `gws` pour le MCP. Référence : [docs/architecture.md](docs/architectu
 
 ## Sécurité
 
-- Tokens OAuth chiffrés (AES-256-GCM) dans `~/.config/gws-accounts/<alias>/`,
-  clé maître dans le Trousseau macOS — rien de tout ça dans le repo (`.gitignore`).
-- **Default-deny** par service ; brouillons Gmail sans envoi ; scopes par défaut
-  hors suppression définitive. Détails & limites : [docs/threat-model.md](docs/threat-model.md).
-- `gwsa strongauth on` exige Touch ID (présence humaine) pour unlock / grant / add.
+Le parti pris : **ne pas faire confiance au LLM par défaut**. Il peut *demander*
+un accès (élicitation) ; seul un humain l'ouvre. Concrètement :
+
+- **Default-deny** — tout service non déclaré dans la policy d'un profil est
+  refusé ; un nouveau compte démarre avec une policy prudente.
+- **Aucun envoi de mail** — les tools MCP s'arrêtent au brouillon Gmail.
+- **Écriture Drive zonée** — limitée à des dossiers autorisés, temporaires par
+  défaut.
+- **Verrous par profil** — un profil verrouillé refuse tout accès aux données,
+  MCP compris, jusqu'à un déverrouillage humain, optionnellement sous **Touch ID**.
+- **Tokens chiffrés** — AES-256-GCM sur disque, clé maître dans le Trousseau
+  macOS ; rien de sensible dans le repo.
+- **Journal d'audit** — chaque appel est tracé avec le client qui l'a émis.
+
+Le détail — garanties phase par phase, ce qui n'est **pas** encore garanti, et
+comment signaler une faille : [SECURITY.md](SECURITY.md) ·
+[docs/threat-model.md](docs/threat-model.md).
 
 ## Limites connues
 
@@ -114,3 +145,8 @@ exécute `gws` pour le MCP. Référence : [docs/architecture.md](docs/architectu
 - Si le multi-comptes natif (`--account`) revient dans gws
   ([issue #293](https://github.com/googleworkspace/cli/issues/293)), ce wrapper
   deviendra un alias trivial.
+
+## Soutenir
+
+Projet développé sur temps libre, sous licence [MIT](LICENSE). S'il te rend
+service, tu peux [m'offrir un café ☕](https://buymeacoffee.com/elzinko).

@@ -4,7 +4,8 @@ Le binaire [`bin/google-mcp`](../bin/google-mcp) expose un serveur MCP **stdio**
 (JSON-RPC, une ligne = un message). Il ne parle à Google que via la
 [gateway](../gateway/) (policy + verrous + executor v1 → `gws`).
 
-Prérequis : `gws` installé, au moins un profil (`gwsa add …`), Python 3.
+Prérequis : `gws` installé, Python 3. (Pas besoin d'avoir déjà connecté un
+compte : le tool `setup_status` guide l'initialisation depuis le client LLM.)
 
 Remplace `/ABS/PATH/google-mcp-multi-account` par le chemin absolu du clone.
 
@@ -67,7 +68,7 @@ Dans les settings MCP (UI ou `~/.cursor/mcp.json`) :
 Exemple :
 
 ```bash
-claude mcp add google-multi-account -- /ABS/PATH/google-mcp-multi-account/bin/google-mcp
+claude mcp add google-multi-account --env GWSA_CLIENT=claude-code -- /ABS/PATH/google-mcp-multi-account/bin/google-mcp
 ```
 
 ## Les tools exposés, par groupe

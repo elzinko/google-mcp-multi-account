@@ -81,5 +81,7 @@ par le checker tant que tu n’en poses pas une. Pour basculer : préréglage
 
 ## Journal d’audit
 
-`~/.config/gws-accounts/usage.jsonl` — champ `client` via `GWSA_CLIENT`
+`~/.config/gws-accounts/usage.jsonl` — appels autorisés (`decision:ok`), refus
+de policy et refus de verrou (`decision:refus`, `reason:locked`), sur les trois
+chemins (`gwsa`, broker, fail-fast gateway). Champ `client` via `GWSA_CLIENT`
 (`mcp`, `claude-code`, `cli`, …). Spoofable : utile pour le debug, pas une identité forte.

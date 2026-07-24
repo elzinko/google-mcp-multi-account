@@ -72,8 +72,9 @@ flowchart TD
 
 **Broker Phase 2 A :** `gateway/executor.py` parle au daemon
 [`bin/google-broker`](../bin/google-broker) (auto-start). Seul le broker exécute
-`gws`. Les credentials restent sous `~/.config/gws-accounts/` (pas encore de vault —
-fiche 0003).
+`gws` pour les accès aux données (la découverte lit encore `gws auth status` en
+direct). Les credentials restent sous `~/.config/gws-accounts/` (pas encore de
+vault — fiche 0003).
 
 ---
 
@@ -169,7 +170,7 @@ essentiellement lecture.
 | `access_request` non exécutant | `api.py` | Auto-unlock par le LLM | Humain (ou agent) exécute la commande |
 | Strongauth Touch ID | `touchid.swift` via `/usr/bin/swift` | Unlock/grant sans présence | PATH falsifié **non** (swift abs.) ; fichiers lock éditables oui |
 | Admin loopback + CSRF header | `admin/server.js` | Site web distant | Processus **local** malveillant |
-| Journal `usage.jsonl` | logger + policy | Audit coopératif | `GWSA_CLIENT` spoofable |
+| Journal `usage.jsonl` | logger + policy + refus de verrou (3 chemins) | Audit coopératif | `GWSA_CLIENT` spoofable |
 
 **Synthèse Phase 1 :** discipline d’un agent **coopératif** (MCP + policy + lock).
 **Pas** une isolation contre un agent avec shell libre et accès au filesystem

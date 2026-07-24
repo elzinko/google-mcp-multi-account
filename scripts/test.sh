@@ -221,6 +221,22 @@ cli 3 "alias avec espace rejeté"                             "a b" auth status
 section "Wrapper gwsa — verrou « accès sur demande »"
 "$GWSA" lock testprof >/dev/null 2>&1
 cli 3 "profil verrouillé → toute commande refusée"           testprof gmail users messages list
+rm -f "$GWSA_ROOT/usage.jsonl"
+GWSA_CLIENT=test-cli "$GWSA" testprof gmail users messages list >/dev/null 2>&1
+if python3 - <<'PY'
+import json, os
+lines = open(os.path.join(os.environ["GWSA_ROOT"], "usage.jsonl")).read().splitlines()
+assert len(lines) == 1, lines
+e = json.loads(lines[0])
+assert e["decision"] == "refus" and e["reason"] == "locked", e
+assert e["client"] == "test-cli" and e["alias"] == "testprof", e
+assert e["cmd"] == "gmail users messages list", e
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m refus de verrou journalisé (decision:refus, reason:locked, client)\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m refus de verrou journalisé dans usage.jsonl\n'
+fi
 "$GWSA" unlock testprof 5 >/dev/null 2>&1
 if "$GWSA" list 2>/dev/null | grep -q "🔓"; then
   PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m unlock temporaire visible dans list\n'
@@ -239,6 +255,7 @@ fi
 section "Gateway — verrou + access_request (élicitation sans exécution)"
 export PYTHONPATH="$(pwd)${PYTHONPATH:+:$PYTHONPATH}"
 if python3 - <<'PY'
+import json
 import os
 from pathlib import Path
 from gateway.api import access_request, profiles_list
@@ -263,11 +280,22 @@ r = access_request(alias, "unlock", minutes=30)
 assert r.get("elicitation") and "gwsa unlock" in r["suggested_command"], r
 assert not (d / ".unlock-until").exists(), "access_request ne doit pas déverrouiller"
 
+log = root / "usage.jsonl"
+try:
+    log.unlink()
+except FileNotFoundError:
+    pass
 try:
     api.gmail_list(alias)
     raise SystemExit("gmail_list aurait dû refuser (locked)")
 except GatewayError as e:
     assert e.code == "locked", e.code
+# Le refus fail-fast (api._run) doit laisser une trace dans usage.jsonl.
+entries = [json.loads(x) for x in log.read_text().splitlines()]
+assert len(entries) == 1, entries
+assert entries[0]["decision"] == "refus" and entries[0]["reason"] == "locked", entries
+assert entries[0]["alias"] == alias, entries
+assert entries[0]["client"] == os.environ["GWSA_CLIENT"], entries
 
 r2 = access_request(alias, "grant", folder="LLM", hours=4)
 assert "gwsa grant" in r2["suggested_command"] and "LLM" in r2["suggested_command"], r2
@@ -287,9 +315,9 @@ except GatewayError as e:
 print("ok")
 PY
 then
-  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m gateway lock + access_request\n'
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m gateway lock (refus journalisé) + access_request\n'
 else
-  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m gateway lock + access_request\n'
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m gateway lock (refus journalisé) + access_request\n'
 fi
 
 # MCP tools/list smoke (stdio JSON-RPC, une requête)
@@ -440,6 +468,12 @@ def rpc(obj):
             buf += s.recv(65536)
     return json.loads(buf.split(b"\n", 1)[0])
 
+log = root / "usage.jsonl"
+try:
+    log.unlink()
+except FileNotFoundError:
+    pass
+
 r = rpc({"token": tok, "cmd": "ping"})
 assert r.get("ok"), r
 r2 = rpc({"token": tok, "cmd": "exec", "alias": alias, "args": ["gmail", "users", "messages", "list"], "client": "test"})
@@ -454,13 +488,20 @@ try:
 except GatewayError as e:
     assert e.code == "locked", e.code
 
+# Les deux refus (RPC + direct) doivent être dans usage.jsonl, avec le client.
+entries = [json.loads(x) for x in log.read_text().splitlines()]
+assert len(entries) == 2, entries
+for e in entries:
+    assert e["decision"] == "refus" and e["reason"] == "locked", e
+    assert e["client"] == "test" and e["alias"] == alias, e
+
 srv.shutdown()
 print("ok")
 PY
 then
-  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m broker ping + locked + token\n'
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m broker ping + locked (refus journalisé) + token\n'
 else
-  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m broker ping + locked + token\n'
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m broker ping + locked (refus journalisé) + token\n'
 fi
 
 # --- 5. Onboarding IAM — détecteur du 403 « quota project » (hermétique) -----
