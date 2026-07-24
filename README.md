@@ -8,6 +8,11 @@ Serveur **MCP** local ([`bin/google-mcp`](bin/google-mcp)) + gateway
 et l'admin web pour l'humain. **Rien ne tourne dans le cloud** : le seul passage
 par la console Google Cloud est la création *one-shot* d'un identifiant OAuth.
 
+> **Plateforme : macOS (Apple Silicon).** Requis aujourd'hui — Trousseau (clé de
+> chiffrement), Touch ID, chemins Homebrew. Rendre le projet multi-plateforme
+> (Linux, Intel) et l'ouvrir à d'autres utilisateurs (doc EN, packaging) est à la
+> roadmap : [épic 0014](features/0014-generaliser-autres-utilisateurs.md).
+
 ## Quickstart (3 étapes)
 
 **1 · Provisionner le projet Google Cloud** (une fois, ~10 min) :
