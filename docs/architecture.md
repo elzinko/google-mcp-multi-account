@@ -72,8 +72,9 @@ flowchart TD
 
 **Broker Phase 2 A :** `gateway/executor.py` parle au daemon
 [`bin/google-broker`](../bin/google-broker) (auto-start). Seul le broker exécute
-`gws`. Les credentials restent sous `~/.config/gws-accounts/` (pas encore de vault —
-fiche 0003).
+`gws` pour les accès aux données (la découverte lit encore `gws auth status` en
+direct). Les credentials restent sous `~/.config/gws-accounts/` (pas encore de
+vault — fiche 0003).
 
 ---
 
