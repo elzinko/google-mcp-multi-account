@@ -19,3 +19,6 @@ __pycache__/
 
 # Note de handoff ezk-archive (éphémère personnel, jamais committée)
 .claude/handoff.md
+
+# Scratch de sprint ezk (éphémère, par-branche)
+SPRINT.md
