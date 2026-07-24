@@ -21,7 +21,7 @@ garanties phase par phase) : [docs/threat-model.md](docs/threat-model.md).
 | **Élicitation, pas exécution** | Le tool `access_request` renvoie **la commande que l'humain doit exécuter** — il n'exécute jamais rien lui-même. |
 | **Tokens chiffrés** | Chaque profil stocke un `credentials.enc` (AES-256-GCM, chiffrement du CLI `gws`), clé maître dans le **Trousseau macOS**. Rien de sensible dans le repo (`.gitignore`). |
 | **Broker loopback** | Les appels de données MCP passent par un broker local (`127.0.0.1`, jeton dédié) qui **re-vérifie** verrou et policy avant chaque exécution de `gws`. |
-| **Journal d'audit** | Chaque appel autorisé — et chaque refus de policy — est tracé dans `usage.jsonl` avec le client émetteur (`GWSA_CLIENT`). |
+| **Journal d'audit** | Chaque appel autorisé, chaque refus de policy et chaque refus pour verrou est tracé dans `usage.jsonl` avec le client émetteur (`GWSA_CLIENT`). |
 | **CI** | Syntaxe bash/Python/Node, `shellcheck`, et suite de tests hermétique (aucun compte réel, aucun réseau) sur chaque PR touchant du code (les changements purement documentaires ne déclenchent pas la CI, par frugalité). |
 
 ## Ce qui n'est **pas** (encore) garanti
@@ -38,9 +38,7 @@ L'honnêteté fait partie du modèle :
 - **Un profil sans `policy.json`** (créé avant le durcissement des policies)
   n'est pas filtré du tout : lui poser une policy via l'admin ou `gwsa policy`.
 - **Le journal est un outil de debug, pas une identité forte** : le champ
-  `GWSA_CLIENT` est déclaratif, donc falsifiable — et les refus pour verrou n'y
-  figurent pas encore (seuls les appels autorisés et les refus de policy sont
-  tracés).
+  `GWSA_CLIENT` est déclaratif, donc falsifiable.
 - **L'admin web (`127.0.0.1:4877`) n'a pas d'authentification propre** : elle
   fait confiance à la session macOS locale.
 
