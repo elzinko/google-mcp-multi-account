@@ -59,6 +59,16 @@ Les credentials restent dans `~/.config/gws-accounts/`. Un agent avec shell libr
 peut toujours appeler `gws` directement. Mitigation : restreindre le shell ;
 évolution = vault ([features/0003](../features/0003-vault-credentials-hors-perimetre-agent.md)).
 
+## Email = métadonnée d'identité (hors verrou)
+
+L'email d'un profil reste lisible même verrouillé — c'est la **seule**
+métadonnée exposée (diagnostic IAM de `setup_status`, SECURITY.md). Depuis
+[ADR-0002](adr/ADR-0002-email-metadonnee-hors-verrou.md), il vient d'un
+fichier `.email` écrit au geste humain `gwsa add` (backfill : `gwsa list`,
+admin) — **jamais** d'une exécution `gws`. Invariant testé : verrou ⇒ zéro
+exécution gws ; aucun `GOOGLE_WORKSPACE_CLI_CONFIG_DIR` dans `gateway/`
+hors `broker_server.py`.
+
 ## Phase 2.1 (prévue) — vault
 
 Credentials hors lecture agent ; seule la socket broker reste utile.

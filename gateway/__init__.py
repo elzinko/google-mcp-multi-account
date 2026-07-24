@@ -1,8 +1,8 @@
 """Gateway locale unique — porte d'entrée broker-ready vers les comptes Google.
 
-Phase 1 : délègue à gws via GOOGLE_WORKSPACE_CLI_CONFIG_DIR (executor v1).
-Phase 2 (hors scope) : remplacer gateway.executor par un broker de tokens ;
-les tools MCP et l'API publique de ce package restent stables.
+Phase 2 A : toute exécution gws passe par le broker loopback
+(gateway.executor → broker_server) — jamais de subprocess gws ailleurs dans
+ce package (ADR-0002). L'API publique et les tools MCP restent stables.
 """
 from .api import (
     access_request,

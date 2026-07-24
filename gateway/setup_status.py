@@ -1,6 +1,7 @@
 """setup_status — état agrégé du setup (tool MCP lecture seule + `status --json`).
 
-LIT uniquement : profils connectés (via `gws auth status`), `provision.env`
+LIT uniquement : profils connectés (fichiers de profil + métadonnée `.email`,
+jamais d'exécution gws — ADR-0002), `provision.env`
 (projet + publication), présence du `client_secret.json`, et l'IAM du projet
 (`gcloud get-iam-policy`, read-only) quand gcloud est joignable. N'exécute
 AUCUNE mutation — déverrouiller / accorder un rôle / connecter un compte reste
@@ -18,8 +19,8 @@ import shutil
 import subprocess
 from typing import Any, Optional
 
-from .config import gwsa_root, profile_dir
-from .profiles import _profile_email, list_profiles
+from .config import gwsa_root
+from .profiles import list_profiles
 
 ROLE_SUC = "roles/serviceusage.serviceUsageConsumer"
 
@@ -74,12 +75,9 @@ def setup_status() -> dict[str, Any]:
 
     accounts: list[dict[str, Any]] = []
     for p in list_profiles():
-        # L'email peut manquer pour un profil verrouillé (list_profiles ne le lit
-        # pas) : le récupérer directement — c'est une métadonnée d'identité, pas un
-        # accès aux données, donc hors du verrou.
+        # Email = métadonnée persistée (.email), fournie par list_profiles même
+        # profil verrouillé (ADR-0002) — aucune exécution gws ici.
         email_raw = p.get("email") or ""
-        if not email_raw and p.get("connected"):
-            email_raw = _profile_email(profile_dir(p["alias"]))
         email = email_raw.lower()
         acc: dict[str, Any] = {
             "alias": p["alias"],
@@ -110,6 +108,8 @@ def setup_status() -> dict[str, Any]:
         next_actions.append("./scripts/provision-gcp.sh status   # (terminal) vérifier l'accès IAM des comptes")
     if any(a["iam"] == "missing" for a in accounts):
         next_actions.append("./scripts/provision-gcp.sh sync-iam   # accorder le rôle IAM manquant")
+    if any(a["connected"] and not a["email"] for a in accounts):
+        next_actions.append("gwsa list   # renseigner l'email des profils existants (métadonnée .email, une fois)")
     for a in accounts:
         if a["locked"]:
             next_actions.append(f"gwsa unlock {a['alias']} 30   # profil verrouillé (accès sur demande)")
