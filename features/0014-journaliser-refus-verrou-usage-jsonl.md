@@ -53,8 +53,9 @@ appelé ; quand le broker refuse, il est le seul à tracer.
 - [x] Les appels autorisés et les refus de policy restent journalisés comme avant.
 - [x] Tests hermétiques dans `scripts/test.sh` couvrant les trois chemins
       (GWSA_ROOT temporaire, aucun compte réel).
-- [ ] SECURITY.md ne mentionne plus la lacune (suivi : la phrase arrive avec la
-      PR #16, encore ouverte — à retirer après le merge des deux PRs).
+- [x] SECURITY.md ne mentionne plus la lacune (retirée après le merge de #16 et
+      #17 ; le tableau « Ce qui est en place » indique désormais que les refus de
+      verrou sont tracés).
 
 ## Notes
 
