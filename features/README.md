@@ -30,12 +30,13 @@
 
 | # | Titre | Type | Prio | Épic | Statut | PR |
 |---|-------|------|------|------|--------|----|
+| 0023 | Versionner et déployer le MCP en local, découplé du code source de travail | feature | P0 |  | 💡 idea |  |
 | 0006 | Harnais hybride pour les tests manuels — script pour la mécanique, LLM pour la glu | feature | P2 |  | 💡 idea |  |
-| 0018 | Cross-platform — faire tourner le projet hors macOS (Linux, Intel) | feature | P2 | 0017 | 💡 idea |  |
 | 0019 | Documentation anglaise — ouvrir le projet à une audience non francophone | feature | P2 | 0017 | 💡 idea |  |
 | 0020 | Packaging installable — sortir du git clone + symlink codé en dur | feature | P2 | 0017 | 💡 idea |  |
 | 0001 | Élicitation signée — faire monter `gwsa strongauth` de la présence à la signature | feature | P3 |  | 💡 idea |  |
 | 0003 | Vault credentials hors périmètre agent (Phase 2.1) | feature | P3 |  | 💡 idea |  |
+| 0018 | Cross-platform — faire tourner le projet hors macOS (Linux, Intel) | feature | P3 | 0017 | 💡 idea |  |
 | 0021 | Élargir la couverture MCP — Calendar, Docs, Sheets, Tasks (et écritures) | feature | P3 | 0017 | 💡 idea |  |
 
 > Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0022.
