@@ -5,9 +5,9 @@ type: feature
 priority: P0
 version:
 epic:
-status: todo
+status: shipped
 ready: 2026-07-25
-pr:
+pr: "#25"
 created: 2026-07-25
 ---
 
@@ -85,7 +85,7 @@ qu'il exécute vraiment.
 |---|---|---|
 | Code | `~/.local/share/google-mcp/current/` | le working tree |
 | `GWSA_ROOT` | `~/.config/gws-accounts` | `~/.config/gws-accounts-dev` |
-| `GWSA_BROKER_PORT` | `4878` (défaut) | `4879` |
+| `GWSA_BROKER_PORT` | `4878` (défaut) | `4880` |
 | Entrée MCP | `google-multi-account` | `google-multi-account-dev` |
 
 Les deux leviers existent déjà en variables d'environnement — aucune refonte. Les
@@ -152,3 +152,23 @@ Toutes locales, toutes constatées le **2026-07-25** :
   `--name` nécessaire au second couloir.
 - Amorcer le root de dev demandera de connecter au moins un compte
   (`gwsa add` sur `GWSA_ROOT=~/.config/gws-accounts-dev`) — geste humain, une fois.
+
+## Livré — PR #25 (rebase-merge le 2026-07-26)
+
+Écarts entre le plan et la réalisation, pour mémoire :
+
+- **Port de développement : 4880, pas 4879.** La suite de tests occupe déjà 4879
+  (`scripts/test.sh`, broker Phase 2 A) — les faire cohabiter aurait rendu les
+  tests instables dès qu'un couloir de dev tourne.
+- **Durcissement non prévu** : `broker stop` vérifie la signature du process avant
+  de tuer. Un pidfile périmé pointant un pid recyclé aurait condamné un process
+  innocent. Couvert par un test dédié.
+- **Cas non prévu** : un broker lancé *avant* cette version n'a pas de pidfile.
+  `broker status` teste donc aussi le port et le signale, au lieu d'annoncer « arrêté »
+  à tort. Observé en vrai — un broker orphelin tournait sur le port 4899.
+- **CI cloud non exécutée** : GitHub Actions refuse de démarrer (facturation).
+  Validation faite par la gate locale `act` + Docker (job CI complet en conteneur
+  Linux, 112 tests verts) — merge décidé par le PO en connaissance de cause.
+- Les critères d'acceptation portant sur l'exécution réelle (couloirs simultanés,
+  `profiles_list` du dev vide) restent à constater par l'humain au premier
+  déploiement : ils dépendent de gestes machine que le LLM n'exécute pas.

@@ -5,7 +5,7 @@
 
 | # | Titre | Type | Prio | Épic | Statut | PR |
 |---|-------|------|------|------|--------|----|
-| 0023 | Versionner et déployer le MCP en local, découplé du code source de travail | feature | P0 |  | 🔴 todo |  |
+| 0023 | Versionner et déployer le MCP en local, découplé du code source de travail | feature | P0 |  | ✅ shipped | #25 |
 | 0004 | Broker daemon local Phase 2 A — gws derrière socket loopback | feature | P1 |  | ✅ shipped | 12114ac |
 | 0005 | Onboarding des comptes — chaîne complète élicitée (IAM compris), drift visible | feature | P1 |  | ✅ shipped | #5 |
 | 0012 | Panneau « Santé du setup » + bouton « Réparer l'accès IAM » dans l'admin | feature | P1 |  | ✅ shipped | #14 |
@@ -39,4 +39,4 @@
 | 0018 | Cross-platform — faire tourner le projet hors macOS (Linux, Intel) | feature | P3 | 0017 | 💡 idea |  |
 | 0021 | Élargir la couverture MCP — Calendar, Docs, Sheets, Tasks (et écritures) | feature | P3 | 0017 | 💡 idea |  |
 
-> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0022.
+> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0022, 0023.
