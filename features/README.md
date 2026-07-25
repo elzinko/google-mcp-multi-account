@@ -5,6 +5,7 @@
 
 | # | Titre | Type | Prio | Épic | Statut | PR |
 |---|-------|------|------|------|--------|----|
+| 0023 | Versionner et déployer le MCP en local, découplé du code source de travail | feature | P0 |  | 🔴 todo |  |
 | 0004 | Broker daemon local Phase 2 A — gws derrière socket loopback | feature | P1 |  | ✅ shipped | 12114ac |
 | 0005 | Onboarding des comptes — chaîne complète élicitée (IAM compris), drift visible | feature | P1 |  | ✅ shipped | #5 |
 | 0012 | Panneau « Santé du setup » + bouton « Réparer l'accès IAM » dans l'admin | feature | P1 |  | ✅ shipped | #14 |
@@ -30,7 +31,6 @@
 
 | # | Titre | Type | Prio | Épic | Statut | PR |
 |---|-------|------|------|------|--------|----|
-| 0023 | Versionner et déployer le MCP en local, découplé du code source de travail | feature | P0 |  | 💡 idea |  |
 | 0006 | Harnais hybride pour les tests manuels — script pour la mécanique, LLM pour la glu | feature | P2 |  | 💡 idea |  |
 | 0019 | Documentation anglaise — ouvrir le projet à une audience non francophone | feature | P2 | 0017 | 💡 idea |  |
 | 0020 | Packaging installable — sortir du git clone + symlink codé en dur | feature | P2 | 0017 | 💡 idea |  |

@@ -5,8 +5,8 @@ type: feature
 priority: P0
 version:
 epic:
-status: idea
-ready:
+status: todo
+ready: 2026-07-25
 pr:
 created: 2026-07-25
 ---
