@@ -5,9 +5,9 @@ type: feature
 priority: P2
 version:
 epic:
-status: todo
+status: shipped
 ready: 2026-07-24
-pr:
+pr: "#23"
 created: 2026-07-24
 ---
 
@@ -35,15 +35,15 @@ externes** vérifiées. La référencer depuis le README (section dédiée).
 
 ## Critères d'acceptation
 
-- [ ] `docs/critique.md` existe : structure lisible (verdict, forces, limites par
+- [x] `docs/critique.md` existe : structure lisible (verdict, forces, limites par
       thème, position vs concurrence, ce qui pourrait rendre le projet obsolète).
-- [ ] Ton **factuel et honnête** — ni auto-flagellation ni argumentaire de vente.
-- [ ] Chaque limite **renvoie** à la fiche/doc concerné (0003 vault, 0017/0018
+- [x] Ton **factuel et honnête** — ni auto-flagellation ni argumentaire de vente.
+- [x] Chaque limite **renvoie** à la fiche/doc concerné (0003 vault, 0017/0018
       généralisation, 0021 couverture MCP, `docs/threat-model.md`).
-- [ ] **Références externes vérifiées** (gws + issues, spec MCP, scopes Google /
+- [x] **Références externes vérifiées** (gws + issues, spec MCP, scopes Google /
       CASA, Desktop Extensions `.mcpb`, un serveur MCP concurrent).
-- [ ] Référencé depuis le **README** (lien visible).
-- [ ] `./scripts/test.sh` reste vert (aucun code touché) ; liens internes valides.
+- [x] Référencé depuis le **README** (lien visible).
+- [x] `./scripts/test.sh` reste vert (aucun code touché) ; liens internes valides.
 
 ## Notes
 

@@ -18,7 +18,7 @@
 | 0011 | `gwsa admin` — démarrer/arrêter l'interface web en un geste, proposé par l'élicitation | feature | P2 |  | ✅ shipped | #9 |
 | 0013 | Brancher le serveur MCP dans Claude Desktop en un geste (script idempotent) | feature | P2 |  | ✅ shipped | #15 |
 | 0016 | Porte d'entrée open-source — README copiable, SECURITY.md, licence MIT, badges | feature | P2 |  | ✅ shipped | #16 |
-| 0022 | Doc de critique technique lisible (forces / limites / risques) référencée au README | feature | P2 |  | 🔴 todo |  |
+| 0022 | Doc de critique technique lisible (forces / limites / risques) référencée au README | feature | P2 |  | ✅ shipped | #23 |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)
 
@@ -38,4 +38,4 @@
 | 0003 | Vault credentials hors périmètre agent (Phase 2.1) | feature | P3 |  | 💡 idea |  |
 | 0021 | Élargir la couverture MCP — Calendar, Docs, Sheets, Tasks (et écritures) | feature | P3 | 0017 | 💡 idea |  |
 
-> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016.
+> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0022.
