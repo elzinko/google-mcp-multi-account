@@ -11,9 +11,10 @@ from typing import Any, Callable
 
 from . import api
 from .errors import GatewayError
+from .version import server_version
 
 SERVER_NAME = "google-mcp-multi-account"
-SERVER_VERSION = "0.1.0"
+SERVER_VERSION = server_version()
 PROTOCOL_VERSION = "2024-11-05"
 
 

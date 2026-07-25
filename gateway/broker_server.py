@@ -31,6 +31,9 @@ from .usage import log_usage
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 4878
 TOKEN_FILE_NAME = ".broker-token"
+# Pidfile : rend le broker pilotable (« gwsa broker status|stop »). Il vit dans
+# GWSA_ROOT, donc chaque couloir (stable / dev) a le sien — fiche 0023.
+PID_FILE_NAME = ".broker.pid"
 
 
 def broker_host() -> str:
@@ -43,6 +46,10 @@ def broker_port() -> int:
 
 def token_path() -> Path:
     return gwsa_root() / TOKEN_FILE_NAME
+
+
+def pid_path() -> Path:
+    return gwsa_root() / PID_FILE_NAME
 
 
 def ensure_token() -> str:
@@ -185,9 +192,30 @@ def serve(host: str | None = None, port: int | None = None) -> None:
     token = ensure_token()
     BrokerHandler.expected_token = token
     with ThreadedTCPServer((host, port), BrokerHandler) as server:
+        _write_pid()
         sys.stderr.write(f"google-broker : écoute {host}:{port} (token {token_path()})\n")
         sys.stderr.flush()
-        server.serve_forever()
+        try:
+            server.serve_forever()
+        finally:
+            _clear_pid()
+
+
+def _write_pid() -> None:
+    path = pid_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"{os.getpid()}\n", encoding="utf-8")
+
+
+def _clear_pid() -> None:
+    """N'efface le pidfile que s'il est le nôtre — sinon on effacerait celui d'un
+    broker qui nous a succédé sur le même GWSA_ROOT."""
+    path = pid_path()
+    try:
+        if path.read_text(encoding="utf-8").strip() == str(os.getpid()):
+            path.unlink()
+    except OSError:
+        pass
 
 
 def main() -> None:

@@ -8,7 +8,7 @@ from pathlib import Path
 ALIAS_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 RESERVED = {
     "add", "list", "remove", "status", "help", "lock", "unlock",
-    "policy", "grant", "grants", "strongauth", "admin",
+    "policy", "grant", "grants", "strongauth", "admin", "broker",
 }
 
 # Services gws non soumis à la policy données (auth locale, introspection).

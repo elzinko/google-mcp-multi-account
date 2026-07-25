@@ -97,6 +97,60 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol
   | ./bin/google-mcp
 ```
 
+## Développer sans casser le MCP que tu utilises
+
+Par défaut, le serveur branché dans Claude Desktop exécute **le clone**, en direct.
+Modifier le code change donc l'outil pendant que tu t'en sers — et du code non
+validé garde l'accès aux vrais comptes. Pour séparer les deux :
+
+**1 · Déployer une version figée** (une fois, puis à chaque version) :
+
+```bash
+git tag v0.2.0 && ./scripts/deploy-local.sh
+```
+
+Le script refuse un arbre sale ou un HEAD non taggé. Il copie la version dans
+`~/.local/share/google-mcp/v0.2.0/`, bascule le lien `current`, et arrête le
+broker pour que le nouveau code soit réellement pris en compte.
+
+**2 · Brancher Claude Desktop sur la copie** (le script te l'affiche à la fin) :
+
+```bash
+~/.local/share/google-mcp/current/scripts/install-claude-desktop.sh
+```
+
+**3 · Travailler dans le clone**, sur son propre couloir :
+
+| | Stable (en service) | Développement |
+|---|---|---|
+| Code | `~/.local/share/google-mcp/current/` | ton clone |
+| `GWSA_ROOT` | `~/.config/gws-accounts` | `~/.config/gws-accounts-dev` |
+| `GWSA_BROKER_PORT` | `4878` (défaut) | `4880` |
+
+```bash
+export GWSA_ROOT="$HOME/.config/gws-accounts-dev" GWSA_BROKER_PORT=4880
+```
+
+(4879 est réservé à la suite de tests — d'où 4880 pour le développement.)
+
+**Le port distinct n'est pas cosmétique** : le broker ne se relance pas s'il en
+existe déjà un qui répond. Sans ports séparés, le premier démarré exécute *tout*,
+pour les deux couloirs — tu croirais tester tes modifications alors que tu
+exécutes l'ancien code.
+
+Vérifier qui est qui : le serveur annonce sa version dans `initialize`. La copie
+déployée annonce son tag, le clone annonce `dev`.
+
+```bash
+./scripts/deploy-local.sh --list        # versions déployées (* = courante)
+./scripts/deploy-local.sh --rollback v0.1.0
+gwsa broker status                      # sur le couloir courant
+```
+
+Le couloir de développement part avec un `GWSA_ROOT` vide : il faut y connecter au
+moins un compte (`gwsa add <alias>`) — geste humain, une fois. C'est le prix de
+l'isolation : ton code en chantier ne voit pas tes vrais comptes.
+
 ## Limites v1
 
 - Pas d’outil d’envoi Gmail (brouillons seulement).
