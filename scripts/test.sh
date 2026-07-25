@@ -625,6 +625,148 @@ printf '{ "mcpServers": [1, 2, 3] }' > "$f"; orig="$(cat "$f")"
   && pass "mcpServers non-objet → refus (fail-closed), fichier intact" \
   || fail "mcpServers non-objet → refus, fichier intact"
 
+# --- Déploiement local figé (fiche 0023) ------------------------------------
+
+section "Version du serveur — VERSION généré au déploiement, « dev » dans un clone"
+
+python3 - >/dev/null 2>&1 <<'PY'
+import sys, tempfile, pathlib
+sys.path.insert(0, ".")
+import gateway.version as v
+d = pathlib.Path(tempfile.mkdtemp())
+v.REPO_DIR = d                                   # racine bidon : rien n'est lu du vrai repo
+assert v.server_version() == "dev", "sans VERSION → dev"
+(d / "VERSION").write_text("v9.9.9\n", encoding="utf-8")
+assert v.server_version() == "v9.9.9", "avec VERSION → son contenu"
+(d / "VERSION").write_text("   \n", encoding="utf-8")
+assert v.server_version() == "dev", "VERSION vide → dev"
+PY
+[[ $? -eq 0 ]] \
+  && pass "version : « dev » sans VERSION, contenu du fichier sinon, « dev » si vide" \
+  || fail "version : « dev » sans VERSION, contenu du fichier sinon"
+
+section "Pilotage du broker — gwsa broker status|stop"
+
+BPID="$GWSA_ROOT/.broker.pid"
+rm -f "$BPID"
+# Port dédié : sans ça, un vrai broker écoutant sur 4878 rendrait le test
+# « status sans pidfile » instable selon la machine.
+export GWSA_BROKER_PORT=4977
+
+out="$("$GWSA" broker status 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$out" == *"arrêté"* ]] \
+  && pass "broker status sans pidfile → « arrêté », exit 0" \
+  || fail "broker status sans pidfile → « arrêté », exit 0"
+
+echo "999999" > "$BPID"          # pid qui n'existe pas → pidfile obsolète
+out="$("$GWSA" broker status 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$out" == *"obsolète"* ]] \
+  && pass "broker status sur pidfile obsolète → le signale, exit 0" \
+  || fail "broker status sur pidfile obsolète → le signale"
+
+# Pid VIVANT mais qui n'est pas un broker (le shell de test lui-même) : les pids
+# sont recyclés, un pidfile périmé ne doit pas condamner un process innocent.
+echo "$$" > "$BPID"
+out="$("$GWSA" broker status 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$out" == *"obsolète"* ]] \
+  && pass "broker status : pid vivant mais non-broker → obsolète (pas de faux positif)" \
+  || fail "broker status : pid vivant mais non-broker → obsolète"
+
+out="$("$GWSA" broker stop 2>&1)"; rc=$?
+[[ "$rc" -eq 0 ]] && kill -0 "$$" 2>/dev/null \
+  && pass "broker stop : ne tue PAS un process innocent dont le pid traînait" \
+  || fail "broker stop : ne tue pas un process innocent"
+
+echo "999999" > "$BPID"
+out="$("$GWSA" broker stop 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && ! -f "$BPID" ]] \
+  && pass "broker stop sur pidfile obsolète → nettoie, exit 0 (idempotent)" \
+  || fail "broker stop sur pidfile obsolète → nettoie, exit 0"
+
+cli 3 "broker : sous-commande inconnue refusée" broker nawak
+cli 3 "« broker » est un mot réservé (gwsa add broker)" add broker
+
+section "deploy-local.sh — copie figée, refus d'un arbre sale ou non taggé"
+
+DEP="$TMP/deploy"
+SRC="$TMP/srcrepo"
+mkdir -p "$SRC/scripts"
+cp scripts/deploy-local.sh "$SRC/scripts/"
+echo "coeur" > "$SRC/app.txt"
+git -C "$SRC" init -q >/dev/null 2>&1
+git -C "$SRC" config user.email "test@example.invalid"
+git -C "$SRC" config user.name "test"
+git -C "$SRC" add -A >/dev/null 2>&1
+git -C "$SRC" commit -qm "init" >/dev/null 2>&1
+DEPLOY="$SRC/scripts/deploy-local.sh"
+
+GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 && ! -d "$DEP" ]] \
+  && pass "HEAD non taggé → refus, rien de déployé" \
+  || fail "HEAD non taggé → refus, rien de déployé"
+
+git -C "$SRC" tag v1.0.0
+
+echo "pas commité" > "$SRC/dirty.txt"
+GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 && ! -d "$DEP" ]] \
+  && pass "arbre de travail sale → refus, rien de déployé" \
+  || fail "arbre de travail sale → refus, rien de déployé"
+rm -f "$SRC/dirty.txt"
+
+GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" --print >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && ! -d "$DEP" ]] \
+  && pass "--print : dry-run n'écrit rien" \
+  || fail "--print : dry-run n'écrit rien"
+
+GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && -f "$DEP/v1.0.0/app.txt" && "$(cat "$DEP/v1.0.0/VERSION" 2>/dev/null)" == "v1.0.0" ]] \
+  && pass "déploiement : copie créée sous le nom du tag + VERSION écrit" \
+  || fail "déploiement : copie créée + VERSION écrit"
+
+[[ "$(basename "$(readlink "$DEP/current" 2>/dev/null)" 2>/dev/null)" == "v1.0.0" ]] \
+  && pass "déploiement : current pointe la version déployée" \
+  || fail "déploiement : current pointe la version déployée"
+
+[[ ! -d "$DEP/v1.0.0/.git" ]] \
+  && pass "copie figée : pas de .git embarqué (git archive, fichiers suivis seuls)" \
+  || fail "copie figée : pas de .git embarqué"
+
+# LE critère de la fiche : toucher la source ne doit rien changer au déployé.
+echo "modifié pendant le développement" > "$SRC/app.txt"
+[[ "$(cat "$DEP/v1.0.0/app.txt")" == "coeur" ]] \
+  && pass "copie figée : modifier la source ne change PAS le code déployé" \
+  || fail "copie figée : modifier la source ne change PAS le code déployé"
+git -C "$SRC" checkout -q -- app.txt
+
+GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 ]] \
+  && pass "redéploiement du même tag → idempotent (exit 0)" \
+  || fail "redéploiement du même tag → idempotent"
+
+echo "v2" > "$SRC/app.txt"
+git -C "$SRC" commit -qam "v2" >/dev/null 2>&1
+git -C "$SRC" tag v1.1.0
+GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" >/dev/null 2>&1
+[[ "$(basename "$(readlink "$DEP/current" 2>/dev/null)" 2>/dev/null)" == "v1.1.0" ]] \
+  && pass "seconde version déployée, current suit" \
+  || fail "seconde version déployée, current suit"
+
+GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" --rollback v1.0.0 >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$DEP/current" 2>/dev/null)" 2>/dev/null)" == "v1.0.0" ]] \
+  && pass "rollback : current revient sur la version précédente" \
+  || fail "rollback : current revient sur la version précédente"
+
+out="$(GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" --list 2>&1)"
+[[ "$out" == *"* v1.0.0"* && "$out" == *"v1.1.0"* ]] \
+  && pass "--list : les versions déployées, courante marquée d'une étoile" \
+  || fail "--list : versions déployées, courante marquée"
+
+GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" --rollback v9.9.9 >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 ]] \
+  && pass "rollback vers une version non déployée → refus" \
+  || fail "rollback vers une version non déployée → refus"
+
 # --- Bilan ------------------------------------------------------------------
 
 printf '\n\033[1mBilan : %d réussis, %d échoués\033[0m\n' "$PASS" "$FAIL"

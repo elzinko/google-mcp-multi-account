@@ -20,6 +20,7 @@
 #   gwsa grants <alias> [clear]                       Lister/vider les autorisations temporaires
 #   gwsa strongauth on|off|status                     Exiger Touch ID / mdp macOS pour unlock & grant
 #   gwsa admin [stop]                                 Démarrer/arrêter l'interface web (127.0.0.1:4877)
+#   gwsa broker [status|stop]                         État/arrêt du broker de ce GWSA_ROOT
 #   gwsa remove <alias>                               Déconnecter et supprimer un profil
 #   gwsa <alias> <commande gws…>                      Exécuter gws sur le compte <alias>
 #
@@ -62,7 +63,7 @@ check_alias() {
   [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] \
     || die "alias invalide « $1 » (lettres, chiffres, - et _ uniquement)"
   case "$1" in
-    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth|admin) die "« $1 » est un mot réservé" ;;
+    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth|admin|broker) die "« $1 » est un mot réservé" ;;
   esac
 }
 
@@ -410,6 +411,57 @@ cmd_admin() { # gwsa admin [stop] — interface web locale (127.0.0.1:4877), dé
   esac
 }
 
+cmd_broker() { # gwsa broker [status|stop] — piloter le broker de CE GWSA_ROOT
+  # Le broker démarre tout seul (gateway/executor.py) et ne s'arrêtait jamais :
+  # après un déploiement, l'ancien code restait servi. Le pidfile vit dans
+  # GWSA_ROOT, donc chaque couloir (stable / dev) pilote le sien — fiche 0023.
+  local pidf="$GWSA_ROOT/.broker.pid"
+  local port="${GWSA_BROKER_PORT:-4878}"
+  local pid=""
+  if [[ -f "$pidf" ]]; then pid="$(cat "$pidf" 2>/dev/null || true)"; fi
+
+  # Un pid vivant ne suffit PAS : les pids sont recyclés, et un pidfile périmé
+  # pointerait un process innocent qu'on tuerait. On exige la signature du broker.
+  is_broker_pid() {
+    [[ -n "${1:-}" ]] || return 1
+    kill -0 "$1" 2>/dev/null || return 1
+    ps -p "$1" -o command= 2>/dev/null | grep -q "gateway.broker_server"
+  }
+  # Un broker lancé AVANT cette version n'a pas de pidfile : sans ce test, on
+  # annoncerait « arrêté » alors qu'il écoute — et qu'il sert l'ancien code.
+  port_listening() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+
+  case "${1:-status}" in
+    status)
+      if is_broker_pid "$pid"; then
+        echo "✓ broker en route — pid $pid, port $port, root $GWSA_ROOT"
+      elif [[ -n "$pid" ]]; then
+        echo "broker arrêté — pidfile obsolète ($pidf)"
+      elif port_listening "$port"; then
+        echo "⚠ un broker écoute sur $port SANS pidfile (démarré avant cette version) — le relancer pour le rendre pilotable"
+      else
+        echo "broker arrêté — port $port, root $GWSA_ROOT"
+      fi ;;
+    stop)
+      if is_broker_pid "$pid"; then
+        kill "$pid" 2>/dev/null || true
+        local waited=0
+        while kill -0 "$pid" 2>/dev/null && [[ "$waited" -lt 25 ]]; do
+          sleep 0.2; waited=$((waited + 1))
+        done
+        if kill -0 "$pid" 2>/dev/null; then kill -9 "$pid" 2>/dev/null || true; fi
+        echo "✓ broker arrêté (pid $pid)."
+      elif port_listening "$port"; then
+        echo "⚠ un broker écoute sur $port sans pidfile — arrêt impossible proprement."
+        echo "  le repérer : ps ax | grep gateway.broker_server"
+      else
+        echo "broker déjà arrêté."
+      fi
+      rm -f "$pidf" ;;
+    *) die "usage : gwsa broker [status|stop]" ;;
+  esac
+}
+
 cmd_remove() {
   local alias="$1"
   check_alias "$alias"
@@ -441,6 +493,7 @@ main() {
         *) die "usage : gwsa strongauth on|off|status" ;;
       esac ;;
     admin)  shift; [[ $# -le 1 ]] || die "usage : gwsa admin [stop]"; cmd_admin "$@" ;;
+    broker) shift; [[ $# -le 1 ]] || die "usage : gwsa broker [status|stop]"; cmd_broker "$@" ;;
     remove) shift; [[ $# -eq 1 ]] || die "usage : gwsa remove <alias>"; cmd_remove "$@" ;;
     *)
       local alias="$1"; shift
