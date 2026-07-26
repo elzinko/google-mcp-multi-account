@@ -39,16 +39,25 @@ l'app), puis range le `client_secret.json`. Le projet GCP reste une coquille
 vide : rien de déployé, 0 €.
 Détail / voie manuelle : [docs/setup-oauth.md](docs/setup-oauth.md).
 
-**2 · Brancher Claude Desktop** (une fois) :
+**2 · Installer le serveur et le brancher** (une fois) :
 
 ```bash
-./scripts/install-claude-desktop.sh
+./scripts/update.sh
 ```
 
-Le script trouve la config, ajoute l'entrée MCP sans toucher à tes autres
-serveurs, fait un backup — relançable sans risque. Puis **redémarrer Claude
-Desktop** (Cmd-Q, puis relancer — fermer la fenêtre ne suffit pas). Autres
-clients (Cursor, Claude Code) et voie manuelle : [docs/mcp-setup.md](docs/mcp-setup.md).
+Une commande, comme pour un produit installé : elle prend la dernière version
+publiée, l'installe **hors du clone** (`~/.local/share/google-mcp/<version>/`),
+et branche Claude Desktop dessus — sans toucher à tes autres serveurs MCP, avec
+un backup de la config. Relançable sans risque : elle dit « déjà à jour » quand
+il n'y a rien de neuf.
+
+Installer hors du clone n'est pas un détail : sinon développer changerait
+l'outil pendant que tu t'en sers, et du code en chantier garderait l'accès à tes
+vrais comptes.
+
+Puis **redémarrer Claude Desktop** (Cmd-Q, puis relancer — fermer la fenêtre ne
+suffit pas). Autres clients (Cursor, Claude Code), branchement manuel et
+couloirs de développement : [docs/mcp-setup.md](docs/mcp-setup.md).
 
 **3 · Demander au LLM d'initialiser tes comptes** — par exemple : « fais le
 point sur mon setup Google ». Il lit l'état du setup (tool `setup_status`), te
@@ -146,6 +155,29 @@ comment signaler une faille : [SECURITY.md](SECURITY.md) ·
 - **Manuels** : [tests/manuels/](tests/manuels/) — guidés par un LLM sur de vrais
   comptes ; il suffit de dire « lance le test manuel drive-2-comptes » (prérequis :
   un dossier bac à sable `ZZ-TESTS` à la racine des Drive concernés).
+
+## Versions
+
+Le **tag git** est la source de vérité de la version. Le serveur annonce la
+sienne dans le handshake MCP : une version taggée s'il tourne depuis une copie
+installée, `dev` s'il tourne depuis le clone.
+
+| Commande | Ce qu'elle fait |
+|---|---|
+| `./scripts/update.sh` | installe la dernière version publiée et bascule dessus |
+| `./scripts/update.sh --check` | dit ce qui est installé / disponible, n'écrit rien |
+| `./scripts/update.sh --to v0.1.0` | revient à une version précise |
+| `./scripts/release.sh` | publie : semver déduit des commits, CHANGELOG, tag, push |
+| `./scripts/release.sh --print` | montre la version qui sortirait, n'écrit rien |
+
+`release.sh` déduit le niveau des [conventional commits](https://www.conventionalcommits.org/)
+depuis le dernier tag — `feat` → minor, `BREAKING CHANGE` → major, sinon patch —
+et refuse de publier dans le flou : arbre sale, hors `main`, retard sur
+`origin`, tag déjà posé, rien à publier, tests rouges.
+
+Historique des versions : [CHANGELOG.md](CHANGELOG.md). Détail des couloirs
+(brancher plusieurs versions à la fois, développer sans casser celle en
+service) : [docs/mcp-setup.md](docs/mcp-setup.md).
 
 ## Maintenance
 
