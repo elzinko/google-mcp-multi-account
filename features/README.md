@@ -12,7 +12,7 @@
 | 0014 | Journaliser les refus de verrou dans usage.jsonl (decision:refus, reason:locked) | bug | P1 |  | ✅ shipped | #17 |
 | 0015 | Email de profil = métadonnée persistée (.email) — zéro exécution gws hors broker | refactor | P1 |  | ✅ shipped | #18 |
 | 0024 | Fiabiliser les tools Gmail/Drive du MCP — brouillon cassé, Drive sans contenu ni propriétaire | bug | P1 |  | ✅ shipped | #26 |
-| 0025 | Couloirs étanches — chaque version branchée parle à son propre broker | bug | P1 |  | 🟠 in-progress | #27 |
+| 0025 | Couloirs étanches — chaque version branchée parle à son propre broker | bug | P1 |  | ✅ shipped | #27 |
 | 0002 | Durcir le modèle de policy — décisions « default-deny » soulevées par l'audit | feature | P2 |  | ✅ shipped | #12 |
 | 0007 | Provisioning GCP idempotent/déclaratif — durcir provision-gcp.sh ou passer à Terraform | feature | P2 |  | ✅ shipped | #10 |
 | 0008 | Connexion dynamique d'un nouveau compte via élicitation forte (access_request kind=add_account) | feature | P2 |  | ✅ shipped | #7 |
@@ -44,4 +44,4 @@
 | 0021 | Élargir la couverture MCP — Calendar, Docs, Sheets, Tasks (et écritures) | feature | P3 | 0017 | 💡 idea |  |
 | 0028 | Ménage des versions déployées (+ CHANGELOG et releases GitHub) | chore | P3 |  | 💡 idea |  |
 
-> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0022, 0023, 0024.
+> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0022, 0023, 0024, 0025.
