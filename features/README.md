@@ -11,7 +11,7 @@
 | 0012 | Panneau « Santé du setup » + bouton « Réparer l'accès IAM » dans l'admin | feature | P1 |  | ✅ shipped | #14 |
 | 0014 | Journaliser les refus de verrou dans usage.jsonl (decision:refus, reason:locked) | bug | P1 |  | ✅ shipped | #17 |
 | 0015 | Email de profil = métadonnée persistée (.email) — zéro exécution gws hors broker | refactor | P1 |  | ✅ shipped | #18 |
-| 0024 | Fiabiliser les tools Gmail/Drive du MCP — brouillon cassé, Drive sans contenu ni propriétaire | bug | P1 |  | 🟠 in-progress |  |
+| 0024 | Fiabiliser les tools Gmail/Drive du MCP — brouillon cassé, Drive sans contenu ni propriétaire | bug | P1 |  | 🟠 in-progress | #26 |
 | 0002 | Durcir le modèle de policy — décisions « default-deny » soulevées par l'audit | feature | P2 |  | ✅ shipped | #12 |
 | 0007 | Provisioning GCP idempotent/déclaratif — durcir provision-gcp.sh ou passer à Terraform | feature | P2 |  | ✅ shipped | #10 |
 | 0008 | Connexion dynamique d'un nouveau compte via élicitation forte (access_request kind=add_account) | feature | P2 |  | ✅ shipped | #7 |
