@@ -30,10 +30,12 @@ from .usage import log_usage
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 4878
-TOKEN_FILE_NAME = ".broker-token"
-# Pidfile : rend le broker pilotable (« gwsa broker status|stop »). Il vit dans
-# GWSA_ROOT, donc chaque couloir (stable / dev) a le sien — fiche 0023.
-PID_FILE_NAME = ".broker.pid"
+# Jeton et pidfile sont nommés d'après le PORT, pas seulement d'après GWSA_ROOT
+# (fiche 0025). Deux versions branchées en même temps partagent les comptes mais
+# ont chacune leur broker : sans le port dans le nom, le second écrase le
+# pidfile du premier et « gwsa broker stop » arrête le mauvais process.
+TOKEN_FILE_TPL = ".broker-{port}-token"
+PID_FILE_TPL = ".broker-{port}.pid"
 
 
 def broker_host() -> str:
@@ -44,18 +46,18 @@ def broker_port() -> int:
     return int(os.environ.get("GWSA_BROKER_PORT", str(DEFAULT_PORT)))
 
 
-def token_path() -> Path:
-    return gwsa_root() / TOKEN_FILE_NAME
+def token_path(port: int | None = None) -> Path:
+    return gwsa_root() / TOKEN_FILE_TPL.format(port=port if port is not None else broker_port())
 
 
-def pid_path() -> Path:
-    return gwsa_root() / PID_FILE_NAME
+def pid_path(port: int | None = None) -> Path:
+    return gwsa_root() / PID_FILE_TPL.format(port=port if port is not None else broker_port())
 
 
-def ensure_token() -> str:
+def ensure_token(port: int | None = None) -> str:
     root = gwsa_root()
     root.mkdir(parents=True, exist_ok=True)
-    path = token_path()
+    path = token_path(port)
     if path.is_file():
         return path.read_text(encoding="utf-8").strip()
     tok = secrets.token_hex(16)
@@ -194,28 +196,30 @@ class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 def serve(host: str | None = None, port: int | None = None) -> None:
     host = host or broker_host()
     port = port if port is not None else broker_port()
-    token = ensure_token()
+    # Le port EFFECTIF nomme le jeton et le pidfile — pas celui de
+    # l'environnement, qui peut différer si serve() a reçu un port explicite.
+    token = ensure_token(port)
     BrokerHandler.expected_token = token
     with ThreadedTCPServer((host, port), BrokerHandler) as server:
-        _write_pid()
-        sys.stderr.write(f"google-broker : écoute {host}:{port} (token {token_path()})\n")
+        _write_pid(port)
+        sys.stderr.write(f"google-broker : écoute {host}:{port} (token {token_path(port)})\n")
         sys.stderr.flush()
         try:
             server.serve_forever()
         finally:
-            _clear_pid()
+            _clear_pid(port)
 
 
-def _write_pid() -> None:
-    path = pid_path()
+def _write_pid(port: int | None = None) -> None:
+    path = pid_path(port)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(f"{os.getpid()}\n", encoding="utf-8")
 
 
-def _clear_pid() -> None:
+def _clear_pid(port: int | None = None) -> None:
     """N'efface le pidfile que s'il est le nôtre — sinon on effacerait celui d'un
-    broker qui nous a succédé sur le même GWSA_ROOT."""
-    path = pid_path()
+    broker qui nous a succédé sur le même port."""
+    path = pid_path(port)
     try:
         if path.read_text(encoding="utf-8").strip() == str(os.getpid()):
             path.unlink()
