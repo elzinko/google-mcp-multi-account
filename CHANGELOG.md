@@ -1,5 +1,22 @@
 # Journal des versions
 
+## v0.2.0 — 2026-07-27
+
+### Fonctionnalités
+
+- feat(cli): gwsa update / release, et le PATH suit la version installee (fiche 0030)
+- feat(release): publier et mettre a jour en une commande (fiche 0029)
+
+### Documentation
+
+- docs(features): ship 0029 #28 et 0030 #30
+- docs(features): 0030 sur #30 (la #29 a ete fermee avec sa branche de base)
+- docs(features): 0030 en cours sur #29
+- docs(features): add 0030 poste de commande versionne
+- docs(readme): installer via update.sh + section Versions (fiche 0029)
+- docs(features): 0029 en cours sur #28
+- docs(features): add 0029 release et update en une commande
+
 ## v0.1.1 — 2026-07-26
 
 ### Corrections
