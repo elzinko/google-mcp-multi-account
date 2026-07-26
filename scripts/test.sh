@@ -1098,6 +1098,182 @@ GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" --rollback v9.9.9 >/dev/null 2>&1; rc=$?
   && pass "rollback vers une version non déployée → refus" \
   || fail "rollback vers une version non déployée → refus"
 
+# --- Publication et mise à jour (fiche 0029) --------------------------------
+#
+# Hermétique : dépôt git jouet sous $TMP, aucun remote, aucun réseau, suite de
+# tests remplacée par un stub. Le vrai dépôt n'est jamais tagué ni poussé.
+
+section "release.sh — semver déduit des commits, CHANGELOG, tag annoté"
+
+REL="$TMP/relrepo"
+RELDEP="$TMP/reldeploy"
+RELCONF="$TMP/reldesktop.json"
+mkdir -p "$REL/scripts" "$REL/bin"
+cp scripts/release.sh scripts/update.sh scripts/deploy-local.sh \
+   scripts/install-claude-desktop.sh "$REL/scripts/"
+printf '#!/bin/sh\nexit 0\n' > "$REL/scripts/test.sh"; chmod +x "$REL/scripts/test.sh"
+printf '#!/bin/sh\necho faux-mcp\n' > "$REL/bin/google-mcp"; chmod +x "$REL/bin/google-mcp"
+echo "coeur" > "$REL/app.txt"
+git -C "$REL" init -q >/dev/null 2>&1
+git -C "$REL" checkout -qb main >/dev/null 2>&1
+git -C "$REL" config user.email "test@example.invalid"
+git -C "$REL" config user.name "test"
+git -C "$REL" add -A >/dev/null 2>&1
+git -C "$REL" commit -qm "feat(x): premiere fonctionnalite" >/dev/null 2>&1
+UPDATE="$REL/scripts/update.sh"
+relenv() { GWSA_DEPLOY_ROOT="$RELDEP" GWSA_DESKTOP_CONFIG="$RELCONF" "$@"; }
+release() { (cd "$REL" && GWSA_DEPLOY_ROOT="$RELDEP" ./scripts/release.sh "$@"); }
+ntags() { git -C "$REL" tag --list | grep -c . | tr -d ' '; }
+
+# dry-run : annonce la version, n'écrit ni tag ni CHANGELOG
+out_r="$(release --print 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$out_r" == *"v0.1.0"* && "$(ntags)" == "0" && ! -f "$REL/CHANGELOG.md" ]] \
+  && pass "release --print : annonce la version, ne tague rien, n'écrit rien" \
+  || fail "release --print : dry-run non étanche"
+
+# un feat sans tag existant → première minor
+release >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && "$(git -C "$REL" tag --list)" == "v0.1.0" ]] \
+  && pass "release : feat → v0.1.0, tag posé" \
+  || fail "release : feat → v0.1.0"
+
+grep -q "## v0.1.0" "$REL/CHANGELOG.md" 2>/dev/null \
+  && grep -q "premiere fonctionnalite" "$REL/CHANGELOG.md" \
+  && pass "release : CHANGELOG.md créé, commits groupés sous la version" \
+  || fail "release : CHANGELOG.md incomplet"
+
+# tag annoté (il porte les notes), pas un tag léger
+[[ "$(git -C "$REL" cat-file -t v0.1.0 2>/dev/null)" == "tag" ]] \
+  && pass "release : tag annoté (porte les notes de version)" \
+  || fail "release : tag léger au lieu d'annoté"
+
+# rien de nouveau depuis le tag → refus
+release >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 ]] \
+  && pass "release : aucun commit depuis le dernier tag → refus" \
+  || fail "release : devrait refuser sans commit nouveau"
+
+# fix → patch. Contenu modifié pour de vrai : sans divergence entre v0.1.0 et
+# la suite, le test de « --tag » plus bas ne pourrait pas distinguer la version
+# demandée de celle de HEAD.
+echo "coeur v2" > "$REL/app.txt"
+git -C "$REL" commit -qam "fix(y): repare un souci" >/dev/null 2>&1
+out_r="$(release --print 2>&1)"
+[[ "$out_r" == *"v0.1.1"* && "$out_r" == *"patch"* ]] \
+  && pass "release : fix → patch (v0.1.1)" \
+  || fail "release : fix devrait donner un patch"
+
+# breaking → major
+git -C "$REL" commit -q --allow-empty -m "feat(z)!: signature changee" >/dev/null 2>&1
+out_r="$(release --print 2>&1)"
+[[ "$out_r" == *"v1.0.0"* && "$out_r" == *"major"* ]] \
+  && pass "release : « type!: » (breaking) → major (v1.0.0)" \
+  || fail "release : breaking devrait donner un major"
+
+# niveau imposé en argument
+out_r="$(release minor --print 2>&1)"
+[[ "$out_r" == *"v0.2.0"* ]] \
+  && pass "release : niveau imposé en argument (minor → v0.2.0)" \
+  || fail "release : argument de niveau ignoré"
+
+# arbre sale → refus
+echo "brouillon" > "$REL/sale.txt"
+release >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 && "$(ntags)" == "1" ]] \
+  && pass "release : arbre sale → refus, aucun tag posé" \
+  || fail "release : arbre sale devrait refuser"
+rm -f "$REL/sale.txt"
+
+# hors branche principale → refus
+git -C "$REL" checkout -qb chantier >/dev/null 2>&1
+release >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 ]] \
+  && pass "release : hors branche principale → refus" \
+  || fail "release : devrait refuser hors main"
+git -C "$REL" checkout -q main >/dev/null 2>&1
+
+# tests rouges → refus, rien n'est tagué
+# Le stub rouge est COMMITÉ : sinon l'arbre est sale et c'est cette garde-là
+# qui refuse — le test ne prouverait rien sur les tests rouges.
+printf '#!/bin/sh\nexit 1\n' > "$REL/scripts/test.sh"
+git -C "$REL" commit -qam "chore(test): suite rouge" >/dev/null 2>&1
+release >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 && "$(ntags)" == "1" ]] \
+  && pass "release : tests rouges → refus, aucun tag posé (arbre propre)" \
+  || fail "release : tests rouges devraient bloquer la publication"
+printf '#!/bin/sh\nexit 0\n' > "$REL/scripts/test.sh"
+git -C "$REL" commit -qam "chore(test): suite verte" >/dev/null 2>&1
+
+# seconde version, pour avoir de quoi tester update
+release >/dev/null 2>&1
+[[ -n "$(git -C "$REL" tag --list v1.0.0)" ]] \
+  && pass "release : seconde publication (v1.0.0) enchaînée sans friction" \
+  || fail "release : seconde publication en échec"
+
+section "deploy-local.sh --tag — déployer une version autre que celle de HEAD"
+
+# HEAD porte « coeur v2 » ; la copie de v0.1.0 doit porter « coeur ».
+relenv "$REL/scripts/deploy-local.sh" --tag v0.1.0 >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && "$(cat "$RELDEP/v0.1.0/VERSION" 2>/dev/null)" == "v0.1.0" \
+   && "$(cat "$RELDEP/v0.1.0/app.txt" 2>/dev/null)" == "coeur" ]] \
+  && pass "--tag : déploie le CONTENU de la version demandée, pas celui de HEAD" \
+  || fail "--tag : contenu déployé = celui de HEAD"
+
+[[ "$(cat "$RELDEP/v0.1.0/.source" 2>/dev/null)" == "$REL" ]] \
+  && pass "--tag : clone source noté dans .source (update depuis la copie)" \
+  || fail "--tag : .source manquant dans la copie déployée"
+
+relenv "$REL/scripts/deploy-local.sh" --tag v9.9.9 >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 ]] \
+  && pass "--tag : tag inconnu → refus" \
+  || fail "--tag : tag inconnu devrait refuser"
+
+# un arbre sale ne bloque PAS --tag : on archive une référence, pas le chantier
+echo "brouillon" > "$REL/sale.txt"
+relenv "$REL/scripts/deploy-local.sh" --tag v1.0.0 >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && -d "$RELDEP/v1.0.0" && ! -f "$RELDEP/v1.0.0/sale.txt" ]] \
+  && pass "--tag : arbre sale toléré, mais jamais embarqué dans la copie" \
+  || fail "--tag : arbre sale mal géré"
+rm -f "$REL/sale.txt"
+
+section "update.sh — mettre à jour le poste en une commande"
+
+rm -rf "$RELDEP" "$RELCONF"
+out_u="$(relenv "$UPDATE" --check 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$out_u" == *"aucune"* && "$out_u" == *"v1.0.0"* && ! -d "$RELDEP" ]] \
+  && pass "update --check : dit installé/disponible, n'écrit rien" \
+  || fail "update --check : écrit ou n'informe pas"
+
+relenv "$UPDATE" >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$RELDEP/current")")" == "v1.0.0" ]] \
+  && pass "update : installe la dernière version et bascule current" \
+  || fail "update : n'installe pas la dernière version"
+
+[[ "$(jget "$RELCONF" mcpServers.google-multi-account.command)" == "$RELDEP/current/bin/google-mcp" ]] \
+  && pass "update : branche le client sur current (jamais sur un dossier de version)" \
+  || fail "update : entrée client absente ou figée sur une version"
+
+out_u="$(relenv "$UPDATE" 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$out_u" == *"déjà à jour"* ]] \
+  && pass "update : relancé sans rien à faire → « déjà à jour » (idempotent)" \
+  || fail "update : devrait être idempotent"
+
+relenv "$UPDATE" --to v0.1.0 >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$RELDEP/current")")" == "v0.1.0" ]] \
+  && pass "update --to : installe une version précise (retour arrière)" \
+  || fail "update --to : version précise non installée"
+
+relenv "$UPDATE" --to v9.9.9 >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 && "$(basename "$(readlink "$RELDEP/current")")" == "v0.1.0" ]] \
+  && pass "update --to : version inconnue → refus, current inchangé" \
+  || fail "update --to : version inconnue mal gérée"
+
+# depuis la COPIE INSTALLÉE (sans .git) : le relais par .source doit marcher
+out_u="$(relenv "$RELDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$out_u" == *"clone source"* && "$out_u" == *"v1.0.0"* ]] \
+  && pass "update : lancé depuis la copie installée, retrouve le clone via .source" \
+  || fail "update : ne retrouve pas le clone depuis la copie installée"
+
 # --- Bilan ------------------------------------------------------------------
 
 printf '\n\033[1mBilan : %d réussis, %d échoués\033[0m\n' "$PASS" "$FAIL"
