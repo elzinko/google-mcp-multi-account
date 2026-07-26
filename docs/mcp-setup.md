@@ -103,21 +103,44 @@ Par défaut, le serveur branché dans Claude Desktop exécute **le clone**, en d
 Modifier le code change donc l'outil pendant que tu t'en sers — et du code non
 validé garde l'accès aux vrais comptes. Pour séparer les deux :
 
-**1 · Déployer une version figée** (une fois, puis à chaque version) :
+**1 · Publier une version** — le numéro se calcule tout seul :
 
 ```bash
-git tag v0.2.0 && ./scripts/deploy-local.sh
+./scripts/release.sh
 ```
 
-Le script refuse un arbre sale ou un HEAD non taggé. Il copie la version dans
-`~/.local/share/google-mcp/v0.2.0/`, bascule le lien `current`, et arrête le
-broker pour que le nouveau code soit réellement pris en compte.
+Le niveau vient des conventional commits depuis le dernier tag : un `feat` →
+minor, un `BREAKING CHANGE` (ou `type!:`) → major, sinon patch. Passe
+`patch`, `minor` ou `major` pour forcer, `--print` pour voir sans rien écrire.
 
-**2 · Brancher Claude Desktop sur la copie** (le script te l'affiche à la fin) :
+Le script refuse de publier dans le flou : arbre sale, branche autre que
+`main`, retard sur `origin/main`, tag déjà posé, aucun commit depuis la
+dernière version, ou tests rouges. Au vert il écrit `CHANGELOG.md`, commite,
+pose un tag annoté et pousse les deux.
+
+**2 · Installer cette version sur ce poste** — une commande, comme un produit :
 
 ```bash
-~/.local/share/google-mcp/current/scripts/install-claude-desktop.sh
+./scripts/update.sh
 ```
+
+Elle prend la dernière version publiée, l'installe à côté de l'ancienne dans
+`~/.local/share/google-mcp/<tag>/`, bascule `current`, recycle le broker, et
+ne touche à la config de Claude Desktop que si l'entrée manque ou pointe
+ailleurs. Relancée sans rien de neuf, elle dit « déjà à jour » et s'arrête.
+
+| Option | Effet |
+|---|---|
+| `--check` | dit installé / disponible, n'écrit rien |
+| `--to v0.1.0` | installe une version précise (retour arrière) |
+| `--force` | réinstalle même si c'est déjà la version courante |
+
+Il reste un geste manuel, incompressible : **redémarrer Claude Desktop**. Le
+serveur MCP est lancé par l'application, il ne se recharge pas tout seul.
+
+Pour un cas particulier, les briques restent accessibles :
+`deploy-local.sh --tag v0.1.0` installe une version sans passer par `update`,
+et `install-claude-desktop.sh` branche une entrée à la main.
 
 **3 · Travailler dans le clone**, sur son propre couloir :
 

@@ -9,6 +9,7 @@
 #
 # Usage :
 #   ./scripts/deploy-local.sh                # déploie le tag de HEAD, bascule current
+#   ./scripts/deploy-local.sh --tag v0.2.0   # déploie CE tag, quel que soit HEAD
 #   ./scripts/deploy-local.sh --print        # dry-run : dit ce qu'il ferait, n'écrit rien
 #   ./scripts/deploy-local.sh --list         # versions déployées (* = courante)
 #   ./scripts/deploy-local.sh --rollback X   # rebascule current sur la version X
@@ -39,13 +40,16 @@ die()  { echo "${R}✗ $*${N}" >&2; exit 1; }
 DRY=""
 MODE="deploy"
 ROLLBACK_TO=""
+WANT_TAG=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --print|--dry-run) DRY=1 ;;
+    --tag) shift; WANT_TAG="${1:-}" ;;
+    --tag=*) WANT_TAG="${1#*=}" ;;
     --list) MODE="list" ;;
     --rollback) shift; ROLLBACK_TO="${1:-}"; MODE="rollback" ;;
     --rollback=*) ROLLBACK_TO="${1#*=}"; MODE="rollback" ;;
-    -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "argument inconnu « $1 » (voir --help)" ;;
   esac
   shift
@@ -102,14 +106,25 @@ step "Contrôles"
 command -v git >/dev/null 2>&1 || die "git est requis"
 git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1 || die "$REPO_ROOT n'est pas un dépôt git"
 
-[[ -z "$(git -C "$REPO_ROOT" status --porcelain)" ]] \
-  || die "arbre de travail sale — commite ou remise tes modifications avant de déployer"
-ok "arbre de travail propre"
+if [[ -n "$WANT_TAG" ]]; then
+  # --tag archive une référence git, jamais l'arbre de travail : on peut donc
+  # installer une version pendant qu'on développe autre chose à côté.
+  git -C "$REPO_ROOT" rev-parse -q --verify "refs/tags/$WANT_TAG" >/dev/null \
+    || die "tag « $WANT_TAG » inconnu dans $REPO_ROOT (git tag pour la liste ; git fetch --tags si besoin)"
+  VERSION="$WANT_TAG"
+  SOURCE_REF="refs/tags/$WANT_TAG"
+  ok "version : $VERSION (tag demandé — arbre de travail ignoré)"
+else
+  [[ -z "$(git -C "$REPO_ROOT" status --porcelain)" ]] \
+    || die "arbre de travail sale — commite ou remise tes modifications avant de déployer"
+  ok "arbre de travail propre"
 
-VERSION="$(git -C "$REPO_ROOT" describe --exact-match --tags HEAD 2>/dev/null || true)"
-[[ -n "$VERSION" ]] \
-  || die "HEAD n'est pas taggé — pose un tag d'abord (ex. : git tag v0.2.0), sinon la version déployée n'est pas identifiable"
-ok "version : $VERSION"
+  VERSION="$(git -C "$REPO_ROOT" describe --exact-match --tags HEAD 2>/dev/null || true)"
+  [[ -n "$VERSION" ]] \
+    || die "HEAD n'est pas taggé — pose un tag d'abord (ex. : git tag v0.2.0), sinon la version déployée n'est pas identifiable"
+  SOURCE_REF="HEAD"
+  ok "version : $VERSION"
+fi
 
 TARGET="$DEPLOY_ROOT/$VERSION"
 
@@ -131,9 +146,12 @@ else
   tmp="$(mktemp -d "$DEPLOY_ROOT/.tmp-XXXXXX")"
   # git archive n'exporte que les fichiers SUIVIS de HEAD : pas de .git/, pas de
   # worktrees, aucun fichier non commité. C'est ce qui garantit la copie figée.
-  git -C "$REPO_ROOT" archive HEAD | tar -x -C "$tmp" \
+  git -C "$REPO_ROOT" archive "$SOURCE_REF" | tar -x -C "$tmp" \
     || { rm -rf "$tmp"; die "échec de l'export git archive"; }
   printf '%s\n' "$VERSION" > "$tmp/VERSION"
+  # Le clone source, pour que « update.sh » sache où chercher les versions
+  # quand il est lancé depuis la copie installée (qui n'a pas de .git).
+  printf '%s\n' "$REPO_ROOT" > "$tmp/.source"
   mv "$tmp" "$TARGET"
   ok "copie figée : $TARGET"
 fi
