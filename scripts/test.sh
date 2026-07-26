@@ -1131,7 +1131,16 @@ git -C "$REL" config user.name "test"
 git -C "$REL" add -A >/dev/null 2>&1
 git -C "$REL" commit -qm "feat(x): premiere fonctionnalite" >/dev/null 2>&1
 UPDATE="$REL/scripts/update.sh"
-relenv() { GWSA_DEPLOY_ROOT="$RELDEP" GWSA_DESKTOP_CONFIG="$RELCONF" "$@"; }
+# Le lien « PATH » manipulé par les tests vit sous $TMP — jamais le vrai
+# /opt/homebrew/bin/gwsa. relenv le désigne systématiquement : sans ça, un
+# update.sh lancé par un test retomberait sur « command -v gwsa », donc sur le
+# lien réel de la machine.
+FAKEBIN="$TMP/fakebin"; mkdir -p "$FAKEBIN"
+LINK="$FAKEBIN/gwsa"
+relenv() {
+  GWSA_DEPLOY_ROOT="$RELDEP" GWSA_DESKTOP_CONFIG="$RELCONF" \
+  GWSA_CLI_LINK="${GWSA_CLI_LINK:-$LINK}" "$@"
+}
 release() { (cd "$REL" && GWSA_DEPLOY_ROOT="$RELDEP" ./scripts/release.sh "$@"); }
 ntags() { git -C "$REL" tag --list | grep -c . | tr -d ' '; }
 
@@ -1328,10 +1337,6 @@ out_g="$("$NOSRC/bin/gwsa" release --print 2>&1)"; rc=$?
 
 section "update.sh — le lien PATH suit la version installée (fiche 0030)"
 
-FAKEBIN="$TMP/fakebin"
-mkdir -p "$FAKEBIN"
-LINK="$FAKEBIN/gwsa"
-
 # lien vers le clone (l'état posé par le quickstart) → doit passer sur current
 ln -sfn "$REL/bin/gwsa" "$LINK"
 GWSA_CLI_LINK="$LINK" relenv "$UPDATE" --force >/dev/null 2>&1
@@ -1351,6 +1356,12 @@ out_l="$(GWSA_CLI_LINK="$LINK" relenv "$UPDATE" --force 2>&1)"
 [[ "$(readlink "$LINK")" == "/usr/bin/true" && "$out_l" == *"hors projet"* ]] \
   && pass "lien PATH : cible étrangère laissée intacte (avertissement)" \
   || fail "lien PATH : a écrasé une cible étrangère"
+
+# bac à sable sans lien désigné → on ne touche à rien (le PATH réel est sacré)
+out_l="$(GWSA_DEPLOY_ROOT="$RELDEP" GWSA_DESKTOP_CONFIG="$RELCONF" "$UPDATE" --force 2>&1)"
+[[ "$out_l" == *"sans GWSA_CLI_LINK"* ]] \
+  && pass "lien PATH : dépôt surchargé sans GWSA_CLI_LINK → aucun lien touché" \
+  || fail "lien PATH : un test pourrait atteindre le gwsa réel du PATH"
 
 # fichier réel (pas un lien) → on ne touche pas non plus
 rm -f "$LINK"

@@ -135,6 +135,14 @@ fi
 # étrangère est laissé intact.
 link_cli() {
   local link expected target
+  # Garde-fou de bac à sable : si le dépôt d'installation est surchargé (suite de
+  # tests) sans que le lien à gérer soit désigné explicitement, on ne touche à
+  # RIEN. Un test ne doit jamais pouvoir réécrire le gwsa du PATH réel — c'est
+  # arrivé une fois, en retirant une garde pendant un test de mutation.
+  if [[ -n "${GWSA_DEPLOY_ROOT:-}" && -z "${GWSA_CLI_LINK:-}" ]]; then
+    warn "dépôt d'installation surchargé sans GWSA_CLI_LINK — lien du PATH laissé tel quel"
+    return 0
+  fi
   link="${GWSA_CLI_LINK:-$(command -v gwsa 2>/dev/null || true)}"
   expected="$DEPLOY_ROOT/current/bin/gwsa"
 
