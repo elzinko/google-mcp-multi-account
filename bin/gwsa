@@ -21,6 +21,8 @@
 #   gwsa strongauth on|off|status                     Exiger Touch ID / mdp macOS pour unlock & grant
 #   gwsa admin [stop]                                 Démarrer/arrêter l'interface web (127.0.0.1:4877)
 #   gwsa broker [status|stop]                         État/arrêt du broker de ce GWSA_ROOT
+#   gwsa update [--check|--to <version>]              Installer la dernière version publiée
+#   gwsa release [patch|minor|major|--print]          Publier une version (semver + CHANGELOG + tag)
 #   gwsa remove <alias>                               Déconnecter et supprimer un profil
 #   gwsa <alias> <commande gws…>                      Exécuter gws sur le compte <alias>
 #
@@ -63,7 +65,7 @@ check_alias() {
   [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] \
     || die "alias invalide « $1 » (lettres, chiffres, - et _ uniquement)"
   case "$1" in
-    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth|admin|broker) die "« $1 » est un mot réservé" ;;
+    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth|admin|broker|update|release) die "« $1 » est un mot réservé" ;;
   esac
 }
 
@@ -464,6 +466,28 @@ cmd_broker() { # gwsa broker [status|stop] — piloter le broker de CE couloir
   esac
 }
 
+cmd_update() { # gwsa update [--check|--to <version>|--force] — installer la version publiée
+  local script="$REPO_DIR/scripts/update.sh"
+  [[ -x "$script" ]] || die "script de mise à jour introuvable ($script)"
+  exec "$script" "$@"
+}
+
+cmd_release() { # gwsa release [patch|minor|major|--print] — publier une version
+  # Publier demande le dépôt SOURCE. Une copie installée n'a pas de .git, mais
+  # deploy-local.sh y a noté le chemin du clone (.source) — même relais que
+  # update.sh (fiches 0029, 0030).
+  local root="$REPO_DIR"
+  if ! git -C "$root" rev-parse --git-dir >/dev/null 2>&1; then
+    [[ -s "$root/.source" ]] \
+      || die "publier demande le dépôt source : ni .git ni .source dans $root — lance « ./scripts/release.sh » depuis ton clone"
+    root="$(cat "$root/.source")"
+    [[ -d "$root" ]] || die "clone source « $root » introuvable (noté dans $REPO_DIR/.source)"
+  fi
+  local script="$root/scripts/release.sh"
+  [[ -x "$script" ]] || die "script de publication introuvable ($script)"
+  exec "$script" "$@"
+}
+
 cmd_remove() {
   local alias="$1"
   check_alias "$alias"
@@ -496,6 +520,8 @@ main() {
       esac ;;
     admin)  shift; [[ $# -le 1 ]] || die "usage : gwsa admin [stop]"; cmd_admin "$@" ;;
     broker) shift; [[ $# -le 1 ]] || die "usage : gwsa broker [status|stop]"; cmd_broker "$@" ;;
+    update)  shift; cmd_update "$@" ;;
+    release) shift; cmd_release "$@" ;;
     remove) shift; [[ $# -eq 1 ]] || die "usage : gwsa remove <alias>"; cmd_remove "$@" ;;
     *)
       local alias="$1"; shift
