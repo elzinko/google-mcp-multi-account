@@ -28,5 +28,22 @@ def profile_dir(alias: str) -> Path:
     return gwsa_root() / alias
 
 
+def upload_spool() -> Path:
+    """Répertoire de dépôt des médias `--upload` — ET répertoire courant de gws
+    côté broker (ADR-0003).
+
+    gws refuse tout `--upload` dont le chemin résolu sort de son cwd : le
+    contenu doit donc être écrit ici, et nulle part ailleurs. Le point en tête
+    le tient hors des énumérations de profils (`ALIAS_RE`).
+    """
+    d = gwsa_root() / ".uploads"
+    d.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(d, 0o700)
+    except OSError:
+        pass
+    return d
+
+
 def client_id() -> str:
     return os.environ.get("GWSA_CLIENT") or "mcp"

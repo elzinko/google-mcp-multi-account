@@ -79,8 +79,8 @@ claude mcp add google-multi-account --env GWSA_CLIENT=claude-code -- /ABS/PATH/g
 | Diagnostic | `setup_status` | État du setup (projet, publication, IAM par compte) + `next_actions` : commandes à proposer pour compléter/réparer (lecture seule). Guide l'onboarding, même sans shell (Desktop) |
 | Gmail — lecture | `gmail_list` · `gmail_get` | Recherche puis lit les messages d'un compte |
 | Gmail — brouillon | `gmail_draft_create` | Prépare un brouillon ; **aucun tool n'envoie de mail** |
-| Drive — lecture | `drive_list` · `drive_get` | Liste / inspecte fichiers et dossiers (`webViewLink` compris) |
-| Drive — écriture zonée | `drive_create` | Crée un fichier sous un parent autorisé (policy zones + grants) |
+| Drive — lecture | `drive_list` · `drive_get` | Liste / inspecte fichiers et dossiers (`webViewLink` compris) et **qui les possède** (`owner`, `owned_by_me`) |
+| Drive — écriture zonée | `drive_create` | Crée un fichier sous un parent autorisé (policy zones + grants), **avec son contenu** si `content` est fourni : le markdown devient un Google Doc rédigé ([ADR-0003](adr/ADR-0003-contenu-drive-via-depot-broker.md)) |
 | Élicitation | `access_request` | kind=`unlock` \| `grant` \| `add_account` : renvoie **la commande à faire exécuter par l'humain** — n'exécute jamais rien |
 
 Chaque appel traverse la gateway (verrou + policy default-deny) puis le

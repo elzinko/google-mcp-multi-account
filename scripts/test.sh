@@ -322,10 +322,188 @@ fi
 
 # MCP tools/list smoke (stdio JSON-RPC, une requête)
 MCP_OUT="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | python3 -m gateway 2>/dev/null | head -1)"
-if echo "$MCP_OUT" | python3 -c 'import json,sys; r=json.load(sys.stdin); names=[t["name"] for t in r["result"]["tools"]]; assert "gmail_list" in names and "gmail_draft_create" in names and "setup_status" in names; assert not any(t["name"]=="gmail_send" for t in r["result"]["tools"]); ar=[t for t in r["result"]["tools"] if t["name"]=="access_request"][0]; assert "add_account" in ar["inputSchema"]["properties"]["kind"]["enum"]'; then
+if echo "$MCP_OUT" | python3 -c 'import json,sys; r=json.load(sys.stdin); names=[t["name"] for t in r["result"]["tools"]]; assert "gmail_list" in names and "gmail_draft_create" in names and "setup_status" in names; assert not any(t["name"]=="gmail_send" for t in r["result"]["tools"]); ar=[t for t in r["result"]["tools"] if t["name"]=="access_request"][0]; assert "add_account" in ar["inputSchema"]["properties"]["kind"]["enum"]; dc=[t for t in r["result"]["tools"] if t["name"]=="drive_create"][0]; assert "content" in dc["inputSchema"]["properties"] and "text/markdown" in dc["inputSchema"]["properties"]["content_type"]["enum"]'; then
   PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m MCP tools/list (Gmail+Drive+setup_status, pas de send)\n'
 else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m MCP tools/list\n'
+fi
+
+section "Gateway — arguments gws construits (fiche 0024 : paramètres de chemin, contenu, propriétaire)"
+if python3 - <<'PY'
+import base64
+import json
+import os
+from pathlib import Path
+
+import gateway.api as api
+from gateway.config import upload_spool
+from gateway.errors import GatewayError
+
+# Paramètres de CHEMIN exigés par gws pour chaque méthode appelée par la
+# gateway (« gws schema <méthode> » → path). Les oublier = refus avant tout
+# appel : « Required path parameter userId is missing » (le bug de la fiche).
+PATH_PARAMS = {
+    ("gmail", "users", "messages", "list"): {"userId"},
+    ("gmail", "users", "messages", "get"): {"userId", "id"},
+    ("gmail", "users", "drafts", "create"): {"userId"},
+    ("drive", "files", "list"): set(),
+    ("drive", "files", "get"): {"fileId"},
+    ("drive", "files", "create"): set(),
+}
+
+CALLS = []
+UPLOAD = {}
+REPLY = {
+    "id": "FILE1",
+    "name": "Livrable",
+    "owners": [{"emailAddress": "alice@gmail.com"}],
+    "ownedByMe": True,
+}
+
+
+def fake_run(alias, args, timeout=60):
+    """Remplace l'aller-retour broker : on inspecte la commande gws construite."""
+    CALLS.append(args)
+    if "--upload" in args:  # capturer le média AVANT que la gateway ne l'efface
+        p = Path(args[args.index("--upload") + 1])
+        UPLOAD.update(path=p, data=p.read_bytes(), mode=p.stat().st_mode & 0o777)
+    if REPLY.get("boom"):
+        raise GatewayError("échec simulé côté gws", code="exec")
+    return dict(REPLY)
+
+
+api._run = fake_run
+
+
+def flags(args):
+    return {a: args[i + 1] for i, a in enumerate(args) if a.startswith("--")}
+
+
+def method_of(args):
+    return tuple(a for a in args[: next((i for i, a in enumerate(args)
+                                          if a.startswith("-")), len(args))])
+
+
+alias = "testprof"
+api.gmail_list(alias, query="is:unread")
+api.gmail_get(alias, "MSGID")
+api.gmail_create_draft(alias, to="bob@example.com", subject="Sujet",
+                       body="Corps", cc="carol@example.com")
+api.drive_list(alias, parent="FOLDER")
+api.drive_get(alias, "FILE1")
+
+# 1. Aucun appel n'oublie un paramètre de chemin — le bug initial et sa famille.
+for args in CALLS:
+    m = method_of(args)
+    assert m in PATH_PARAMS, f"méthode {m} inconnue du test — compléter PATH_PARAMS"
+    params = json.loads(flags(args).get("--params", "{}"))
+    missing = PATH_PARAMS[m] - set(params)
+    assert not missing, f"{m} : paramètre(s) de chemin manquant(s) {missing}"
+
+# 2. Le brouillon garde son corps RFC 2822 en plus du userId.
+draft = next(a for a in CALLS if method_of(a) == ("gmail", "users", "drafts", "create"))
+f = flags(draft)
+assert json.loads(f["--params"]) == {"userId": "me"}, f["--params"]
+raw = json.loads(f["--json"])["message"]["raw"]
+msg = base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4)).decode("utf-8")
+assert "To: bob@example.com" in msg and "Subject: Sujet" in msg, msg
+assert "Cc: carol@example.com" in msg and msg.endswith("Corps"), msg
+
+# 3. Propriétaire demandé ET exposé (drive_get / drive_list).
+get_args = next(a for a in CALLS if method_of(a) == ("drive", "files", "get"))
+list_args = next(a for a in CALLS if method_of(a) == ("drive", "files", "list"))
+for args in (get_args, list_args):
+    fields = json.loads(flags(args)["--params"])["fields"]
+    assert "owners(emailAddress)" in fields and "ownedByMe" in fields, fields
+
+got = api.drive_get(alias, "FILE1")
+assert got["owner"] == "alice@gmail.com" and got["owned_by_me"] is True, got
+REPLY_LIST = {"files": [dict(REPLY), {"id": "F2", "name": "Autre"}]}
+api._run = lambda *a, **k: dict(REPLY_LIST)
+listed = api.drive_list(alias)
+assert listed["ownership"] == [
+    {"id": "FILE1", "name": "Livrable", "owner": "alice@gmail.com", "owned_by_me": True},
+    {"id": "F2", "name": "Autre", "owner": "", "owned_by_me": None},
+], listed["ownership"]
+api._run = fake_run
+
+# 4. drive_create sans contenu : comportement historique (aucun --upload).
+CALLS.clear()
+created = api.drive_create(alias, "Vide", "FOLDER")
+args = CALLS[-1]
+assert "--upload" not in args, args
+assert json.loads(flags(args)["--json"])["parents"] == ["FOLDER"], args
+assert created["owner"] == "alice@gmail.com", created
+
+# 5. drive_create avec contenu : upload multipart, texte exact, fichier effacé.
+CALLS.clear()
+texte = "# Livrable\n\nUn **paragraphe** accentué : éàü.\n"
+api.drive_create(alias, "Livrable", "FOLDER", content=texte)
+args = CALLS[-1]
+f = flags(args)
+assert f["--upload-content-type"] == "text/markdown", f
+assert UPLOAD["data"].decode("utf-8") == texte, UPLOAD["data"]
+assert UPLOAD["mode"] == 0o600, oct(UPLOAD["mode"])
+# Le média doit vivre dans le répertoire de dépôt = cwd de gws (ADR-0003),
+# sinon gws refuse « outside the current directory ».
+assert UPLOAD["path"].parent == upload_spool(), UPLOAD["path"]
+assert not UPLOAD["path"].exists(), "le média doit être effacé après l'appel"
+# Les zones Drive restent vérifiables : parents dans --json, propriétaire demandé.
+assert json.loads(f["--json"])["parents"] == ["FOLDER"], f["--json"]
+assert "owners(emailAddress)" in json.loads(f["--params"])["fields"], f["--params"]
+
+# 6. content_type explicite honoré ; format non textuel refusé.
+api.drive_create(alias, "Brut", "FOLDER", content="texte", content_type="text/plain")
+assert flags(CALLS[-1])["--upload-content-type"] == "text/plain", CALLS[-1]
+assert UPLOAD["path"].suffix == ".txt", UPLOAD["path"]
+# Cible non-Google : le fichier est déposé tel quel, pas converti.
+api.drive_create(alias, "notes.txt", "FOLDER", mime_type="text/plain", content="brut")
+assert flags(CALLS[-1])["--upload-content-type"] == "text/plain", CALLS[-1]
+for bad in ("application/pdf", "image/png"):
+    try:
+        api.drive_create(alias, "X", "FOLDER", content="x", content_type=bad)
+        raise SystemExit(f"content_type {bad} aurait dû être refusé")
+    except GatewayError as e:
+        assert e.code == "error", e.code
+
+# 7. Contenu démesuré : refus net, rien n'est envoyé ni laissé sur le disque.
+before = set(upload_spool().iterdir())
+try:
+    api.drive_create(alias, "Gros", "FOLDER", content="x" * 2_000_000)
+    raise SystemExit("un contenu de 2 Mo aurait dû être refusé")
+except GatewayError as e:
+    assert e.code == "error", e.code
+
+# 8. Échec côté gws : le média est effacé quand même (nettoyage en finally).
+REPLY["boom"] = True
+try:
+    api.drive_create(alias, "Livrable", "FOLDER", content="perdu")
+    raise SystemExit("l'échec gws aurait dû remonter")
+except GatewayError as e:
+    assert e.code == "exec", e.code
+REPLY.pop("boom")
+assert not UPLOAD["path"].exists(), "média laissé derrière après un échec"
+assert set(upload_spool().iterdir()) == before, "résidus dans le répertoire de dépôt"
+print("ok")
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m paramètres de chemin + brouillon + propriétaire + contenu Drive\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m arguments gws construits (fiche 0024)\n'
+fi
+
+# Le répertoire de dépôt vit dans GWSA_ROOT : il ne doit jamais passer pour un
+# profil (les trois énumérateurs filtrent sur ALIAS_RE).
+if python3 -c '
+from gateway.api import profiles_list
+from gateway.config import upload_spool
+upload_spool()
+profs = profiles_list()["profiles"]
+assert profs and not any(p["alias"].startswith(".") for p in profs), profs
+' && ! "$GWSA" list 2>/dev/null | grep -q 'uploads'; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m répertoire de dépôt .uploads invisible des listes de profils\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m .uploads ne doit pas apparaître comme un profil\n'
 fi
 
 section "Gateway — setup_status (lecture seule, dégradation gracieuse)"
@@ -502,6 +680,46 @@ then
   PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m broker ping + locked (refus journalisé) + token\n'
 else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m broker ping + locked (refus journalisé) + token\n'
+fi
+
+# Le broker exécute gws depuis le répertoire de dépôt (ADR-0003) : c'est le bac
+# à sable fichiers de gws, qui refuse tout --upload en dehors de son cwd.
+if python3 - <<'PY'
+import subprocess
+from pathlib import Path
+
+import gateway.broker_server as bs
+from gateway.config import upload_spool
+
+captured = {}
+
+
+class Done:
+    returncode, stdout, stderr = 0, '{"ok": true}', ""
+
+
+def fake(cmd, **kw):
+    captured.update(kw, cmd=cmd)
+    return Done()
+
+
+bs._gws_bin = lambda: "/usr/bin/true"   # suite hermétique : gws peut être absent
+real_run, subprocess.run = subprocess.run, fake
+try:
+    bs.run_gws_local(Path("/nowhere/profile"), ["drive", "files", "list"])
+finally:
+    subprocess.run = real_run
+
+spool = upload_spool()
+assert captured["cwd"] == str(spool), captured.get("cwd")
+assert spool.is_dir() and spool.stat().st_mode & 0o777 == 0o700, oct(spool.stat().st_mode)
+assert captured["env"]["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] == "/nowhere/profile", captured["env"]
+print("ok")
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m broker : gws exécuté depuis le répertoire de dépôt (cwd, 0700)\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m broker : cwd de gws = répertoire de dépôt (ADR-0003)\n'
 fi
 
 # --- 5. Onboarding IAM — détecteur du 403 « quota project » (hermétique) -----
