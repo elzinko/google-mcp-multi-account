@@ -1,5 +1,17 @@
 # Journal des versions
 
+## v0.2.1 — 2026-07-27
+
+### Corrections
+
+- fix(tests): la suite ne peut plus toucher le gwsa du PATH reel (fiche 0031)
+
+### Documentation
+
+- docs(features): ship 0031 #31
+- docs(features): 0031 en cours sur #31
+- docs(features): add 0031 tests hors du PATH reel
+
 ## v0.2.0 — 2026-07-27
 
 ### Fonctionnalités
