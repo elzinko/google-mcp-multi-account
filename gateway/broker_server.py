@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 # Réutiliser la logique gateway (lock, policy, config)
-from .config import SYS_PYTHON, POLICY_CHECKER, gwsa_root
+from .config import SYS_PYTHON, POLICY_CHECKER, gwsa_root, upload_spool
 from .errors import GatewayError
 from .profiles import require_unlocked
 from .usage import log_usage
@@ -84,6 +84,11 @@ def run_gws_local(profile_path: Path, args: list[str], timeout: int = 60) -> Any
         r = subprocess.run(
             [_gws_bin(), *args],
             env=env,
+            # cwd = répertoire de dépôt (ADR-0003) : c'est le bac à sable
+            # fichiers de gws (il refuse tout `--upload` hors de son cwd). Le
+            # fixer ici sert les uploads ET rétrécit ce bac à sable pour toutes
+            # les commandes — sinon gws s'exécute dans le dépôt git.
+            cwd=str(upload_spool()),
             capture_output=True,
             text=True,
             timeout=timeout,

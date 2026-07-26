@@ -87,7 +87,7 @@ vault — fiche 0003).
 | `api.py` | Contrat public : `profiles_list`, `gmail_*`, `drive_*`, `access_request` |
 | `profiles.py` | Alias, lock, listage profils |
 | `executor.py` | **Phase 2 A** : client RPC vers le broker (plus d’appel `gws` ici) |
-| `broker_server.py` | Daemon `127.0.0.1:4878` — lock + policy (`policy-check.py`) + journal + `gws` |
+| `broker_server.py` | Daemon `127.0.0.1:4878` — lock + policy (`policy-check.py`) + journal + `gws` (exécuté depuis le répertoire de dépôt, ADR-0003) |
 | `default_policy.py` | JSON « prudent » écrit à `gwsa add` |
 | `mcp_server.py` | Adaptateur MCP stdio (JSON-RPC newline-delimited, **stdlib only**) |
 | `errors.py` | `GatewayError` (`locked`, `policy`, `alias`, …) |
@@ -110,8 +110,8 @@ la commande exacte à faire exécuter par l’humain (`gwsa unlock` / `gwsa gran
 | `profiles_list` | Liste alias / lock / policy | — |
 | `gmail_list` / `gmail_get` | Lecture | Non |
 | `gmail_draft_create` | Brouillon | Non (pas de tool `send`) |
-| `drive_list` / `drive_get` | Lecture | — |
-| `drive_create` | Création sous `parent_id` (zones) | — |
+| `drive_list` / `drive_get` | Lecture, propriétaire compris (`owner`, `owned_by_me`) | — |
+| `drive_create` | Création sous `parent_id` (zones), contenu optionnel en upload multipart (ADR-0003) | — |
 | `access_request` | Texte d’élicitation seulement | — |
 
 Pas de `gwsa_run` générique : surface volontairement réduite.

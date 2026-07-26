@@ -15,7 +15,7 @@ garanties phase par phase) : [docs/threat-model.md](docs/threat-model.md).
 |---|---|
 | **Default-deny par service** | Un service absent de la policy d'un profil est refusé. Un compte connecté via `gwsa add` démarre avec une policy prudente (zones Drive vides, pas d'envoi Gmail — même via le CLI). |
 | **Aucun tool d'envoi** | Les tools MCP Gmail s'arrêtent au **brouillon**. Aucun tool n'envoie de mail ni ne supprime définitivement. |
-| **Écriture Drive zonée** | `drive_create` n'écrit que sous des dossiers autorisés — en permanent (policy) ou en temporaire (grants, qui **expirent**, 8 h par défaut). |
+| **Écriture Drive zonée** | `drive_create` n'écrit que sous des dossiers autorisés — en permanent (policy) ou en temporaire (grants, qui **expirent**, 8 h par défaut). Idem quand elle dépose un document **avec son contenu** : la destination est vérifiée de la même façon. |
 | **Verrous par compte** | Un profil verrouillé refuse tout accès aux données, en CLI comme via MCP, jusqu'à un `unlock` humain (temporaire par défaut). Seule métadonnée qui reste lisible : l'email du compte, pour le diagnostic (`setup_status`). |
 | **Touch ID** | `gwsa strongauth on` exige une preuve de présence physique (Touch ID / mot de passe macOS) pour `unlock`, `grant` et `add`. |
 | **Élicitation, pas exécution** | Le tool `access_request` renvoie **la commande que l'humain doit exécuter** — il n'exécute jamais rien lui-même. |

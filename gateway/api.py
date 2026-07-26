@@ -2,15 +2,44 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Any, Optional
 
-from .config import client_id
+from .config import client_id, upload_spool
 from .errors import GatewayError
 from .executor import run_via_broker
 from .profiles import list_profiles as _list_profiles
 from .profiles import require_unlocked, validate_alias
 from .setup_status import setup_status  # noqa: F401 — re-export pour le dispatch MCP
 from .usage import log_usage
+
+# Champs Drive demandés partout : `owners`/`ownedByMe` répondent à « ce
+# livrable appartient-il bien au bon compte ? » — la question que le
+# multi-comptes pose à chaque dépôt (fiche 0024).
+_DRIVE_FILE_FIELDS = (
+    "id,name,mimeType,modifiedTime,parents,webViewLink,size,"
+    "owners(emailAddress),ownedByMe"
+)
+_DRIVE_LIST_FIELDS = (
+    "files(id,name,mimeType,modifiedTime,parents,"
+    "owners(emailAddress),ownedByMe),nextPageToken"
+)
+
+# Contenu texte accepté par drive_create. Restreint à ce qui se rédige : Drive
+# convertit ces formats vers un type Google, et un paramètre `content` (str)
+# n'a de sens que pour du texte.
+_CONTENT_TYPES = {
+    "text/markdown": ".md",
+    "text/plain": ".txt",
+    "text/html": ".html",
+    "text/csv": ".csv",
+}
+_GOOGLE_MIME_PREFIX = "application/vnd.google-apps."
+_MAX_CONTENT_BYTES = 1_000_000
 
 
 def profiles_list() -> dict[str, Any]:
@@ -81,11 +110,33 @@ def gmail_create_draft(
     raw = ("\r\n".join(headers) + "\r\n\r\n" + (body or "")).encode("utf-8")
     raw_b64 = base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
     payload = {"message": {"raw": raw_b64}}
+    # `--json` porte le corps, `--params` le paramètre de CHEMIN userId
+    # (gmail/v1/users/{userId}/drafts). Sans lui, gws refuse avant tout appel :
+    # « Required path parameter userId is missing » (fiche 0024).
     data = _run(
         alias,
-        ["gmail", "users", "drafts", "create", "--json", json.dumps(payload)],
+        [
+            "gmail", "users", "drafts", "create",
+            "--params", json.dumps({"userId": "me"}),
+            "--json", json.dumps(payload),
+        ],
     )
     return {"ok": True, "alias": alias, "result": data}
+
+
+def _ownership(f: Any) -> dict[str, Any]:
+    """Propriétaire d'un fichier Drive, lisible sans fouiller la réponse brute.
+
+    `owned_by_me` vaut None quand l'API ne renseigne pas `ownedByMe` (cas des
+    Drive partagés) : « inconnu » plutôt qu'un « non » inventé.
+    """
+    if not isinstance(f, dict):
+        return {"owner": "", "owned_by_me": None}
+    owners = f.get("owners")
+    owner = ""
+    if isinstance(owners, list) and owners and isinstance(owners[0], dict):
+        owner = owners[0].get("emailAddress") or ""
+    return {"owner": owner, "owned_by_me": f.get("ownedByMe")}
 
 
 def drive_list(
@@ -102,13 +153,19 @@ def drive_list(
     params = {
         "pageSize": page_size,
         "q": q,
-        "fields": "files(id,name,mimeType,modifiedTime,parents),nextPageToken",
+        "fields": _DRIVE_LIST_FIELDS,
     }
     data = _run(
         alias,
         ["drive", "files", "list", "--params", json.dumps(params)],
     )
-    return {"ok": True, "alias": alias, "result": data}
+    files = data.get("files") if isinstance(data, dict) else None
+    ownership = [
+        {"id": f.get("id"), "name": f.get("name"), **_ownership(f)}
+        for f in files
+        if isinstance(f, dict)
+    ] if isinstance(files, list) else []
+    return {"ok": True, "alias": alias, "result": data, "ownership": ownership}
 
 
 def drive_get(alias: str, file_id: str) -> dict[str, Any]:
@@ -117,13 +174,63 @@ def drive_get(alias: str, file_id: str) -> dict[str, Any]:
         raise GatewayError("file_id requis", code="error")
     params = {
         "fileId": file_id,
-        "fields": "id,name,mimeType,modifiedTime,parents,webViewLink,size",
+        "fields": _DRIVE_FILE_FIELDS,
     }
     data = _run(
         alias,
         ["drive", "files", "get", "--params", json.dumps(params)],
     )
-    return {"ok": True, "alias": alias, "result": data}
+    return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
+
+
+def _content_type_for(content_type: str, mime_type: str) -> str:
+    """Format du texte envoyé, et donc source de conversion côté Drive."""
+    ct = (content_type or "").strip().lower()
+    if not ct:
+        # Cible Google (Doc/Sheet/Slides) : Drive convertit depuis la source.
+        # Markdown par défaut — c'est le format dans lequel les agents rédigent,
+        # et titres/listes/gras arrivent rendus dans le document.
+        # Cible ordinaire : le texte est déposé tel quel.
+        ct = "text/markdown" if mime_type.startswith(_GOOGLE_MIME_PREFIX) else mime_type
+    if ct not in _CONTENT_TYPES:
+        raise GatewayError(
+            f"content_type « {ct} » non supporté — formats texte acceptés : "
+            f"{', '.join(sorted(_CONTENT_TYPES))}",
+            code="error",
+        )
+    return ct
+
+
+@contextmanager
+def _spooled_content(content: str, content_type: str) -> Iterator[Path]:
+    """Écrit le contenu dans le répertoire de dépôt du broker, le temps d'un appel.
+
+    gws n'accepte un média que par chemin de fichier (`--upload`), et refuse
+    tout chemin hors de son répertoire courant — qui est précisément ce
+    répertoire de dépôt (ADR-0003). Fichier en 0600, effacé quoi qu'il arrive.
+    """
+    raw = content.encode("utf-8")
+    if len(raw) > _MAX_CONTENT_BYTES:
+        raise GatewayError(
+            f"contenu trop volumineux ({len(raw)} octets, maximum "
+            f"{_MAX_CONTENT_BYTES}) — déposer un fichier plus court",
+            code="error",
+        )
+    fd, tmp = tempfile.mkstemp(
+        dir=str(upload_spool()),
+        prefix="content-",
+        suffix=_CONTENT_TYPES[content_type],
+    )
+    path = Path(tmp)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(raw)
+        yield path
+    finally:
+        try:
+            path.unlink()
+        except OSError:
+            pass
 
 
 def drive_create(
@@ -131,21 +238,40 @@ def drive_create(
     name: str,
     parent_id: str,
     mime_type: str = "application/vnd.google-apps.document",
+    content: str = "",
+    content_type: str = "",
 ) -> dict[str, Any]:
-    """Crée un fichier sous parent_id — soumis aux zones Drive (policy + grants)."""
+    """Crée un fichier sous parent_id — soumis aux zones Drive (policy + grants).
+
+    Avec `content`, le texte part en upload multipart dans la même requête et
+    Drive le convertit vers `mime_type` : un Google Doc rédigé, pas une coquille
+    vide. Sans `content`, le fichier est créé vide (comportement historique).
+    """
     validate_alias(alias)
     if not name or not parent_id:
         raise GatewayError("name et parent_id sont requis", code="error")
     body = {
         "name": name,
         "mimeType": mime_type,
+        # `parents` doit rester dans --json : c'est le seul endroit que
+        # scripts/policy-check.py lit pour vérifier la zone d'écriture.
         "parents": [parent_id],
     }
-    data = _run(
-        alias,
-        ["drive", "files", "create", "--json", json.dumps(body)],
-    )
-    return {"ok": True, "alias": alias, "result": data}
+    args = [
+        "drive", "files", "create",
+        "--params", json.dumps({"fields": _DRIVE_FILE_FIELDS}),
+        "--json", json.dumps(body),
+    ]
+    if not content:
+        data = _run(alias, args)
+        return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
+    ctype = _content_type_for(content_type, mime_type)
+    with _spooled_content(content, ctype) as path:
+        data = _run(
+            alias,
+            [*args, "--upload", str(path), "--upload-content-type", ctype],
+        )
+    return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
 
 
 def access_request(

@@ -69,6 +69,19 @@ admin) — **jamais** d'une exécution `gws`. Invariant testé : verrou ⇒ zér
 exécution gws ; aucun `GOOGLE_WORKSPACE_CLI_CONFIG_DIR` dans `gateway/`
 hors `broker_server.py`.
 
+## Contenu déposé sur Drive (répertoire de dépôt)
+
+`drive_create(content=…)` matérialise le texte dans
+`~/.config/gws-accounts/.uploads/` (0700) le temps d'un appel `gws --upload` :
+c'est la seule façon de passer un média à `gws`, qui refuse par ailleurs tout
+chemin hors de son répertoire courant ([ADR-0003](adr/ADR-0003-contenu-drive-via-depot-broker.md)).
+Fichier en 0600, effacé en `finally` (succès comme échec) — exposition
+comparable à `usage.jsonl`, qui journalise déjà les arguments des commandes.
+Effet de bord favorable : `gws` s'exécute désormais **depuis ce répertoire**,
+donc son bac à sable fichiers n'est plus le dépôt git. Les zones Drive
+s'appliquent inchangées : `parents` reste dans `--json`, seul endroit que
+`policy-check.py` lit pour valider la destination.
+
 ## Phase 2.1 (prévue) — vault
 
 Credentials hors lecture agent ; seule la socket broker reste utile.

@@ -107,7 +107,12 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "drive_list",
-        "description": "Liste des fichiers Drive (lecture). Filtre optionnel parent / query.",
+        "description": (
+            "Liste des fichiers Drive (lecture). Filtre optionnel parent / query. "
+            "Renvoie `ownership` : le propriétaire de chaque fichier "
+            "(owner, owned_by_me) — pour vérifier qu'un livrable est bien sur le "
+            "bon compte."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -122,7 +127,11 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "drive_get",
-        "description": "Métadonnées d'un fichier Drive par file_id (lecture).",
+        "description": (
+            "Métadonnées d'un fichier Drive par file_id (lecture), propriétaire "
+            "compris : `owner` (email) et `owned_by_me` (null = non renseigné "
+            "par Drive, cas des Drive partagés)."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -136,8 +145,12 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "drive_create",
         "description": (
-            "Crée un fichier Drive sous parent_id. Soumis aux zones (policy + grants). "
-            "Si refusé : appeler access_request kind=grant."
+            "Crée un fichier Drive sous parent_id, avec son contenu si `content` "
+            "est fourni : le texte (markdown par défaut) est converti en Google "
+            "Doc rédigé — sans `content`, le fichier est créé vide. Renvoie le "
+            "propriétaire (`owner`, `owned_by_me`) pour vérifier le dépôt. "
+            "Soumis aux zones (policy + grants) ; si refusé : appeler "
+            "access_request kind=grant."
         ),
         "inputSchema": {
             "type": "object",
@@ -148,6 +161,21 @@ TOOLS: list[dict[str, Any]] = [
                 "mime_type": {
                     "type": "string",
                     "default": "application/vnd.google-apps.document",
+                },
+                "content": {
+                    "type": "string",
+                    "description": (
+                        "Contenu texte du document (markdown recommandé : titres, "
+                        "listes et gras arrivent rendus). Vide = fichier vide."
+                    ),
+                },
+                "content_type": {
+                    "type": "string",
+                    "enum": ["text/markdown", "text/plain", "text/html", "text/csv"],
+                    "description": (
+                        "Format de `content`. Par défaut text/markdown quand la "
+                        "cible est un type Google."
+                    ),
                 },
             },
             "required": ["alias", "name", "parent_id"],
@@ -222,6 +250,8 @@ DISPATCH: dict[str, Callable] = {
         name=kw["name"],
         parent_id=kw["parent_id"],
         mime_type=kw.get("mime_type") or "application/vnd.google-apps.document",
+        content=kw.get("content") or "",
+        content_type=kw.get("content_type") or "",
     ),
     "access_request": lambda **kw: api.access_request(
         alias=kw["alias"],
