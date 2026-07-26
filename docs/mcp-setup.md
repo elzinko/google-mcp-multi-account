@@ -138,6 +138,10 @@ ailleurs. Relancée sans rien de neuf, elle dit « déjà à jour » et s'arrêt
 Il reste un geste manuel, incompressible : **redémarrer Claude Desktop**. Le
 serveur MCP est lancé par l'application, il ne se recharge pas tout seul.
 
+Les deux commandes sont aussi des verbes de `gwsa`, qui est dans ton PATH :
+`gwsa update` et `gwsa release`. Depuis la copie installée, `gwsa release`
+retrouve le clone source tout seul (fichier `.source`).
+
 Pour un cas particulier, les briques restent accessibles :
 `deploy-local.sh --tag v0.1.0` installe une version sans passer par `update`,
 et `install-claude-desktop.sh` branche une entrée à la main.

@@ -29,7 +29,7 @@ par la console Google Cloud est la création *one-shot* d'un identifiant OAuth.
 git clone https://github.com/elzinko/google-mcp-multi-account.git
 cd google-mcp-multi-account
 brew install googleworkspace-cli                    # le CLI gws
-ln -sf "$PWD/bin/gwsa" "$(brew --prefix)/bin/gwsa"  # le wrapper dans le PATH
+ln -sf "$PWD/bin/gwsa" "$(brew --prefix)/bin/gwsa"  # le wrapper dans le PATH (amorçage)
 ./scripts/provision-gcp.sh                          # crée le projet, active les APIs, te guide
 ```
 
@@ -164,16 +164,25 @@ installée, `dev` s'il tourne depuis le clone.
 
 | Commande | Ce qu'elle fait |
 |---|---|
-| `./scripts/update.sh` | installe la dernière version publiée et bascule dessus |
-| `./scripts/update.sh --check` | dit ce qui est installé / disponible, n'écrit rien |
-| `./scripts/update.sh --to v0.1.0` | revient à une version précise |
-| `./scripts/release.sh` | publie : semver déduit des commits, CHANGELOG, tag, push |
-| `./scripts/release.sh --print` | montre la version qui sortirait, n'écrit rien |
+| `gwsa update` | installe la dernière version publiée et bascule dessus |
+| `gwsa update --check` | dit ce qui est installé / disponible, n'écrit rien |
+| `gwsa update --to v0.1.0` | revient à une version précise |
+| `gwsa release` | publie : semver déduit des commits, CHANGELOG, tag, push |
+| `gwsa release --print` | montre la version qui sortirait, n'écrit rien |
 
-`release.sh` déduit le niveau des [conventional commits](https://www.conventionalcommits.org/)
+`gwsa release` déduit le niveau des [conventional commits](https://www.conventionalcommits.org/)
 depuis le dernier tag — `feat` → minor, `BREAKING CHANGE` → major, sinon patch —
 et refuse de publier dans le flou : arbre sale, hors `main`, retard sur
 `origin`, tag déjà posé, rien à publier, tests rouges.
+
+Ce sont les mêmes commandes que `./scripts/update.sh` et
+`./scripts/release.sh` — `gwsa` leur passe simplement la main, et `gwsa help`
+reste l'index de tout ce qui existe.
+
+`gwsa update` fait aussi pointer le `gwsa` de ton PATH sur la copie installée,
+pour que le poste de commande soit versionné comme le serveur. Le lien du
+quickstart n'est qu'un amorçage. Il ne touche jamais un fichier réel, ni un
+lien dont la cible est étrangère au projet.
 
 Historique des versions : [CHANGELOG.md](CHANGELOG.md). Détail des couloirs
 (brancher plusieurs versions à la fois, développer sans casser celle en

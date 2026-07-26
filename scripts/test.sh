@@ -215,8 +215,17 @@ section "Wrapper gwsa — validation des arguments"
 rm -f "$PROFILE/policy.json"
 
 cli 3 "alias invalide (slash) rejeté"                        "bad/alias" auth status
-cli 3 "mot réservé comme alias rejeté (add list)"            add list
-cli 3 "mot réservé comme alias rejeté (add admin)"           add admin
+reserved() { # reserved <mot> — le refus doit CITER « mot réservé »
+  local word="$1" out rc
+  out="$("$GWSA" add "$word" 2>&1)"; rc=$?
+  if [[ "$rc" -eq 3 && "$out" == *"mot réservé"* ]]; then
+    PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m « %s » refusé comme alias (mot réservé)\n' "$word"
+  else
+    FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m « %s » devrait être refusé comme mot réservé (rc=%s)\n' "$word" "$rc"
+  fi
+}
+reserved list
+reserved admin
 cli 3 "admin : arguments superflus rejetés"                  admin stop extra
 cli 0 "admin stop sans serveur → no-op sain"                 admin stop
 cli 3 "arguments superflus rejetés (list)"                   list auth status
@@ -987,7 +996,7 @@ out="$("$GWSA" broker stop 2>&1)"; rc=$?
   || fail "broker stop sur pidfile obsolète → nettoie, exit 0"
 
 cli 3 "broker : sous-commande inconnue refusée" broker nawak
-cli 3 "« broker » est un mot réservé (gwsa add broker)" add broker
+reserved broker
 
 # Deux couloirs, deux brokers : arrêter l'un ne doit pas toucher l'autre.
 # Sans le port dans le nom du pidfile, le second broker écrasait le fichier du
@@ -1113,6 +1122,7 @@ cp scripts/release.sh scripts/update.sh scripts/deploy-local.sh \
    scripts/install-claude-desktop.sh "$REL/scripts/"
 printf '#!/bin/sh\nexit 0\n' > "$REL/scripts/test.sh"; chmod +x "$REL/scripts/test.sh"
 printf '#!/bin/sh\necho faux-mcp\n' > "$REL/bin/google-mcp"; chmod +x "$REL/bin/google-mcp"
+cp bin/gwsa "$REL/bin/gwsa"   # embarqué dans les copies déployées (cf. link_cli)
 echo "coeur" > "$REL/app.txt"
 git -C "$REL" init -q >/dev/null 2>&1
 git -C "$REL" checkout -qb main >/dev/null 2>&1
@@ -1273,6 +1283,82 @@ out_u="$(relenv "$RELDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
 [[ "$rc" -eq 0 && "$out_u" == *"clone source"* && "$out_u" == *"v1.0.0"* ]] \
   && pass "update : lancé depuis la copie installée, retrouve le clone via .source" \
   || fail "update : ne retrouve pas le clone depuis la copie installée"
+
+section "gwsa update / release — un seul poste de commande (fiche 0030)"
+
+# De quoi publier : sans commit nouveau, release refuse (et le test ne dirait
+# rien de la délégation).
+git -C "$REL" commit -q --allow-empty -m "feat(cli): un verbe de plus" >/dev/null 2>&1
+GW="$REL/bin/gwsa"
+gwenv() { GWSA_DEPLOY_ROOT="$RELDEP" GWSA_DESKTOP_CONFIG="$RELCONF" "$@"; }
+
+"$GW" help 2>&1 | grep -q "gwsa update" \
+  && "$GW" help 2>&1 | grep -q "gwsa release" \
+  && pass "gwsa help : les deux verbes sont listés" \
+  || fail "gwsa help : verbes absents"
+
+reserved update
+reserved release
+
+# délégation : gwsa update passe la main au script, arguments compris
+out_g="$(gwenv "$GW" update --check 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$out_g" == *"disponible"* ]] \
+  && pass "gwsa update : délègue au script (--check transmis)" \
+  || fail "gwsa update : délégation cassée"
+
+out_g="$(gwenv "$GW" release --print 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$out_g" == *"publierait"* ]] \
+  && pass "gwsa release : délègue au script (--print transmis)" \
+  || fail "gwsa release : délégation cassée"
+
+# depuis la copie installée : release retrouve le clone via .source
+out_g="$(gwenv "$RELDEP/current/bin/gwsa" release --print 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$out_g" == *"publierait"* ]] \
+  && pass "gwsa release : depuis la copie installée, relais par .source" \
+  || fail "gwsa release : relais .source cassé"
+
+# … et sans .source, refus explicite plutôt qu'un comportement au hasard
+NOSRC="$TMP/nosource"
+mkdir -p "$NOSRC/bin" "$NOSRC/scripts"
+cp bin/gwsa "$NOSRC/bin/"
+out_g="$("$NOSRC/bin/gwsa" release --print 2>&1)"; rc=$?
+[[ "$rc" -ne 0 && "$out_g" == *".source"* ]] \
+  && pass "gwsa release : sans .git ni .source → refus qui dit quoi faire" \
+  || fail "gwsa release : devrait refuser hors dépôt source"
+
+section "update.sh — le lien PATH suit la version installée (fiche 0030)"
+
+FAKEBIN="$TMP/fakebin"
+mkdir -p "$FAKEBIN"
+LINK="$FAKEBIN/gwsa"
+
+# lien vers le clone (l'état posé par le quickstart) → doit passer sur current
+ln -sfn "$REL/bin/gwsa" "$LINK"
+GWSA_CLI_LINK="$LINK" relenv "$UPDATE" --force >/dev/null 2>&1
+[[ "$(readlink "$LINK")" == "$RELDEP/current/bin/gwsa" ]] \
+  && pass "lien PATH : le lien vers le clone passe sur la copie installée" \
+  || fail "lien PATH : pas rebranché sur current"
+
+# déjà correct → idempotent
+out_l="$(GWSA_CLI_LINK="$LINK" relenv "$UPDATE" --force 2>&1)"
+[[ "$out_l" == *"déjà sur la copie installée"* ]] \
+  && pass "lien PATH : déjà correct → rien à faire (idempotent)" \
+  || fail "lien PATH : devrait se dire déjà correct"
+
+# cible étrangère au projet → on ne touche pas
+ln -sfn "/usr/bin/true" "$LINK"
+out_l="$(GWSA_CLI_LINK="$LINK" relenv "$UPDATE" --force 2>&1)"
+[[ "$(readlink "$LINK")" == "/usr/bin/true" && "$out_l" == *"hors projet"* ]] \
+  && pass "lien PATH : cible étrangère laissée intacte (avertissement)" \
+  || fail "lien PATH : a écrasé une cible étrangère"
+
+# fichier réel (pas un lien) → on ne touche pas non plus
+rm -f "$LINK"
+printf '#!/bin/sh\necho vrai fichier\n' > "$LINK"; chmod +x "$LINK"
+out_l="$(GWSA_CLI_LINK="$LINK" relenv "$UPDATE" --force 2>&1)"
+[[ ! -L "$LINK" && "$(cat "$LINK")" == *"vrai fichier"* && "$out_l" == *"pas un lien"* ]] \
+  && pass "lien PATH : fichier réel jamais remplacé par un lien" \
+  || fail "lien PATH : a écrasé un fichier réel"
 
 # --- Bilan ------------------------------------------------------------------
 

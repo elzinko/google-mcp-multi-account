@@ -127,6 +127,41 @@ else
   warn "installeur introuvable ($INSTALLER) — branchement à faire à la main"
 fi
 
+# ── le poste de commande suit la version installée ───────────────
+# gwsa doit être versionné comme le serveur MCP (fiche 0030) : sinon « gwsa
+# unlock » exécute le code du clone sur les comptes du couloir stable.
+# Prudence : on ne reprend QUE un lien symbolique dont la cible est un bin/gwsa
+# du clone source ou d'une version déployée. Un fichier réel ou une cible
+# étrangère est laissé intact.
+link_cli() {
+  local link expected target
+  link="${GWSA_CLI_LINK:-$(command -v gwsa 2>/dev/null || true)}"
+  expected="$DEPLOY_ROOT/current/bin/gwsa"
+
+  [[ -n "$link" ]] || { warn "gwsa absent du PATH — lien non posé"; return 0; }
+  [[ -x "$expected" ]] || { warn "gwsa absent de la copie installée — lien inchangé"; return 0; }
+
+  if [[ ! -L "$link" ]]; then
+    warn "« $link » n'est pas un lien symbolique — laissé tel quel"
+    return 0
+  fi
+  target="$(readlink "$link")"
+  if [[ "$target" == "$expected" ]]; then
+    ok "gwsa du PATH déjà sur la copie installée"
+    return 0
+  fi
+  case "$target" in
+    "$SRC"/bin/gwsa|"$DEPLOY_ROOT"/*/bin/gwsa) ;;
+    *) warn "gwsa du PATH pointe « $target » (hors projet) — laissé tel quel"; return 0 ;;
+  esac
+  if ln -sfn "$expected" "$link" 2>/dev/null; then
+    ok "gwsa du PATH → $expected"
+  else
+    warn "impossible de réécrire « $link » — à refaire à la main : ln -sfn \"$expected\" \"$link\""
+  fi
+}
+link_cli
+
 step "Terminé — un dernier geste"
 echo "Redémarre Claude Desktop (Cmd-Q puis relance) : le serveur MCP est lancé"
 echo "par l'application, il ne se recharge pas tout seul."
