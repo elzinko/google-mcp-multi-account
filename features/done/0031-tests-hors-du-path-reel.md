@@ -5,7 +5,7 @@ type: bug
 priority: P1
 version:
 epic:
-status: in-progress
+status: shipped
 ready: 2026-07-27
 pr: "#31"
 created: 2026-07-27
