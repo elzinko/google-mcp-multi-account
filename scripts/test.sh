@@ -56,6 +56,23 @@ GRANT="GRANTFOLDER1234567890"
 
 # --- 1. Policy par service (fail closed) ------------------------------------
 
+section "Syntaxe des scripts — avec le bash DU SYSTÈME (macOS = 3.2)"
+# La CI valide la syntaxe avec le bash de son runner (Linux, bash 5). Or macOS
+# embarque bash 3.2, qui compte les apostrophes ASCII à l'intérieur d'un heredoc
+# ouvert dans une substitution de commande : un nombre impair casse le parsing.
+# Un script vert en CI peut donc être cassé chez l'utilisateur — d'où ce contrôle
+# local, avec /bin/bash et pas le bash du PATH.
+SYS_BASH="/bin/bash"
+[[ -x "$SYS_BASH" ]] || SYS_BASH="$(command -v bash)"
+for f in bin/gwsa scripts/*.sh; do
+  if "$SYS_BASH" -n "$f" 2>/dev/null; then
+    PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m %s : syntaxe valide (%s)\n' "$f" "$("$SYS_BASH" --version | head -1 | sed 's/.*version \([0-9.]*\).*/\1/')"
+  else
+    FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m %s : erreur de syntaxe avec %s\n' "$f" "$SYS_BASH"
+    "$SYS_BASH" -n "$f" 2>&1 | head -3 | sed 's/^/      /'
+  fi
+done
+
 section "Policy par service — préréglage prudent (Gmail sans envoi, Drive lecture seule)"
 policy <<'EOF'
 {
@@ -843,6 +860,72 @@ printf '{ "mcpServers": [1, 2, 3] }' > "$f"; orig="$(cat "$f")"
   && pass "mcpServers non-objet → refus (fail-closed), fichier intact" \
   || fail "mcpServers non-objet → refus, fichier intact"
 
+# --- Couloirs étanches (fiche 0025) -----------------------------------------
+#
+# Le serveur MCP parle au broker qui écoute sur GWSA_BROKER_PORT. Deux versions
+# branchées sur le même port se partagent le premier broker démarré : le nom de
+# l'entrée mentirait alors sur la version qui répond.
+
+# le port part dans l'entrée, même quand c'est celui par défaut
+f="$CD/port-default.json"
+"$INSTALL" --config "$f" >/dev/null 2>&1
+[[ "$(jget "$f" mcpServers.google-multi-account.env.GWSA_BROKER_PORT)" == "4878" ]] \
+  && pass "couloir : le port du broker est écrit dans l'entrée (4878 par défaut)" \
+  || fail "couloir : port par défaut absent de l'entrée"
+
+# --port choisit le couloir
+f="$CD/port-custom.json"
+"$INSTALL" --config "$f" --name google-multi-account-v0 --port 4881 >/dev/null 2>&1
+[[ "$(jget "$f" mcpServers.google-multi-account-v0.env.GWSA_BROKER_PORT)" == "4881" ]] \
+  && pass "couloir : --port 4881 écrit dans l'entrée nommée" \
+  || fail "couloir : --port ignoré"
+
+# deux binaires différents sur le même port → refus (le cœur de la fiche)
+f="$CD/port-collision.json"
+cat > "$f" <<'JSON'
+{ "mcpServers": {
+    "google-multi-account": { "command": "/ailleurs/google-mcp",
+                              "env": { "GWSA_BROKER_PORT": "4878" } } } }
+JSON
+out_c="$("$INSTALL" --config "$f" --name google-multi-account-dev 2>&1)"; rc_c=$?
+[[ "$rc_c" -ne 0 && "$out_c" == *"port 4878"* && "$out_c" == *"--port"* \
+   && -z "$(jget "$f" mcpServers.google-multi-account-dev.command)" ]] \
+  && pass "couloir : deux binaires sur un même port → refus + rien écrit" \
+  || fail "couloir : collision de port non détectée"
+
+# … mais un port libre passe, et l'entrée existante n'est pas touchée
+"$INSTALL" --config "$f" --name google-multi-account-dev --port 4880 >/dev/null 2>&1
+[[ "$(jget "$f" mcpServers.google-multi-account-dev.env.GWSA_BROKER_PORT)" == "4880" \
+   && "$(jget "$f" mcpServers.google-multi-account.command)" == "/ailleurs/google-mcp" ]] \
+  && pass "couloir : port libre accepté, entrée voisine intacte" \
+  || fail "couloir : port libre refusé ou voisin modifié"
+
+# un serveur MCP tiers n'est jamais un concurrent de port (il n'a pas de broker)
+f="$CD/port-tiers.json"
+cat > "$f" <<'JSON'
+{ "mcpServers": { "filesystem": { "command": "/usr/local/bin/mcp-filesystem" } } }
+JSON
+"$INSTALL" --config "$f" >/dev/null 2>&1
+[[ -n "$(jget "$f" mcpServers.google-multi-account.command)" ]] \
+  && pass "couloir : serveur MCP tiers non compté comme concurrent de port" \
+  || fail "couloir : serveur tiers pris pour un concurrent"
+
+# port hors bornes → refus argumenté
+for bad in 80 abc 99999; do
+  "$INSTALL" --config "$CD/bad-port.json" --port "$bad" >/dev/null 2>&1 \
+    && { fail "couloir : --port $bad aurait dû être refusé"; break; }
+done
+[[ ! -f "$CD/bad-port.json" ]] \
+  && pass "couloir : --port invalide (80, abc, 99999) refusé, rien écrit" \
+  || fail "couloir : --port invalide a quand même écrit"
+
+# la version branchée est affichée (dev ici : pas de VERSION dans un clone)
+# Pas de pipe direct : grep -q + pipefail = SIGPIPE sur le script amont.
+out_v="$("$INSTALL" --config "$CD/version-shown.json" --print 2>&1)"
+[[ "$out_v" == *"version  : dev"* ]] \
+  && pass "couloir : le script annonce la version qu'il branche" \
+  || fail "couloir : version non affichée"
+
 # --- Déploiement local figé (fiche 0023) ------------------------------------
 
 section "Version du serveur — VERSION généré au déploiement, « dev » dans un clone"
@@ -865,11 +948,13 @@ PY
 
 section "Pilotage du broker — gwsa broker status|stop"
 
-BPID="$GWSA_ROOT/.broker.pid"
-rm -f "$BPID"
 # Port dédié : sans ça, un vrai broker écoutant sur 4878 rendrait le test
 # « status sans pidfile » instable selon la machine.
 export GWSA_BROKER_PORT=4977
+# Le pidfile est nommé d'après le port (fiche 0025) : un couloir ne pilote que
+# son propre broker.
+BPID="$GWSA_ROOT/.broker-4977.pid"
+rm -f "$BPID"
 
 out="$("$GWSA" broker status 2>&1)"; rc=$?
 [[ "$rc" -eq 0 && "$out" == *"arrêté"* ]] \
@@ -903,6 +988,34 @@ out="$("$GWSA" broker stop 2>&1)"; rc=$?
 
 cli 3 "broker : sous-commande inconnue refusée" broker nawak
 cli 3 "« broker » est un mot réservé (gwsa add broker)" add broker
+
+# Deux couloirs, deux brokers : arrêter l'un ne doit pas toucher l'autre.
+# Sans le port dans le nom du pidfile, le second broker écrasait le fichier du
+# premier et « gwsa broker stop » visait le mauvais process (fiche 0025).
+VOISIN="$GWSA_ROOT/.broker-4988.pid"
+echo "999999" > "$BPID"        # couloir courant (4977), pidfile obsolète
+echo "424242" > "$VOISIN"      # couloir voisin (4988), intact attendu
+"$GWSA" broker stop >/dev/null 2>&1
+[[ ! -f "$BPID" && "$(cat "$VOISIN" 2>/dev/null)" == "424242" ]] \
+  && pass "deux couloirs : stop n'efface que le pidfile de SON port" \
+  || fail "deux couloirs : stop a touché le pidfile du voisin"
+
+# Et le pidfile lu par gwsa est bien celui que le broker Python écrirait.
+if python3 -c '
+import os, sys
+os.environ["GWSA_BROKER_PORT"] = "4988"
+from gateway.broker_server import pid_path, token_path
+assert pid_path().name == ".broker-4988.pid", pid_path()
+assert token_path().name == ".broker-4988-token", token_path()
+os.environ["GWSA_BROKER_PORT"] = "4977"
+assert pid_path().name == ".broker-4977.pid", pid_path()
+assert pid_path(4988).name == ".broker-4988.pid", "port explicite prioritaire"
+'; then
+  pass "broker Python : jeton et pidfile nommés d'après le port"
+else
+  fail "broker Python : jeton/pidfile pas indexés par port"
+fi
+rm -f "$VOISIN"
 
 section "deploy-local.sh — copie figée, refus d'un arbre sale ou non taggé"
 

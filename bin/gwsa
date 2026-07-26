@@ -411,12 +411,14 @@ cmd_admin() { # gwsa admin [stop] — interface web locale (127.0.0.1:4877), dé
   esac
 }
 
-cmd_broker() { # gwsa broker [status|stop] — piloter le broker de CE GWSA_ROOT
+cmd_broker() { # gwsa broker [status|stop] — piloter le broker de CE couloir
   # Le broker démarre tout seul (gateway/executor.py) et ne s'arrêtait jamais :
-  # après un déploiement, l'ancien code restait servi. Le pidfile vit dans
-  # GWSA_ROOT, donc chaque couloir (stable / dev) pilote le sien — fiche 0023.
-  local pidf="$GWSA_ROOT/.broker.pid"
+  # après un déploiement, l'ancien code restait servi (fiche 0023). Le pidfile
+  # est nommé d'après GWSA_ROOT *et* le port : deux versions branchées en même
+  # temps partagent les comptes mais pas leur broker — sans le port dans le nom,
+  # on arrêterait celui du voisin (fiche 0025).
   local port="${GWSA_BROKER_PORT:-4878}"
+  local pidf="$GWSA_ROOT/.broker-$port.pid"
   local pid=""
   if [[ -f "$pidf" ]]; then pid="$(cat "$pidf" 2>/dev/null || true)"; fi
 
