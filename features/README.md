@@ -13,8 +13,8 @@
 | 0015 | Email de profil = métadonnée persistée (.email) — zéro exécution gws hors broker | refactor | P1 |  | ✅ shipped | #18 |
 | 0024 | Fiabiliser les tools Gmail/Drive du MCP — brouillon cassé, Drive sans contenu ni propriétaire | bug | P1 |  | ✅ shipped | #26 |
 | 0025 | Couloirs étanches — chaque version branchée parle à son propre broker | bug | P1 |  | ✅ shipped | #27 |
-| 0029 | Publier et mettre à jour en une commande (release semver + update façon installeur) | feature | P1 |  | 🟠 in-progress | #28 |
-| 0030 | Poste de commande versionné — gwsa update/release et le lien PATH sur la copie installée | feature | P1 |  | 🟠 in-progress | #30 |
+| 0029 | Publier et mettre à jour en une commande (release semver + update façon installeur) | feature | P1 |  | ✅ shipped | #28 |
+| 0030 | Poste de commande versionné — gwsa update/release et le lien PATH sur la copie installée | feature | P1 |  | ✅ shipped | #30 |
 | 0002 | Durcir le modèle de policy — décisions « default-deny » soulevées par l'audit | feature | P2 |  | ✅ shipped | #12 |
 | 0007 | Provisioning GCP idempotent/déclaratif — durcir provision-gcp.sh ou passer à Terraform | feature | P2 |  | ✅ shipped | #10 |
 | 0008 | Connexion dynamique d'un nouveau compte via élicitation forte (access_request kind=add_account) | feature | P2 |  | ✅ shipped | #7 |
@@ -46,4 +46,4 @@
 | 0021 | Élargir la couverture MCP — Calendar, Docs, Sheets, Tasks (et écritures) | feature | P3 | 0017 | 💡 idea |  |
 | 0028 | Ménage des versions déployées (+ CHANGELOG et releases GitHub) | chore | P3 |  | 💡 idea |  |
 
-> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0022, 0023, 0024, 0025.
+> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0022, 0023, 0024, 0025, 0029, 0030.
