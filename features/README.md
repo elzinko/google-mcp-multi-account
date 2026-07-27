@@ -16,6 +16,7 @@
 | 0029 | Publier et mettre à jour en une commande (release semver + update façon installeur) | feature | P1 |  | ✅ shipped | #28 |
 | 0030 | Poste de commande versionné — gwsa update/release et le lien PATH sur la copie installée | feature | P1 |  | ✅ shipped | #30 |
 | 0031 | La suite de tests ne doit jamais pouvoir toucher le PATH réel | bug | P1 |  | ✅ shipped | #31 |
+| 0037 | Sémantique de la suppression en zone — corbeille = suppression, racine de zone immuable, avertissement | feature | P1 |  | 🔴 todo |  |
 | 0002 | Durcir le modèle de policy — décisions « default-deny » soulevées par l'audit | feature | P2 |  | ✅ shipped | #12 |
 | 0007 | Provisioning GCP idempotent/déclaratif — durcir provision-gcp.sh ou passer à Terraform | feature | P2 |  | ✅ shipped | #10 |
 | 0008 | Connexion dynamique d'un nouveau compte via élicitation forte (access_request kind=add_account) | feature | P2 |  | ✅ shipped | #7 |
@@ -40,7 +41,7 @@
 | 0027 | Déployer un commit non taggé pour essayer une PR (couloir jetable) | feature | P2 |  | 💡 idea |  |
 | 0032 | La notification Touch ID doit nommer le compte et le produit, pas l'alias seul | feature | P2 |  | 💡 idea |  |
 | 0034 | Mettre à jour le protocole du test manuel drive-2-comptes (limites périmées + nouvelles phases) | chore | P3 |  | 💡 idea |  |
-| 0033 | Grant Drive « one-shot » demandé depuis la conversation, confirmé par Touch ID | feature | P3 | 0001 | 💡 idea |  |
+| 0038 | Créer un dossier-zone rapidement, geste humain (sans passer par le LLM) | feature | P2 |  | 💡 idea |  |
 | 0035 | Accès rapide à l'admin + visualisation des zones (icône barre de menus ?) | feature | P2 |  | 💡 idea |  |
 | 0036 | Clarté des cartes profil dans l'admin (état d'accès, badges, hiérarchie des actions) | feature | P2 |  | 💡 idea |  |
 | 0006 | Harnais hybride pour les tests manuels — script pour la mécanique, LLM pour la glu | feature | P2 |  | 💡 idea |  |
