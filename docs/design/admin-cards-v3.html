@@ -1,0 +1,322 @@
+<title>Cartes profil de l'admin — v3</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#f6f5f0; --card:#fff; --txt:#222; --mut:#71706b; --line:#dedcd3;
+    --ok:#0f6e56; --okbg:#e1f5ee; --warn:#854f0b; --warnbg:#faeeda;
+    --bad:#a32d2d; --badbg:#fcebeb; --acc:#534ab7; --accbg:#eeedfe; --paper:#efeee7;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#1d1d1b; --card:#2a2a27; --txt:#eceae2; --mut:#a3a199; --line:#44443f;
+      --ok:#5dcaa5; --okbg:#0a3b2e; --warn:#fac775; --warnbg:#41310a;
+      --bad:#f09595; --badbg:#4a1616; --acc:#afa9ec; --accbg:#28245c; --paper:#232320;
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#f6f5f0; --card:#fff; --txt:#222; --mut:#71706b; --line:#dedcd3;
+    --ok:#0f6e56; --okbg:#e1f5ee; --warn:#854f0b; --warnbg:#faeeda;
+    --bad:#a32d2d; --badbg:#fcebeb; --acc:#534ab7; --accbg:#eeedfe; --paper:#efeee7;
+  }
+  :root[data-theme="dark"]{
+    --bg:#1d1d1b; --card:#2a2a27; --txt:#eceae2; --mut:#a3a199; --line:#44443f;
+    --ok:#5dcaa5; --okbg:#0a3b2e; --warn:#fac775; --warnbg:#41310a;
+    --bad:#f09595; --badbg:#4a1616; --acc:#afa9ec; --accbg:#28245c; --paper:#232320;
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--bg); color:var(--txt);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; -webkit-font-smoothing:antialiased}
+  .wrap{max-width:760px; margin:0 auto; padding:38px 20px 72px}
+
+  .doc h1{font-size:26px; margin:0 0 8px; letter-spacing:-.01em}
+  .doc .lede{color:var(--mut); margin:0 0 18px; font-size:15px}
+  .doc .lede code{font-family:ui-monospace,monospace; font-size:.88em; background:var(--paper); padding:1px 5px; border-radius:5px}
+  .verdict{background:var(--card); border:1px solid var(--line); border-left:3px solid var(--acc);
+    border-radius:10px; padding:13px 16px; margin:0; font-size:13.5px}
+  .verdict b{color:var(--acc)}
+  .verdict ul{margin:8px 0 0; padding-left:18px} .verdict li{margin:3px 0; color:var(--mut)}
+  .verdict li b{color:var(--txt)}
+  .previewlabel{font-size:11px; font-weight:700; letter-spacing:.13em; text-transform:uppercase;
+    color:var(--mut); margin:30px 0 12px}
+
+  /* ============ LE PRODUIT ============ */
+  .plist{display:flex; flex-direction:column; gap:12px}
+  .p{background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden}
+  .p.open{border-left:3px solid var(--warn)}
+  .p.off{border-left:3px solid var(--bad)}
+
+  .head{display:flex; align-items:flex-start; gap:12px; padding:13px 15px; cursor:pointer}
+  .head:hover{background:color-mix(in srgb, var(--paper) 55%, transparent)}
+  .idcol{flex:1; min-width:0; display:flex; flex-direction:column; gap:5px}
+  .idline{display:flex; align-items:baseline; gap:9px; flex-wrap:wrap}
+  .mail{font-weight:700; font-size:15.5px; letter-spacing:-.005em}
+  .copy{border:0; background:transparent; color:inherit; font:inherit; cursor:pointer; padding:0;
+    display:inline-flex; align-items:center; gap:6px; border-radius:6px}
+  .copy:hover{color:var(--acc)}
+  .copy .ci{opacity:0; font-size:11.5px; color:var(--ok); font-weight:600; transition:opacity .15s}
+  .copy.done .ci{opacity:1}
+
+  .statusline{display:flex; align-items:center; gap:9px; flex-wrap:wrap}
+  .badge{font-size:12.5px; padding:2px 9px; border-radius:99px; white-space:nowrap;
+    display:inline-flex; align-items:center; gap:5px}
+  .b-warn{background:var(--warnbg); color:var(--warn)} .b-bad{background:var(--badbg); color:var(--bad)}
+  .b-mut{background:var(--bg); color:var(--mut); border:1px solid var(--line)}
+  .b-off{background:var(--badbg); color:var(--bad)}
+  .count{font-variant-numeric:tabular-nums}
+  .zsum{font-size:13px; color:var(--mut)} .zsum b{color:var(--txt); font-weight:600}
+
+  .actinline{display:flex; gap:7px; align-items:center; flex-wrap:wrap}
+  button{font:inherit; font-size:13px; border:1px solid var(--line); background:var(--card);
+    color:var(--txt); border-radius:8px; padding:5px 11px; cursor:pointer}
+  button:hover{border-color:var(--mut)}
+  button:focus-visible{outline:2px solid var(--acc); outline-offset:2px}
+  button.primary{background:var(--acc); border-color:var(--acc); color:#fff}
+  button.ghost{color:var(--mut)}
+  button.tiny{font-size:12px; padding:3px 9px}
+  /* v3 : les boutons destructeurs ont un encadré de base (affordance) */
+  button.dline{color:var(--bad); border-color:color-mix(in srgb,var(--bad) 38%,var(--line)); background:var(--card)}
+  button.dline:hover{border-color:var(--bad); background:var(--badbg)}
+
+  .acct{display:flex; align-items:center; gap:7px; flex-shrink:0}
+  .chev{color:var(--mut); transition:transform .18s; font-size:13px; margin-top:2px}
+  .p.exp .chev{transform:rotate(180deg)}
+
+  .panel{display:none; border-top:1px solid var(--line); padding:14px 15px; background:color-mix(in srgb,var(--paper) 40%,transparent)}
+  .p.exp .panel{display:block}
+  .psec{margin:0 0 16px} .psec:last-child{margin:0}
+  .plabel{font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--mut); margin:0 0 9px}
+
+  .zrow{display:flex; align-items:center; gap:10px; padding:9px 11px; background:var(--card);
+    border:1px solid var(--line); border-radius:9px; margin-bottom:7px}
+  .zrow .zi{color:var(--mut)}
+  .zname{font-weight:600; font-size:13.5px}
+  .zmeta{font-size:12px; color:var(--mut)} .zmeta .count{color:var(--warn); font-weight:600}
+  .zspacer{flex:1}
+  .zperm{font-size:11.5px; color:var(--ok); background:var(--okbg); padding:1px 8px; border-radius:99px}
+
+  .effnote{font-size:12.5px; color:var(--warn); background:var(--warnbg); border-radius:8px;
+    padding:7px 11px; margin:2px 0 10px; display:flex; gap:7px; align-items:baseline}
+
+  .addzone{border:1px dashed var(--line); border-radius:9px; padding:12px; margin-top:2px}
+  .addzone .row{display:flex; gap:9px; align-items:center; flex-wrap:wrap; margin-bottom:10px}
+  .durrow{display:flex; gap:6px; align-items:center; flex-wrap:wrap}
+  .chipbtn{font-size:12.5px; border:1px solid var(--line); background:var(--card); color:var(--txt);
+    border-radius:99px; padding:3px 12px; cursor:pointer; font-variant-numeric:tabular-nums}
+  .chipbtn[aria-pressed="true"]{background:var(--accbg); border-color:var(--acc); color:var(--acc); font-weight:600}
+  .callout{background:var(--badbg); border:1px solid var(--bad); border-left:4px solid var(--bad);
+    border-radius:9px; padding:11px 13px; margin:10px 0; display:flex; gap:10px; align-items:flex-start}
+  .callout .ico{color:var(--bad); font-size:15px; line-height:1.4}
+  .callout p{margin:0; font-size:12.5px} .callout b{color:var(--bad)}
+  .callout .fine{color:var(--mut); display:block; margin-top:5px; font-size:11.5px}
+
+  .pchips{display:flex; flex-wrap:wrap; gap:7px; align-items:center}
+  .chip{font-size:12.5px; background:var(--accbg); color:var(--acc); padding:2px 9px; border-radius:6px}
+  .offmsg{font-size:12.5px; color:var(--bad); display:flex; align-items:center; gap:7px}
+  .dim{opacity:.45}
+
+  footer{margin-top:44px; padding-top:18px; border-top:1px solid var(--line); color:var(--mut); font-size:12.5px}
+  footer code{font-family:ui-monospace,monospace; font-size:.9em}
+  #toast{position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(8px);
+    background:var(--txt); color:var(--bg); padding:8px 15px; border-radius:9px; font-size:13px;
+    opacity:0; pointer-events:none; transition:opacity .2s, transform .2s}
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  @media (max-width:560px){.head{flex-wrap:wrap}.acct{order:3}}
+</style>
+
+<div class="wrap">
+  <div class="doc">
+    <h1>Cartes profil — v3</h1>
+    <p class="lede">Trois changements depuis la v2 : les alias (<code>gwsa perso</code>…) disparaissent de l'aperçu — l'email suffit ; « accès sur demande » est reformulé en clair ; les boutons destructeurs ont un encadré. Clique une carte pour la déplier, un email pour le copier.</p>
+    <div class="verdict">
+      <b>Ce qui change dans la v3</b>
+      <ul>
+        <li><b>Plus d'alias dans l'aperçu.</b> Le titre, c'est l'email. L'alias reste la clé technique côté serveur (visible via <code>gwsa list</code> / journaux) mais n'encombre plus la carte.</li>
+        <li><b>« Verrouillé » expliqué.</b> Fini « accès sur demande » : la carte dit « un LLM doit te demander l'accès ».</li>
+        <li><b>Boutons destructeurs encadrés.</b> « Retirer », « Révoquer » ont un contour dès le repos — ça se lit comme un bouton, plus comme du texte.</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="previewlabel">Aperçu produit</p>
+  <div class="plist">
+
+    <!-- ========== perso : OUVERT, déplié ========== -->
+    <div class="p open exp" id="p-perso">
+      <div class="head" onclick="toggle('p-perso')">
+        <div class="idcol">
+          <div class="idline">
+            <button class="copy mail" onclick="copyIt(event,'thomas.couderc@gmail.com')">thomas.couderc@gmail.com <span class="ci">copié&nbsp;✓</span></button>
+          </div>
+          <div class="statusline">
+            <span class="badge b-warn">🔓 Ouvert · <span class="count">3</span> min</span>
+            <span class="actinline" onclick="event.stopPropagation()">
+              <button class="tiny" onclick="flash(event,'Reverrouillé')">Reverrouiller</button>
+              <button class="tiny ghost" onclick="flash(event,'Accès prolongé')">Prolonger…</button>
+            </span>
+            <span class="zsum">· <b>1 zone</b> d'écriture</span>
+          </div>
+        </div>
+        <div class="acct" onclick="event.stopPropagation()">
+          <button class="tiny dline" onclick="flash(event,'Compte révoqué (démo)')">Révoquer</button>
+          <span class="chev">▾</span>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="effnote">⏱ <span><b>Écriture effective : 3 min.</b> L'accès se referme avant la zone (1 h 58) — c'est la première échéance qui compte.</span></div>
+        <div class="psec">
+          <p class="plabel">Zones d'écriture Drive</p>
+          <div class="zrow">
+            <span class="zi">📁</span>
+            <span>
+              <span class="zname">Livrables/Client-A</span>
+              <span class="zperm">permanente</span>
+            </span>
+            <span class="zspacer"></span>
+            <button class="copy tiny ghost" onclick="copyIt(event,'1a2b3c…')">Copier l'ID <span class="ci">copié&nbsp;✓</span></button>
+            <button class="tiny dline" onclick="flash(event,'Zone retirée de la config')">Retirer</button>
+          </div>
+          <div class="zrow">
+            <span class="zi">📁</span>
+            <span>
+              <span class="zname">Projets/2026</span>
+              <span class="zmeta">temporaire · expire dans <span class="count">1 h 58</span></span>
+            </span>
+            <span class="zspacer"></span>
+            <button class="tiny" onclick="flash(event,'Zone prolongée')">Prolonger…</button>
+            <button class="tiny dline" onclick="flash(event,'Zone retirée')">Retirer</button>
+          </div>
+
+          <div class="addzone">
+            <div class="row">
+              <button onclick="flash(event,'Ouvre le sélecteur Drive')">📁 Choisir un dossier…</button>
+              <span class="zsum">ou <a href="#" onclick="flash(event,'Crée un dossier (geste humain)');return false" style="color:var(--acc)">créer un dossier</a> (fiche 0038)</span>
+            </div>
+            <div class="row durrow">
+              <span class="zsum">Accorder pour</span>
+              <button class="chipbtn" aria-pressed="false" onclick="pick(this)">1 h</button>
+              <button class="chipbtn" aria-pressed="true"  onclick="pick(this)">8 h</button>
+              <button class="chipbtn" aria-pressed="false" onclick="pick(this)">24 h</button>
+              <button class="chipbtn" aria-pressed="false" onclick="pick(this)">Autre…</button>
+            </div>
+            <div class="callout">
+              <span class="ico" aria-hidden="true">⚠</span>
+              <p>Le LLM pourra <b>créer, modifier et mettre à la corbeille</b> tout le contenu de ce dossier — <b>y compris le dossier lui-même</b>. Rien n'est supprimé définitivement (corbeille, 30 j).
+                <span class="fine">Portée dérivée de la policy du compte. La fiche 0037 vise à rendre la racine de zone intouchable.</span></p>
+            </div>
+            <button class="primary" onclick="flash(event,'Zone accordée pour 8 h')">Accorder</button>
+          </div>
+        </div>
+        <div class="psec">
+          <p class="plabel">Policy par service</p>
+          <div class="pchips">
+            <span class="chip">Drive : lecture + écriture en zones</span>
+            <span class="chip">Gmail : lecture + brouillons</span>
+            <span class="chip">Agenda : lecture</span>
+            <span class="chip">Keep : lecture + création</span>
+            <button class="tiny ghost" onclick="flash(event,'Ouvre l\'éditeur de policy')">Éditer…</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== zebra : VERROUILLÉ, replié ========== -->
+    <div class="p" id="p-zebra">
+      <div class="head" onclick="toggle('p-zebra')">
+        <div class="idcol">
+          <div class="idline">
+            <button class="copy mail" onclick="copyIt(event,'troiszebres@gmail.com')">troiszebres@gmail.com <span class="ci">copié&nbsp;✓</span></button>
+          </div>
+          <div class="statusline">
+            <span class="badge b-bad">🔒 Verrouillé</span>
+            <span class="actinline" onclick="event.stopPropagation()">
+              <button class="tiny primary" onclick="flash(event,'Touch ID → déverrouillé')">Déverrouiller…</button>
+            </span>
+            <span class="zsum">· un LLM doit te demander l'accès</span>
+          </div>
+        </div>
+        <div class="acct" onclick="event.stopPropagation()">
+          <button class="tiny dline" onclick="flash(event,'Compte révoqué (démo)')">Révoquer</button>
+          <span class="chev">▾</span>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="psec">
+          <p class="plabel">Zones d'écriture Drive</p>
+          <p class="zsum" style="margin:0 0 10px">Aucune zone. Le LLM ne peut écrire nulle part sur ce Drive tant que tu n'accordes pas de zone.</p>
+          <div class="addzone">
+            <div class="row">
+              <button onclick="flash(event,'Ouvre le sélecteur Drive')">📁 Choisir un dossier…</button>
+              <span class="zsum">ou <a href="#" onclick="flash(event,'Crée un dossier');return false" style="color:var(--acc)">créer un dossier</a></span>
+            </div>
+            <div class="row durrow">
+              <span class="zsum">Accorder pour</span>
+              <button class="chipbtn" aria-pressed="true"  onclick="pick(this)">1 h</button>
+              <button class="chipbtn" aria-pressed="false" onclick="pick(this)">8 h</button>
+              <button class="chipbtn" aria-pressed="false" onclick="pick(this)">24 h</button>
+              <button class="chipbtn" aria-pressed="false" onclick="pick(this)">Autre…</button>
+            </div>
+            <button class="primary" onclick="flash(event,'Zone accordée')">Accorder</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== mw : DÉCONNECTÉ, replié ========== -->
+    <div class="p off" id="p-mw">
+      <div class="head" onclick="toggle('p-mw')">
+        <div class="idcol">
+          <div class="idline">
+            <button class="copy mail" onclick="copyIt(event,'matiereweb@gmail.com')">matiereweb@gmail.com <span class="ci">copié&nbsp;✓</span></button>
+          </div>
+          <div class="statusline">
+            <span class="badge b-off">⚠ Jeton expiré</span>
+            <span class="zsum dim">· accès et zones indisponibles</span>
+          </div>
+        </div>
+        <div class="acct" onclick="event.stopPropagation()">
+          <button class="tiny primary" onclick="flash(event,'gwsa add mw → navigateur')">Reconnecter…</button>
+          <button class="tiny dline" onclick="flash(event,'Compte révoqué (démo)')">Révoquer</button>
+          <span class="chev">▾</span>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="offmsg">⚠ Le jeton OAuth de ce compte a expiré (app en mode test, 7 jours). Reconnecte-le pour retrouver l'accès — les zones et la policy sont conservées.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    Maquette statique — palette et composants de <code>admin/index.html</code>. Thème clair/sombre : sélecteur du lecteur. Fiches : <b>0036</b> clarté · <b>0037</b> suppression en zone · <b>0038</b> créer un dossier · <code>ADR-0004</code> (proposé).
+  </footer>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+  function toast(msg){
+    var t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+    clearTimeout(t._h); t._h=setTimeout(function(){t.classList.remove('show')},1600);
+  }
+  function toggle(id){
+    var el=document.getElementById(id);
+    var wasOpen=el.classList.contains('exp');
+    document.querySelectorAll('.p.exp').forEach(function(p){p.classList.remove('exp')});
+    if(!wasOpen){el.classList.add('exp');}
+  }
+  function copyIt(e,val){
+    e.stopPropagation();
+    var b=e.currentTarget; b.classList.add('done');
+    try{navigator.clipboard&&navigator.clipboard.writeText(val);}catch(_){}
+    toast('Copié : '+val);
+    clearTimeout(b._h); b._h=setTimeout(function(){b.classList.remove('done')},1400);
+  }
+  function flash(e,msg){ e.stopPropagation(); toast(msg); }
+  function pick(btn){
+    btn.parentNode.querySelectorAll('.chipbtn').forEach(function(c){c.setAttribute('aria-pressed','false')});
+    btn.setAttribute('aria-pressed','true');
+    if(btn.textContent==='Autre…') toast('Champ durée personnalisée');
+  }
+</script>
