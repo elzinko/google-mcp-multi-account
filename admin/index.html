@@ -78,6 +78,52 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
 #toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--txt);
   color:var(--bg); padding:9px 16px; border-radius:9px; opacity:0; transition:opacity .25s; pointer-events:none; max-width:80vw; }
 .mtop { margin-top:14px; display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
+
+/* ── Refonte v11 (fiche 0036) : liste → page de compte ── */
+.prow { display:grid; grid-template-columns:1fr auto auto 30px; align-items:center; gap:14px;
+  background:var(--card); border:1px solid var(--line); border-radius:12px; padding:13px 16px; margin:10px 0; }
+.prow.open { border-left:3px solid var(--warn); }
+.prow.off  { background:color-mix(in srgb,var(--bg) 55%, var(--card)); }
+.prow.off .pmail { opacity:.5; }
+.prow.can  { cursor:pointer; }
+.prow.can:hover { border-color:var(--mut); }
+.pmail { font-weight:700; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pctrl { display:inline-flex; align-items:center; gap:9px; }
+.pchev { color:var(--mut); display:inline-flex; justify-content:center; }
+/* interrupteur de connexion */
+.tgl { width:38px; height:22px; border-radius:99px; border:1px solid var(--line); background:var(--bg);
+  position:relative; cursor:pointer; padding:0; flex-shrink:0; }
+.tgl .knob { position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:99px;
+  background:var(--card); border:1px solid var(--line); transition:left .15s; }
+.tgl[aria-checked="true"] { background:var(--okbg); border-color:color-mix(in srgb,var(--ok) 45%,transparent); }
+.tgl[aria-checked="true"] .knob { left:18px; background:var(--ok); border-color:var(--ok); }
+/* cadenas = bouton d'accès */
+.lockbtn { width:30px; height:30px; border-radius:9px; border:1px solid; display:inline-flex;
+  align-items:center; justify-content:center; cursor:pointer; padding:0; flex-shrink:0; background:var(--card); }
+.lockbtn.closed { color:var(--bad); background:var(--badbg); border-color:color-mix(in srgb,var(--bad) 38%,transparent); }
+.lockbtn.opened { color:var(--warn); background:var(--warnbg); border-color:color-mix(in srgb,var(--warn) 50%,transparent); }
+.cd { color:var(--warn); font-size:12.5px; font-weight:600; font-variant-numeric:tabular-nums; }
+.offword { color:var(--mut); font-size:13px; }
+/* page de détail */
+.detail { background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+.dhead { padding:14px 16px; border-bottom:1px solid var(--line); }
+.back { display:inline-flex; align-items:center; gap:6px; border:0; background:transparent; color:var(--acc);
+  cursor:pointer; font-size:13.5px; padding:0; margin-bottom:11px; }
+.drow { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.dmail { font-weight:700; font-size:17px; margin-right:auto; }
+.dbody { padding:15px 16px; }
+.plabel { font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--mut); margin:0 0 10px; }
+.srow { display:grid; grid-template-columns:110px 1fr auto; align-items:center; gap:14px; padding:10px 0; border-top:1px solid var(--line); }
+.srow:first-of-type { border-top:0; }
+.sname { font-size:15px; font-weight:700; color:var(--acc); }
+.caps { display:flex; flex-wrap:wrap; gap:8px; }
+.cap { font-size:12.5px; font-weight:600; } .cap.y { color:var(--ok); } .cap.n { color:var(--bad); }
+.cap .d { color:var(--mut); font-weight:400; }
+.danger { margin-top:18px; border:1px solid color-mix(in srgb,var(--bad) 35%,var(--line)); border-radius:10px;
+  padding:12px 14px; background:color-mix(in srgb,var(--badbg) 55%,transparent); }
+.danger .dl { font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--bad); margin:0 0 8px; }
+.danger .drx { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.danger p { margin:0; font-size:12.5px; color:var(--mut); flex:1; min-width:180px; }
 </style>
 </head>
 <body>
@@ -90,11 +136,11 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
   <button onclick="openDoc()">❓ Doc</button>
 </header>
 <main>
-  <p class="note">Profils = comptes Google connectés localement (tokens chiffrés dans
-  <span class="mono">~/.config/gws-accounts/&lt;alias&gt;/</span>). Un profil 🔒 refuse toute commande
-  tant que tu ne l'as pas déverrouillé — l'« accès sur demande » que les LLM doivent te demander.
-  La policy limite ce que chaque profil peut faire ; pour Drive, l'écriture se fait par
-  <b>zones</b> : permanentes (policy) ou temporaires (élicitation, <span class="mono">gwsa grant</span>).</p>
+  <p class="note">La ligne d'un compte se lit en trois temps.
+  <b>L'interrupteur</b> : le compte est-il connecté à Google ?
+  <b>Le cadenas</b> : l'accès est-il verrouillé ou déverrouillé ? C'est un bouton — clique dessus.
+  <b>Le décompte</b> : le temps restant, en vrai.
+  Un compte déconnecté est grisé : un seul geste possible, l'interrupteur.</p>
   <div id="cards"></div>
 </main>
 
@@ -341,28 +387,120 @@ function summary(p) {
   return chips;
 }
 
-function render() {
+// ── Refonte v11 (fiche 0036) : deux commandes par compte, jamais mêlées ──
+//   L'INTERRUPTEUR = connexion à Google.  LE CADENAS = accès (verrou), cliquable,
+//   avec décompte réel. « Révoquer » descend dans la zone de danger du détail.
+//   On réutilise les dialogues existants (policy, zones, révocation).
+const LOCK_C = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+const LOCK_O = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.8-1.3"/></svg>';
+const SVCDEF = [
+  { key: "drive", name: "Drive", keys: DRIVE_KEYS },
+  { key: "gmail", name: "Gmail", keys: GMAIL_KEYS },
+  { key: "calendar", name: "Agenda", keys: CAL_KEYS },
+  { key: "keep", name: "Keep", keys: KEEP_KEYS },
+  { key: "docs", name: "Docs", keys: [["read","lecture"],["create","création"],["update","modification"]] },
+  { key: "sheets", name: "Sheets", keys: [["read","lecture"],["create","création"],["update","modification"]] },
+  { key: "tasks", name: "Tâches", keys: [["read","lecture"],["create","création"],["update","modification"],["delete","suppression"]] },
+];
+let VIEW = { mode: "list", alias: null };
+function byAlias(a) { return PROFILES.find((x) => x.alias === a); }
+function isOpen(p) { return p.connected && (!p.locked || p.unlockedUntil * 1000 > Date.now()); }
+function hasWindow(p) { return p.connected && p.locked && p.unlockedUntil * 1000 > Date.now(); }
+function fmtLeft(p) {
+  const s = Math.max(0, Math.round(p.unlockedUntil - Date.now() / 1000)), m = Math.floor(s / 60);
+  return m >= 60 ? "encore " + Math.floor(m / 60) + " h " + String(m % 60).padStart(2, "0")
+                 : "encore " + m + ":" + String(s % 60).padStart(2, "0");
+}
+function tglHtml(p) {
+  return '<button class="tgl" role="switch" aria-checked="' + (p.connected ? "true" : "false") +
+    '" title="' + (p.connected ? "Connecté à Google. Pour retirer ce compte : page du compte → zone de danger."
+      : "Déconnecté de Google. Clique pour refaire la connexion.") +
+    '" onclick="event.stopPropagation();connToggle(\'' + p.alias + '\')"><span class="knob"></span></button>';
+}
+function lockHtml(p) {
+  if (!p.connected) return '<span class="offword">Déconnecté</span>';
+  if (isOpen(p)) {
+    const cd = hasWindow(p) ? '<span class="cd" data-alias="' + p.alias + '">' + fmtLeft(p) + "</span>"
+                            : '<span class="offword">déverrouillé</span>';
+    return '<button class="lockbtn opened" title="Accès déverrouillé — clique pour reverrouiller." aria-label="Reverrouiller" onclick="event.stopPropagation();lockClick(\'' + p.alias + '\')">' + LOCK_O + "</button>" + cd;
+  }
+  return '<button class="lockbtn closed" title="Accès verrouillé — les assistants ne peuvent ni lire ni écrire. Clique pour déverrouiller (30 min)." aria-label="Déverrouiller" onclick="event.stopPropagation();lockClick(\'' + p.alias + '\')">' + LOCK_C + "</button>";
+}
+function capsHtml(key, rules) {
+  if (!rules) return '<span class="cap y">tous droits · libre</span>';
+  const r = key === "drive" ? normDrive(rules) : rules;
+  const def = SVCDEF.find((s) => s.key === key);
+  return def.keys.map(([k, lbl]) => {
+    const on = !!(r && r[k]);
+    const note = (key === "drive" && (k === "create" || k === "update") && on && r.zonesOnly) ? ' <span class="d">(zones)</span>' : "";
+    return '<span class="cap ' + (on ? "y" : "n") + '">' + lbl + note + "</span>";
+  }).join("");
+}
+function render() { rerender(); }
+function rerender() { (VIEW.mode === "detail" && byAlias(VIEW.alias)) ? renderDetail(VIEW.alias) : renderList(); }
+function renderList() {
+  VIEW = { mode: "list", alias: null };
   const el = $("cards");
   if (!PROFILES.length) { el.innerHTML = '<div class="card">Aucun profil — clique « Connecter un compte ».</div>'; return; }
   el.innerHTML = PROFILES.map((p) => {
-    const lockBadge = !p.locked ? '<span class="badge b-mut">déverrouillé en permanence</span>'
-      : p.unlockedForMin > 0 ? '<span class="badge b-warn">🔓 encore ' + p.unlockedForMin + " min</span>"
-      : '<span class="badge b-bad">🔒 accès sur demande</span>';
-    const state = p.connected ? '<span class="badge b-ok">connecté</span>' : '<span class="badge b-mut">non connecté</span>';
-    const lockBtns = !p.locked ? '<button class="small" onclick="act(\'' + p.alias + "','lock')\">🔒 Verrouiller</button>"
-      : '<button class="small" onclick="openUnlock(\'' + p.alias + "')\">🔓 Déverrouiller…</button>" +
-        (p.unlockedForMin > 0 ? '<button class="small" onclick="act(\'' + p.alias + "','lock')\">🔒 Reverrouiller</button>" : "");
-    return '<div class="card"><div class="row1"><span class="alias">' + p.alias + "</span>" +
-      '<span class="email">' + (p.email || "—") + "</span>" + state + lockBadge + "</div>" +
-      '<div class="chips">' + summary(p).join("") + "</div>" +
-      '<div class="actions">' + lockBtns +
-      '<button class="small" onclick="openPolicy(\'' + p.alias + "')\">⚙️ Policy…</button>" +
-      (p.connected ? "" : '<button class="small" onclick="reconnect(\'' + p.alias + "')\">↻ Reconnecter</button>") +
-      '<span class="spacer"></span>' +
-      '<button class="small danger" onclick="openRevoke(\'' + p.alias + "')\">⛔ Révoquer</button>" +
-      "</div></div>";
+    const cls = "prow can" + (hasWindow(p) ? " open" : "") + (p.connected ? "" : " off");
+    const prolongBtn = hasWindow(p) ? '<button class="small" onclick="event.stopPropagation();prolong(\'' + p.alias + '\')">Prolonger…</button>' : "";
+    return '<div class="' + cls + '" onclick="openDetail(\'' + p.alias + '\')">' +
+      '<span class="pmail">' + esc(p.email || p.alias) + "</span>" +
+      '<span class="pctrl">' + tglHtml(p) + "</span>" +
+      '<span class="pctrl">' + lockHtml(p) + prolongBtn + "</span>" +
+      '<span class="pchev">›</span></div>';
   }).join("");
 }
+function openDetail(alias) { renderDetail(alias); }
+function renderDetail(alias) {
+  const p = byAlias(alias);
+  if (!p) return renderList();
+  VIEW = { mode: "detail", alias };
+  const prolongBtn = hasWindow(p) ? '<button class="small" onclick="prolong(\'' + alias + '\')">Prolonger…</button>' : "";
+  const rows = SVCDEF.filter((s) => ["drive","gmail","calendar","keep"].includes(s.key) || (p.policy && p.policy[s.key]))
+    .map((s) => {
+      const rules = p.policy && p.policy[s.key];
+      const zonesBtn = s.key === "drive" ? '<button class="small" onclick="openZonesFor(\'' + alias + '\')">Zones…</button>' : "";
+      return '<div class="srow"><span class="sname">' + s.name + '</span><span class="caps">' + capsHtml(s.key, rules) + "</span>" +
+        '<span class="actions">' + zonesBtn + '<button class="small" onclick="openPolicy(\'' + alias + '\')">Configurer…</button></span></div>';
+    }).join("");
+  $("cards").innerHTML = '<div class="detail"><div class="dhead">' +
+    '<button class="back" onclick="renderList()">‹ Comptes</button>' +
+    '<div class="drow"><span class="dmail">' + esc(p.email || alias) + "</span>" +
+      tglHtml(p) + lockHtml(p) + prolongBtn + "</div></div>" +
+    '<div class="dbody"><p class="plabel">Droits par application</p>' + rows +
+    '<div class="danger"><p class="dl">Zone de danger</p><div class="drx">' +
+      "<p>L'outil oublie ce compte : les assistants n'y auront plus accès et tes réglages (zones, autorisations) seront perdus. Rien n'est supprimé dans ton compte Google. Pour l'utiliser à nouveau, il faudra refaire une connexion complète.</p>" +
+      '<button class="danger" onclick="openRevoke(\'' + alias + '\')">Retirer ce compte de l\'outil</button></div></div></div></div>';
+}
+function connToggle(alias) {
+  const p = byAlias(alias);
+  if (p && p.connected) toast("Pour déconnecter ce compte : page du compte → zone de danger.");
+  else reconnect(alias);
+}
+function lockClick(alias) {
+  const p = byAlias(alias);
+  if (!p || !p.connected) return;
+  if (isOpen(p)) { if (hasWindow(p) && !confirm("Reverrouiller l'accès maintenant ?")) return; act(alias, "lock"); }
+  else act(alias, "unlock", { minutes: 30 });
+}
+function prolong(alias) {
+  const p = byAlias(alias);
+  const rem = Math.max(0, Math.ceil((p.unlockedUntil - Date.now() / 1000) / 60));
+  act(alias, "unlock", { minutes: rem + 30 });
+  toast("Accès prolongé de 30 min");
+}
+function openZonesFor(alias) { polTarget = alias; openZones(); }
+setInterval(() => {
+  let expired = false;
+  document.querySelectorAll(".cd[data-alias]").forEach((el) => {
+    const p = byAlias(el.getAttribute("data-alias"));
+    if (!p) return;
+    if (p.unlockedUntil * 1000 <= Date.now()) expired = true; else el.textContent = fmtLeft(p);
+  });
+  if (expired) rerender();
+}, 1000);
 
 let LAST = "";
 async function refresh() {

@@ -26,7 +26,7 @@
 | 0013 | Brancher le serveur MCP dans Claude Desktop en un geste (script idempotent) | feature | P2 |  | ✅ shipped | #15 |
 | 0016 | Porte d'entrée open-source — README copiable, SECURITY.md, licence MIT, badges | feature | P2 |  | ✅ shipped | #16 |
 | 0022 | Doc de critique technique lisible (forces / limites / risques) référencée au README | feature | P2 |  | ✅ shipped | #23 |
-| 0036 | Refonte des cartes profil de l'admin — liste, page de compte, zones (spec maquette v11) | feature | P2 |  | 🔴 todo |  |
+| 0036 | Refonte des cartes profil de l'admin — liste, page de compte, zones (spec maquette v11) | feature | P2 |  | 🟠 in-progress |  |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)
 
