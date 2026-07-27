@@ -42,6 +42,7 @@
 | 0032 | La notification Touch ID doit nommer le compte et le produit, pas l'alias seul | feature | P2 |  | 💡 idea |  |
 | 0034 | Mettre à jour le protocole du test manuel drive-2-comptes (limites périmées + nouvelles phases) | chore | P3 |  | 💡 idea |  |
 | 0038 | Créer un dossier-zone rapidement, geste humain (sans passer par le LLM) | feature | P2 |  | 💡 idea |  |
+| 0039 | Bannir « jeton/token » des surfaces utilisateur — un seul vocabulaire (accès / connexion) | chore | P2 |  | 💡 idea |  |
 | 0035 | Accès rapide à l'admin + visualisation des zones (icône barre de menus ?) | feature | P2 |  | 💡 idea |  |
 | 0036 | Clarté des cartes profil dans l'admin (état d'accès, badges, hiérarchie des actions) | feature | P2 |  | 💡 idea |  |
 | 0006 | Harnais hybride pour les tests manuels — script pour la mécanique, LLM pour la glu | feature | P2 |  | 💡 idea |  |
