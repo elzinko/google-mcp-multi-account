@@ -6,7 +6,7 @@ priority: P1
 version:
 epic:
 status: todo
-ready:
+ready: 2026-07-28
 pr:
 created: 2026-07-27
 ---
@@ -38,6 +38,15 @@ config. Il manque de rendre le reste cohérent.
 
 ## Proposition (à trancher — options)
 
+> **Décision (2026-07-28) — adopté : A + B + C.** Corbeille = `delete` (A),
+> racine de zone immuable (B, obligatoire), avertissement à la pose (C). **D**
+> (mode par provenance) reste en réserve, hors v1.
+>
+> **Séquencement** : A et B vivent dans `scripts/policy-check.py` (+ tests
+> hermétiques) — indépendants de l'UI. **C édite le dialogue d'ajout de zone de
+> l'admin** → dépend de la refonte 0036 (PR #44) **mergée d'abord**, sinon C
+> patcherait l'ancien admin. Implémentation en une PR une fois 0036 sur `main`.
+
 **A. Corbeille = suppression (recommandé).** Regarder le corps : un
 `{"trashed": true}` est reclassé en catégorie `delete`. Avec le défaut
 `delete: false`, le LLM ne peut alors corbeiller **ni** le contenu **ni** la
@@ -61,8 +70,11 @@ réserve, pas pour la v1.
 
 ## Critères d'acceptation
 
-- [ ] À groomer — décision PO sur A (corbeille = delete ?) attendue en premier.
-- [ ] B livré quoi qu'il arrive : la racine de zone est intouchable.
+- [x] Décision PO tranchée (2026-07-28) : A + B + C adoptés, D en réserve.
+- [ ] A : `drive files update` avec `{trashed:true}` reclassé en `delete` —
+      refusé sous `delete:false` (contenu ET racine).
+- [ ] B livré quoi qu'il arrive : la racine de zone est intouchable
+      (`under_allowed` distingue « est la racine » de « est un descendant »).
 - [ ] C : l'avertissement apparaît dans le flux d'ajout de zone (admin).
 - [ ] Test hermétique : `files update {trashed:true}` refusé si `delete:false`
       (option A) ; racine de zone jamais corbeillable (option B).
