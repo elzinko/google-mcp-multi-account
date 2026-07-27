@@ -26,6 +26,7 @@
 | 0013 | Brancher le serveur MCP dans Claude Desktop en un geste (script idempotent) | feature | P2 |  | ✅ shipped | #15 |
 | 0016 | Porte d'entrée open-source — README copiable, SECURITY.md, licence MIT, badges | feature | P2 |  | ✅ shipped | #16 |
 | 0022 | Doc de critique technique lisible (forces / limites / risques) référencée au README | feature | P2 |  | ✅ shipped | #23 |
+| 0036 | Refonte des cartes profil de l'admin — liste, page de compte, zones (spec maquette v11) | feature | P2 |  | 🔴 todo |  |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)
 
@@ -44,7 +45,6 @@
 | 0038 | Créer un dossier-zone rapidement, geste humain (sans passer par le LLM) | feature | P2 |  | 💡 idea |  |
 | 0039 | Bannir « jeton/token » des surfaces utilisateur — un seul vocabulaire (accès / connexion) | chore | P2 |  | 💡 idea |  |
 | 0035 | Accès rapide à l'admin + visualisation des zones (icône barre de menus ?) | feature | P2 |  | 💡 idea |  |
-| 0036 | Clarté des cartes profil dans l'admin (état d'accès, badges, hiérarchie des actions) | feature | P2 |  | 💡 idea |  |
 | 0006 | Harnais hybride pour les tests manuels — script pour la mécanique, LLM pour la glu | feature | P2 |  | 💡 idea |  |
 | 0019 | Documentation anglaise — ouvrir le projet à une audience non francophone | feature | P2 | 0017 | 💡 idea |  |
 | 0020 | Packaging installable — sortir du git clone + symlink codé en dur | feature | P2 | 0017 | 💡 idea |  |

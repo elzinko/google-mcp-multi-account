@@ -1,11 +1,11 @@
 ---
 id: 0036
-title: Clarté des cartes profil dans l'admin (état d'accès, badges, hiérarchie des actions)
+title: Refonte des cartes profil de l'admin — liste, page de compte, zones (spec maquette v11)
 type: feature
 priority: P2
 version:
 epic:
-status: idea
+status: todo
 ready:
 pr:
 created: 2026-07-27
@@ -13,61 +13,111 @@ created: 2026-07-27
 
 ## Contexte / Problème
 
-Revue UX des cartes profil de l'admin (capture du 2026-07-27). Les cartes
-mélangent deux axes — la **connexion** (le token OAuth est-il valide ?) et
-l'**accès** (un LLM peut-il lire/écrire maintenant ?) — sans les distinguer,
-ce qui rend l'état difficile à lire d'un coup d'œil.
+Revue UX démarrée sur une capture réelle (2026-07-27) : les cartes mélangeaient
+connexion et accès, les badges d'états opposés se ressemblaient, « Révoquer »
+dominait, le vocabulaire fuyait de la plomberie (« jeton »). Onze maquettes
+itérées avec l'utilisateur, une revue adverse, une revue architecte
+(ADR-0004, à réviser), un panel de nommage (lentilles novice / exactitude /
+cohérence).
 
-Findings (état rendu par `admin/index.html`, lignes ~348-362) :
+**La source de vérité visuelle et comportementale est la maquette
+[docs/design/admin-cards-v11.html](../docs/design/admin-cards-v11.html)**
+(v1→v10 conservées à côté pour l'historique des décisions).
 
-1. **Deux états opposés, badges jumeaux.** « accès sur demande » (verrouillé,
-   fermé) et « encore N min » (déverrouillé, ouvert, compte à rebours) sont
-   **contraires** mais se ressemblent (même famille d'icône cadenas, même
-   pastille). Impossible de repérer en un instant *quels comptes sont ouverts*.
+## Spécification retenue (à implémenter dans `admin/index.html` + `server.js`)
 
-2. **« accès sur demande » décrit la règle, pas l'état.** C'est la politique
-   (« l'accès se demande »), pas l'état courant (« verrouillé »). Collé au
-   badge vert « connecté », un nouvel arrivant ne sait pas si c'est bon ou
-   mauvais. Mieux : un mot d'état clair (« 🔒 Verrouillé ») + « accès sur
-   demande » en sous-titre/infobulle.
+### Modèle mental — deux commandes par compte, jamais mélangées
 
-3. **Deux axes présentés comme des pastilles sœurs.** « connecté » (auth) et le
-   badge de verrou (accès) répondent à deux questions différentes ; les aligner
-   comme des égales brouille la lecture. Piste : « Connexion : ✅ » d'un côté,
-   « Accès : 🔒 verrouillé » de l'autre.
+| Commande | Contrôle | États | Geste |
+|---|---|---|---|
+| **Connexion à Google** | interrupteur (toggle) | connecté / déconnecté (ligne grisée) | l'allumer = refaire la connexion (navigateur) |
+| **Accès** (verrou) | cadenas cliquable | 🔒 fermé (rouge) / 🔓 ouvert (orange) + décompte | fermé→clic = Touch ID, 30 min ; ouvert→clic = confirmation puis reverrouille |
 
-4. **« Déverrouiller… » affiché même sur un compte déjà ouvert.** Pour un compte
-   « encore N min », proposer « Déverrouiller… » interroge (c'est déjà ouvert).
-   Si l'intention est de prolonger, l'appeler « Prolonger… ». « Déverrouiller… »
-   ne garder que sur les comptes fermés.
+Interdits à l'écran : « jeton », « OAuth », « token ». Lexique retenu (les
+mots vivent dans les infobulles et boutons ; à l'écran l'état est porté par
+l'icône seule + « encore N:SS ») : « Déverrouiller (30 min)… / Reverrouiller
+maintenant / Prolonger… / Retirer ce compte de l'outil ».
+« Prolonger… » ajoute **30 min cumulées** à l'échéance courante. Décompte :
+`encore M:SS` sous l'heure, `encore H h MM` au-delà.
+On garde la famille « verrou » (le chat dit déjà « profil verrouillé » via les
+refus MCP, le CLI dit lock/unlock, Touch ID aussi) — voir fiche 0039 pour
+harmoniser les autres surfaces.
 
-5. **« Révoquer » (rouge, destructif) est l'ancre visuelle.** Le rouge attire le
-   plus l'œil alors que c'est l'action la plus rare (déconnecter le compte). Une
-   action destructrice ne doit pas dominer : la démoter (icône, menu overflow),
-   la sortir de la rangée principale.
+### Vue liste (une ligne par compte, créneaux fixes)
 
-6. **Compteur de zones cryptique.** « (0) » et « (0 + 1 temp) » ne se lisent
-   pas. Mieux : « Zones : 0 permanente · 1 temporaire ».
+`[email cliquable = copie] [interrupteur] [cadenas + décompte] [Prolonger… si ouvert] [chevron]`
 
-7. **Aucune hiérarchie au repos.** Les cinq cartes ont le même poids visuel.
-   Le compte *ouvert* (déverrouillé) est justement l'état « chaud » qu'on veut
-   repérer : lui donner un accent (bordure gauche colorée) le ferait ressortir.
+- Emplacements **fixes** : l'état et l'action ne changent jamais de place,
+  seul leur contenu change.
+- **Compte à rebours réel** (`encore M:SS`), rafraîchi chaque seconde ; à zéro
+  l'accès se reverrouille tout seul (et l'UI le montre).
+- Compte **déconnecté** : ligne grisée, interrupteur éteint, mention
+  « Déconnecté » — pas de cadenas, pas de chevron, ligne non ouvrable.
+  Seule exception assumée : la copie de l'email reste cliquable (inoffensif).
+- Copie au clic (email) avec coche ✓ + message éphémère.
 
-## Proposition
+### Page de compte (liste → détail, pas d'accordéon — ADR-0004 à réviser)
 
-Restructurer la carte autour de deux lignes d'état lisibles (Connexion / Accès),
-un mot d'état clair plutôt qu'une phrase de politique, des zones énoncées en
-clair, les actions destructrices démotées, et un accent visuel sur les comptes
-ouverts. Maquette avant/après à produire au grooming.
+- Ouverture par clic sur une ligne connectée ; « ‹ Comptes » revient. Pas de
+  routeur : bascule de vue.
+- En-tête : email + interrupteur + cadenas/décompte + boutons explicites
+  (« Déverrouiller (30 min)… » ou « Prolonger… » + « Reverrouiller maintenant »).
+- **Droits par application** : une ligne **par service déclaré dans la policy
+  du profil** (`gateway/default_policy.py` en compte 7 : gmail, drive,
+  calendar, docs, sheets, tasks, keep — la maquette n'en montre que 4 à titre
+  d'échantillon), nom en couleur accent, capacités en **vert** (autorisé) /
+  **rouge** (refusé, ex. « envoi » — non barré), bouton « Configurer… » par
+  ligne. Aucune liste de zones dans cette vue.
+- **Zone de danger** en pied : « Retirer ce compte de l'outil » + texte qui
+  précise que rien n'est supprimé chez Google.
+
+### Fenêtre « Zones d'écriture — Drive » (Configurer… de la ligne Drive)
+
+- Deux temps dans la même modale : la **liste** des zones, puis l'**ajout**.
+- Ligne de zone : `[📁] [nom seul — chemin complet en infobulle, clic = copie]
+  [pastille P/T colorée, infobulle] [icône ↗ ouvrir dans Drive] [croix ✕ retirer]`.
+- Emplacement d'ajout : bloc en **pointillés** au gabarit d'une zone, bouton
+  « ＋ Ajouter une zone » à droite.
+- Ajout : **navigateur du Drive** (fil d'Ariane + « ＋ Nouveau dossier ici »,
+  reprend l'existant `afCrumbs`/`gws drive files list` + fiche 0038), dossier
+  choisi annulable par croix, durées 1/2/4/8/24 h, avertissement rouge
+  (fiche 0037 — texte fourni par le serveur, pas codé en dur), « Accorder »
+  actif seulement une fois un dossier choisi. Ajouts multiples enchaînables.
+
+### Contrat serveur & règles d'implémentation
+
+- Le décompte réel exige que `server.js` expose **l'échéance du déverrouillage
+  en timestamp** (pas une durée pré-formatée) : le front calcule et rafraîchit,
+  et montre le reverrouillage automatique à zéro sans recharger.
+- **Pas d'`onclick` inline interpolé** avec des données (emails, noms de
+  dossiers) : une apostrophe casserait le handler. Construction DOM + listeners,
+  ou échappement systématique.
+- Le bouton explicite « Reverrouiller maintenant » (page du compte) agit
+  directement ; seule l'icône cadenas de la liste demande confirmation.
 
 ## Critères d'acceptation
 
-- [ ] À groomer.
+- [ ] La liste rend les 3 situations (déverrouillé+décompte, verrouillé,
+      déconnecté grisé) aux emplacements fixes de la maquette v11.
+- [ ] Cadenas cliquable : fermé→déverrouille (Touch ID via gwsa) ;
+      ouvert→confirmation puis reverrouille ; décompte réel, reverrouillage
+      auto à zéro visible sans recharger.
+- [ ] Interrupteur : éteint sur compte déconnecté ; l'allumer lance la
+      reconnexion ; l'éteindre est refusé avec renvoi vers la zone de danger.
+- [ ] Page de compte : droits par appli en vert/rouge, « Configurer… » ouvre
+      la fenêtre zones (Drive) ou l'éditeur de policy (autres).
+- [ ] Fenêtre zones conforme (nom seul + infobulle chemin, P/T, ↗, ✕,
+      pointillés, navigateur Drive avec création, ajouts multiples).
+- [ ] Aucun « jeton / OAuth / token » dans l'UI.
+- [ ] `./scripts/test.sh` vert.
 
 ## Notes
 
-- Revue déclenchée par une question utilisateur (« l'UI n'est pas super
-  claire »). Complémentaire de [[0035-admin-acces-rapide-et-visu-zones]]
-  (accès à l'admin) — ici c'est la **lisibilité une fois dedans**.
-- Respecter le design system s'il existe (`docs/design-system.md`) ; sinon,
-  rester sobre, cohérent avec l'existant.
+- Maquettes : `docs/design/admin-cards-v1..v11.html` — la v11 fait foi.
+- Dépendances : [[0037-semantique-suppression-en-zone]] (texte d'avertissement
+  serveur), [[0038-creer-dossier-zone-rapidement]] (création de dossier),
+  [[0039-harmoniser-vocabulaire-jeton]] (autres surfaces), ADR-0004 (à réviser
+  accordéon → liste/détail avant implémentation).
+- Question ouverte pour l'implémentation : « Ouvrir dans Drive » avec le bon
+  compte Google (`authuser` / profil navigateur) n'est pas garanti par une
+  simple URL — à creuser.
