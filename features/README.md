@@ -38,6 +38,9 @@
 |---|-------|------|------|------|--------|----|
 | 0026 | Savoir quelle version répond — version annoncée par les tools, dérive détectée | feature | P2 |  | 💡 idea |  |
 | 0027 | Déployer un commit non taggé pour essayer une PR (couloir jetable) | feature | P2 |  | 💡 idea |  |
+| 0032 | La notification Touch ID doit nommer le compte et le produit, pas l'alias seul | feature | P2 |  | 💡 idea |  |
+| 0034 | Mettre à jour le protocole du test manuel drive-2-comptes (limites périmées + nouvelles phases) | chore | P3 |  | 💡 idea |  |
+| 0033 | Grant Drive « one-shot » demandé depuis la conversation, confirmé par Touch ID | feature | P3 | 0001 | 💡 idea |  |
 | 0006 | Harnais hybride pour les tests manuels — script pour la mécanique, LLM pour la glu | feature | P2 |  | 💡 idea |  |
 | 0019 | Documentation anglaise — ouvrir le projet à une audience non francophone | feature | P2 | 0017 | 💡 idea |  |
 | 0020 | Packaging installable — sortir du git clone + symlink codé en dur | feature | P2 | 0017 | 💡 idea |  |
