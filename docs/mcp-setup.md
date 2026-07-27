@@ -59,17 +59,34 @@ Dans les settings MCP (UI ou `~/.cursor/mcp.json`) :
 
 ## Claude Code
 
-1. Ajouter le même serveur MCP (CLI `claude mcp add` ou config projet).
-2. Pour les accès **données** (Gmail/Drive) : préférer les tools MCP.
-3. Restreindre le shell : ne pas autoriser `gws` nu ni l’édition de
-   `~/.config/gws-accounts/` — voir [threat-model.md](threat-model.md).
-4. Unlock / grant restent **humains** (`gwsa` ou admin `http://127.0.0.1:4877`).
+**Claude Code a sa propre config MCP** (`~/.claude.json`), séparée de Claude
+Desktop : brancher Desktop ne le rend **pas** visible dans le CLI `claude`. Il
+faut l'enregistrer à part.
 
-Exemple :
+Le plus simple — le script dédié, idempotent, qui délègue au CLI officiel :
 
 ```bash
-claude mcp add google-multi-account --env GWSA_CLIENT=claude-code -- /ABS/PATH/google-mcp-multi-account/bin/google-mcp
+./scripts/install-claude-code.sh          # branche au scope user (visible partout)
+./scripts/install-claude-code.sh --print  # dry-run : montre la commande
 ```
+
+`./scripts/update.sh` l'appelle **automatiquement** quand le CLI `claude` est
+présent — tu n'as donc en général rien à faire de plus. Sous le capot, c'est :
+
+```bash
+claude mcp add google-multi-account --scope user --env GWSA_CLIENT=claude-code --env GWSA_BROKER_PORT=4878 -- ~/.local/share/google-mcp/current/bin/google-mcp
+```
+
+`--scope user` le rend visible depuis n'importe quel dossier ; `GWSA_CLIENT=claude-code`
+distingue ce client dans le journal ; le port 4878 partage le broker (et donc les
+comptes) avec Desktop. Vérifier : `claude mcp get google-multi-account`, ou `/mcp`
+dans un nouveau `claude`.
+
+Ensuite, mêmes règles que partout :
+- Accès **données** (Gmail/Drive) : préférer les tools MCP.
+- Restreindre le shell : ne pas autoriser `gws` nu ni l’édition de
+  `~/.config/gws-accounts/` — voir [threat-model.md](threat-model.md).
+- Unlock / grant restent **humains** (`gwsa` ou admin `http://127.0.0.1:4877`).
 
 ## Les tools exposés, par groupe
 
