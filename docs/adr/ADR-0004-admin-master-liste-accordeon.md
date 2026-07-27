@@ -1,6 +1,8 @@
 # ADR-0004 — Admin : master-liste à panneau d'expansion, sans vue de détail
 
 Statut : **proposé** (en attente de validation PO) · 2026-07-27 · Portée : `admin/index.html` + `admin/server.js`
+
+> **Mise à jour 2026-07-27 (maquette v7).** À l'usage, le détail d'un compte a grossi (droits par appli, zones). La direction retenue en maquette passe de l'**accordéon** à une **liste-maître → page de détail** (swap de vue, toujours sans routeur). Cet ADR est donc à **réviser** dans ce sens avant ratification : les décisions 2 (édition des zones dans le panneau) et 3 (avertissement piloté par le serveur) restent valables ; seule la forme accordéon vs détail change.
 Fiches liées : 0036 (clarté des cartes), 0037 (sémantique de la suppression en zone)
 
 ## Contexte
