@@ -7,7 +7,7 @@ version:
 epic:
 status: todo
 ready: 2026-07-27
-pr:
+pr: "#43"
 created: 2026-07-27
 ---
 
