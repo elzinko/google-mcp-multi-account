@@ -72,8 +72,9 @@ Conventions : toutes les commandes agent passent par
 
 **Pré-vol** : lister le contenu de chaque zone (`drive files list` avec
 `'<ID_ZONE>' in parents and trashed=false`). S'il reste des fichiers d'un
-run précédent, le signaler et proposer de les mettre à la corbeille — ou de
-les ignorer : les noms horodatés garantissent qu'ils ne gênent pas.
+run précédent, le signaler et proposer de les mettre à la corbeille (possible
+seulement si la zone accorde `delete:true` — fiche 0037) — ou de les ignorer :
+les noms horodatés garantissent qu'ils ne gênent pas.
 
 Pour **chaque** compte, dans la même session :
 
@@ -127,18 +128,21 @@ résultat.
 
 ### Phase 6 — nettoyage (sur accord explicite, réversible)
 
-Après le « ok » de l'utilisateur, mettre **le dossier entier à la corbeille**
-(un appel par compte, restaurable 30 jours) :
+Depuis la **fiche 0037**, la racine d'une zone est une **frontière immuable** :
+le LLM ne peut pas la corbeiller (ni la renommer / déplacer), et mettre à la
+corbeille exige `delete:true` (corbeille = suppression). Avec le préréglage
+prudent (`delete:false`), **le nettoyage des dossiers de zone est un geste
+humain**. Donc, après le « ok » de l'utilisateur :
 
-```bash
-gwsa ALIAS1 drive files update --params '{"fileId":"<ID_ZONE_1>"}' --json '{"trashed":true}'
-gwsa ALIAS2 drive files update --params '{"fileId":"<ID_ZONE_2>"}' --json '{"trashed":true}'
-```
+1. L'agent **liste** ce qu'il a créé (liens) et annonce qu'il **ne peut pas**
+   corbeiller les dossiers `<ID_ZONE_1>` / `<ID_ZONE_2>` — c'est voulu.
+2. **L'humain** met ces dossiers à la corbeille depuis Drive (restaurable
+   30 jours), ou les garde pour un futur run.
 
-Alternative : garder les dossiers pour de futurs tests — les grants expirent
-tout seuls. Vider la corbeille reste un geste 100 % humain, dans Drive.
-Verrous et grants se referment automatiquement (30 min / 2 h) : rien d'autre
-à faire.
+Les commandes `files update {"trashed":true}` sur `<ID_ZONE_n>` **échouent
+désormais** (exit 4) : ne pas les proposer. Alternative : garder les dossiers —
+les grants expirent tout seuls, verrous et grants se referment automatiquement
+(30 min / 2 h). Vider la corbeille reste un geste 100 % humain, dans Drive.
 
 ## Rejouabilité — le test est idempotent
 
@@ -160,7 +164,8 @@ Verrous et grants se referment automatiquement (30 min / 2 h) : rien d'autre
 - [ ] Un fichier créé **et modifié** (contenu + nom) dans chaque compte.
 - [ ] Contenus distincts vérifiés dans les 2 Drive (liens fournis, bon compte).
 - [ ] Écriture hors zone refusée ; 3ᵉ profil resté inaccessible.
-- [ ] Nettoyage : dossiers à la corbeille (ou conservés), rien de définitif.
+- [ ] Nettoyage : l'agent ne corbeille pas la racine de zone (refus attendu,
+      fiche 0037) ; dossiers mis à la corbeille par l'humain (ou conservés).
 - [ ] Journal : `scripts/log-usage.py` a tracé les commandes avec
       `GWSA_CLIENT` (visible dans l'admin, section journal).
 
@@ -181,7 +186,8 @@ Verrous et grants se referment automatiquement (30 min / 2 h) : rien d'autre
 - Le serveur MCP n'expose ni `drive_update` ni upload de contenu : les
   modifications passent par `gwsa … drive files update --upload` (autorisé
   par CLAUDE.md). Candidat backlog : tool MCP `drive_update`.
-- `files update` avec `{"trashed":true}` est classé *update* par le
-  contrôleur : la mise à la corbeille marche donc même avec `delete:false`.
-  Assumé ici (c'est réversible) ; à trancher dans la fiche 0002
-  (durcissement policy).
+- **Corbeille = suppression (fiche 0037, livrée)** : `files update {"trashed":true}`
+  est classé *delete* — refusé sous `delete:false`, et la **racine d'une zone**
+  n'est jamais corbeillable (frontière immuable, même sous `delete:true`). Le
+  nettoyage des dossiers de zone est donc un geste humain (Phase 6). Ferme la
+  question ouverte de la fiche 0002.

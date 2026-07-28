@@ -5,9 +5,9 @@ type: feature
 priority: P1
 version:
 epic:
-status: todo
-ready:
-pr:
+status: in-progress
+ready: 2026-07-28
+pr: "#47"
 created: 2026-07-27
 ---
 
@@ -38,6 +38,15 @@ config. Il manque de rendre le reste cohérent.
 
 ## Proposition (à trancher — options)
 
+> **Décision (2026-07-28) — adopté : A + B + C.** Corbeille = `delete` (A),
+> racine de zone immuable (B, obligatoire), avertissement à la pose (C). **D**
+> (mode par provenance) reste en réserve, hors v1.
+>
+> **Séquencement** : A et B vivent dans `scripts/policy-check.py` (+ tests
+> hermétiques) — indépendants de l'UI. **C édite le dialogue d'ajout de zone de
+> l'admin** → dépend de la refonte 0036 (PR #44) **mergée d'abord**, sinon C
+> patcherait l'ancien admin. Implémentation en une PR une fois 0036 sur `main`.
+
 **A. Corbeille = suppression (recommandé).** Regarder le corps : un
 `{"trashed": true}` est reclassé en catégorie `delete`. Avec le défaut
 `delete: false`, le LLM ne peut alors corbeiller **ni** le contenu **ni** la
@@ -61,11 +70,19 @@ réserve, pas pour la v1.
 
 ## Critères d'acceptation
 
-- [ ] À groomer — décision PO sur A (corbeille = delete ?) attendue en premier.
-- [ ] B livré quoi qu'il arrive : la racine de zone est intouchable.
-- [ ] C : l'avertissement apparaît dans le flux d'ajout de zone (admin).
-- [ ] Test hermétique : `files update {trashed:true}` refusé si `delete:false`
-      (option A) ; racine de zone jamais corbeillable (option B).
+- [x] Décision PO tranchée (2026-07-28) : A + B + C adoptés, D en réserve.
+- [x] A : `drive files update` (ou `patch`) avec `{trashed:true}` reclassé en
+      `delete` — refusé sous `delete:false` ; `trashed:false` (restauration)
+      reste une modification.
+- [x] B livré : la racine d'une zone (`fid in zones`) est intouchable —
+      suppression / corbeille / renommage / déplacement refusés même sous
+      `delete:true` ; seul le contenu (descendants) reste modifiable.
+- [x] C : avertissement rouge dans le dialogue d'ajout de zone de l'admin
+      (« confier ce dossier » ; frontière intouchable ; corbeille sous
+      autorisation de suppression).
+- [x] Tests hermétiques (`scripts/test.sh`, section fiche 0037) : corbeille via
+      `update/patch {trashed:true}` refusée sous `delete:false`, autorisée sous
+      `delete:true` ; untrash permis ; racine de zone jamais mutable.
 
 ## Notes
 

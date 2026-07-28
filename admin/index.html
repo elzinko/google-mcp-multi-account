@@ -50,6 +50,8 @@ legend { font-weight:600; font-size:14px; padding:0 6px; }
 .grid label, .zline { display:flex; align-items:center; gap:7px; margin:3px 0; color:var(--txt); font-size:14px; }
 .zline { margin-top:9px; font-weight:600; }
 .note { font-size:12.5px; color:var(--mut); margin:6px 0 0; }
+.zwarn { font-size:12.5px; line-height:1.5; color:var(--bad); background:var(--badbg);
+  border:1px solid var(--bad); border-radius:8px; padding:9px 12px; margin:12px 0 0; }
 .zone { display:flex; align-items:center; gap:8px; margin:4px 0; font-size:13.5px; }
 .zone .mono { color:var(--mut); }
 .addrow { display:flex; gap:8px; margin:6px 0 2px; align-items:center; }
@@ -242,6 +244,11 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
     <input type="number" id="afHours" value="8" min="1" max="168"> h
     <label style="margin:0"><input type="radio" name="afDur" value="perm"> permanent</label>
   </div>
+  <p class="zwarn">⚠️ Accorder une zone, c'est <b>confier ce dossier</b>. Les assistants pourront
+  y <b>créer et modifier</b> des fichiers (sous-dossiers compris). Ils ne toucheront pas au
+  dossier lui-même — ni renommé, ni déplacé, ni mis à la corbeille — et ne mettront rien à la
+  corbeille tant que tu n'as pas autorisé la suppression. N'accorde une zone que sur un dossier
+  que tu acceptes de confier.</p>
   <div class="mtop"><button onclick="dAddFolder.close()">Annuler</button>
   <button class="primary" onclick="afConfirm()">Autoriser (sous-dossiers inclus)</button></div>
 </dialog>
