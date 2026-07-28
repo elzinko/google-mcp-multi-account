@@ -1,5 +1,55 @@
 # Journal des versions
 
+## v0.3.0 — 2026-07-29
+
+### Fonctionnalités
+
+- feat(cli): gwsa session/project/sandbox commands and hermetic tests
+- feat(admin): Dev panel, sessions UI, and MCP entry removal
+- feat(sandbox): deploy CLI with wire/remove and detached HEAD fix
+- feat(0040): MCP sessions, project manifest, and policy caps
+- feat(0001): signed elicitation and vault credentials path
+- feat(admin): lock chip, relock modal, and Touch ID UX
+- feat(gwsa): dev corridors, isolated OAuth seed, and dev test
+- feat(admin): zones folder picker and authorize flow
+- feat(policy): corbeille = suppression + racine de zone immuable (fiche 0037)
+- feat(deploy): brancher le MCP dans Claude Code (CLI), pas seulement Desktop (fiche 0040)
+- feat(admin): refonte des cartes profil admin — liste → page de détail (fiche 0036)
+
+### Corrections
+
+- fix(vault): honor Codex review on credentials and session unlock
+- fix(gwsa): exiger l'email sur add sous strongauth (0032)
+- fix(admin): keep Touch ID unlock/grant from dropping the HTTP connection
+- fix(admin): keep policy actions visible and drop duplicate Zones button
+- fix(gwsa): fiabiliser dev test CI et broker hermétique
+
+### Documentation
+
+- docs(features): ship 0027 + 0032 après PR #48 (#50)
+- docs(features): statut shipped effectif sur 0037 (rattrapage)
+- docs(features): ship 0037 (#47)
+- docs(features): statut shipped effectif sur 0036/0040 (rattrapage du ship)
+- docs(features): ship 0036 (#44) + 0040 (#43)
+- docs(design): maquette v11 (interrupteur + cadenas-bouton) ; fiche 0036 = spec
+- docs(design): maquette v10 admin (lexique sans plomberie) + fiche 0039
+- docs(design): maquette v9 admin (emplacement d'ajout de zone en pointillés)
+- docs(design): maquette v8 admin (zones resserrées, ajout multi-zones)
+- docs(design): maquette v7 admin (liste → détail) + note ADR-0004
+- docs(design): maquette v6 des cartes admin (fenêtre zones + navigateur Drive)
+- docs(design): maquette v5 des cartes admin (droits par appli, zones sous Drive)
+- docs(design): maquette v4 des cartes admin (copie par le nom, modale d'ajout)
+- docs(design): maquette v3 des cartes admin (alias retirés, état reformulé)
+- docs(design): maquette v2 des cartes admin + ADR-0004 (proposé)
+- docs(design): maquette v1 des cartes profil de l'admin (revue UX)
+- docs(features): ferme 0033, ouvre 0037 (suppression en zone) + 0038 (créer dossier-zone)
+- docs(features): add 0035 (acces rapide admin) + 0036 (clarte cartes profil)
+- docs(features): add 0032-0034 (touchid nomme le compte, grant one-shot, maj protocole test)
+
+### Autres
+
+- test(ci): couvrir gwsa dev isolé, use --apply et list/status/remove
+
 ## v0.2.1 — 2026-07-27
 
 ### Corrections
