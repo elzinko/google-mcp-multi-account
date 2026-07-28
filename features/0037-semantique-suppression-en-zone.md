@@ -71,13 +71,18 @@ réserve, pas pour la v1.
 ## Critères d'acceptation
 
 - [x] Décision PO tranchée (2026-07-28) : A + B + C adoptés, D en réserve.
-- [ ] A : `drive files update` avec `{trashed:true}` reclassé en `delete` —
-      refusé sous `delete:false` (contenu ET racine).
-- [ ] B livré quoi qu'il arrive : la racine de zone est intouchable
-      (`under_allowed` distingue « est la racine » de « est un descendant »).
-- [ ] C : l'avertissement apparaît dans le flux d'ajout de zone (admin).
-- [ ] Test hermétique : `files update {trashed:true}` refusé si `delete:false`
-      (option A) ; racine de zone jamais corbeillable (option B).
+- [x] A : `drive files update` (ou `patch`) avec `{trashed:true}` reclassé en
+      `delete` — refusé sous `delete:false` ; `trashed:false` (restauration)
+      reste une modification.
+- [x] B livré : la racine d'une zone (`fid in zones`) est intouchable —
+      suppression / corbeille / renommage / déplacement refusés même sous
+      `delete:true` ; seul le contenu (descendants) reste modifiable.
+- [x] C : avertissement rouge dans le dialogue d'ajout de zone de l'admin
+      (« confier ce dossier » ; frontière intouchable ; corbeille sous
+      autorisation de suppression).
+- [x] Tests hermétiques (`scripts/test.sh`, section fiche 0037) : corbeille via
+      `update/patch {trashed:true}` refusée sous `delete:false`, autorisée sous
+      `delete:true` ; untrash permis ; racine de zone jamais mutable.
 
 ## Notes
 

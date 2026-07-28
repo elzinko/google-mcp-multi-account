@@ -252,6 +252,16 @@ def check_drive(profile_dir, drive_raw, args, pos):
     else:
         deny(profile_dir, args, "drive",
              "méthode files « %s » non classifiable — refusée par prudence" % pos[-1])
+    # Option A (fiche 0037) : mettre à la corbeille EST une suppression, même quand
+    # l'API le fait via « files update {"trashed": true} » (classé « update » sur le
+    # seul nom de méthode). On regarde le corps : trashed=true → catégorie delete,
+    # donc refusé sous delete:false (défaut). « trashed:false » (restauration) reste
+    # une modification.
+    if cat == "update":
+        _tbody = parse_json_flag(args, "--json")
+        _tparams = parse_json_flag(args, "--params")
+        if _tbody.get("trashed") is True or _tparams.get("trashed") is True:
+            cat = "delete"
     if not drive.get(cat, False):
         deny(profile_dir, args, "drive",
              "%s refusé·e par la policy (« files %s »)" % (LABELS_FR.get(cat, cat), pos[-1]))
@@ -286,6 +296,14 @@ def check_drive(profile_dir, drive_raw, args, pos):
     if not fid:
         deny(profile_dir, args, "drive",
              "files %s sans fileId identifiable — refusé par prudence" % pos[-1])
+    # Option B (fiche 0037) : la RACINE d'une zone est une frontière immuable —
+    # jamais corbeillée / renommée / déplacée, même sous delete:true. Seul son
+    # CONTENU (les descendants) est modifiable. « Retirer une zone » est un geste
+    # de config (« gwsa grant revoke »), pas une opération Drive.
+    if fid in zones:
+        deny(profile_dir, args, "drive",
+             "cible %s = racine d'une zone (frontière immuable) — créer/modifier "
+             "seulement DEDANS ; retirer la zone via « gwsa grant revoke »" % fid)
     if not under_allowed(profile_dir, fid, zones):
         deny(profile_dir, args, "drive", "cible %s hors zone d'écriture autorisée" % fid)
     # Un déplacement (addParents/removeParents, dans --params OU --json) peut faire

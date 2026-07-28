@@ -187,6 +187,37 @@ check 4 "create : parent dans --params (ignoré par l'API) → refusé"       dr
 check 4 "move addParents hors zone refusé"                                drive files update --params "{\"fileId\":\"$ZONE\",\"addParents\":\"HORS9999999999999999\"}"
 check 4 "removeParents sans réancrage en zone refusé"                     drive files update --params "{\"fileId\":\"$ZONE\",\"removeParents\":\"$ZONE\"}"
 
+section "Corbeille = suppression + racine de zone immuable (fiche 0037)"
+# A — corbeiller via « files update {trashed:true} » est une SUPPRESSION, refusée
+#     sous delete:false même si update:true (le trou : classé « update » avant).
+policy <<EOF
+{"drive": {"read": true, "create": true, "update": true, "delete": false,
+           "share": false, "zonesOnly": true, "writeFolders": ["$ZONE"]}}
+EOF
+no_grants
+check 4 "corbeille via update {trashed:true} refusée sous delete:false"   drive files update --params "{\"fileId\":\"$ZONE\"}" --json '{"trashed":true}'
+check 4 "corbeille via patch {trashed:true} refusée sous delete:false"    drive files patch  --params "{\"fileId\":\"$ZONE\"}" --json '{"trashed":true}'
+# …et libre quand delete:true est explicitement accordé (hors zones)
+policy <<'EOF'
+{"drive": {"read": true, "create": true, "update": true, "delete": true,
+           "share": false, "zonesOnly": false, "writeFolders": []}}
+EOF
+check 0 "corbeille via update {trashed:true} autorisée sous delete:true"  drive files update --json '{"trashed":true}'
+# untrash (restauration, trashed:false) reste une modification, pas une suppression
+policy <<'EOF'
+{"drive": {"read": true, "create": true, "update": true, "delete": false,
+           "share": false, "zonesOnly": false, "writeFolders": []}}
+EOF
+check 0 "restauration update {trashed:false} reste autorisée (update)"    drive files update --json '{"trashed":false}'
+# B — la racine d'une zone est une frontière immuable, MÊME sous delete:true
+policy <<EOF
+{"drive": {"read": true, "create": true, "update": true, "delete": true,
+           "share": false, "zonesOnly": true, "writeFolders": ["$ZONE"]}}
+EOF
+check 4 "racine de zone : suppression refusée même sous delete:true"      drive files delete --params "{\"fileId\":\"$ZONE\"}"
+check 4 "racine de zone : corbeille refusée même sous delete:true"        drive files update --params "{\"fileId\":\"$ZONE\"}" --json '{"trashed":true}'
+check 4 "racine de zone : renommage refusé (update sur la racine)"        drive files update --params "{\"fileId\":\"$ZONE\"}" --json '{"name":"x"}'
+
 section "Policy corrompue → fail closed (le docstring le promet)"
 printf '{ ceci nest pas du json valide' > "$PROFILE/policy.json"
 check 4 "policy.json illisible → refus (jamais fail open)"                gmail users messages send --json '{"raw":"x"}'
