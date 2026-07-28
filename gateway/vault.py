@@ -46,11 +46,30 @@ def profile_credentials_legacy(alias: str) -> Path:
 
 
 def is_migrated(alias: str) -> bool:
-    return credentials_path(alias).is_file()
+    return (gwsa_root() / VAULT_DIR_NAME / alias / CREDENTIALS_NAME).is_file()
+
+
+def has_credentials(alias: str) -> bool:
+    """True si credentials.enc existe (vault ou legacy profil) — sans créer de dossiers."""
+    return (
+        profile_credentials_legacy(alias).is_file()
+        or (gwsa_root() / VAULT_DIR_NAME / alias / CREDENTIALS_NAME).is_file()
+    )
+
+
+def remove_vault_alias(alias: str) -> None:
+    """Supprime le répertoire vault d'un alias (après gwsa remove)."""
+    d = gwsa_root() / VAULT_DIR_NAME / alias
+    if d.is_dir():
+        shutil.rmtree(d, ignore_errors=True)
 
 
 def migrate_alias(alias: str) -> bool:
-    """Déplace credentials.enc vers le vault si encore dans le profil. Retourne True si déplacé."""
+    """Déplace credentials.enc vers le vault si encore dans le profil. Retourne True si déplacé.
+
+    Si le vault a déjà des credentials et le profil en a de nouveaux (re-auth /
+    `gwsa add`), remplace atomiquement le vault par la source fraîche.
+    """
     src = profile_credentials_legacy(alias)
     dst = credentials_path(alias)
     vdir = vault_dir(alias)
@@ -65,13 +84,8 @@ def migrate_alias(alias: str) -> bool:
                 pass
     if not src.is_file():
         return False
-    if dst.is_file():
-        try:
-            src.unlink()
-        except OSError:
-            pass
-        return False
     dst.parent.mkdir(parents=True, exist_ok=True)
+    # Remplace silencieusement un credentials.enc vault existant (re-auth).
     shutil.move(str(src), str(dst))
     try:
         os.chmod(dst, 0o600)

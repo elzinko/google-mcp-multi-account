@@ -285,19 +285,23 @@ def grant_allowed_by_manifest(
     alias: str,
     folder_id: str,
 ) -> bool:
-    """True si le grant session est dans le plafond manifeste (ou pas de plafond drive)."""
+    """True si le grant session est dans le plafond manifeste (ou pas de plafond drive).
+
+    Absence de `drive` / de clé `zones` = pas de plafond (True).
+    Liste explicite `zones: []` = plafond vide → aucun grant Drive.
+    """
     ac = manifest_cap_for_alias(manifest, alias)
     if ac is None:
         return True
     drive = ac.get("drive")
     if not isinstance(drive, dict):
         return True
+    if "zones" not in drive:
+        return True
     zones = drive.get("zones")
-    if not zones:
+    if not isinstance(zones, list):
         return True
     allowed = manifest_drive_zones(manifest, alias)
-    if not allowed:
-        return True
     return folder_id.strip() in allowed
 
 
