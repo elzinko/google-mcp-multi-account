@@ -1,8 +1,25 @@
-# ADR-0004 — Admin : master-liste à panneau d'expansion, sans vue de détail
+# ADR-0004 — Admin : liste-maître → page de détail, sans routeur
 
-Statut : **proposé** (en attente de validation PO) · 2026-07-27 · Portée : `admin/index.html` + `admin/server.js`
+Statut : **accepté** — implémenté (fiche 0036, maquette v11) · révisé 2026-07-28 · Portée : `admin/index.html` + `admin/server.js`
 
-> **Mise à jour 2026-07-27 (maquette v7).** À l'usage, le détail d'un compte a grossi (droits par appli, zones). La direction retenue en maquette passe de l'**accordéon** à une **liste-maître → page de détail** (swap de vue, toujours sans routeur). Cet ADR est donc à **réviser** dans ce sens avant ratification : les décisions 2 (édition des zones dans le panneau) et 3 (avertissement piloté par le serveur) restent valables ; seule la forme accordéon vs détail change.
+> **Ratification 2026-07-28 (implémentation, maquette v11).** La forme **accordéon**
+> (`<details>/<summary>`) d'origine est **abandonnée** au profit d'une **liste-maître →
+> page de détail** : un swap d'état DOM (`VIEW = {mode:'list'|'detail'}`, fonctions
+> `renderList` / `renderDetail`), **toujours sans routeur ni URL**. La décision 1 ci-dessous
+> est donc révisée en ce sens ; les figures 1-2 illustrent l'exploration accordéon initiale
+> et valent pour l'esprit (deux états, aucune navigation), pas pour la forme finale.
+>
+> **Écarts assumés à la ratification** (par rapport aux décisions 2 et 3 telles qu'écrites) :
+> - **Décision 2** — l'édition des zones vit dans le **dialogue Zones** existant (bouton
+>   « Zones… » sur la ligne Drive du détail), qui porte déjà les actions par zone
+>   (prolonger / révoquer / ajouter), plutôt qu'en lignes éditables inline dans le panneau.
+>   Fonction identique, forme = modale réutilisée (zéro dépendance, pas de ré-écriture).
+> - **Décision 3** — le serveur expose les **flags de policy bruts** (`/api/profiles` →
+>   `policy`) ; le front en **dérive** les libellés de droits (`capsHtml`, table `SVCDEF`).
+>   L'invariant tenu est l'essentiel : **le front n'affirme jamais un droit en dur** — chaque
+>   « vert / rouge » vient d'un flag réel. Le mapping flag → libellé (partagé, une seule table)
+>   vit côté front plutôt que côté serveur ; la bascule 0037 (corbeille = suppression) n'agira
+>   toujours que sur un flag serveur (`delete`), pas sur le front.
 Fiches liées : 0036 (clarté des cartes), 0037 (sémantique de la suppression en zone)
 
 ## Contexte
@@ -27,10 +44,14 @@ L'UI ne doit pas figer cette décision.
 
 ## Décision
 
-**1. Master-liste seule, détail par expansion in-place** via `<details>/<summary>`
-natif — pas de vue de détail séparée, donc **pas de routeur** (ni hash côté
-front, ni route HTML côté serveur). La carte repliée EST la vue d'ensemble ; la
-carte dépliée EST le détail. Un seul artefact, un seul chemin de rendu.
+**1. Liste-maître → page de détail, par swap d'état DOM** (~~accordéon
+`<details>/<summary>`~~, révisé — cf. ratification en tête). Un seul état
+`VIEW = {mode:'list'|'detail', alias}` et deux chemins de rendu (`renderList` /
+`renderDetail`) dans le même `#cards` : la liste montre une ligne par compte
+(interrupteur · cadenas · décompte · chevron) ; cliquer une ligne rend la page de
+détail (droits par appli, zones, zone de danger) ; « ‹ Comptes » revient à la
+liste. **Toujours pas de routeur** — ni hash côté front, ni route HTML côté
+serveur : une simple bascule d'état, un seul artefact.
 
 **2. L'édition des zones vit dans le panneau déplié de la carte.** Chaque zone
 est une ligne du panneau portant ses propres actions (prolonger / révoquer /
