@@ -426,12 +426,18 @@ function lockHtml(p) {
   }
   return '<button class="lockbtn closed" title="Accès verrouillé — les assistants ne peuvent ni lire ni écrire. Clique pour déverrouiller (30 min)." aria-label="Déverrouiller" onclick="event.stopPropagation();lockClick(\'' + p.alias + '\')">' + LOCK_C + "</button>";
 }
-function capsHtml(key, rules) {
-  if (!rules) return '<span class="cap y">tous droits · libre</span>';
-  const r = key === "drive" ? normDrive(rules) : rules;
+function capsHtml(key, rules, hasPolicy) {
   const def = SVCDEF.find((s) => s.key === key);
+  const libre = '<span class="cap y">tous droits · libre</span>';
+  const denied = () => def.keys.map(([, lbl]) => '<span class="cap n">' + lbl + "</span>").join("");
+  // Service absent des règles : sans policy.json = legacy-libre ; policy présente
+  // mais service non déclaré = default-deny (comme policy-check.py) → tout rouge.
+  if (rules == null) return hasPolicy ? denied() : libre;
+  // Drive : traduit l'ancien schéma ; mode:"open" → normDrive null = service libre.
+  const r = key === "drive" ? normDrive(rules) : rules;
+  if (!r) return libre;
   return def.keys.map(([k, lbl]) => {
-    const on = !!(r && r[k]);
+    const on = !!r[k];
     const note = (key === "drive" && (k === "create" || k === "update") && on && r.zonesOnly) ? ' <span class="d">(zones)</span>' : "";
     return '<span class="cap ' + (on ? "y" : "n") + '">' + lbl + note + "</span>";
   }).join("");
@@ -445,24 +451,27 @@ function renderList() {
   el.innerHTML = PROFILES.map((p) => {
     const cls = "prow can" + (hasWindow(p) ? " open" : "") + (p.connected ? "" : " off");
     const prolongBtn = hasWindow(p) ? '<button class="small" onclick="event.stopPropagation();prolong(\'' + p.alias + '\')">Prolonger…</button>' : "";
-    return '<div class="' + cls + '" onclick="openDetail(\'' + p.alias + '\')">' +
+    // Déconnecté = non ouvrable (seul l'interrupteur agit) : pas d'onclick, pas de chevron.
+    const openAttr = p.connected ? ' onclick="openDetail(\'' + p.alias + '\')"' : "";
+    const chev = p.connected ? "›" : "";
+    return '<div class="' + cls + '"' + openAttr + '>' +
       '<span class="pmail">' + esc(p.email || p.alias) + "</span>" +
       '<span class="pctrl">' + tglHtml(p) + "</span>" +
       '<span class="pctrl">' + lockHtml(p) + prolongBtn + "</span>" +
-      '<span class="pchev">›</span></div>';
+      '<span class="pchev">' + chev + "</span></div>";
   }).join("");
 }
-function openDetail(alias) { renderDetail(alias); }
+function openDetail(alias) { const p = byAlias(alias); if (p && p.connected) renderDetail(alias); }
 function renderDetail(alias) {
   const p = byAlias(alias);
-  if (!p) return renderList();
+  if (!p || !p.connected) return renderList();
   VIEW = { mode: "detail", alias };
   const prolongBtn = hasWindow(p) ? '<button class="small" onclick="prolong(\'' + alias + '\')">Prolonger…</button>' : "";
   const rows = SVCDEF.filter((s) => ["drive","gmail","calendar","keep"].includes(s.key) || (p.policy && p.policy[s.key]))
     .map((s) => {
       const rules = p.policy && p.policy[s.key];
       const zonesBtn = s.key === "drive" ? '<button class="small" onclick="openZonesFor(\'' + alias + '\')">Zones…</button>' : "";
-      return '<div class="srow"><span class="sname">' + s.name + '</span><span class="caps">' + capsHtml(s.key, rules) + "</span>" +
+      return '<div class="srow"><span class="sname">' + s.name + '</span><span class="caps">' + capsHtml(s.key, rules, !!p.policy) + "</span>" +
         '<span class="actions">' + zonesBtn + '<button class="small" onclick="openPolicy(\'' + alias + '\')">Configurer…</button></span></div>';
     }).join("");
   $("cards").innerHTML = '<div class="detail"><div class="dhead">' +
