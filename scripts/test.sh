@@ -1621,6 +1621,19 @@ else
   fail "touchid : strong_auth_reason ou binaire manquant dans gwsa"
 fi
 
+# Sous strongauth, add sans email doit refuser avant Touch ID (fiche 0032 / review #50)
+printf '{"installed":{"client_id":"hermetic-test","client_secret":"not-a-real-secret"}}\n' \
+  > "$GWSA_ROOT/client_secret.json"
+touch "$GWSA_ROOT/.strong-auth"
+out_add="$("$GWSA" add newacct 2>&1)"; rc_add=$?
+rm -f "$GWSA_ROOT/.strong-auth"
+if [[ "$rc_add" -eq 3 ]] \
+  && echo "$out_add" | grep -q 'email requis quand strongauth'; then
+  pass "touchid : gwsa add sans email refusé sous strongauth (exit 3)"
+else
+  fail "touchid : add sans email sous strongauth — rc=$rc_add out=$(echo "$out_add" | head -c 160)"
+fi
+
 # Admin : unlock/grant doivent attendre Touch ID > 20 s (sinon Failed to fetch)
 if grep -q 'GWSA_TIMEOUT_AUTH_MS = 120000' admin/server.js \
   && grep -q 'holdHttpForAuth' admin/server.js \
