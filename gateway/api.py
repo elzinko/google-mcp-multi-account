@@ -9,11 +9,14 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Optional
 
-from .config import client_id, upload_spool
+from .config import client_id, profile_dir, upload_spool
+from .context import get_git_root, get_session_id
 from .errors import GatewayError
 from .executor import run_via_broker
-from .profiles import list_profiles as _list_profiles
+from .profiles import is_locked, list_profiles as _list_profiles
 from .profiles import require_unlocked, validate_alias
+from .project import git_toplevel
+from .sessions import is_session_unlocked
 from .setup_status import setup_status  # noqa: F401 — re-export pour le dispatch MCP
 from .usage import log_usage
 
@@ -47,14 +50,30 @@ def profiles_list() -> dict[str, Any]:
 
 
 def _run(alias: str, gws_args: list[str], timeout: int = 60) -> Any:
-    # Fail-fast local ; le broker re-vérifie lock + policy puis exécute gws.
+    sid = get_session_id()
+    gro = get_git_root() or git_toplevel()
     try:
-        require_unlocked(alias)
+        if sid:
+            d = profile_dir(alias)
+            if not d.is_dir():
+                raise GatewayError(
+                    f"profil inconnu « {alias} » — le créer avec : gwsa add {alias}",
+                    code="not_found",
+                )
+            if is_locked(d) and not is_session_unlocked(sid, alias):
+                raise GatewayError(
+                    f"profil « {alias} » verrouillé pour cette session — "
+                    f"access_request kind=session_unlock",
+                    code="locked",
+                )
+        else:
+            require_unlocked(alias)
     except GatewayError as e:
-        # Le refus local court-circuite le broker : journaliser ici, sinon
-        # cette tentative n'apparaîtrait nulle part dans usage.jsonl.
         if e.code == "locked":
-            log_usage(alias, gws_args, client_id(), decision="refus", reason="locked")
+            log_usage(
+                alias, gws_args, client_id(), decision="refus", reason="locked",
+                session_id=sid, git_root=gro,
+            )
         raise
     return run_via_broker(alias, gws_args, timeout=timeout)
 
@@ -313,46 +332,171 @@ def access_request(
             ),
             "suggested_command": f"gwsa add {alias} {email}",
         }
-    if kind == "unlock":
+    if kind in ("session_unlock", "unlock"):
         mins = max(1, min(int(minutes), 1440))
+        sid = get_session_id()
+        if sid or kind == "session_unlock":
+            if not sid:
+                raise GatewayError("session_unlock nécessite une session MCP active", code="error")
+            return {
+                "ok": True,
+                "elicitation": True,
+                "kind": "session_unlock",
+                "alias": alias,
+                "session_id": sid,
+                "message": (
+                    f"Le profil « {alias} » est verrouillé pour cette session. "
+                    f"L'utilisateur doit exécuter :\n"
+                    f"  gwsa session unlock {sid} {alias} {mins}\n"
+                    f"(déverrouillage limité à cette conversation — {mins} min)."
+                ),
+                "suggested_command": f"gwsa session unlock {sid} {alias} {mins}",
+            }
         return {
             "ok": True,
             "elicitation": True,
             "kind": "unlock",
             "alias": alias,
+            "deprecated": True,
             "message": (
                 f"Le profil « {alias} » est verrouillé (accès sur demande). "
-                f"Pour autoriser l'accès pendant {mins} min, l'utilisateur doit exécuter :\n"
+                f"Depuis une conversation MCP, préférer access_request kind=session_unlock "
+                f"(déverrouillage limité à cette session). Sans session MCP active, legacy poste entier :\n"
                 f"  gwsa unlock {alias} {mins}\n"
-                f"ou utiliser l'interface admin http://127.0.0.1:4877 (démarrer : « gwsa admin ») "
-                f"(Touch ID si strongauth est activé). "
+                f"(déprécié — partagé entre toutes les sessions ; admin http://127.0.0.1:4877). "
                 f"Le LLM ne doit PAS exécuter cette commande ni contourner le verrou."
             ),
             "suggested_command": f"gwsa unlock {alias} {mins}",
         }
-    if kind == "grant":
+    if kind in ("session_grant", "grant", "project_grant"):
         if not folder:
             raise GatewayError(
                 "kind=grant nécessite folder (nom ou ID du dossier Drive)",
                 code="error",
             )
         h = max(1, min(int(hours), 168))
+        sid = get_session_id()
+
+        if kind == "project_grant":
+            if not sid:
+                raise GatewayError("project_grant nécessite une session MCP active", code="error")
+            from .project import grant_allowed_by_manifest, resolve_project
+            from pathlib import Path
+
+            git_root = (get_git_root() or os.environ.get("GWSA_GIT_ROOT", "") or "").strip()
+            start = Path(git_root) if git_root else None
+            proj = resolve_project(start)
+            if not proj.manifest_path:
+                return {
+                    "ok": True,
+                    "elicitation": True,
+                    "kind": "project_grant",
+                    "alias": alias,
+                    "folder": folder,
+                    "session_id": sid,
+                    "message": (
+                        f"Aucun manifeste projet (.gwsa/manifest.json). "
+                        f"L'utilisateur doit d'abord :\n"
+                        f"  gwsa project init\n"
+                        f"  # éditer capabilities.{alias}.drive.zones\n"
+                        f"  gwsa project sign\n"
+                        f"puis access_request kind=project_grant à nouveau."
+                    ),
+                    "suggested_command": "gwsa project init",
+                }
+            if not proj.manifest_valid:
+                return {
+                    "ok": True,
+                    "elicitation": True,
+                    "kind": "project_grant",
+                    "alias": alias,
+                    "folder": folder,
+                    "session_id": sid,
+                    "message": (
+                        f"Manifeste projet présent mais signature invalide "
+                        f"({proj.verify_error or 'non signé'}). "
+                        f"Exécuter : gwsa project sign"
+                    ),
+                    "suggested_command": "gwsa project sign",
+                }
+            # folder peut être un nom — on ne résout pas Drive ici ; on teste si
+            # ça ressemble à un id déjà dans le manifeste, sinon on guide quand même
+            # vers session grant en rappelant le plafond.
+            in_ceiling = grant_allowed_by_manifest(proj.manifest, alias, folder)
+            if not in_ceiling:
+                return {
+                    "ok": True,
+                    "elicitation": True,
+                    "kind": "project_grant",
+                    "alias": alias,
+                    "folder": folder,
+                    "session_id": sid,
+                    "blocked_by_manifest": True,
+                    "message": (
+                        f"« {folder} » n'est pas dans le plafond manifeste projet "
+                        f"pour « {alias} » (.gwsa/manifest.json). "
+                        f"L'humain doit éditer capabilities puis « gwsa project sign », "
+                        f"ou choisir une zone déjà déclarée. "
+                        f"Session grant hors manifeste serait refusé."
+                    ),
+                    "suggested_command": "gwsa project show",
+                }
+            return {
+                "ok": True,
+                "elicitation": True,
+                "kind": "project_grant",
+                "alias": alias,
+                "folder": folder,
+                "session_id": sid,
+                "message": (
+                    f"Zone projet « {folder} » dans le plafond .gwsa/ pour « {alias} ». "
+                    f"Pour l'activer sur cette conversation :\n"
+                    f'  gwsa session grant {sid} {alias} "{folder}" {h}\n'
+                    f"(intersection policy ∩ manifeste ∩ session — {h} h)."
+                ),
+                "suggested_command": f'gwsa session grant {sid} {alias} "{folder}" {h}',
+            }
+
+        if sid or kind == "session_grant":
+            if not sid:
+                raise GatewayError("session_grant nécessite une session MCP active", code="error")
+            return {
+                "ok": True,
+                "elicitation": True,
+                "kind": "session_grant",
+                "alias": alias,
+                "session_id": sid,
+                "folder": folder,
+                "message": (
+                    f"Écriture Drive sous « {folder} » refusée pour cette session. "
+                    f"L'utilisateur doit exécuter :\n"
+                    f'  gwsa session grant {sid} {alias} "{folder}" {h}\n'
+                    f"(zone valable pour cette conversation seulement — {h} h). "
+                    f"Si le dépôt a un .gwsa/ signé, préférer kind=project_grant "
+                    f"(vérifie le plafond manifeste)."
+                ),
+                "suggested_command": f'gwsa session grant {sid} {alias} "{folder}" {h}',
+            }
         return {
             "ok": True,
             "elicitation": True,
             "kind": "grant",
             "alias": alias,
             "folder": folder,
+            "deprecated": True,
             "message": (
                 f"Écriture Drive sous « {folder} » refusée sans zone active. "
-                f"Pour une autorisation temporaire ({h} h), l'utilisateur doit exécuter :\n"
+                f"Depuis une conversation MCP, préférer access_request kind=session_grant "
+                f"ou kind=project_grant (zone limitée à cette session + plafond .gwsa/). "
+                f"Sans session MCP active, legacy poste entier :\n"
                 f"  gwsa grant {alias} \"{folder}\" {h}\n"
-                f"ou via l'admin http://127.0.0.1:4877 (démarrer : « gwsa admin »). Expiration automatique — "
-                f"redemander à chaque session est normal."
+                f"(déprécié — partagé entre toutes les sessions ; admin http://127.0.0.1:4877). "
+                f"Expiration automatique — redemander est normal."
             ),
             "suggested_command": f'gwsa grant {alias} "{folder}" {h}',
         }
     raise GatewayError(
-        "kind invalide — utiliser « unlock », « grant » ou « add_account »",
+        "kind invalide — utiliser « unlock », « grant », « session_unlock », "
+        "« session_grant », « project_grant » ou « add_account »",
         code="error",
     )

@@ -10,7 +10,10 @@ import traceback
 from typing import Any, Callable
 
 from . import api
+from .context import set_git_root, set_session_id
 from .errors import GatewayError
+from .project import git_toplevel
+from .sessions import close_session, create_session
 from .version import server_version
 
 SERVER_NAME = "google-mcp-multi-account"
@@ -150,7 +153,7 @@ TOOLS: list[dict[str, Any]] = [
             "Doc rédigé — sans `content`, le fichier est créé vide. Renvoie le "
             "propriétaire (`owner`, `owned_by_me`) pour vérifier le dépôt. "
             "Soumis aux zones (policy + grants) ; si refusé : appeler "
-            "access_request kind=grant."
+            "access_request kind=session_grant (ou kind=grant legacy poste entier)."
         ),
         "inputSchema": {
             "type": "object",
@@ -197,16 +200,23 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "access_request",
         "description": (
-            "Demande d'élicitation humaine : kind=unlock (profil verrouillé), "
-            "kind=grant (zone Drive temporaire) ou kind=add_account (connecter un "
-            "nouveau compte Google — alias inexistant + email requis). N'exécute "
-            "RIEN — renvoie la commande exacte à faire exécuter par l'utilisateur."
+            "Demande d'élicitation humaine : kind=session_unlock / session_grant / "
+            "project_grant (cette conversation MCP ; project_grant vérifie le plafond "
+            ".gwsa/), kind=unlock / kind=grant (legacy poste entier, déprécié), ou "
+            "kind=add_account (nouveau compte — alias inexistant + email). "
+            "N'exécute RIEN — renvoie la commande exacte à faire exécuter par l'utilisateur."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "alias": {"type": "string"},
-                "kind": {"type": "string", "enum": ["unlock", "grant", "add_account"]},
+                "kind": {
+                    "type": "string",
+                    "enum": [
+                        "unlock", "grant", "add_account",
+                        "session_unlock", "session_grant", "project_grant",
+                    ],
+                },
                 "folder": {"type": "string", "description": "Nom ou ID dossier (si grant)"},
                 "hours": {"type": "integer", "default": 8, "description": "Durée grant"},
                 "minutes": {"type": "integer", "default": 60, "description": "Durée unlock"},
@@ -278,18 +288,6 @@ def _handle(msg: dict) -> None:
     if mid is None and method:
         return
 
-    if method == "initialize":
-        _write({
-            "jsonrpc": "2.0",
-            "id": mid,
-            "result": {
-                "protocolVersion": PROTOCOL_VERSION,
-                "capabilities": {"tools": {"listChanged": False}},
-                "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
-            },
-        })
-        return
-
     if method == "ping":
         _write({"jsonrpc": "2.0", "id": mid, "result": {}})
         return
@@ -331,26 +329,61 @@ def _handle(msg: dict) -> None:
 
 def main() -> None:
     # stderr pour logs — stdout réservé au JSON-RPC
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            msg = json.loads(line)
-        except json.JSONDecodeError:
-            sys.stderr.write(f"gateway-mcp : JSON invalide ignoré\n")
-            continue
-        try:
-            _handle(msg)
-        except Exception:
-            traceback.print_exc(file=sys.stderr)
-            mid = msg.get("id") if isinstance(msg, dict) else None
-            if mid is not None:
-                _write({
-                    "jsonrpc": "2.0",
-                    "id": mid,
-                    "error": {"code": -32603, "message": "internal error"},
-                })
+    active_session_id = ""
+    try:
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                msg = json.loads(line)
+            except json.JSONDecodeError:
+                sys.stderr.write("gateway-mcp : JSON invalide ignoré\n")
+                continue
+            try:
+                if isinstance(msg, dict) and msg.get("method") == "initialize":
+                    # initialize crée la session — capturée pour purge à la déconnexion
+                    mid = msg.get("id")
+                    params = msg.get("params") or {}
+                    state = create_session(client=SERVER_NAME)
+                    active_session_id = state.session_id
+                    set_session_id(state.session_id)
+                    root = git_toplevel()
+                    if root:
+                        set_git_root(root)
+                    _write({
+                        "jsonrpc": "2.0",
+                        "id": mid,
+                        "result": {
+                            "protocolVersion": PROTOCOL_VERSION,
+                            "capabilities": {"tools": {"listChanged": False}},
+                            "serverInfo": {
+                                "name": SERVER_NAME,
+                                "version": SERVER_VERSION,
+                                "session_id": state.session_id,
+                            },
+                        },
+                    })
+                    continue
+                _handle(msg)
+            except Exception:
+                traceback.print_exc(file=sys.stderr)
+                mid = msg.get("id") if isinstance(msg, dict) else None
+                if mid is not None:
+                    _write({
+                        "jsonrpc": "2.0",
+                        "id": mid,
+                        "error": {"code": -32603, "message": "internal error"},
+                    })
+    finally:
+        if active_session_id:
+            try:
+                close_session(active_session_id)
+                sys.stderr.write(
+                    f"gateway-mcp : session {active_session_id} purgée (fin connexion stdio)\n"
+                )
+            except Exception:
+                traceback.print_exc(file=sys.stderr)
 
 
 if __name__ == "__main__":
