@@ -204,6 +204,13 @@ besoin de son propre nom **et** de son propre port :
   --name google-multi-account-v0.1.0 --port 4881
 ```
 
+Pour une **branche / PR jetable** (sans toucher `current` ni l'entrée stable
+`google-multi-account` @ 4878) : `gwsa sandbox deploy --wire` (ou
+`gwsa sandbox wire` après coup). Unwire sélectif :
+`gwsa sandbox wire --remove desktop` (répertoire conservé) ;
+nucléaire : `gwsa sandbox remove <id>`. Détail : `gwsa sandbox --help` et fiche
+[0041](../features/0041-sandbox-deploy-cli.md).
+
 Trois règles, sinon le nom de l'entrée ment sur la version qui répond :
 
 - **Un port par entrée.** L'installeur écrit `GWSA_BROKER_PORT` dans la config,
