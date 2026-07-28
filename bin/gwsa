@@ -65,7 +65,7 @@ check_alias() {
   [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] \
     || die "alias invalide « $1 » (lettres, chiffres, - et _ uniquement)"
   case "$1" in
-    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth|admin|broker|update|release) die "« $1 » est un mot réservé" ;;
+    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth|admin|broker|update|release|session|vault) die "« $1 » est un mot réservé" ;;
   esac
 }
 
@@ -180,6 +180,12 @@ PYEOF
     [[ -n "$rem" ]] && { echo; echo "$rem" >&2; }
   fi
   echo "✓ Profil « $alias » connecté${email:+ — $email}. Test : gwsa $alias auth status"
+  REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.vault import ensure_vault_layout
+ensure_vault_layout(sys.argv[1])
+" "$alias" 2>/dev/null || true
 }
 
 cmd_list() {
@@ -383,6 +389,103 @@ for e in active:
 PYEOF
 }
 
+cmd_session() { # gwsa session unlock|grant|revoke-descendants|show <session_id> …
+  local sub="${1:-}"; shift || true
+  case "$sub" in
+    unlock)
+      local sid="${1:-}" alias="${2:-}" mins="${3:-60}"
+      [[ -n "$sid" && -n "$alias" ]] || die "usage : gwsa session unlock <session_id> <alias> [minutes]"
+      check_alias "$alias"
+      require_strong_auth "déverrouiller « $alias » pour la session $sid ($mins min)"
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import session_unlock
+session_unlock(sys.argv[1], sys.argv[2], int(sys.argv[3]))
+" "$sid" "$alias" "$mins"
+      echo "🔓 session $sid : « $alias » déverrouillé pour $mins min (cette conversation seulement)."
+      ;;
+    grant)
+      local sid="${1:-}" alias="${2:-}" target="${3:-}" hours="${4:-8}"
+      [[ -n "$sid" && -n "$alias" && -n "$target" ]] \
+        || die "usage : gwsa session grant <session_id> <alias> <dossier> [heures]"
+      check_alias "$alias"
+      local dir; dir="$(profile_dir "$alias")"
+      [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+      [[ "$hours" =~ ^[0-9]+$ && "$hours" -ge 1 && "$hours" -le 168 ]] \
+        || die "durée invalide « $hours »"
+      local resolved fid fname
+      resolved="$(resolve_folder "$dir" "$target")"
+      fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
+      [[ -n "$fid" ]] || die "dossier introuvable"
+      require_strong_auth "zone session $sid : « $fname » ($alias, ${hours}h)"
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import session_grant_drive
+session_grant_drive(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5]))
+" "$sid" "$alias" "$fid" "$fname" "$hours"
+      echo "🕐 session $sid : zone « $fname » pour $hours h."
+      ;;
+    revoke-descendants)
+      local sid="${1:-}"; [[ -n "$sid" ]] || die "usage : gwsa session revoke-descendants <session_id>"
+      require_strong_auth "révoquer les sous-sessions de $sid"
+      n="$(REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import revoke_descendants
+print(revoke_descendants(sys.argv[1]))
+" "$sid")"
+      echo "✓ $n sous-session(s) purgée(s) pour $sid."
+      ;;
+    show)
+      local sid="${1:-}"; [[ -n "$sid" ]] || die "usage : gwsa session show <session_id>"
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import json, os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import get_session
+s = get_session(sys.argv[1])
+print(json.dumps(s.to_json() if s else {}, indent=2, ensure_ascii=False))
+" "$sid"
+      ;;
+    *) die "usage : gwsa session unlock|grant|revoke-descendants|show …" ;;
+  esac
+}
+
+cmd_vault() { # gwsa vault migrate — déplace credentials.enc vers .vault/
+  local sub="${1:-migrate}"
+  case "$sub" in
+    migrate)
+      moved="$(REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.vault import migrate_all
+m = migrate_all()
+print(','.join(m) if m else '')
+")"
+      if [[ -n "$moved" ]]; then
+        echo "✓ vault : profils migrés — $moved"
+      else
+        echo "✓ vault : rien à migrer (déjà en place ou aucun credentials.enc dans les profils)."
+      fi
+      ;;
+    status)
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.config import gwsa_root
+from gateway.vault import is_migrated
+root = gwsa_root()
+for p in sorted(root.glob('*/')):
+    if p.name.startswith('.'): continue
+    if (p / 'policy.json').is_file() or (p / 'credentials.enc').is_file():
+        print(p.name, 'vault' if is_migrated(p.name) else 'legacy')
+"
+      ;;
+    *) die "usage : gwsa vault migrate|status" ;;
+  esac
+}
+
 cmd_admin() { # gwsa admin [stop] — interface web locale (127.0.0.1:4877), détachée + idempotente
   local action="${1:-start}" pidf="$GWSA_ROOT/.admin.pid" log="$GWSA_ROOT/admin.log"
   case "$action" in
@@ -509,6 +612,8 @@ main() {
     policy) shift; [[ $# -ge 1 ]] || die "usage : gwsa policy <alias> [show|mode|allow|revoke|clear]"; cmd_policy "$@" ;;
     grant)  shift; [[ $# -ge 1 ]] || die "usage : gwsa grant <alias> <dossier> [heures]"; cmd_grant "$@" ;;
     grants) shift; [[ $# -ge 1 && $# -le 2 ]] || die "usage : gwsa grants <alias> [clear]"; cmd_grants "$@" ;;
+    session) shift; cmd_session "$@" ;;
+    vault) shift; cmd_vault "$@" ;;
     strongauth)
       shift
       [[ $# -le 1 ]] || die "usage : gwsa strongauth on|off|status"
@@ -545,7 +650,12 @@ main() {
       if [[ -f "$USAGE_LOGGER" ]]; then
         "$SYS_PYTHON" "$USAGE_LOGGER" "$GWSA_ROOT" "$alias" "$@" >/dev/null 2>&1 || true
       fi
-      GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" exec gws "$@"
+      GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$("$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, '$REPO_DIR')
+from gateway.vault import gws_config_dir
+print(gws_config_dir(sys.argv[1]))
+" "$alias")" exec gws "$@"
       ;;
   esac
 }

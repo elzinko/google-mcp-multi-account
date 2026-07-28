@@ -1473,6 +1473,55 @@ out_l="$(GWSA_CLI_LINK="$LINK" relenv "$UPDATE" --force 2>&1)"
   && pass "lien PATH : fichier réel jamais remplacé par un lien" \
   || fail "lien PATH : a écrasé un fichier réel"
 
+section "sessions + vault (fiche 0040)"
+
+SESS_ROOT="$TMP/gwsa-sessions"
+mkdir -p "$SESS_ROOT/alpha"
+echo '{"drive":{"read":true,"create":true,"zonesOnly":true,"writeFolders":[]}}' > "$SESS_ROOT/alpha/policy.json"
+touch "$SESS_ROOT/alpha/.locked"
+PY="/usr/bin/python3"
+[[ -x "$PY" ]] || PY="$(command -v python3)"
+
+export GWSA_ROOT="$SESS_ROOT" PYTHONPATH="$(pwd)"
+out_s="$("$PY" -c "
+from gateway.sessions import create_session, session_unlock, session_grant_drive, active_drive_zones, create_child_session, revoke_descendants
+s1 = create_session(client='test')
+s2 = create_session(client='test')
+session_unlock(s1.session_id, 'alpha', 30)
+session_grant_drive(s1.session_id, 'alpha', 'folderAAA', 'ZoneA', 2)
+z1 = active_drive_zones(s1.session_id, 'alpha')
+z2 = active_drive_zones(s2.session_id, 'alpha')
+child = create_child_session(s1.session_id)
+zc = active_drive_zones(child.session_id, 'alpha')
+print('z1', len(z1), 'z2', len(z2), 'zc', len(zc))
+")"
+[[ "$out_s" == *"z1 1"* && "$out_s" == *"z2 0"* && "$out_s" == *"zc 1"* ]] \
+  && pass "sessions : grants isolés par session, héritage enfant" \
+  || fail "sessions : isolation ou héritage incorrect ($out_s)"
+
+n_rev="$("$PY" -c "
+from gateway.sessions import create_session, create_child_session, revoke_descendants
+p = create_session(client='t')
+c = create_child_session(p.session_id)
+print(revoke_descendants(p.session_id))
+")"
+[[ "$n_rev" == "1" ]] \
+  && pass "sessions : revoke_descendants purge les enfants" \
+  || fail "sessions : revoke_descendants ($n_rev)"
+
+mkdir -p "$SESS_ROOT/beta"
+echo 'secret' > "$SESS_ROOT/beta/credentials.enc"
+GWSA_ROOT="$SESS_ROOT" "$PY" -c "
+from gateway.vault import migrate_alias, is_migrated, gws_config_dir
+from pathlib import Path
+assert migrate_alias('beta')
+assert is_migrated('beta')
+assert not Path('$SESS_ROOT/beta/credentials.enc').exists()
+assert gws_config_dir('beta').name == 'beta'
+" 2>/dev/null \
+  && pass "vault : migration credentials.enc vers .vault/" \
+  || fail "vault : migration"
+
 # --- Bilan ------------------------------------------------------------------
 
 printf '\n\033[1mBilan : %d réussis, %d échoués\033[0m\n' "$PASS" "$FAIL"

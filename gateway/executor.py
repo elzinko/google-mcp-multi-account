@@ -12,6 +12,7 @@ from typing import Any
 
 from .broker_server import broker_host, broker_port, ensure_token, token_path
 from .config import REPO_DIR, SYS_PYTHON, client_id
+from .context import get_git_root, get_session_id
 from .errors import GatewayError
 
 _CONNECT_TIMEOUT = 2.0
@@ -92,16 +93,20 @@ def run_gws(profile_dir: str, args: list[str], timeout: int = 60) -> Any:
 def run_via_broker(alias: str, args: list[str], timeout: int = 60) -> Any:
     ensure_broker_running()
     tok = ensure_token()
-    resp = _request(
-        {
-            "token": tok,
-            "cmd": "exec",
-            "alias": alias,
-            "args": args,
-            "client": client_id(),
-        },
-        timeout=float(timeout) + 5,
-    )
+    payload: dict[str, Any] = {
+        "token": tok,
+        "cmd": "exec",
+        "alias": alias,
+        "args": args,
+        "client": client_id(),
+    }
+    sid = get_session_id()
+    if sid:
+        payload["session_id"] = sid
+    gro = get_git_root()
+    if gro:
+        payload["git_root"] = gro
+    resp = _request(payload, timeout=float(timeout) + 5)
     if not resp.get("ok"):
         raise GatewayError(
             resp.get("error") or "refus broker",

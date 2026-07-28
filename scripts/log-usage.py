@@ -19,6 +19,12 @@ try:
         "cmd": " ".join(args),
         "decision": os.environ.get("GWSA_LOG_DECISION", "ok"),
     }
+    sid = os.environ.get("GWSA_SESSION_ID", "")
+    if sid:
+        entry["session_id"] = sid
+    gro = os.environ.get("GWSA_GIT_ROOT", "")
+    if gro:
+        entry["git_root"] = gro
     reason = os.environ.get("GWSA_LOG_REASON", "")
     if reason:
         entry["reason"] = reason
