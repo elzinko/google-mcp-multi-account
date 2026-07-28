@@ -1731,6 +1731,120 @@ else
   printf '  \033[33m⊘\033[0m dev test hermétique : node absent — ignoré\n'
 fi
 
+section "gwsa dev — deploy isolé, use, list, status, remove (hermétique)"
+# HOME factice : DEV_PROD_ROOT / DEV_ISOLATED_ROOT vivent sous ~/.config/…
+# (jamais le vrai $HOME). client_secret.json = fixture OAuth, pas un secret réel.
+
+DEVCORR_HOME="$TMP/devcorr-home"
+DEVCORR_DEP="$TMP/devcorr-deploy"
+DEVCORR_CFG="$TMP/devcorr-desktop.json"
+DEVCORR_PROD="$DEVCORR_HOME/.config/gws-accounts"
+DEVCORR_ISO="$DEVCORR_HOME/.config/gws-accounts-dev"
+mkdir -p "$DEVCORR_PROD"
+printf '{"installed":{"client_id":"hermetic-test","client_secret":"not-a-real-secret"}}\n' \
+  > "$DEVCORR_PROD/client_secret.json"
+chmod 600 "$DEVCORR_PROD/client_secret.json"
+
+branch="$(git rev-parse --abbrev-ref HEAD)"
+sha="$(git rev-parse --short HEAD)"
+part="$(printf '%s' "$branch" | tr '/' '-' | tr -cd 'A-Za-z0-9-')"
+[[ -n "$part" ]] || part="branch"
+dev_corr_id="dev-${part}-${sha}"
+dev_corr_target="$DEVCORR_DEP/$dev_corr_id"
+server_name="google-mcp-$dev_corr_id"
+
+out_iso="$(HOME="$DEVCORR_HOME" GWSA_DEPLOY_ROOT="$DEVCORR_DEP" \
+  "$GWSA" dev deploy --isolated 2>&1)" || true
+if [[ -d "$dev_corr_target" ]] \
+  && echo "$out_iso" | grep -q '(isolé)' \
+  && [[ -f "$DEVCORR_ISO/client_secret.json" ]] \
+  && cmp -s "$DEVCORR_PROD/client_secret.json" "$DEVCORR_ISO/client_secret.json" \
+  && DEVCORR_ISO="$DEVCORR_ISO" DEVCORR_TARGET="$dev_corr_target" python3 - <<'PY'
+import json, os, stat
+iso = os.environ["DEVCORR_ISO"]
+target = os.environ["DEVCORR_TARGET"]
+mode = os.stat(os.path.join(iso, "client_secret.json")).st_mode & 0o777
+assert mode == 0o600, oct(mode)
+meta = json.load(open(os.path.join(target, ".dev-meta.json"), encoding="utf-8"))
+assert meta.get("isolated") is True, meta
+assert meta.get("gwsa_root") == iso, meta
+PY
+then
+  pass "dev deploy --isolated : meta isolated + client_secret.json copié (0600, sans lire le contenu)"
+else
+  fail "dev deploy --isolated : seed OAuth ou meta incorrect — $(echo "$out_iso" | tail -5 | tr '\n' ' ')"
+fi
+
+# Relance : secret déjà présent → pas d'écrasement ni d'erreur
+touch -t 202001010000 "$DEVCORR_ISO/client_secret.json"
+HOME="$DEVCORR_HOME" GWSA_DEPLOY_ROOT="$DEVCORR_DEP" \
+  "$GWSA" dev deploy --isolated >/dev/null 2>&1 || true
+if DEVCORR_ISO="$DEVCORR_ISO" python3 - <<'PY'
+import os, time
+path = os.path.join(os.environ["DEVCORR_ISO"], "client_secret.json")
+assert time.localtime(os.path.getmtime(path)).tm_year == 2020
+PY
+then
+  pass "dev deploy --isolated : client_secret existant non écrasé (idempotent)"
+else
+  fail "dev deploy --isolated : client_secret.json réécrit alors qu'il existait déjà"
+fi
+
+if HOME="$DEVCORR_HOME" GWSA_DEPLOY_ROOT="$DEVCORR_DEP" \
+  GWSA_DESKTOP_CONFIG="$DEVCORR_CFG" \
+  "$GWSA" dev use "$dev_corr_id" --claude-desktop --apply >/dev/null 2>&1 \
+  && DEVCORR_CFG="$DEVCORR_CFG" DEVCORR_ISO="$DEVCORR_ISO" \
+     DEVCORR_TARGET="$dev_corr_target" SERVER_NAME="$server_name" python3 - <<'PY'
+import json, os
+cfg = os.environ["DEVCORR_CFG"]
+name = os.environ["SERVER_NAME"]
+iso = os.environ["DEVCORR_ISO"]
+target = os.environ["DEVCORR_TARGET"]
+entry = json.load(open(cfg, encoding="utf-8"))["mcpServers"][name]
+assert entry["command"] == os.path.join(target, "bin", "google-mcp"), entry
+env = entry["env"]
+assert env["GWSA_CLIENT"] == "claude-desktop", env
+assert env["GWSA_ROOT"] == iso, env
+assert env["GWSA_BROKER_PORT"].isdigit(), env
+PY
+then
+  pass "dev use --claude-desktop --apply : JSON MCP correct (config temporaire)"
+else
+  fail "dev use --claude-desktop --apply : structure JSON incorrecte"
+fi
+
+list_out="$(HOME="$DEVCORR_HOME" GWSA_DEPLOY_ROOT="$DEVCORR_DEP" "$GWSA" dev list 2>&1)"
+if echo "$list_out" | grep -q "$dev_corr_id" \
+  && echo "$list_out" | grep -q "$DEVCORR_ISO"; then
+  pass "dev list : version dev + GWSA_ROOT isolé visibles"
+else
+  fail "dev list : version ou root isolé absent"
+fi
+
+status_out="$(HOME="$DEVCORR_HOME" GWSA_DEPLOY_ROOT="$DEVCORR_DEP" \
+  "$GWSA" dev status "$dev_corr_id" 2>&1)"
+if echo "$status_out" | grep -q "Version $dev_corr_id"; then
+  pass "dev status <id> : version dev affichée"
+else
+  fail "dev status <id> : version absente — $(echo "$status_out" | tr '\n' ' ')"
+fi
+
+if HOME="$DEVCORR_HOME" GWSA_DEPLOY_ROOT="$DEVCORR_DEP" \
+  "$GWSA" dev remove "$dev_corr_id" >/dev/null 2>&1 \
+  && [[ ! -d "$dev_corr_target" ]]; then
+  pass "dev remove <id> : version dev supprimée"
+else
+  fail "dev remove <id> : répertoire encore présent"
+fi
+
+rm_stable_out="$(HOME="$DEVCORR_HOME" GWSA_DEPLOY_ROOT="$DEVCORR_DEP" \
+  "$GWSA" dev remove v1.0.0 2>&1)" || true
+if echo "$rm_stable_out" | grep -q "n'est pas une version dev"; then
+  pass "dev remove : refuse une version stable (dev-* uniquement)"
+else
+  fail "dev remove : aurait dû refuser une version stable — $rm_stable_out"
+fi
+
 # --- Bilan ------------------------------------------------------------------
 
 printf '\n\033[1mBilan : %d réussis, %d échoués\033[0m\n' "$PASS" "$FAIL"

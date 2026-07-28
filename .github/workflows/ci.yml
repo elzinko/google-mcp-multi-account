@@ -46,6 +46,11 @@ jobs:
       - name: Syntaxe Node
         run: node --check admin/server.js
 
+      # Hermétique (GWSA_ROOT / HOME / configs temporaires) : policy, gateway MCP,
+      # admin zones (wiring + API grant/drive-folder), gwsa dev (deploy isolé,
+      # use --apply, list/status/remove, dev test + marqueur afSearchHits).
+      # Touch ID / swiftc : job macOS manuel (label « macos ») — jamais en CI Linux.
+      # PR checkout = merge commit GitHub (HEAD = fusion PR→main), comme en prod.
       - name: Tests (policy + garde-fous gwsa)
         run: ./scripts/test.sh
 
