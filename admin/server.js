@@ -152,10 +152,13 @@ async function listProfiles() {
     const connected = fs.existsSync(path.join(dir, "credentials.enc"));
     const hasLock = fs.existsSync(path.join(dir, ".locked"));
     let unlockedForMin = 0;
+    // unlockedUntil : échéance du déverrouillage en epoch SECONDES (0 = verrouillé
+    // ou pas de fenêtre). Le front en fait un décompte réel (fiche 0036) ; on ne
+    // pré-formate pas en minutes côté serveur pour que le compte à rebours vive.
+    let unlockedUntil = 0;
     if (hasLock) {
-      let until = 0;
-      try { until = parseInt(fs.readFileSync(path.join(dir, ".unlock-until"), "utf8"), 10) || 0; } catch {}
-      unlockedForMin = Math.max(0, Math.floor((until - Date.now() / 1000) / 60));
+      try { unlockedUntil = parseInt(fs.readFileSync(path.join(dir, ".unlock-until"), "utf8"), 10) || 0; } catch {}
+      unlockedForMin = Math.max(0, Math.floor((unlockedUntil - Date.now() / 1000) / 60));
     }
     let policy = null;
     try { policy = JSON.parse(fs.readFileSync(path.join(dir, "policy.json"), "utf8")); } catch {}
@@ -167,7 +170,7 @@ async function listProfiles() {
         .map((e) => ({ id: e.id, name: e.name, minutesLeft: Math.floor((e.expiresAt - now) / 60) }));
     } catch {}
     const email = connected ? await gwsEmail(alias) : "";
-    out.push({ alias, connected, email, locked: hasLock, unlockedForMin, policy, grants });
+    out.push({ alias, connected, email, locked: hasLock, unlockedForMin, unlockedUntil, policy, grants });
   }
   return out.sort((a, b) => a.alias.localeCompare(b.alias));
 }

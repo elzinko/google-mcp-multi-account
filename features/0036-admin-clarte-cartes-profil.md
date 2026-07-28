@@ -5,8 +5,8 @@ type: feature
 priority: P2
 version:
 epic:
-status: todo
-ready:
+status: in-progress
+ready: 2026-07-28
 pr:
 created: 2026-07-27
 ---
