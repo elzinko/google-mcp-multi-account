@@ -5,10 +5,11 @@ type: feature
 priority: P3
 version:
 epic:
-status: idea
+status: in-progress
 ready:
 pr:
 created: 2026-07-20
+updated: 2026-07-28
 ---
 
 ## Contexte / Problème
@@ -52,15 +53,12 @@ tranché explicitement.
 Périmètre pressenti **ici** : les deux points d'élicitation existants, `unlock` et
 `grant` (Drive). Rien d'autre pour l'instant.
 
-## ⛔ Dépendance bloquante — ne rien démarrer avant
+## ⛔ Dépendance whatsapp-group-mcp#0007
 
-**Tant que la fiche 0007 de `whatsapp-group-mcp` n'est pas faite ET testée en conditions
-réelles, on ne bouge pas ici.** Ce projet est le **second consommateur**, pas le
-pionnier : il récupère un mécanisme éprouvé, il ne le défriche pas. Toute avance prise
-ici serait du travail à refaire.
-
-Signal de déblocage : 0007 `shipped`, avec un retour d'expérience réel (le doigt de
-Thomas, pas seulement les tests à clé logicielle).
+**État constaté le 2026-07-28** : fiche 0007 toujours `idea` (non shipped). Le user a
+autorisé l'implémentation du **chemin macOS / gwsa** dans ce repo sans attendre 0007
+(transport WhatsApp reste bloqué côté l'autre projet). Conception alignée sur les 4
+décisions de 0007 ; ADR local : [ADR-0005](../docs/adr/ADR-0005-elicitation-signee-v2.md).
 
 ## Questions ouvertes (à trancher au grooming, une fois débloquée)
 
@@ -109,24 +107,24 @@ Thomas, pas seulement les tests à clé logicielle).
 
 ## Critères d'acceptation
 
-*(esquisse — à compléter au grooming, une fois 0007 livrée et les questions ci-dessus
-tranchées ; ne pas passer le gate `ready` en l'état)*
-
-- [ ] `gwsa unlock` et `gwsa grant` exigent une **signature fraîche** liée à l'action
-      exacte (alias + action + cible + date), pas un simple booléen de présence
-- [ ] Rejeu refusé (nonce) ; question modifiée = signature invalide (hachage)
-- [ ] Reçus signés journalisés (au minimum dans `usage.jsonl`, aux côtés des décisions
-      policy déjà tracées)
-- [ ] Repli documenté en cas d'absence de biométrie ; jamais d'accord silencieux
-- [ ] Décision tracée (ADR ou note) sur la mutualisation retenue
+- [x] `gwsa unlock` / `grant` / `session unlock` / `session grant` exigent une
+      **signature fraîche** liée à l'action quand `strongauth on` (payload canonique +
+      nonce ; plus de simple booléen `touchid.swift`)
+- [x] Rejeu refusé (nonce) ; payload modifié = signature invalide
+- [x] Reçus signés journalisés (`~/.config/gws-accounts/.elicitation/receipts.jsonl` +
+      `usage.jsonl` decision `elicitation`)
+- [x] Repli documenté fail closed (ADR-0005) ; pas d'accord silencieux
+- [x] Décision mutualisation : copie locale, extraction différée (ADR-0005)
+- [x] Admin web : même flux signé sur unlock/grant (aujourd'hui délègue à `gwsa` — OK si strongauth+enroll) ; panneau **Sessions** pour unlock/grant session-scopés
+- [ ] Enrôlement Secure Enclave validé **en conditions réelles** (doigt, pas seulement mock CI)
+- [ ] Retour d'expérience croisé avec whatsapp-group-mcp#0007 une fois shipped
 
 ## Notes
 
-- **État de l'art interne à reprendre** : `scripts/touchid.swift` (~25 lignes,
-  `.deviceOwnerAuthentication`), `gwsa strongauth on|off|status` (drapeau
-  `~/.config/gws-accounts/.strong-auth`), `require_strong_auth()` dans `bin/gwsa`.
-  Même dépendance (LocalAuthentication), même contrainte de compilation (`swiftc`, pas
-  de Xcode requis) — il manque la signature et la liaison à la question.
+- **État de l'art interne (2026-07-28)** : `gateway/elicitation.py`,
+  `scripts/elicitation-sign.swift` (enroll + sign P-256), `gwsa elicitation enroll`,
+  `require_signed_elicitation` dans `bin/gwsa`. `touchid.swift` conservé mais non
+  utilisé quand strongauth est activé.
 - **Verdict déjà acquis (2026-07-19)** : pas de « plugin Claude Desktop ». Desktop
   consomme des serveurs MCP ; l'« extension » `.mcpb`/`.dxt` n'est qu'un emballage
   d'installation, sans API ni garantie supplémentaire. Le cérémonial vient de toute
