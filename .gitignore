@@ -23,6 +23,9 @@ __pycache__/
 # Scratch de sprint ezk (éphémère, par-branche)
 SPRINT.md
 
+# Binaire Touch ID compilé localement (swiftc, plateforme-dépendant)
+bin/mcp-google-mcp-multi-account
+
 # Version DÉPLOYÉE — générée par scripts/deploy-local.sh, jamais commitée.
 # C'est son absence qui fait qu'un clone de travail s'annonce « dev » (fiche 0023).
 VERSION
