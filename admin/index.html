@@ -116,7 +116,7 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
 .mtop { margin-top:14px; display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
 
 /* ── Refonte v11 (fiche 0036) : liste → page de compte ── */
-.prow { display:grid; grid-template-columns:1fr auto auto 30px; align-items:center; gap:14px;
+.prow { display:grid; grid-template-columns:1fr auto 30px; align-items:center; gap:14px;
   background:var(--card); border:1px solid var(--line); border-radius:12px; padding:13px 16px; margin:10px 0; }
 .prow.open { border-left:3px solid var(--warn); }
 .prow.off  { background:color-mix(in srgb,var(--bg) 55%, var(--card)); }
@@ -126,13 +126,6 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
 .pmail { font-weight:700; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .pctrl { display:inline-flex; align-items:center; gap:9px; }
 .pchev { color:var(--mut); display:inline-flex; justify-content:center; }
-/* interrupteur de connexion */
-.tgl { width:38px; height:22px; border-radius:99px; border:1px solid var(--line); background:var(--bg);
-  position:relative; cursor:pointer; padding:0; flex-shrink:0; }
-.tgl .knob { position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:99px;
-  background:var(--card); border:1px solid var(--line); transition:left .15s; }
-.tgl[aria-checked="true"] { background:var(--okbg); border-color:color-mix(in srgb,var(--ok) 45%,transparent); }
-.tgl[aria-checked="true"] .knob { left:18px; background:var(--ok); border-color:var(--ok); }
 /* cadenas = bouton d'accès */
 .lockbtn { width:30px; height:30px; border-radius:9px; border:1px solid; display:inline-flex;
   align-items:center; justify-content:center; cursor:pointer; padding:0; flex-shrink:0; background:var(--card); }
@@ -157,7 +150,6 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
 .cap .d { color:var(--mut); font-weight:400; }
 .danger { margin-top:18px; border:1px solid color-mix(in srgb,var(--bad) 35%,var(--line)); border-radius:10px;
   padding:12px 14px; background:color-mix(in srgb,var(--badbg) 55%,transparent); }
-.danger .dl { font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--bad); margin:0 0 8px; }
 .danger .drx { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .danger p { margin:0; font-size:12.5px; color:var(--mut); flex:1; min-width:180px; }
 </style>
@@ -172,11 +164,10 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
   <button onclick="openDoc()">❓ Doc</button>
 </header>
 <main>
-  <p class="note">La ligne d'un compte se lit en trois temps.
-  <b>L'interrupteur</b> : le compte est-il connecté à Google ?
+  <p class="note">La ligne d'un compte se lit en deux temps.
   <b>Le cadenas</b> : l'accès est-il verrouillé ou déverrouillé ? C'est un bouton — clique dessus.
   <b>Le décompte</b> : le temps restant, en vrai.
-  Un compte déconnecté est grisé : un seul geste possible, l'interrupteur.</p>
+  Un compte déconnecté est grisé : « Reconnecter » sur la ligne, ou « + Connecter un compte ».</p>
   <div id="cards"></div>
 </main>
 
@@ -435,9 +426,9 @@ function summary(p) {
   return chips;
 }
 
-// ── Refonte v11 (fiche 0036) : deux commandes par compte, jamais mêlées ──
-//   L'INTERRUPTEUR = connexion à Google.  LE CADENAS = accès (verrou), cliquable,
-//   avec décompte réel. « Révoquer » descend dans la zone de danger du détail.
+// ── Refonte v11 (fiche 0036) : liste → détail ──
+//   Connexion : « + Connecter un compte » ou « Reconnecter » (profil déconnecté).
+//   Déconnexion : bouton du détail.  LE CADENAS = accès (verrou), cliquable, décompte réel.
 //   On réutilise les dialogues existants (policy, zones, révocation).
 const LOCK_C = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
 const LOCK_O = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.8-1.3"/></svg>';
@@ -459,11 +450,8 @@ function fmtLeft(p) {
   return m >= 60 ? "encore " + Math.floor(m / 60) + " h " + String(m % 60).padStart(2, "0")
                  : "encore " + m + ":" + String(s % 60).padStart(2, "0");
 }
-function tglHtml(p) {
-  return '<button class="tgl" role="switch" aria-checked="' + (p.connected ? "true" : "false") +
-    '" title="' + (p.connected ? "Connecté à Google. Pour retirer ce compte : page du compte → zone de danger."
-      : "Déconnecté de Google. Clique pour refaire la connexion.") +
-    '" onclick="event.stopPropagation();connToggle(\'' + p.alias + '\')"><span class="knob"></span></button>';
+function reconnectBtn(alias) {
+  return '<button class="small" onclick="event.stopPropagation();reconnect(\'' + alias + '\')">Reconnecter</button>';
 }
 function lockHtml(p) {
   if (!p.connected) return '<span class="offword">Déconnecté</span>';
@@ -499,13 +487,14 @@ function renderList() {
   el.innerHTML = PROFILES.map((p) => {
     const cls = "prow can" + (hasWindow(p) ? " open" : "") + (p.connected ? "" : " off");
     const prolongBtn = hasWindow(p) ? '<button class="small" onclick="event.stopPropagation();prolong(\'' + p.alias + '\')">Prolonger…</button>' : "";
-    // Déconnecté = non ouvrable (seul l'interrupteur agit) : pas d'onclick, pas de chevron.
+    const lockArea = p.connected
+      ? '<span class="pctrl">' + lockHtml(p) + prolongBtn + "</span>"
+      : '<span class="pctrl">' + reconnectBtn(p.alias) + ' <span class="offword">Déconnecté</span></span>';
     const openAttr = p.connected ? ' onclick="openDetail(\'' + p.alias + '\')"' : "";
     const chev = p.connected ? "›" : "";
     return '<div class="' + cls + '"' + openAttr + '>' +
       '<span class="pmail">' + esc(p.email || p.alias) + "</span>" +
-      '<span class="pctrl">' + tglHtml(p) + "</span>" +
-      '<span class="pctrl">' + lockHtml(p) + prolongBtn + "</span>" +
+      lockArea +
       '<span class="pchev">' + chev + "</span></div>";
   }).join("");
 }
@@ -525,16 +514,11 @@ function renderDetail(alias) {
   $("cards").innerHTML = '<div class="detail"><div class="dhead">' +
     '<button class="back" onclick="renderList()">‹ Comptes</button>' +
     '<div class="drow"><span class="dmail">' + esc(p.email || alias) + "</span>" +
-      tglHtml(p) + lockHtml(p) + prolongBtn + "</div></div>" +
+      lockHtml(p) + prolongBtn + "</div></div>" +
     '<div class="dbody"><p class="plabel">Droits par application</p>' + rows +
-    '<div class="danger"><p class="dl">Zone de danger</p><div class="drx">' +
+    '<div class="danger"><div class="drx">' +
       "<p>L'outil oublie ce compte : les assistants n'y auront plus accès et tes réglages (zones, autorisations) seront perdus. Rien n'est supprimé dans ton compte Google. Pour l'utiliser à nouveau, il faudra refaire une connexion complète.</p>" +
-      '<button class="danger" onclick="openRevoke(\'' + alias + '\')">Retirer ce compte de l\'outil</button></div></div></div></div>';
-}
-function connToggle(alias) {
-  const p = byAlias(alias);
-  if (p && p.connected) toast("Pour déconnecter ce compte : page du compte → zone de danger.");
-  else reconnect(alias);
+      '<button class="danger" onclick="openRevoke(\'' + alias + '\')">Déconnecter ce compte</button></div></div></div></div>';
 }
 function lockClick(alias) {
   const p = byAlias(alias);
@@ -584,7 +568,7 @@ function openRevoke(alias) { revokeTarget = alias; $("revokeAlias").textContent 
 async function doRevoke() {
   if ($("revokeConfirm").value.trim() !== revokeTarget) return toast("Alias saisi ≠ « " + revokeTarget + " » — révocation annulée");
   await act(revokeTarget, "revoke");
-  dRevoke.close(); toast("⛔ " + revokeTarget + " révoqué");
+  dRevoke.close(); toast("⛔ " + revokeTarget + " déconnecté");
 }
 function reconnect(alias) { $("addAlias").value = alias; $("addEmail").value = ""; $("addStatus").textContent = ""; dAdd.showModal(); }
 
