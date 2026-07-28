@@ -42,18 +42,23 @@ Deux manques au moment du consentement :
   de la fiche 0001 (signature) ; ici, viser au moins que le texte cite
   « google-mcp-multi-account ».
 
-## Livré (PR #48)
+## Livré (PR #48, précisé #50)
 
-- `strong_auth_reason` affiche l'**email** (pas l'alias) dans la raison Touch ID
-  — ex. `déverrouiller le compte Google thomas@…`
+- unlock / grant : `strong_auth_reason` affiche l'**email** (pas l'alias) —
+  ex. `déverrouiller le compte Google thomas@…`
 - Binaire compilé nommé `bin/mcp-google-mcp-multi-account` (macOS n'affiche
   plus « swift » / `swift-frontend` comme demandeur)
+- `gwsa add` : si strongauth est actif, l'**email est requis**
+  (`gwsa add <alias> <email>`) — Touch ID cite cet email, plus jamais l'alias
+  seul (avant connexion il n'y a pas encore de `.email`)
 - Formule retenue : email d'abord (sans « alias + email ») — l'intention
   « nommer le compte » est couverte ; la signature dure reste fiche 0001
 
 ## Critères d'acceptation
 
-- [x] La raison Touch ID cite l'email du compte (pas seulement l'alias)
+- [x] La raison Touch ID cite l'email du compte (pas seulement l'alias) —
+      unlock/grant via `.email` ; add via email-attendu obligatoire sous
+      strongauth
 - [x] Le dialogue système nomme un binaire produit (`mcp-google-mcp-multi-account`),
       pas `swift`
 
