@@ -218,9 +218,16 @@ commandes, le broker les exécute et applique verrous, policy et zones. Deux
 versions sur un même port se partagent le premier broker démarré — le résultat
 ne correspond alors à aucune des deux.
 
-Le couloir de développement part avec un `GWSA_ROOT` vide : il faut y connecter au
-moins un compte (`gwsa add <alias>`) — geste humain, une fois. C'est le prix de
-l'isolation : ton code en chantier ne voit pas tes vrais comptes.
+Le couloir de développement part sans comptes : `gwsa dev deploy --isolated`
+crée `~/.config/gws-accounts-dev` et y copie `client_secret.json` depuis la
+prod (l'app OAuth seulement — pas les tokens). Il reste à connecter au moins
+un compte de test (`GWSA_ROOT=… gwsa add <alias>`) — geste humain, une fois.
+C'est le prix de l'isolation : ton code en chantier ne voit pas tes vrais
+comptes.
+
+Pour valider une PR depuis un worktree : `./bin/gwsa dev test` déploie la
+branche courante, redémarre l'admin sur le code déployé et affiche un résumé
+(id, URL, marqueur `afSearchHits`). Voir [PR_VALIDATION.md](PR_VALIDATION.md).
 
 ## Limites v1
 
