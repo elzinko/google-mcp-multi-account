@@ -10,6 +10,7 @@
 #
 # Usage :
 #   gwsa add <alias> [email-attendu] [options login]  Créer un profil et connecter un compte
+#                                                   (email obligatoire si strongauth on)
 #   gwsa list                                         Lister les profils et leur état
 #   gwsa lock <alias>                                 Verrouiller un profil (accès sur demande)
 #   gwsa unlock <alias> [minutes]                     Déverrouiller temporairement (défaut 60 min)
@@ -166,6 +167,11 @@ cmd_add() { # cmd_add <alias> [email-attendu] [options gws auth login]
   # Connecter un compte élargit la surface d'accès : même barrière biométrique
   # que unlock/grant quand strongauth est activée (après le check du secret,
   # pour qu'un environnement de test sans secret n'atteigne jamais Touch ID).
+  # Sous strongauth, l'email est obligatoire : pas encore de `.email` avant la
+  # connexion, et Touch ID doit nommer le compte (fiche 0032), pas l'alias.
+  if [[ -z "$expected" && -f "$GWSA_ROOT/.strong-auth" ]]; then
+    die "usage : gwsa add <alias> <email> — email requis quand strongauth est actif (Touch ID nomme le compte)"
+  fi
   if [[ -n "$expected" ]]; then
     require_strong_auth "connecter un nouveau compte Google $expected"
   else
