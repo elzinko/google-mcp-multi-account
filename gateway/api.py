@@ -9,11 +9,14 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Optional
 
-from .config import client_id, upload_spool
+from .config import client_id, profile_dir, upload_spool
+from .context import get_git_root, get_session_id
 from .errors import GatewayError
 from .executor import run_via_broker
-from .profiles import list_profiles as _list_profiles
+from .profiles import is_locked, list_profiles as _list_profiles
 from .profiles import require_unlocked, validate_alias
+from .project import git_toplevel
+from .sessions import is_session_unlocked
 from .setup_status import setup_status  # noqa: F401 — re-export pour le dispatch MCP
 from .usage import log_usage
 
@@ -47,14 +50,30 @@ def profiles_list() -> dict[str, Any]:
 
 
 def _run(alias: str, gws_args: list[str], timeout: int = 60) -> Any:
-    # Fail-fast local ; le broker re-vérifie lock + policy puis exécute gws.
+    sid = get_session_id()
+    gro = get_git_root() or git_toplevel()
     try:
-        require_unlocked(alias)
+        if sid:
+            d = profile_dir(alias)
+            if not d.is_dir():
+                raise GatewayError(
+                    f"profil inconnu « {alias} » — le créer avec : gwsa add {alias}",
+                    code="not_found",
+                )
+            if is_locked(d) and not is_session_unlocked(sid, alias):
+                raise GatewayError(
+                    f"profil « {alias} » verrouillé pour cette session — "
+                    f"access_request kind=session_unlock",
+                    code="locked",
+                )
+        else:
+            require_unlocked(alias)
     except GatewayError as e:
-        # Le refus local court-circuite le broker : journaliser ici, sinon
-        # cette tentative n'apparaîtrait nulle part dans usage.jsonl.
         if e.code == "locked":
-            log_usage(alias, gws_args, client_id(), decision="refus", reason="locked")
+            log_usage(
+                alias, gws_args, client_id(), decision="refus", reason="locked",
+                session_id=sid, git_root=gro,
+            )
         raise
     return run_via_broker(alias, gws_args, timeout=timeout)
 
@@ -313,8 +332,26 @@ def access_request(
             ),
             "suggested_command": f"gwsa add {alias} {email}",
         }
-    if kind == "unlock":
+    if kind in ("session_unlock", "unlock"):
         mins = max(1, min(int(minutes), 1440))
+        sid = get_session_id()
+        if sid or kind == "session_unlock":
+            if not sid:
+                raise GatewayError("session_unlock nécessite une session MCP active", code="error")
+            return {
+                "ok": True,
+                "elicitation": True,
+                "kind": "session_unlock",
+                "alias": alias,
+                "session_id": sid,
+                "message": (
+                    f"Le profil « {alias} » est verrouillé pour cette session. "
+                    f"L'utilisateur doit exécuter :\n"
+                    f"  gwsa session unlock {sid} {alias} {mins}\n"
+                    f"(déverrouillage limité à cette conversation — {mins} min)."
+                ),
+                "suggested_command": f"gwsa session unlock {sid} {alias} {mins}",
+            }
         return {
             "ok": True,
             "elicitation": True,
@@ -330,13 +367,32 @@ def access_request(
             ),
             "suggested_command": f"gwsa unlock {alias} {mins}",
         }
-    if kind == "grant":
+    if kind in ("session_grant", "grant"):
         if not folder:
             raise GatewayError(
                 "kind=grant nécessite folder (nom ou ID du dossier Drive)",
                 code="error",
             )
         h = max(1, min(int(hours), 168))
+        sid = get_session_id()
+        if sid or kind == "session_grant":
+            if not sid:
+                raise GatewayError("session_grant nécessite une session MCP active", code="error")
+            return {
+                "ok": True,
+                "elicitation": True,
+                "kind": "session_grant",
+                "alias": alias,
+                "session_id": sid,
+                "folder": folder,
+                "message": (
+                    f"Écriture Drive sous « {folder} » refusée pour cette session. "
+                    f"L'utilisateur doit exécuter :\n"
+                    f'  gwsa session grant {sid} {alias} "{folder}" {h}\n'
+                    f"(zone valable pour cette conversation seulement — {h} h)."
+                ),
+                "suggested_command": f'gwsa session grant {sid} {alias} "{folder}" {h}',
+            }
         return {
             "ok": True,
             "elicitation": True,
@@ -353,6 +409,7 @@ def access_request(
             "suggested_command": f'gwsa grant {alias} "{folder}" {h}',
         }
     raise GatewayError(
-        "kind invalide — utiliser « unlock », « grant » ou « add_account »",
+        "kind invalide — utiliser « unlock », « grant », « session_unlock », "
+        "« session_grant » ou « add_account »",
         code="error",
     )

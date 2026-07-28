@@ -190,7 +190,12 @@ def normalize_drive(drive):
 
 
 def active_grants(profile_dir):
-    """Zones temporaires accordées par l'utilisateur (gwsa grant), non expirées."""
+    """Zones temporaires : session MCP (prioritaire) ou session-grants.json legacy."""
+    if os.environ.get("GWSA_USE_SESSION_GRANTS") == "1":
+        raw = os.environ.get("GWSA_SESSION_DRIVE_ZONES", "")
+        if raw.strip():
+            return {z.strip() for z in raw.split(",") if z.strip()}
+        return set()
     try:
         with open(os.path.join(profile_dir, "session-grants.json")) as f:
             g = json.load(f)

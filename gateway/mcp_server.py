@@ -10,7 +10,10 @@ import traceback
 from typing import Any, Callable
 
 from . import api
+from .context import set_git_root, set_session_id
 from .errors import GatewayError
+from .project import git_toplevel
+from .sessions import close_session, create_session
 from .version import server_version
 
 SERVER_NAME = "google-mcp-multi-account"
@@ -206,7 +209,7 @@ TOOLS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "alias": {"type": "string"},
-                "kind": {"type": "string", "enum": ["unlock", "grant", "add_account"]},
+                "kind": {"type": "string", "enum": ["unlock", "grant", "add_account", "session_unlock", "session_grant"]},
                 "folder": {"type": "string", "description": "Nom ou ID dossier (si grant)"},
                 "hours": {"type": "integer", "default": 8, "description": "Durée grant"},
                 "minutes": {"type": "integer", "default": 60, "description": "Durée unlock"},
@@ -279,13 +282,22 @@ def _handle(msg: dict) -> None:
         return
 
     if method == "initialize":
+        state = create_session(client=SERVER_NAME)
+        set_session_id(state.session_id)
+        root = git_toplevel()
+        if root:
+            set_git_root(root)
         _write({
             "jsonrpc": "2.0",
             "id": mid,
             "result": {
                 "protocolVersion": PROTOCOL_VERSION,
                 "capabilities": {"tools": {"listChanged": False}},
-                "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
+                "serverInfo": {
+                    "name": SERVER_NAME,
+                    "version": SERVER_VERSION,
+                    "session_id": state.session_id,
+                },
             },
         })
         return
