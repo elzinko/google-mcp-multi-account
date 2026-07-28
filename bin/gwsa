@@ -63,6 +63,7 @@ USAGE_LOGGER="$REPO_DIR/scripts/log-usage.py"
 # une telle porte rouvrirait exactement le trou qu'on ferme ici.
 SYS_PYTHON="/usr/bin/python3"
 SYS_SWIFT="/usr/bin/swift"
+TOUCHID_BIN="$REPO_DIR/bin/mcp-google-mcp-multi-account"
 [[ -x "$SYS_PYTHON" ]] || { echo "gwsa : interpréteur système introuvable ($SYS_PYTHON) — installer les outils en ligne de commande : xcode-select --install" >&2; exit 3; }
 
 die() { echo "gwsa : $*" >&2; exit 3; }
@@ -100,8 +101,25 @@ is_locked() { # is_locked <dir> — vrai si verrouillé ET pas de déverrouillag
   [[ "$(date +%s)" -ge "$until_ts" ]]
 }
 
+ensure_touchid_bin() { # compile le binaire Touch ID nommé (dialogue macOS plus lisible que swift-frontend)
+  [[ -x "$TOUCHID_BIN" ]] && return 0
+  command -v swiftc >/dev/null 2>&1 || return 1
+  swiftc -o "$TOUCHID_BIN" "$REPO_DIR/scripts/touchid.swift" 2>/dev/null
+}
+
+strong_auth_reason() { # strong_auth_reason <action> <profile-dir> — email plutôt qu'alias dans la raison
+  local action="$1" dir="$2" email
+  email="$(profile_email "$dir")"
+  if [[ -n "$email" ]]; then printf '%s %s' "$action" "$email"
+  else printf '%s' "$action"; fi
+}
+
 require_strong_auth() { # require_strong_auth <raison> — Touch ID/mot de passe si activé
   [[ -f "$GWSA_ROOT/.strong-auth" ]] || return 0
+  if ensure_touchid_bin && [[ -x "$TOUCHID_BIN" ]]; then
+    "$TOUCHID_BIN" "$1" || die "authentification forte refusée — action annulée"
+    return 0
+  fi
   [[ -x "$SYS_SWIFT" ]] \
     || die "authentification forte activée mais $SYS_SWIFT indisponible (installer : xcode-select --install)"
   "$SYS_SWIFT" "$REPO_DIR/scripts/touchid.swift" "$1" \
@@ -148,7 +166,11 @@ cmd_add() { # cmd_add <alias> [email-attendu] [options gws auth login]
   # Connecter un compte élargit la surface d'accès : même barrière biométrique
   # que unlock/grant quand strongauth est activée (après le check du secret,
   # pour qu'un environnement de test sans secret n'atteigne jamais Touch ID).
-  require_strong_auth "connecter un nouveau compte Google « $alias »${expected:+ ($expected)}"
+  if [[ -n "$expected" ]]; then
+    require_strong_auth "connecter un nouveau compte Google $expected"
+  else
+    require_strong_auth "connecter un nouveau compte Google $alias"
+  fi
   local dir; dir="$(profile_dir "$alias")"
   mkdir -p "$dir"
   cp "$MASTER_SECRET" "$dir/client_secret.json"
@@ -235,7 +257,7 @@ cmd_unlock() {
   local dir; dir="$(profile_dir "$alias")"
   [[ -d "$dir" ]] || die "profil inconnu « $alias »"
   [[ -f "$dir/.locked" ]] || { echo "Profil « $alias » non verrouillé — rien à faire."; return 0; }
-  require_strong_auth "déverrouiller le profil Google « $alias »"
+  require_strong_auth "$(strong_auth_reason "déverrouiller le compte Google" "$dir")"
   if [[ "$mins" == "off" ]]; then
     rm -f "$dir/.locked" "$dir/.unlock-until"
     echo "🔓 Verrou retiré : « $alias » est déverrouillé en permanence."
@@ -351,7 +373,7 @@ PYEOF
   resolved="$(resolve_folder "$dir" "$target")"
   fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
   [[ -n "$fid" ]] || die "dossier « $target » introuvable ou ambigu — donne son ID (fin de l'URL du dossier dans Drive)"
-  require_strong_auth "autoriser l'écriture Drive sous « $fname » ($alias, ${hours} h)"
+  require_strong_auth "$(strong_auth_reason "autoriser l'écriture Drive sous « $fname » pour" "$dir") (${hours} h)"
   "$SYS_PYTHON" - "$G" "$fid" "$fname" "$hours" <<'PYEOF'
 import json, os, sys, time
 path, fid, fname, hours = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])

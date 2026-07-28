@@ -1588,6 +1588,35 @@ else
   fail "logique : scripts/af-selection-logic.js en échec"
 fi
 
+# Padlock / unlock UX — chip unifié (cadenas + timer), modal relock, pas de confirm() natif
+if grep -q 'id="dRelock"' "$AF_HTML" \
+  && grep -q 'function openRelock' "$AF_HTML" \
+  && grep -q 'function doRelock' "$AF_HTML" \
+  && grep -q 'function lockSetLoading' "$AF_HTML" \
+  && grep -q 'function shorten' "$AF_HTML" \
+  && grep -q 'class="lockchip' "$AF_HTML" \
+  && grep -q 'cd-prolong' "$AF_HTML" \
+  && grep -q 'cd-shorten' "$AF_HTML" \
+  && grep -q 'Verrouiller l' "$AF_HTML" \
+  && grep -q 'id="relockAccount"' "$AF_HTML" \
+  && ! grep -q 'encore ' "$AF_HTML" \
+  && ! grep -q 'confirm("Verrouiller' "$AF_HTML" \
+  && ! grep -q "confirm('Verrouiller" "$AF_HTML" \
+  && ! grep -q 'confirm("Reverrouiller' "$AF_HTML" \
+  && ! grep -q "confirm('Reverrouiller" "$AF_HTML"; then
+  pass "padlock : lockchip unifié + −/+ + modal dRelock (sans confirm())"
+else
+  fail "padlock : marqueurs lockchip / shorten / dRelock manquants"
+fi
+
+if grep -q 'TOUCHID_BIN=' bin/gwsa \
+  && grep -q 'strong_auth_reason' bin/gwsa \
+  && grep -q 'mcp-google-mcp-multi-account' bin/gwsa; then
+  pass "touchid : binaire nommé + raison avec email (gwsa)"
+else
+  fail "touchid : strong_auth_reason ou binaire manquant dans gwsa"
+fi
+
 # API admin hermétique : grant + drive-folder écrivent bien grants / policy
 AF_ALIAS=zonesapi
 AF_DIR="$GWSA_ROOT/$AF_ALIAS"
