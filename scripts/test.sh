@@ -1504,6 +1504,148 @@ out_l="$(GWSA_CLI_LINK="$LINK" relenv "$UPDATE" --force 2>&1)"
   && pass "lien PATH : fichier réel jamais remplacé par un lien" \
   || fail "lien PATH : a écrasé un fichier réel"
 
+section "Admin zones — flux authorize (wiring + logique + API)"
+
+AF_HTML=admin/index.html
+AF_LOGIC=scripts/af-selection-logic.js
+
+# Markers UI / handlers : auraient attrapé « Sélectionner → Zones vides »
+if grep -q 'data-af-action="select"' "$AF_HTML" \
+  && grep -q 'afOpenAuthorize()' "$AF_HTML" \
+  && grep -q 'onclick="afConfirm()"' "$AF_HTML" \
+  && grep -q 'id="dAuthorizeFolder"' "$AF_HTML" \
+  && grep -q '/drive-folder"' "$AF_HTML" \
+  && grep -q '"/grant"' "$AF_HTML"; then
+  pass "wiring : Sélectionner → durée → Valider appelle drive-folder/grant"
+else
+  fail "wiring : marqueurs authorize manquants dans admin/index.html"
+fi
+
+# Pas de ligne « Sélectionné : » / bouton footer Autoriser… (UI simplifiée)
+if ! grep -q 'id="afChosen"' "$AF_HTML" \
+  && ! grep -q 'id="afConfirmBtn"' "$AF_HTML" \
+  && ! grep -q 'Sélectionné :' "$AF_HTML"; then
+  pass "UI : pas de afChosen / Autoriser… en footer (Sélectionner suffit)"
+else
+  fail "UI : afChosen ou Autoriser… encore présents"
+fi
+
+# Loading UX sur Valider (Touch ID / grant) — marqueurs cheap
+if grep -q 'id="afValidateBtn"' "$AF_HTML" \
+  && grep -q 'function afSetAuthorizeLoading' "$AF_HTML" \
+  && grep -q 'is-loading' "$AF_HTML" \
+  && grep -q 'afSetAuthorizeLoading(true)' "$AF_HTML" \
+  && grep -q 'finally { afSetAuthorizeLoading(false); }' "$AF_HTML"; then
+  pass "wiring : Valider loading UX (is-loading + finally)"
+else
+  fail "wiring : marqueurs loading Valider manquants"
+fi
+
+# Footer picker = Annuler seul (entre dAddFolder et dAuthorizeFolder)
+picker_footer="$(awk '/id="dAddFolder"/,/id="dAuthorizeFolder"/' "$AF_HTML")"
+if echo "$picker_footer" | grep -q 'dAddFolder.close()' \
+  && ! echo "$picker_footer" | grep -q 'Autoriser'; then
+  pass "UI : footer picker = Annuler uniquement"
+else
+  fail "UI : footer picker encore trop chargé"
+fi
+
+# Régression critique : afOpenAuthorize ne doit PAS fermer le picker
+if node -e '
+const fs = require("fs");
+const html = fs.readFileSync("admin/index.html", "utf8");
+const m = html.match(/function afOpenAuthorize\(\) \{([\s\S]*?)\n\}/);
+if (!m) { console.error("afOpenAuthorize introuvable"); process.exit(2); }
+const body = m[1];
+if (body.includes("dAddFolder.close")) {
+  console.error("afOpenAuthorize ferme encore dAddFolder (reprise Zones prématurée)");
+  process.exit(1);
+}
+if (!body.includes("dAuthorizeFolder.showModal")) {
+  console.error("afOpenAuthorize n'\''ouvre pas dAuthorizeFolder");
+  process.exit(1);
+}
+' ; then
+  pass "régression : afOpenAuthorize garde le picker ouvert sous le dialog durée"
+else
+  fail "régression : afOpenAuthorize referme le picker (bug zones vides)"
+fi
+
+# Navigation efface la sélection (afClearSelection dans afOpen / afJump / afEnterFolder)
+if grep -q 'function afClearSelection' "$AF_HTML" \
+  && grep -q 'function afOpen(id, name) { afClearSelection()' "$AF_HTML" \
+  && grep -q 'function afJump(i) { afClearSelection()' "$AF_HTML" \
+  && grep -q 'afClearSelection();' "$AF_HTML"; then
+  pass "sélection : clear sur navigate (open / jump / enter)"
+else
+  fail "sélection : afClearSelection absent des navigateurs"
+fi
+
+# Logique pure (Node) — sélection + machine à états du bug
+if node "$AF_LOGIC" >/dev/null; then
+  pass "logique : sélection clear + flux authorize (picker reste ouvert)"
+else
+  fail "logique : scripts/af-selection-logic.js en échec"
+fi
+
+# API admin hermétique : grant + drive-folder écrivent bien grants / policy
+AF_ALIAS=zonesapi
+AF_DIR="$GWSA_ROOT/$AF_ALIAS"
+mkdir -p "$AF_DIR"
+printf '%s\n' '{"drive":{"read":true,"create":true,"update":true,"delete":false,"share":false,"zonesOnly":true,"writeFolders":[]}}' \
+  > "$AF_DIR/policy.json"
+rm -f "$GWSA_ROOT/.strong-auth"   # pas de Touch ID en bac à sable
+AF_PORT=0
+# port libre 49152–49500
+for AF_PORT in 49171 49172 49173 49174 49175; do
+  if ! (echo >/dev/tcp/127.0.0.1/"$AF_PORT") 2>/dev/null; then break; fi
+done
+AF_FID="ZONEFOLDER12345678901"
+AF_PID=""
+GWSA_ADMIN_PORT="$AF_PORT" node admin/server.js >/dev/null 2>&1 &
+AF_PID=$!
+# attendre l'écoute (max ~3 s)
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  if (echo >/dev/tcp/127.0.0.1/"$AF_PORT") 2>/dev/null; then break; fi
+  sleep 0.3
+done
+af_api() { # af_api METHOD PATH [json-body]
+  local method="$1" path="$2" body="${3:-}"
+  if [[ -n "$body" ]]; then
+    curl -sS -o "$TMP/af_api.json" -w "%{http_code}" \
+      -X "$method" "http://127.0.0.1:${AF_PORT}${path}" \
+      -H "X-GWSA-Admin: 1" -H "Content-Type: application/json" -d "$body"
+  else
+    curl -sS -o "$TMP/af_api.json" -w "%{http_code}" \
+      -X "$method" "http://127.0.0.1:${AF_PORT}${path}" \
+      -H "X-GWSA-Admin: 1"
+  fi
+}
+AF_CODE="$(af_api POST "/api/profiles/${AF_ALIAS}/grant" "{\"target\":\"${AF_FID}\",\"hours\":2}")"
+if [[ "$AF_CODE" == "200" ]] \
+  && grep -q "$AF_FID" "$AF_DIR/session-grants.json" 2>/dev/null; then
+  pass "API grant : écrit session-grants.json (temporaire)"
+else
+  fail "API grant : HTTP $AF_CODE — $(head -c 200 "$TMP/af_api.json" 2>/dev/null)"
+fi
+AF_CODE="$(af_api POST "/api/profiles/${AF_ALIAS}/drive-folder" "{\"target\":\"${AF_FID}\"}")"
+if [[ "$AF_CODE" == "200" ]] \
+  && grep -q "$AF_FID" "$AF_DIR/policy.json" 2>/dev/null; then
+  pass "API drive-folder : ajoute writeFolders (permanent)"
+else
+  fail "API drive-folder : HTTP $AF_CODE — $(head -c 200 "$TMP/af_api.json" 2>/dev/null)"
+fi
+# profiles JSON expose grants + writeFolders pour le refresh UI
+AF_CODE="$(af_api GET "/api/profiles")"
+if [[ "$AF_CODE" == "200" ]] \
+  && grep -q "$AF_ALIAS" "$TMP/af_api.json" \
+  && grep -q "$AF_FID" "$TMP/af_api.json"; then
+  pass "API profiles : refresh UI voit la zone après authorize"
+else
+  fail "API profiles : zone absente du payload refresh"
+fi
+if [[ -n "$AF_PID" ]]; then kill "$AF_PID" 2>/dev/null || true; wait "$AF_PID" 2>/dev/null || true; fi
+
 # --- Bilan ------------------------------------------------------------------
 
 printf '\n\033[1mBilan : %d réussis, %d échoués\033[0m\n' "$PASS" "$FAIL"

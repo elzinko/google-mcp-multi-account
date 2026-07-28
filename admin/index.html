@@ -18,9 +18,18 @@ header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:16p
 h1 { font-size:19px; font-weight:600; margin:0 auto 0 0; }
 main { max-width:880px; margin:0 auto; padding:18px 22px 60px; }
 button { font:inherit; border:1px solid var(--line); background:var(--card); color:var(--txt);
-  border-radius:8px; padding:7px 13px; cursor:pointer; }
+  border-radius:8px; padding:7px 13px; cursor:pointer; transition: transform .08s ease, filter .08s ease, box-shadow .08s ease; }
 button:hover { border-color:var(--mut); }
+button:active:not(:disabled) { transform:scale(.97); filter:brightness(.92); box-shadow:inset 0 1px 3px rgba(0,0,0,.18); }
 button.primary { background:var(--acc); border-color:var(--acc); color:#fff; }
+button.primary:active:not(:disabled) { filter:brightness(.82); box-shadow:inset 0 2px 5px rgba(0,0,0,.28); }
+button.primary:disabled { background:var(--line); border-color:var(--line); color:var(--mut); cursor:not-allowed; opacity:.85; transform:none; box-shadow:none; }
+button.is-loading { cursor:wait; pointer-events:none; }
+button.primary.is-loading { background:color-mix(in srgb, var(--acc) 55%, var(--line)); border-color:color-mix(in srgb, var(--acc) 45%, var(--line)); color:#fff; opacity:.9; }
+button.is-loading::before { content:""; display:inline-block; width:11px; height:11px; margin-right:7px;
+  border:2px solid currentColor; border-right-color:transparent; border-radius:50%;
+  vertical-align:-1px; animation:btn-spin .7s linear infinite; }
+@keyframes btn-spin { to { transform:rotate(360deg); } }
 button.danger  { background:var(--badbg); border-color:var(--bad); color:var(--bad); font-weight:600; }
 button.small { padding:4px 9px; font-size:13px; border-radius:6px; }
 .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin:12px 0; }
@@ -37,7 +46,7 @@ button.small { padding:4px 9px; font-size:13px; border-radius:6px; }
 .actions { display:flex; gap:8px; flex-wrap:wrap; }
 .spacer { flex:1; }
 dialog { border:1px solid var(--line); border-radius:14px; background:var(--card); color:var(--txt);
-  max-width:660px; width:92vw; padding:20px; }
+  max-width:660px; width:92vw; max-height:90vh; padding:20px; overflow-y:auto; overscroll-behavior:contain; }
 dialog::backdrop { background:rgba(0,0,0,.45); }
 dialog h2 { margin:0 0 12px; font-size:17px; }
 label { display:block; margin:10px 0 4px; color:var(--mut); font-size:13.5px; }
@@ -70,10 +79,35 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
 .docbody th, .docbody td { border:1px solid var(--line); padding:4px 8px; text-align:left; vertical-align:top; }
 .docbody th { background:var(--bg); }
 .docbody .mermaid { display:flex; justify-content:center; background:transparent; margin:10px 0; overflow-x:auto; }
-.pickrow { display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:7px; margin:2px 0; font-size:13.5px; }
-.pickrow:hover { background:var(--bg); }
-.pickrow .path { color:var(--mut); font-size:12px; }
+.pickrow { display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:7px; margin:1px 0; font-size:13.5px; cursor:pointer; user-select:none; }
+.pickrow:hover:not(.selected) { background:color-mix(in srgb, var(--txt) 8%, var(--card)); }
+.pickrow.selected { background:var(--accbg); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--acc) 45%, transparent); }
+.pickrow .path { color:var(--mut); font-size:12px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pickrow .fname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pickrow .row-sel { opacity:0; flex-shrink:0; padding:2px 8px; font-size:12px; color:var(--mut); border:0; background:transparent; border-radius:5px; }
+.pickrow:hover .row-sel, .pickrow.selected .row-sel { opacity:1; }
+.pickrow .row-sel:hover { color:var(--acc); background:var(--accbg); }
+.pickrow .row-sel:active { color:var(--acc); background:color-mix(in srgb, var(--acc) 22%, var(--accbg)); transform:scale(.96); box-shadow:inset 0 1px 2px rgba(0,0,0,.12); }
+.flist { border:1px solid var(--line); border-radius:9px; max-height:34vh; overflow-y:auto; overscroll-behavior:contain; padding:4px; background:var(--bg); }
+.flist-empty { padding:14px 10px; color:var(--mut); font-size:13px; text-align:center; }
+.af-toolbar { display:flex; gap:8px; margin-bottom:8px; }
+.af-toolbar input { flex:1; }
+.af-hits { border:1px solid var(--line); border-radius:9px; margin-bottom:8px; max-height:18vh; overflow-y:auto; overscroll-behavior:contain; background:var(--card); }
+.af-hits[hidden] { display:none !important; }
+.af-hits .pickrow { border-radius:5px; }
+.zone-section { margin:14px 0 6px; }
+.zone-section h3 { margin:0 0 6px; font-size:12px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--mut); }
+.zone-section p { margin:0 0 6px; font-size:12px; color:var(--mut); }
+.zonerow { display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:7px; margin:1px 0; font-size:13.5px; cursor:default; }
+.zonerow:hover { background:color-mix(in srgb, var(--txt) 8%, var(--card)); }
+.zonerow .zname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+.zonerow .zmeta { color:var(--mut); font-size:12px; flex-shrink:0; }
+.zonerow .zdel { opacity:0; flex-shrink:0; padding:2px 8px; font-size:14px; line-height:1; color:var(--mut); border:1px solid transparent; background:transparent; border-radius:5px; transition:opacity .12s; }
+.zonerow:hover .zdel { opacity:1; }
+.zonerow .zdel:hover { color:var(--bad); border-color:var(--bad); background:var(--badbg); }
+.zonelist { border:1px solid var(--line); border-radius:9px; padding:4px; background:var(--bg); min-height:2.5rem; max-height:28vh; overflow-y:auto; overscroll-behavior:contain; }
 .crumb a { color:var(--acc); cursor:pointer; }
+.crumb a:hover { text-decoration:underline; }
 .docbody ul { margin:6px 0; padding-left:22px; }
 .docbody a { color:var(--acc); }
 .tabs { display:flex; gap:8px; margin-bottom:10px; }
@@ -215,30 +249,36 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
 
 <dialog id="dZones">
   <h2>📁 Zones d'écriture — <span id="zonesAlias" class="mono"></span></h2>
-  <p class="note"><b>Permanentes</b> (policy — restent jusqu'à retrait) :</p>
-  <div id="permZones"></div>
-  <p class="note"><b>Temporaires</b> (élicitation — expirent automatiquement, le LLM devra redemander) :</p>
-  <div id="tmpZones"></div>
-  <div class="mtop"><button onclick="dZones.close()">Fermer</button>
-  <button class="primary" onclick="openAddFolder()">＋ Ajouter un dossier…</button></div>
+  <div class="zone-section">
+    <h3>Permanentes</h3>
+    <p>Restent jusqu'à retrait manuel (policy).</p>
+    <div id="permZones" class="zonelist"></div>
+  </div>
+  <div class="zone-section">
+    <h3>Temporaires</h3>
+    <p>Expirent automatiquement — le LLM devra redemander.</p>
+    <div id="tmpZones" class="zonelist"></div>
+  </div>
+  <div class="mtop"><button type="button" onclick="dZones.close()">Fermer</button>
+  <button type="button" class="primary" onclick="openAddFolder()">＋ Ajouter un dossier…</button></div>
 </dialog>
 
 <dialog id="dAddFolder">
   <h2>Ajouter un dossier autorisé</h2>
-  <div class="tabs">
-    <button class="small" onclick="afMode('search')">🔍 Rechercher par nom</button>
-    <button class="small" onclick="afMode('browse')">📂 Parcourir Mon Drive</button>
+  <p class="note" style="margin:0 0 8px">Clic pour sélectionner · double-clic pour ouvrir un dossier.</p>
+  <div class="af-toolbar">
+    <input type="text" id="afQuery" placeholder="Rechercher un dossier par nom…">
+    <button type="button" class="small" onclick="afDoSearch()">Rechercher</button>
   </div>
-  <div id="afSearch">
-    <div class="addrow"><input type="text" id="afQuery" placeholder="Nom (ou début du nom) du dossier">
-      <button class="small" onclick="afDoSearch()">Rechercher</button></div>
-    <div id="afResults" class="note">Tape un nom — s'il y a plusieurs correspondances, tu choisiras dans la liste (avec le chemin complet).</div>
-  </div>
-  <div id="afBrowse" style="display:none">
-    <p class="note crumb" id="afCrumb"></p>
-    <div id="afList" style="max-height:30vh;overflow:auto"></div>
-  </div>
-  <div class="addrow" style="margin-top:12px"><span>Dossier choisi : <b id="afChosen">aucun</b></span></div>
+  <div id="afSearchHits" class="af-hits" hidden></div>
+  <p class="note crumb" id="afCrumb" style="margin:4px 0 6px"></p>
+  <div id="afList" class="flist"><div class="flist-empty">Chargement…</div></div>
+  <div class="mtop"><button type="button" onclick="dAddFolder.close()">Annuler</button></div>
+</dialog>
+
+<dialog id="dAuthorizeFolder">
+  <h2>Durée de l'autorisation</h2>
+  <p class="note" id="afAuthTarget" style="margin:0 0 10px"></p>
   <div class="addrow">
     <label style="margin:0"><input type="radio" name="afDur" value="temp" checked> temporaire</label>
     <input type="number" id="afHours" value="8" min="1" max="168"> h
@@ -249,8 +289,8 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
   dossier lui-même — ni renommé, ni déplacé, ni mis à la corbeille — et ne mettront rien à la
   corbeille tant que tu n'as pas autorisé la suppression. N'accorde une zone que sur un dossier
   que tu acceptes de confier.</p>
-  <div class="mtop"><button onclick="dAddFolder.close()">Annuler</button>
-  <button class="primary" onclick="afConfirm()">Autoriser (sous-dossiers inclus)</button></div>
+  <div class="mtop"><button type="button" id="afCancelAuthBtn" onclick="afCancelAuthorize()">Annuler</button>
+  <button type="button" class="primary" id="afValidateBtn" onclick="afConfirm()">Valider</button></div>
 </dialog>
 
 <dialog id="dLog">
@@ -360,6 +400,7 @@ async function doSyncIam() {
   refresh();
 }
 function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+function attr(s) { return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;"); }
 
 function normDrive(d) {
   if (!d) return null;
@@ -590,20 +631,51 @@ function renderZonesLists() {
   const d = normDrive(p.policy && p.policy.drive) || { writeFolders: [], writeFolderNames: {} };
   const names = d.writeFolderNames || {};
   $("permZones").innerHTML = (d.writeFolders || []).map((id) =>
-    '<div class="zone">📁 <b>' + esc(names[id] || id) + '</b> <span class="mono">' + esc(id.slice(0, 14)) + '…</span>' +
-    ' <button class="small" onclick="rmZone(\'' + id + '\')">✕</button></div>').join("") ||
-    '<div class="note">— aucune</div>';
+    '<div class="zonerow"><span>📁</span><span class="zname">' + esc(names[id] || id) + '</span>' +
+    '<span class="zmeta mono">' + esc(id.slice(0, 14)) + '…</span>' +
+    '<button type="button" class="zdel" title="Retirer" data-zone-id="' + attr(id) + '" data-zone-kind="perm">✕</button></div>').join("")
+    || '<div class="flist-empty">Aucune zone permanente</div>';
   $("tmpZones").innerHTML = (p.grants || []).map((g) =>
-    '<div class="zone">🕐 <b>' + esc(g.name || g.id) + '</b> <span class="mono">encore ' +
-    Math.floor(g.minutesLeft / 60) + "h" + String(g.minutesLeft % 60).padStart(2, "0") + '</span>' +
-    ' <button class="small" onclick="rmGrant(\'' + g.id + '\')">✕</button></div>').join("") ||
-    '<div class="note">— aucune en cours</div>';
+    '<div class="zonerow"><span>🕐</span><span class="zname">' + esc(g.name || g.id) + '</span>' +
+    '<span class="zmeta">encore ' + Math.floor(g.minutesLeft / 60) + "h" + String(g.minutesLeft % 60).padStart(2, "0") + '</span>' +
+    '<button type="button" class="zdel" title="Révoquer" data-zone-id="' + attr(g.id) + '" data-zone-kind="temp">✕</button></div>').join("")
+    || '<div class="flist-empty">Aucune autorisation temporaire</div>';
 }
+function zonesClick(e) {
+  const btn = e.target.closest("button.zdel");
+  if (!btn) return;
+  const id = btn.dataset.zoneId;
+  if (btn.dataset.zoneKind === "perm") rmZone(id);
+  else rmGrant(id);
+}
+let zonesResumePolicy = false;
+let suppressZonesCloseResume = false;
+let afResumeZonesAfterAdd = false;
 function openZones() {
   $("zonesAlias").textContent = polTarget;
   renderZonesLists();
+  /* Évite les dialogs imbriqués (wheel / overflow cassés sur le top-layer). */
+  zonesResumePolicy = dPolicy.open;
+  if (zonesResumePolicy) dPolicy.close();
   dZones.showModal();
 }
+dZones.addEventListener("close", () => {
+  if (suppressZonesCloseResume) return;
+  if (zonesResumePolicy) {
+    zonesResumePolicy = false;
+    dPolicy.showModal();
+  }
+});
+dAddFolder.addEventListener("close", () => {
+  /* Si le dialog durée est encore ouvert (Annuler / Escape sur le picker), le fermer aussi. */
+  if (dAuthorizeFolder.open) dAuthorizeFolder.close();
+  if (afResumeZonesAfterAdd) {
+    afResumeZonesAfterAdd = false;
+    dZones.showModal();
+    renderZonesLists();
+    updateZonesSummary();
+  }
+});
 function fillPolicyForm(pol) {
   const p = prof();
   const cur = pol !== undefined ? pol : (p.policy || null);
@@ -639,65 +711,159 @@ async function rmGrant(id) {
 }
 
 let afSel = null, afCrumbs = [];
-function openAddFolder() {
-  afSel = null; afCrumbs = [{ id: "root", name: "Mon Drive" }];
-  $("afChosen").textContent = "aucun";
-  $("afQuery").value = ""; $("afResults").innerHTML = "Tape un nom — s'il y a plusieurs correspondances, tu choisiras dans la liste (avec le chemin complet).";
-  afMode("search");
-  dAddFolder.showModal();
+function afPickRow(item) {
+  const sel = afSel && afSel.id === item.id ? " selected" : "";
+  let h = '<div class="pickrow' + sel + '" data-id="' + attr(item.id) + '" data-name="' + attr(item.name) + '"';
+  if (item.path) h += ' data-path="' + attr(item.path) + '"';
+  h += '><span>📁</span><span class="fname">' + esc(item.name) + "</span>";
+  if (item.path) h += '<span class="path">' + esc(item.path) + "</span>";
+  h += '<button type="button" class="row-sel" data-af-action="select" title="Sélectionner">Sélectionner</button>';
+  h += "</div>";
+  return h;
 }
-function afMode(m) {
-  $("afSearch").style.display = m === "search" ? "" : "none";
-  $("afBrowse").style.display = m === "browse" ? "" : "none";
-  if (m === "browse") afLoad();
+function afHighlightSelection() {
+  document.querySelectorAll("#afList .pickrow, #afSearchHits .pickrow").forEach((row) => {
+    row.classList.toggle("selected", !!(afSel && row.dataset.id === afSel.id));
+  });
+}
+function afClearSelection() {
+  afSel = null;
+  afHighlightSelection();
 }
 function afSelect(id, name, path) {
-  afSel = { id, name };
-  $("afChosen").textContent = name + (path ? " (" + path + ")" : "");
+  afSel = { id, name, path: path || "" };
+  afHighlightSelection();
 }
+async function afEnterFolder(id, name) {
+  $("afSearchHits").hidden = true;
+  try {
+    const { ancestors } = await api("/api/profiles/" + polTarget + "/ancestors?id=" + encodeURIComponent(id));
+    const crumbs = [{ id: "root", name: "Mon Drive" }];
+    if (ancestors && ancestors.length) {
+      for (const a of ancestors) crumbs.push(a);
+    } else {
+      crumbs.push({ id, name });
+    }
+    afCrumbs = crumbs;
+  } catch {
+    afCrumbs = afCrumbs.concat([{ id, name }]);
+  }
+  afClearSelection();
+  await afLoad();
+}
+function afPickClick(e) {
+  const selectBtn = e.target.closest("button[data-af-action='select']");
+  if (selectBtn) {
+    e.stopPropagation();
+    const row = selectBtn.closest(".pickrow");
+    if (!row || !row.dataset.id) return;
+    afSelect(row.dataset.id, row.dataset.name, row.dataset.path || undefined);
+    afOpenAuthorize();
+    return;
+  }
+  const row = e.target.closest(".pickrow");
+  if (!row || !row.dataset.id) return;
+  afSelect(row.dataset.id, row.dataset.name, row.dataset.path || undefined);
+}
+function afRowDblClick(e) {
+  const row = e.target.closest(".pickrow");
+  if (!row || !row.dataset.id || e.target.closest("button")) return;
+  if (row.closest("#afSearchHits")) afEnterFolder(row.dataset.id, row.dataset.name);
+  else afOpen(row.dataset.id, row.dataset.name);
+}
+function openAddFolder() {
+  afSel = null;
+  afCrumbs = [{ id: "root", name: "Mon Drive" }];
+  $("afQuery").value = "";
+  $("afSearchHits").hidden = true;
+  $("afSearchHits").innerHTML = "";
+  /* Évite les dialogs imbriqués : le wheel ne scrolle pas le .flist sous un parent modal. */
+  afResumeZonesAfterAdd = dZones.open;
+  if (afResumeZonesAfterAdd) {
+    suppressZonesCloseResume = true;
+    dZones.close();
+    suppressZonesCloseResume = false;
+  }
+  dAddFolder.showModal();
+  afLoad();
+}
+function afSetAuthorizeLoading(on) {
+  const ok = $("afValidateBtn");
+  const cancel = $("afCancelAuthBtn");
+  if (ok) {
+    ok.disabled = !!on;
+    ok.classList.toggle("is-loading", !!on);
+    ok.textContent = on ? "Touch ID…" : "Valider";
+  }
+  if (cancel) cancel.disabled = !!on;
+}
+function afOpenAuthorize() {
+  /* Garde le picker ouvert sous le dialog durée : le fermer reprenait dZones
+     (close handler) et faisait disparaître l'étape Valider — zones restaient vides. */
+  if (!afSel) return;
+  afSetAuthorizeLoading(false);
+  $("afAuthTarget").innerHTML = "Dossier : <b>" + esc(afSel.name) + "</b>" +
+    (afSel.path ? ' <span class="note">(' + esc(afSel.path) + ")</span>" : "");
+  const tempRadio = document.querySelector('input[name="afDur"][value="temp"]');
+  if (tempRadio) tempRadio.checked = true;
+  if (!dAuthorizeFolder.open) dAuthorizeFolder.showModal();
+}
+function afCancelAuthorize() {
+  if ($("afValidateBtn") && $("afValidateBtn").disabled) return;
+  dAuthorizeFolder.close();
+}
+dAuthorizeFolder.addEventListener("close", () => { afSetAuthorizeLoading(false); });
 async function afDoSearch() {
   const q = $("afQuery").value.trim();
-  if (!q) return;
-  $("afResults").innerHTML = "Recherche…";
+  const hits = $("afSearchHits");
+  if (!q) { hits.hidden = true; hits.innerHTML = ""; return; }
+  hits.hidden = false;
+  hits.innerHTML = '<div class="flist-empty">Recherche…</div>';
   try {
     const { results } = await api("/api/profiles/" + polTarget + "/search?q=" + encodeURIComponent(q));
-    $("afResults").innerHTML = results.length ? results.map((r) =>
-      '<div class="pickrow">📁 <b>' + esc(r.name) + '</b> <span class="path">' + esc(r.path) + '</span>' +
-      '<span class="spacer"></span><button class="small" onclick="afSelect(\'' + r.id + "','" + esc(r.name).replace(/'/g, "\\'") + "','" + esc(r.path).replace(/'/g, "\\'") + '\')">Choisir</button></div>').join("")
-      : '<div class="note">Aucun dossier trouvé pour « ' + esc(q) + ' ».</div>';
-  } catch (e) { $("afResults").innerHTML = '<div class="note">Erreur : ' + esc(e.message) + "</div>"; }
+    hits.innerHTML = results.length ? results.map((r) => afPickRow(r)).join("")
+      : '<div class="flist-empty">Aucun dossier pour « ' + esc(q) + ' »</div>';
+    afHighlightSelection();
+  } catch (e) { hits.innerHTML = '<div class="flist-empty">Erreur : ' + esc(e.message) + "</div>"; }
 }
 async function afLoad() {
   const cur = afCrumbs[afCrumbs.length - 1];
   $("afCrumb").innerHTML = afCrumbs.map((c, i) =>
-    i === afCrumbs.length - 1 ? "<b>" + esc(c.name) + "</b>" : '<a onclick="afJump(' + i + ')">' + esc(c.name) + "</a>").join(" / ");
-  $("afList").innerHTML = "Chargement…";
+    i === afCrumbs.length - 1 ? "<b>" + esc(c.name) + "</b>" : '<a data-crumb="' + i + '">' + esc(c.name) + "</a>").join(" / ");
+  $("afList").innerHTML = '<div class="flist-empty">Chargement…</div>';
   try {
     const { folders } = await api("/api/profiles/" + polTarget + "/browse?parent=" + encodeURIComponent(cur.id));
-    const rows = folders.map((f) =>
-      '<div class="pickrow">📁 <b>' + esc(f.name) + "</b><span class=\"spacer\"></span>" +
-      '<button class="small" onclick="afOpen(\'' + f.id + "','" + esc(f.name).replace(/'/g, "\\'") + '\')">Ouvrir</button>' +
-      '<button class="small" onclick="afSelect(\'' + f.id + "','" + esc(f.name).replace(/'/g, "\\'") + '\')">Choisir</button></div>');
-    $("afList").innerHTML = rows.join("") || '<div class="note">Aucun sous-dossier ici.</div>';
-  } catch (e) { $("afList").innerHTML = '<div class="note">Erreur : ' + esc(e.message) + "</div>"; }
+    $("afList").innerHTML = folders.length
+      ? folders.map((f) => afPickRow(f)).join("")
+      : '<div class="flist-empty">Dossier vide — remonte d\'un niveau ou cherche par nom.</div>';
+    afHighlightSelection();
+  } catch (e) { $("afList").innerHTML = '<div class="flist-empty">Erreur : ' + esc(e.message) + "</div>"; }
 }
-function afOpen(id, name) { afCrumbs.push({ id, name }); afLoad(); }
-function afJump(i) { afCrumbs = afCrumbs.slice(0, i + 1); afLoad(); }
+function afOpen(id, name) { afClearSelection(); afCrumbs.push({ id, name }); afLoad(); }
+function afJump(i) { afClearSelection(); afCrumbs = afCrumbs.slice(0, i + 1); afLoad(); }
 async function afConfirm() {
-  if (!afSel) return toast("Choisis d'abord un dossier");
-  const dur = document.querySelector('input[name="afDur"]:checked').value;
+  if (!afSel) return;
+  const ok = $("afValidateBtn");
+  if (ok && ok.disabled) return;
+  const durEl = document.querySelector('input[name="afDur"]:checked');
+  if (!durEl) return;
+  const dur = durEl.value;
+  const targetId = afSel.id;
+  afSetAuthorizeLoading(true);
   try {
     let r;
     if (dur === "perm") {
-      r = await api("/api/profiles/" + polTarget + "/drive-folder", { method: "POST", body: JSON.stringify({ target: afSel.id }) });
+      r = await api("/api/profiles/" + polTarget + "/drive-folder", { method: "POST", body: JSON.stringify({ target: targetId }) });
     } else {
       const h = Math.min(168, Math.max(1, parseInt($("afHours").value, 10) || 8));
-      r = await api("/api/profiles/" + polTarget + "/grant", { method: "POST", body: JSON.stringify({ target: afSel.id, hours: h }) });
+      r = await api("/api/profiles/" + polTarget + "/grant", { method: "POST", body: JSON.stringify({ target: targetId, hours: h }) });
     }
-    dAddFolder.close();
+    if (dAuthorizeFolder.open) dAuthorizeFolder.close();
+    if (dAddFolder.open) dAddFolder.close(); /* close → reprend dZones + refresh listes */
     toast(r.out || "Dossier autorisé");
     await refresh(); renderZonesLists(); updateZonesSummary();
   } catch (e) { toast("Erreur : " + e.message); }
+  finally { afSetAuthorizeLoading(false); }
 }
 async function savePolicy() {
   await refresh();
@@ -784,6 +950,17 @@ async function showDoc(which) {
 }
 async function openDoc() { await showDoc("readme"); dDoc.showModal(); }
 
+$("afList").addEventListener("click", afPickClick);
+$("afList").addEventListener("dblclick", afRowDblClick);
+$("afSearchHits").addEventListener("click", afPickClick);
+$("afSearchHits").addEventListener("dblclick", afRowDblClick);
+$("afCrumb").addEventListener("click", (e) => {
+  const a = e.target.closest("a[data-crumb]");
+  if (a) afJump(+a.dataset.crumb);
+});
+$("afQuery").addEventListener("keydown", (e) => { if (e.key === "Enter") afDoSearch(); });
+$("permZones").addEventListener("click", zonesClick);
+$("tmpZones").addEventListener("click", zonesClick);
 refresh();
 setInterval(refresh, 8000);
 </script>

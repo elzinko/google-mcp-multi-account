@@ -11,7 +11,7 @@ const path = require("path");
 const os = require("os");
 const { execFile, spawn } = require("child_process");
 
-const PORT = 4877;
+const PORT = Number(process.env.GWSA_ADMIN_PORT) || 4877;
 const HOST = "127.0.0.1";
 const REPO = path.resolve(__dirname, "..");
 const GWSA = path.join(REPO, "bin", "gwsa");
@@ -110,6 +110,21 @@ async function folderPath(alias, id, depth = 0) {
   if (!info.parents.length) return info.name;
   const parent = await folderPath(alias, info.parents[0], depth + 1);
   return parent + " / " + info.name;
+}
+
+async function folderAncestors(alias, id) {
+  const chain = [];
+  let cur = id;
+  for (let d = 0; d < 16; d++) {
+    const info = await folderInfo(alias, cur);
+    if (!info) break;
+    chain.unshift({ id: cur, name: info.name });
+    if (!info.parents.length) break;
+    const parent = info.parents[0];
+    if (!parent || parent === cur) break;
+    cur = parent;
+  }
+  return chain;
 }
 
 function gwsEmail(alias) {
@@ -300,6 +315,15 @@ const server = http.createServer(async (req, res) => {
         mcp: rd("docs/mcp-setup.md"),
         schemas: buildSchemas(),
       });
+    }
+    const anc = p.match(/^\/api\/profiles\/([^/]+)\/ancestors$/);
+    if (req.method === "GET" && anc) {
+      const alias = anc[1];
+      if (!ALIAS_RE.test(alias)) return send(res, 400, { error: "alias invalide" });
+      const id = String(u.searchParams.get("id") || "").replace(/[^A-Za-z0-9_-]/g, "");
+      if (!id) return send(res, 400, { error: "id requis" });
+      const ancestors = await folderAncestors(alias, id);
+      return send(res, 200, { ancestors });
     }
     const gm = p.match(/^\/api\/profiles\/([^/]+)\/(browse|search)$/);
     if (req.method === "GET" && gm) {
