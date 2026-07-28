@@ -671,7 +671,11 @@ if python3 - <<'PY'
 import json, os, socket, threading, time
 from pathlib import Path
 
-os.environ["GWSA_BROKER_PORT"] = "4879"  # port de test isolé
+# Port éphémère : évite les collisions avec un broker local (4878/4879).
+_s = socket.socket()
+_s.bind(("127.0.0.1", 0))
+os.environ["GWSA_BROKER_PORT"] = str(_s.getsockname()[1])
+_s.close()
 from gateway.broker_server import (
     BrokerHandler, ThreadedTCPServer, ensure_token, handle_exec, broker_port,
 )
