@@ -1646,6 +1646,58 @@ else
 fi
 if [[ -n "$AF_PID" ]]; then kill "$AF_PID" 2>/dev/null || true; wait "$AF_PID" 2>/dev/null || true; fi
 
+# --- gwsa dev test — déploiement + admin + marqueur PR ----------------------
+
+section "gwsa dev test — déployer, redémarrer l'admin, vérifier afSearchHits"
+
+DEVTEST_DEP="$TMP/devdeploy"
+DEVTEST_ROOT="$TMP/devgwsa"
+DEVTEST_PORT=49201
+mkdir -p "$DEVTEST_ROOT"
+
+if "$GWSA" dev test --help 2>&1 | grep -q 'gwsa dev test'; then
+  pass "dev test --help : usage affiché"
+else
+  fail "dev test --help : usage manquant"
+fi
+
+if grep -q 'cmd_dev_test' bin/gwsa \
+  && grep -q 'afSearchHits' bin/gwsa \
+  && grep -q 'GWSA_ADMIN_NO_OPEN' bin/gwsa; then
+  pass "dev test : implémentation + marqueur afSearchHits + no-open admin"
+else
+  fail "dev test : marqueurs d'implémentation manquants dans gwsa"
+fi
+
+if command -v node >/dev/null 2>&1; then
+  branch="$(git rev-parse --abbrev-ref HEAD)"
+  sha="$(git rev-parse --short HEAD)"
+  part="$(printf '%s' "$branch" | tr '/' '-' | tr -cd 'A-Za-z0-9-')"
+  [[ -n "$part" ]] || part="branch"
+  dev_id="dev-${part}-${sha}"
+  out="$(GWSA_DEPLOY_ROOT="$DEVTEST_DEP" GWSA_ROOT="$DEVTEST_ROOT" \
+    GWSA_ADMIN_PORT="$DEVTEST_PORT" \
+    "$GWSA" dev test 2>&1)" || true
+  if [[ -d "$DEVTEST_DEP/$dev_id" ]] \
+    && echo "$out" | grep -q "Déploiement : $dev_id" \
+    && echo "$out" | grep -q "http://127.0.0.1:$DEVTEST_PORT" \
+    && echo "$out" | grep -q 'Marqueur PR  : oui' \
+    && echo "$out" | grep -q 'afSearchHits' \
+    && echo "$out" | grep -q './bin/gwsa dev test'; then
+    pass "dev test : déploiement + admin + marqueur afSearchHits (hermétique)"
+  else
+    fail "dev test : résumé incomplet — $(echo "$out" | tail -20 | tr '\n' ' ')"
+  fi
+  if [[ -f "$DEVTEST_ROOT/.admin.pid" ]]; then
+    apid="$(cat "$DEVTEST_ROOT/.admin.pid" 2>/dev/null || true)"
+    kill "$apid" 2>/dev/null || true
+  fi
+  lsof -ti "tcp:$DEVTEST_PORT" -sTCP:LISTEN 2>/dev/null | xargs kill 2>/dev/null || true
+  rm -rf "$DEVTEST_DEP/$dev_id"
+else
+  printf '  \033[33m⊘\033[0m dev test hermétique : node absent — ignoré\n'
+fi
+
 # --- Bilan ------------------------------------------------------------------
 
 printf '\n\033[1mBilan : %d réussis, %d échoués\033[0m\n' "$PASS" "$FAIL"

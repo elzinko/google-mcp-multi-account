@@ -21,6 +21,12 @@
 #   gwsa strongauth on|off|status                     Exiger Touch ID / mdp macOS pour unlock & grant
 #   gwsa admin [stop]                                 Démarrer/arrêter l'interface web (127.0.0.1:4877)
 #   gwsa broker [status|stop]                         État/arrêt du broker de ce GWSA_ROOT
+#   gwsa dev deploy [--isolated]                      Déployer le clone courant en version dev temporaire
+#   gwsa dev test [--no-deploy] [--isolated] [--open] Déployer + redémarrer l'admin + résumé de validation
+#   gwsa dev list                                     Versions déployées + configs client (Cursor, Desktop…)
+#   gwsa dev status [id]                              État broker/admin par version dev
+#   gwsa dev use <id> --cursor|--claude-desktop [--apply]  Snippet (ou écriture) config MCP
+#   gwsa dev remove <id>                              Supprimer une version dev temporaire
 #   gwsa update [--check|--to <version>]              Installer la dernière version publiée
 #   gwsa release [patch|minor|major|--print]          Publier une version (semver + CHANGELOG + tag)
 #   gwsa remove <alias>                               Déconnecter et supprimer un profil
@@ -65,7 +71,7 @@ check_alias() {
   [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] \
     || die "alias invalide « $1 » (lettres, chiffres, - et _ uniquement)"
   case "$1" in
-    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth|admin|broker|update|release) die "« $1 » est un mot réservé" ;;
+    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth|admin|broker|dev|update|release) die "« $1 » est un mot réservé" ;;
   esac
 }
 
@@ -385,30 +391,57 @@ PYEOF
 
 cmd_admin() { # gwsa admin [stop] — interface web locale (127.0.0.1:4877), détachée + idempotente
   local action="${1:-start}" pidf="$GWSA_ROOT/.admin.pid" log="$GWSA_ROOT/admin.log"
+  local port="${GWSA_ADMIN_PORT:-4877}"
+  admin_listening() { (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; }
+  is_admin_pid() {
+    [[ -n "${1:-}" ]] || return 1
+    kill -0 "$1" 2>/dev/null || return 1
+    ps -p "$1" -o command= 2>/dev/null | grep -q "admin/server.js"
+  }
+  admin_pid_on_port() {
+    local p; p="$(lsof -ti "tcp:$port" -sTCP:LISTEN 2>/dev/null | head -1)"
+    is_admin_pid "$p" && echo "$p"
+  }
   case "$action" in
     stop)
-      if [[ -f "$pidf" ]] && kill -0 "$(cat "$pidf")" 2>/dev/null; then
-        kill "$(cat "$pidf")" 2>/dev/null || true
+      local pid=""
+      if [[ -f "$pidf" ]]; then pid="$(cat "$pidf" 2>/dev/null || true)"; fi
+      if is_admin_pid "$pid"; then
+        kill "$pid" 2>/dev/null || true
         rm -f "$pidf"
         echo "✓ interface admin arrêtée."
+      elif pid="$(admin_pid_on_port)"; then
+        kill "$pid" 2>/dev/null || true
+        rm -f "$pidf"
+        echo "✓ interface admin arrêtée (processus orphelin pid $pid, sans pidfile)."
+      elif admin_listening "$port"; then
+        echo "⚠ le port $port est occupé mais ce n'est pas notre admin — rien tué."
+        echo "  repérer : lsof -i :$port"
       else
         rm -f "$pidf"
         echo "Interface admin non démarrée — rien à faire."
       fi ;;
     start)
       command -v node >/dev/null 2>&1 || die "node est requis pour l'interface admin — brew install node"
-      if [[ -f "$pidf" ]] && kill -0 "$(cat "$pidf")" 2>/dev/null; then
-        echo "✓ interface admin déjà en route — http://127.0.0.1:4877"
+      local running=""
+      if [[ -f "$pidf" ]]; then running="$(cat "$pidf" 2>/dev/null || true)"; fi
+      if is_admin_pid "$running"; then
+        echo "✓ interface admin déjà en route — http://127.0.0.1:$port"
+      elif running="$(admin_pid_on_port)"; then
+        echo "$running" > "$pidf"
+        echo "✓ interface admin déjà en route (pid $running) — http://127.0.0.1:$port"
+      elif admin_listening "$port"; then
+        die "le port $port est déjà pris par un autre programme — lsof -i :$port"
       else
         mkdir -p "$GWSA_ROOT"
-        nohup node "$REPO_DIR/admin/server.js" >> "$log" 2>&1 &
+        GWSA_ADMIN_PORT="$port" nohup node "$REPO_DIR/admin/server.js" >> "$log" 2>&1 &
         echo $! > "$pidf"
         sleep 1
         kill -0 "$(cat "$pidf")" 2>/dev/null \
           || { rm -f "$pidf"; die "échec du démarrage de l'admin — voir $log"; }
-        echo "✓ interface admin démarrée (pid $(cat "$pidf"), log $log) — http://127.0.0.1:4877"
+        echo "✓ interface admin démarrée (pid $(cat "$pidf"), log $log) — http://127.0.0.1:$port"
       fi
-      open "http://127.0.0.1:4877" 2>/dev/null || true ;;
+      [[ -z "${GWSA_ADMIN_NO_OPEN:-}" ]] && open "http://127.0.0.1:$port" 2>/dev/null || true ;;
     *) die "usage : gwsa admin [stop]" ;;
   esac
 }
@@ -466,6 +499,644 @@ cmd_broker() { # gwsa broker [status|stop] — piloter le broker de CE couloir
   esac
 }
 
+# ── gwsa dev — couloirs de développement temporaires ─────────────────────────
+DEV_DEPLOY_ROOT="${GWSA_DEPLOY_ROOT:-$HOME/.local/share/google-mcp}"
+DEV_PROD_ROOT="${HOME}/.config/gws-accounts"
+DEV_ISOLATED_ROOT="${HOME}/.config/gws-accounts-dev"
+DEV_BROKER_BASE=4880
+
+dev_source_repo() { # dépôt git du répertoire courant, sinon le repo de ce gwsa
+  if git -C "${PWD}" rev-parse --git-dir >/dev/null 2>&1; then
+    git -C "${PWD}" rev-parse --show-toplevel
+  else
+    echo "$REPO_DIR"
+  fi
+}
+
+dev_sanitize_part() { # branche → segment d'id (lettres, chiffres, tirets)
+  local s="$1"
+  s="${s//\//-}"
+  s="${s// /-}"
+  printf '%s' "$s" | tr -cd 'A-Za-z0-9-'
+}
+
+dev_version_dir() { printf '%s/%s' "$DEV_DEPLOY_ROOT" "$1"; }
+
+dev_is_dev_id() { [[ "$1" == dev-* ]]; }
+
+dev_read_meta() { # dev_read_meta <dir> <clé> — lit un champ de .dev-meta.json
+  local dir="$1" key="$2"
+  [[ -f "$dir/.dev-meta.json" ]] || return 1
+  "$SYS_PYTHON" - "$dir/.dev-meta.json" "$key" <<'PYEOF'
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+v = d.get(sys.argv[2])
+if v is not None:
+    print(v)
+PYEOF
+}
+
+dev_collect_ports() { # ports broker déjà attribués (meta dev + configs MCP)
+  local d p
+  if [[ -d "$DEV_DEPLOY_ROOT" ]]; then
+    for d in "$DEV_DEPLOY_ROOT"/dev-*/; do
+      [[ -d "$d" ]] || continue
+      p="$(dev_read_meta "$d" broker_port 2>/dev/null || true)"
+      [[ -n "$p" ]] && echo "$p"
+    done
+  fi
+  "$SYS_PYTHON" - <<'PYEOF'
+import json, os, glob
+
+def ports_from(path):
+    if not os.path.isfile(path):
+        return
+    try:
+        data = json.load(open(path, encoding="utf-8"))
+    except Exception:
+        return
+    for srv in (data.get("mcpServers") or {}).values():
+        if not isinstance(srv, dict):
+            continue
+        cmd = srv.get("command") or ""
+        if os.path.basename(cmd) != "google-mcp":
+            continue
+        env = srv.get("env") or {}
+        p = env.get("GWSA_BROKER_PORT")
+        if p:
+            print(p)
+
+home = os.path.expanduser("~")
+paths = [
+    os.path.join(home, ".cursor", "mcp.json"),
+    os.path.join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json"),
+    os.path.join(home, ".claude.json"),
+]
+xdg = os.environ.get("XDG_CONFIG_HOME") or os.path.join(home, ".config")
+paths.append(os.path.join(xdg, "Claude", "claude_desktop_config.json"))
+for p in paths:
+    ports_from(p)
+for p in glob.glob(os.path.join(home, ".claude", "projects", "*", ".mcp.json")):
+    ports_from(p)
+PYEOF
+}
+
+dev_allocate_port() { # premier port libre ≥ DEV_BROKER_BASE
+  local used p="$DEV_BROKER_BASE"
+  local taken
+  taken="$(dev_collect_ports | sort -nu | tr '\n' ' ')"
+  while :; do
+    if [[ " $taken " != *" $p "* ]]; then
+      if ! (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null; then
+        echo "$p"
+        return 0
+      fi
+    fi
+    p=$((p + 1))
+    [[ "$p" -le 65535 ]] || die "plus de port broker libre (≥ $DEV_BROKER_BASE)"
+  done
+}
+
+dev_sync_tree() { # dev_sync_tree <src> <dst> — copie le clone (arbre de travail inclus)
+  local src="$1" dst="$2"
+  mkdir -p "$dst"
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete \
+      --exclude '.git/' \
+      --exclude '.venv/' \
+      --exclude '__pycache__/' \
+      --exclude 'node_modules/' \
+      "$src/" "$dst/"
+  else
+    find "$dst" -mindepth 1 -maxdepth 1 ! -name '.dev-meta.json' -exec rm -rf {} +
+    tar -C "$src" \
+      --exclude='.git' --exclude='.venv' --exclude='__pycache__' --exclude='node_modules' \
+      -cf - . | tar -C "$dst" -xf -
+  fi
+}
+
+dev_broker_running() { # dev_broker_running <gwsa_root> <port> → affiche pid ou rien
+  local root="$1" port="$2" pidf="$root/.broker-$port.pid" pid=""
+  [[ -f "$pidf" ]] && pid="$(cat "$pidf" 2>/dev/null || true)"
+  [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null \
+    && ps -p "$pid" -o command= 2>/dev/null | grep -q "gateway.broker_server" \
+    && { echo "$pid"; return 0; }
+  if (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
+    echo "listening"
+    return 0
+  fi
+  return 1
+}
+
+dev_admin_status() {
+  local port="${GWSA_ADMIN_PORT:-4877}" pidf="$GWSA_ROOT/.admin.pid" pid=""
+  [[ -f "$pidf" ]] && pid="$(cat "$pidf" 2>/dev/null || true)"
+  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null \
+    && ps -p "$pid" -o command= 2>/dev/null | grep -q "admin/server.js"; then
+    echo "admin en route (pid $pid, port $port, root $GWSA_ROOT)"
+    return 0
+  fi
+  if (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
+    echo "admin écoute sur $port (hors pidfile $GWSA_ROOT)"
+    return 0
+  fi
+  echo "admin arrêté (port $port partagé entre toutes les versions)"
+}
+
+cmd_dev_deploy() {
+  local isolated=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --isolated) isolated=1 ;;
+      -h|--help) echo "usage : gwsa dev deploy [--isolated]"; return 0 ;;
+      *) die "usage : gwsa dev deploy [--isolated]" ;;
+    esac
+    shift
+  done
+  local repo branch sha part id target port gwsa_root
+  repo="$(dev_source_repo)"
+  git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 \
+    || die "pas de dépôt git — lance depuis ton clone (actuel : $repo)"
+  branch="$(git -C "$repo" rev-parse --abbrev-ref HEAD)"
+  sha="$(git -C "$repo" rev-parse --short HEAD)"
+  part="$(dev_sanitize_part "$branch")"
+  [[ -n "$part" ]] || part="branch"
+  id="dev-${part}-${sha}"
+  target="$(dev_version_dir "$id")"
+  gwsa_root="$DEV_PROD_ROOT"
+  [[ -n "$isolated" ]] && gwsa_root="$DEV_ISOLATED_ROOT"
+
+  if port="$(dev_read_meta "$target" broker_port 2>/dev/null)"; then
+    : # réutilise le port d'un déploiement précédent du même id
+  else
+    port="$(dev_allocate_port)"
+  fi
+
+  mkdir -p "$DEV_DEPLOY_ROOT"
+  echo "→ Déploiement dev « $id »"
+  echo "  source     : $repo ($branch @ $sha)"
+  echo "  cible      : $target"
+  echo "  broker     : port $port"
+  echo "  GWSA_ROOT  : $gwsa_root$([[ -n "$isolated" ]] && echo ' (isolé)' || echo ' (comptes partagés avec prod)')"
+  dev_sync_tree "$repo" "$target"
+  printf '%s\n' "$id" > "$target/VERSION"
+  printf '%s\n' "$repo" > "$target/.source"
+  "$SYS_PYTHON" - "$target/.dev-meta.json" "$id" "$branch" "$sha" "$repo" "$port" "$gwsa_root" "$isolated" <<'PYEOF'
+import json, sys, time
+path, vid, branch, sha, source, port, groot, isolated = sys.argv[1:9]
+meta = {
+    "id": vid,
+    "branch": branch,
+    "sha": sha,
+    "source": source,
+    "deployed_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+    "broker_port": int(port),
+    "gwsa_root": groot,
+    "isolated": bool(isolated),
+}
+json.dump(meta, open(path, "w", encoding="utf-8"), indent=2)
+PYEOF
+
+  if [[ -n "$isolated" ]]; then
+    # Couloir isolé : comptes séparés de la prod, mais même app OAuth.
+    # Sans client_secret.json, « gwsa add » refuse immédiatement.
+    mkdir -p "$gwsa_root"
+    if [[ ! -f "$gwsa_root/client_secret.json" ]]; then
+      if [[ -f "$DEV_PROD_ROOT/client_secret.json" ]]; then
+        cp "$DEV_PROD_ROOT/client_secret.json" "$gwsa_root/client_secret.json"
+        chmod 600 "$gwsa_root/client_secret.json" 2>/dev/null || true
+        echo "  → OAuth (client_secret.json) copié depuis $DEV_PROD_ROOT (pas les tokens)"
+      else
+        echo "  ⚠ client_secret.json absent de $DEV_PROD_ROOT"
+        echo "    Avant « gwsa add » : placer client_secret.json dans $gwsa_root"
+        echo "    (suivre docs/setup-oauth.md, ou copier depuis un root déjà provisionné)."
+      fi
+    fi
+  fi
+
+  echo
+  echo "✓ Version dev déployée — le symlink « current » n'a PAS bougé."
+  echo
+  echo "Prochaines étapes :"
+  echo
+  echo "  1. Brancher un client MCP sur cette version :"
+  echo "       gwsa dev use $id --cursor --apply"
+  echo "     ou Claude Desktop (propage GWSA_ROOT du couloir) :"
+  echo "       gwsa dev use $id --claude-desktop --apply"
+  echo
+  echo "  2. Redémarrer le client (Cursor : recharger MCP ; Desktop : Cmd-Q)."
+  echo
+  echo "  3. Vérifier :"
+  echo "       gwsa dev status $id"
+  echo
+  echo "  4. gwsa / broker de CETTE version (depuis n'importe où) :"
+  echo "       GWSA_ROOT=$gwsa_root GWSA_BROKER_PORT=$port $target/bin/gwsa broker status"
+  echo
+  echo "Note : l'admin web (gwsa admin) partage le port ${GWSA_ADMIN_PORT:-4877} — une seule"
+  echo "instance à la fois. Les versions dev réutilisent les comptes prod sauf --isolated."
+  if [[ -n "$isolated" ]]; then
+    echo "  → couloir isolé ($gwsa_root) : connecter un compte de test avec"
+    echo "       GWSA_ROOT=$gwsa_root $target/bin/gwsa add <alias>"
+  fi
+}
+
+cmd_dev_list() {
+  [[ $# -eq 0 ]] || die "« gwsa dev list » ne prend aucun argument (reçu : $*)"
+  local cur="" d v kind port groot
+  echo "Versions (~/.local/share/google-mcp/)"
+  if [[ ! -d "$DEV_DEPLOY_ROOT" ]]; then
+    echo "  (aucun déploiement)"
+  else
+    [[ -L "$DEV_DEPLOY_ROOT/current" ]] && cur="$(basename "$(readlink "$DEV_DEPLOY_ROOT/current")")"
+    for d in "$DEV_DEPLOY_ROOT"/*/; do
+      [[ -d "$d" ]] || continue
+      v="$(basename "$d")"
+      [[ "$v" == "current" ]] && continue
+      if dev_is_dev_id "$v"; then kind="dev"; else kind="stable"; fi
+      port="$(dev_read_meta "$d" broker_port 2>/dev/null || true)"
+      [[ -z "$port" ]] && port="4878"
+      groot="$(dev_read_meta "$d" gwsa_root 2>/dev/null || true)"
+      [[ -z "$groot" ]] && groot="$DEV_PROD_ROOT"
+      if [[ "$v" == "$cur" ]]; then
+        printf '  * %-28s %-6s  port %-5s  %s\n' "$v" "($kind)" "$port" "$d"
+      else
+        printf '    %-28s %-6s  port %-5s  %s\n' "$v" "($kind)" "$port" "$d"
+      fi
+      printf '      GWSA_ROOT %s\n' "$groot"
+    done
+  fi
+  echo
+  echo "Configurations client (entrées google-mcp)"
+  "$SYS_PYTHON" - "$DEV_DEPLOY_ROOT" <<'PYEOF'
+import json, os, glob, sys
+
+deploy_root = os.path.expanduser(sys.argv[1])
+home = os.path.expanduser("~")
+
+def resolve_version(path):
+    path = os.path.realpath(path)
+    if path.startswith(deploy_root + os.sep):
+        parts = path[len(deploy_root) + 1 :].split(os.sep)
+        if parts:
+            return parts[0]
+    if os.path.basename(os.path.dirname(path)) == "bin":
+        parent = os.path.dirname(os.path.dirname(path))
+        if os.path.isfile(os.path.join(parent, "VERSION")):
+            return open(os.path.join(parent, "VERSION"), encoding="utf-8").read().strip()
+    return "dev" if "VERSION" not in os.listdir(os.path.dirname(os.path.dirname(path))) else "?"
+
+def scan_file(label, path):
+    if not os.path.isfile(path):
+        return
+    try:
+        data = json.load(open(path, encoding="utf-8"))
+    except Exception:
+        print(f"  {label} ({path}) — JSON illisible")
+        return
+    found = False
+    for name, srv in sorted((data.get("mcpServers") or {}).items()):
+        if not isinstance(srv, dict):
+            continue
+        cmd = srv.get("command") or ""
+        if os.path.basename(cmd) != "google-mcp":
+            continue
+        found = True
+        env = srv.get("env") or {}
+        port = env.get("GWSA_BROKER_PORT", "4878")
+        client = env.get("GWSA_CLIENT", "?")
+        ver = resolve_version(cmd)
+        print(f"  {label}")
+        print(f"    {path}")
+        print(f"    « {name} » → {cmd}")
+        print(f"    version {ver} · client {client} · broker port {port}")
+    if not found:
+        print(f"  {label} ({path}) — pas d'entrée google-mcp")
+
+scan_file("Cursor", os.path.join(home, ".cursor", "mcp.json"))
+scan_file("Claude Desktop", os.path.join(
+    home, "Library", "Application Support", "Claude", "claude_desktop_config.json"))
+xdg = os.environ.get("XDG_CONFIG_HOME") or os.path.join(home, ".config")
+scan_file("Claude Desktop (xdg)", os.path.join(xdg, "Claude", "claude_desktop_config.json"))
+scan_file("Claude Code", os.path.join(home, ".claude.json"))
+for p in sorted(glob.glob(os.path.join(home, ".claude", "projects", "*", ".mcp.json"))):
+    scan_file("Claude Code (projet)", p)
+PYEOF
+}
+
+cmd_dev_status() {
+  local filter="${1:-}"
+  [[ $# -le 1 ]] || die "usage : gwsa dev status [id]"
+  local d v port groot pid admin_port="${GWSA_ADMIN_PORT:-4877}"
+  echo "Admin (partagé, port $admin_port)"
+  dev_admin_status
+  echo
+  if [[ -n "$filter" ]]; then
+    [[ -d "$(dev_version_dir "$filter")" ]] || die "version « $filter » introuvable (gwsa dev list)"
+    echo "Version $filter"
+    d="$(dev_version_dir "$filter")"
+    port="$(dev_read_meta "$d" broker_port 2>/dev/null || echo 4878)"
+    groot="$(dev_read_meta "$d" gwsa_root 2>/dev/null || echo "$DEV_PROD_ROOT")"
+    if pid="$(dev_broker_running "$groot" "$port" 2>/dev/null)"; then
+      [[ "$pid" == listening ]] && echo "  broker : ⚠ écoute sur $port sans pidfile ($groot)" \
+        || echo "  broker : ✓ pid $pid, port $port, root $groot"
+    else
+      echo "  broker : arrêté (port $port, root $groot)"
+    fi
+    return 0
+  fi
+  echo "Brokers par version dev"
+  if [[ ! -d "$DEV_DEPLOY_ROOT" ]]; then
+    echo "  (aucune version dev)"
+    return 0
+  fi
+  local any=0
+  for d in "$DEV_DEPLOY_ROOT"/dev-*/; do
+    [[ -d "$d" ]] || continue
+    any=1
+    v="$(basename "$d")"
+    port="$(dev_read_meta "$d" broker_port 2>/dev/null || echo 4878)"
+    groot="$(dev_read_meta "$d" gwsa_root 2>/dev/null || echo "$DEV_PROD_ROOT")"
+    if pid="$(dev_broker_running "$groot" "$port" 2>/dev/null)"; then
+      [[ "$pid" == listening ]] && printf '  %-28s broker ⚠ port %s (sans pidfile)\n' "$v" "$port" \
+        || printf '  %-28s broker ✓ pid %s port %s\n' "$v" "$pid" "$port"
+    else
+      printf '  %-28s broker arrêté (port %s)\n' "$v" "$port"
+    fi
+  done
+  [[ $any -eq 1 ]] || echo "  (aucune version dev — gwsa dev deploy)"
+}
+
+cmd_dev_use() {
+  local id="" client="" apply=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --cursor) client="cursor" ;;
+      --claude-desktop) client="claude-desktop" ;;
+      --apply) apply=1 ;;
+      -h|--help)
+        echo "usage : gwsa dev use <id> --cursor [--apply]"
+        echo "        gwsa dev use <id> --claude-desktop [--apply]"
+        return 0 ;;
+      *)
+        [[ -z "$id" ]] && id="$1" || die "usage : gwsa dev use <id> --cursor [--apply]"
+        ;;
+    esac
+    shift
+  done
+  [[ -n "$id" && -n "$client" ]] || die "usage : gwsa dev use <id> --cursor [--apply]"
+  local target mcp port groot server_name cfg
+  target="$(dev_version_dir "$id")"
+  [[ -d "$target" ]] || die "version « $id » introuvable — gwsa dev list"
+  mcp="$target/bin/google-mcp"
+  [[ -x "$mcp" ]] || die "binaire MCP absent : $mcp"
+  port="$(dev_read_meta "$target" broker_port 2>/dev/null || echo 4880)"
+  groot="$(dev_read_meta "$target" gwsa_root 2>/dev/null || echo "$DEV_PROD_ROOT")"
+  server_name="google-mcp-$id"
+
+  case "$client" in
+    cursor) cfg="${GWSA_CURSOR_CONFIG:-$HOME/.cursor/mcp.json}" ;;
+    claude-desktop)
+      case "$(uname -s)" in
+        Darwin) cfg="${GWSA_DESKTOP_CONFIG:-$HOME/Library/Application Support/Claude/claude_desktop_config.json}" ;;
+        Linux)  cfg="${GWSA_DESKTOP_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/Claude/claude_desktop_config.json}" ;;
+        *) die "OS non géré — exporte GWSA_DESKTOP_CONFIG" ;;
+      esac ;;
+  esac
+
+  local snippet
+  snippet="$(cat <<EOF
+{
+  "mcpServers": {
+    "$server_name": {
+      "command": "$mcp",
+      "env": {
+        "GWSA_CLIENT": "$client",
+        "GWSA_BROKER_PORT": "$port",
+        "GWSA_ROOT": "$groot"
+      }
+    }
+  }
+}
+EOF
+)"
+
+  if [[ -z "$apply" ]]; then
+    echo "Snippet MCP ($client) — fusionne dans $cfg :"
+    echo
+    echo "$snippet"
+    echo
+    echo "Relance avec --apply pour écrire (backup horodaté, fusion idempotente)."
+    return 0
+  fi
+
+  MCP_BIN="$mcp" SERVER_NAME="$server_name" GWSA_CLIENT="$client" \
+    BROKER_PORT="$port" GWSA_ROOT_CFG="$groot" CONFIG_PATH="$cfg" \
+    "$SYS_PYTHON" - <<'PYEOF'
+import json, os, sys, tempfile, time
+
+cfg = os.environ["CONFIG_PATH"]
+name = os.environ["SERVER_NAME"]
+port = os.environ["BROKER_PORT"]
+entry = {
+    "command": os.environ["MCP_BIN"],
+    "env": {
+        "GWSA_CLIENT": os.environ["GWSA_CLIENT"],
+        "GWSA_BROKER_PORT": port,
+        "GWSA_ROOT": os.environ["GWSA_ROOT_CFG"],
+    },
+}
+data = {}
+if os.path.exists(cfg):
+    raw = open(cfg, encoding="utf-8").read().strip()
+    if raw:
+        data = json.loads(raw)
+servers = data.setdefault("mcpServers", {})
+servers[name] = entry
+rendered = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+backup = ""
+if os.path.exists(cfg):
+    backup = f"{cfg}.bak-{time.strftime('%Y%m%d-%H%M%S')}"
+    open(backup, "w", encoding="utf-8").write(open(cfg, encoding="utf-8").read())
+os.makedirs(os.path.dirname(cfg) or ".", exist_ok=True)
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(cfg) or ".", prefix=".mcpcfg-")
+with os.fdopen(fd, "w", encoding="utf-8") as f:
+    f.write(rendered)
+os.replace(tmp, cfg)
+print(f"✓ entrée « {name} » écrite dans {cfg}")
+if backup:
+    print(f"  backup : {backup}")
+PYEOF
+  echo "→ Redémarre $client pour recharger le serveur MCP."
+}
+
+cmd_dev_test() {
+  local no_deploy="" isolated="" open_browser=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --no-deploy) no_deploy=1 ;;
+      --isolated) isolated=1 ;;
+      --open) open_browser=1 ;;
+      -h|--help)
+        cat <<'EOF'
+usage : gwsa dev test [--no-deploy] [--isolated] [--open]
+
+Déploie le clone courant (sauf --no-deploy), redémarre l'admin sur le port
+partagé, et affiche un résumé de validation locale.
+
+  --no-deploy   ne pas relancer « gwsa dev deploy » (réutilise le déploiement existant)
+  --isolated    couloir sans comptes prod (transmis à deploy)
+  --open        ouvrir http://127.0.0.1:4877 dans le navigateur (macOS)
+EOF
+        return 0
+        ;;
+      *) die "usage : gwsa dev test [--no-deploy] [--isolated] [--open]" ;;
+    esac
+    shift
+  done
+  local repo branch sha part id target port groot gwsa_bin admin_port admin_url
+  repo="$(dev_source_repo)"
+  git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 \
+    || die "pas de dépôt git — lance depuis ton clone (actuel : $repo)"
+  branch="$(git -C "$repo" rev-parse --abbrev-ref HEAD)"
+  sha="$(git -C "$repo" rev-parse --short HEAD)"
+  part="$(dev_sanitize_part "$branch")"
+  [[ -n "$part" ]] || part="branch"
+  id="dev-${part}-${sha}"
+
+  echo "→ Test local dev"
+  echo "  worktree   : $repo"
+  echo "  branche    : $branch"
+  echo "  commit     : $sha"
+  echo "  id déploy  : $id"
+  echo
+
+  if [[ -z "$no_deploy" ]]; then
+    if [[ -n "$isolated" ]]; then
+      cmd_dev_deploy --isolated
+    else
+      cmd_dev_deploy
+    fi
+    echo
+  else
+    echo "  (déploiement ignoré — --no-deploy)"
+    echo
+  fi
+
+  target="$(dev_version_dir "$id")"
+  [[ -d "$target" ]] || die "version « $id » introuvable — retire --no-deploy ou lance « gwsa dev deploy »"
+  gwsa_bin="$target/bin/gwsa"
+  [[ -x "$gwsa_bin" ]] || die "gwsa absent dans le déploiement : $gwsa_bin"
+  port="$(dev_read_meta "$target" broker_port 2>/dev/null || echo 4878)"
+  groot="$(dev_read_meta "$target" gwsa_root 2>/dev/null || echo "$DEV_PROD_ROOT")"
+  admin_port="${GWSA_ADMIN_PORT:-4877}"
+  admin_url="http://127.0.0.1:${admin_port}"
+
+  echo "→ Redémarrage admin (port $admin_port, code déployé)"
+  GWSA_ROOT="$groot" "$gwsa_bin" admin stop
+  if [[ -n "$open_browser" ]]; then
+    GWSA_ROOT="$groot" "$gwsa_bin" admin
+  else
+    GWSA_ADMIN_NO_OPEN=1 GWSA_ROOT="$groot" "$gwsa_bin" admin
+  fi
+
+  local admin_pid admin_ps marker_ok marker_msg curl_out
+  sleep 0.5
+  admin_pid=""
+  if [[ -f "$groot/.admin.pid" ]]; then
+    admin_pid="$(cat "$groot/.admin.pid" 2>/dev/null || true)"
+  fi
+  if [[ -n "$admin_pid" ]] && kill -0 "$admin_pid" 2>/dev/null; then
+    admin_ps="$(ps -p "$admin_pid" -o command= 2>/dev/null || true)"
+  else
+    admin_pid="$(lsof -ti "tcp:$admin_port" -sTCP:LISTEN 2>/dev/null | head -1 || true)"
+    [[ -n "$admin_pid" ]] && admin_ps="$(ps -p "$admin_pid" -o command= 2>/dev/null || true)"
+  fi
+
+  marker_ok="non"
+  marker_msg="admin injoignable"
+  if command -v curl >/dev/null 2>&1; then
+    curl_out="$(curl -sf "$admin_url/" 2>/dev/null || true)"
+    if [[ -n "$curl_out" ]]; then
+      if echo "$curl_out" | grep -q 'id="afSearchHits"'; then
+        marker_ok="oui"
+        marker_msg='marqueur PR afSearchHits présent'
+      else
+        marker_msg='page servie mais afSearchHits absent'
+      fi
+    fi
+  else
+    marker_msg="curl absent — vérification manuelle"
+  fi
+
+  echo
+  echo "══════════════════════════════════════════════════════════════"
+  echo "  Résumé — test local"
+  echo "══════════════════════════════════════════════════════════════"
+  echo "  Déploiement : $id"
+  echo "  Source       : $repo ($branch @ $sha)"
+  echo "  Admin        : $admin_url"
+  echo "  GWSA_ROOT    : $groot"
+  echo "  Broker       : port $port"
+  echo "  Marqueur PR  : $marker_ok — $marker_msg"
+  echo "  Process admin:"
+  if [[ -n "$admin_ps" ]]; then
+    echo "    $admin_ps"
+  else
+    echo "    (introuvable)"
+  fi
+  echo "══════════════════════════════════════════════════════════════"
+  echo
+  echo "Commande à recopier :"
+  local oneliner="./bin/gwsa dev test"
+  [[ -n "$isolated" ]] && oneliner+=" --isolated"
+  [[ -n "$no_deploy" ]] && oneliner+=" --no-deploy"
+  [[ -n "$open_browser" ]] && oneliner+=" --open"
+  echo "  $oneliner"
+  echo
+}
+
+cmd_dev_remove() {
+  local id="${1:-}"
+  [[ $# -eq 1 ]] || die "usage : gwsa dev remove <id>"
+  dev_is_dev_id "$id" || die "« $id » n'est pas une version dev (refus de supprimer une stable)"
+  local target groot port
+  target="$(dev_version_dir "$id")"
+  [[ -d "$target" ]] || die "version « $id » introuvable"
+  groot="$(dev_read_meta "$target" gwsa_root 2>/dev/null || echo "$DEV_PROD_ROOT")"
+  port="$(dev_read_meta "$target" broker_port 2>/dev/null || echo 4880)"
+  if pid="$(dev_broker_running "$groot" "$port" 2>/dev/null)" && [[ "$pid" != listening ]]; then
+    kill "$pid" 2>/dev/null || true
+    rm -f "$groot/.broker-$port.pid"
+    echo "✓ broker arrêté (pid $pid)"
+  fi
+  rm -rf "$target"
+  echo "✓ version dev « $id » supprimée ($target)"
+  echo "  Pense à retirer l'entrée MCP du client si tu l'avais branchée (gwsa dev list)."
+}
+
+cmd_dev() {
+  [[ $# -ge 1 ]] || die "usage : gwsa dev <deploy|test|list|status|use|remove> …"
+  case "$1" in
+    deploy) shift; cmd_dev_deploy "$@" ;;
+    test)   shift; cmd_dev_test "$@" ;;
+    list)   shift; cmd_dev_list "$@" ;;
+    status) shift; cmd_dev_status "$@" ;;
+    use)    shift; cmd_dev_use "$@" ;;
+    remove) shift; cmd_dev_remove "$@" ;;
+    -h|--help)
+      echo "gwsa dev — couloirs de développement temporaires"
+      echo "  deploy [--isolated]     déployer le clone courant"
+      echo "  test [--no-deploy] [--isolated] [--open]"
+      echo "                          déployer + redémarrer l'admin + résumé"
+      echo "  list                    versions + configs client"
+      echo "  status [id]             brokers / admin"
+      echo "  use <id> --cursor [--apply]"
+      echo "  remove <id>             supprimer une version dev"
+      ;;
+    *) die "sous-commande dev inconnue « $1 » (deploy|test|list|status|use|remove)" ;;
+  esac
+}
+
 cmd_update() { # gwsa update [--check|--to <version>|--force] — installer la version publiée
   local script="$REPO_DIR/scripts/update.sh"
   [[ -x "$script" ]] || die "script de mise à jour introuvable ($script)"
@@ -520,6 +1191,7 @@ main() {
       esac ;;
     admin)  shift; [[ $# -le 1 ]] || die "usage : gwsa admin [stop]"; cmd_admin "$@" ;;
     broker) shift; [[ $# -le 1 ]] || die "usage : gwsa broker [status|stop]"; cmd_broker "$@" ;;
+    dev)    shift; cmd_dev "$@" ;;
     update)  shift; cmd_update "$@" ;;
     release) shift; cmd_release "$@" ;;
     remove) shift; [[ $# -eq 1 ]] || die "usage : gwsa remove <alias>"; cmd_remove "$@" ;;
