@@ -5,9 +5,9 @@ type: feature
 priority: P2
 version:
 epic:
-status: idea
-ready:
-pr:
+status: shipped
+ready: 2026-07-28
+pr: "#48"
 created: 2026-07-26
 ---
 
@@ -24,11 +24,23 @@ Une étiquette explicitement jetable, par exemple
 `~/.local/share/google-mcp/sha-9d7f985/`, se branche sous un nom d'entrée
 distinct avec son propre port (fiche 0025), et ne devient **jamais** `current`.
 
+## Livré (PR #48)
+
+Réalisé via `gwsa dev` plutôt que `deploy-local.sh --as` :
+
+- `gwsa dev deploy [--isolated]` — copie le clone courant sous
+  `~/.local/share/google-mcp/<id>/` (id jetable, jamais `current`)
+- `list` / `status` / `use` (Cursor / Claude Desktop `--apply`) / `remove`
+- Option `--isolated` + seed OAuth pour un couloir sans comptes prod
+- `gwsa dev test` + couverture hermétique dans `scripts/test.sh`
+
 ## Critères d'acceptation
 
-- [ ] À groomer.
+- [x] Déployer un HEAD non taggé en couloir temporaire sans toucher `current`
+- [x] Brancher un client MCP sur ce couloir sans écraser l'install stable
+- [x] Nettoyer le couloir (`remove`) ; tests hermétiques verts
 
 ## Notes
 
 Une étiquette jetable ne doit pas pouvoir usurper un tag (préfixe réservé, ou
-refus si l'étiquette ressemble à `vX.Y.Z`).
+refus si l'étiquette ressemble à `vX.Y.Z`) — géré par l'id de couloir `dev-*`.

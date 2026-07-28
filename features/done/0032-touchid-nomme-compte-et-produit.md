@@ -5,9 +5,9 @@ type: feature
 priority: P2
 version:
 epic:
-status: idea
-ready:
-pr:
+status: shipped
+ready: 2026-07-28
+pr: "#48"
 created: 2026-07-27
 ---
 
@@ -42,9 +42,20 @@ Deux manques au moment du consentement :
   de la fiche 0001 (signature) ; ici, viser au moins que le texte cite
   « google-mcp-multi-account ».
 
+## Livré (PR #48)
+
+- `strong_auth_reason` affiche l'**email** (pas l'alias) dans la raison Touch ID
+  — ex. `déverrouiller le compte Google thomas@…`
+- Binaire compilé nommé `bin/mcp-google-mcp-multi-account` (macOS n'affiche
+  plus « swift » / `swift-frontend` comme demandeur)
+- Formule retenue : email d'abord (sans « alias + email ») — l'intention
+  « nommer le compte » est couverte ; la signature dure reste fiche 0001
+
 ## Critères d'acceptation
 
-- [ ] À groomer.
+- [x] La raison Touch ID cite l'email du compte (pas seulement l'alias)
+- [x] Le dialogue système nomme un binaire produit (`mcp-google-mcp-multi-account`),
+      pas `swift`
 
 ## Notes
 
@@ -52,5 +63,4 @@ Deux manques au moment du consentement :
   stable à travers une reconnexion) ; mais partout où l'humain **consent**
   (Touch ID, confirmation, journal), c'est le **compte** qui doit être nommé.
   `gwsa list` respecte déjà ça (alias + email) ; le Touch ID l'a oublié.
-- Voir [[0033-grant-one-shot-depuis-conversation]] (même surface de confiance)
-  et la fiche 0001 (élicitation signée, provenance dure).
+- Voir fiche 0001 (élicitation signée, provenance dure).

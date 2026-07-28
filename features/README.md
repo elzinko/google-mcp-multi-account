@@ -25,6 +25,8 @@
 | 0013 | Brancher le serveur MCP dans Claude Desktop en un geste (script idempotent) | feature | P2 |  | ✅ shipped | #15 |
 | 0016 | Porte d'entrée open-source — README copiable, SECURITY.md, licence MIT, badges | feature | P2 |  | ✅ shipped | #16 |
 | 0022 | Doc de critique technique lisible (forces / limites / risques) référencée au README | feature | P2 |  | ✅ shipped | #23 |
+| 0027 | Déployer un commit non taggé pour essayer une PR (couloir jetable) | feature | P2 |  | ✅ shipped | #48 |
+| 0032 | La notification Touch ID doit nommer le compte et le produit, pas l'alias seul | feature | P2 |  | ✅ shipped | #48 |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)
 
@@ -37,8 +39,6 @@
 | # | Titre | Type | Prio | Épic | Statut | PR |
 |---|-------|------|------|------|--------|----|
 | 0026 | Savoir quelle version répond — version annoncée par les tools, dérive détectée | feature | P2 |  | 💡 idea |  |
-| 0027 | Déployer un commit non taggé pour essayer une PR (couloir jetable) | feature | P2 |  | 💡 idea |  |
-| 0032 | La notification Touch ID doit nommer le compte et le produit, pas l'alias seul | feature | P2 |  | 💡 idea |  |
 | 0034 | Mettre à jour le protocole du test manuel drive-2-comptes (limites périmées + nouvelles phases) | chore | P3 |  | 💡 idea |  |
 | 0038 | Créer un dossier-zone rapidement, geste humain (sans passer par le LLM) | feature | P2 |  | 💡 idea |  |
 | 0039 | Bannir « jeton/token » des surfaces utilisateur — un seul vocabulaire (accès / connexion) | chore | P2 |  | 💡 idea |  |
@@ -52,4 +52,4 @@
 | 0021 | Élargir la couverture MCP — Calendar, Docs, Sheets, Tasks (et écritures) | feature | P3 | 0017 | 💡 idea |  |
 | 0028 | Ménage des versions déployées (+ CHANGELOG et releases GitHub) | chore | P3 |  | 💡 idea |  |
 
-> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0022, 0023, 0024, 0025, 0029, 0030, 0031, 0036, 0037, 0040.
+> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0022, 0023, 0024, 0025, 0027, 0029, 0030, 0031, 0032, 0036, 0037, 0040.

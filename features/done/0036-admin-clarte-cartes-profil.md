@@ -121,3 +121,8 @@ harmoniser les autres surfaces.
 - Question ouverte pour l'implémentation : « Ouvrir dans Drive » avec le bon
   compte Google (`authuser` / profil navigateur) n'est pas garanti par une
   simple URL — à creuser.
+- **Suite PR #48** (sans nouvelle fiche) : picker zones (recherche, ancestors,
+  authorize sans fermer le picker), `lockchip` + modal reverrouillage, dialog
+  policy sticky footer, timeouts Touch ID admin. L'interrupteur connexion a
+  été **retiré** (Remplacer par Reconnecter / zone de danger) — critère
+  « interrupteur » ci-dessus partiellement supersédé.
