@@ -36,3 +36,9 @@ en fouillant la config à la main le 2026-07-26.
 ## Notes
 
 Découvert en même temps que la fiche 0025 (couloirs étanches).
+
+**Suite 2026-07-28** : la surface Claude Desktop → Connecteurs n'affiche
+toujours pas la version (seulement le nom `google-multi-account` + permissions
+outils). Voir fiche [[0042]] pour la visibilité « humaine » + parcours de mise
+à jour post-merge ; cette fiche 0026 reste centrée sur l'annonce **via tools**
+et la dérive config ↔ `current`.
