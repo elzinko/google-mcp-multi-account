@@ -458,9 +458,20 @@ cmd_admin() { # gwsa admin [stop] — interface web locale (127.0.0.1:4877), dé
         mkdir -p "$GWSA_ROOT"
         GWSA_ADMIN_PORT="$port" nohup node "$REPO_DIR/admin/server.js" >> "$log" 2>&1 &
         echo $! > "$pidf"
-        sleep 1
-        kill -0 "$(cat "$pidf")" 2>/dev/null \
-          || { rm -f "$pidf"; die "échec du démarrage de l'admin — voir $log"; }
+        # Ne pas se fier au seul pid : un EADDRINUSE tue le process après le
+        # sleep 1, laissant un pidfile fantôme et une UI « Failed to fetch ».
+        local ok="" i
+        for i in 1 2 3 4 5 6 7 8; do
+          if is_admin_pid "$(cat "$pidf" 2>/dev/null || true)" && admin_listening; then
+            ok=1; break
+          fi
+          sleep 0.25
+        done
+        if [[ -z "$ok" ]]; then
+          kill "$(cat "$pidf" 2>/dev/null || true)" 2>/dev/null || true
+          rm -f "$pidf"
+          die "échec du démarrage de l'admin — voir $log"
+        fi
         echo "✓ interface admin démarrée (pid $(cat "$pidf"), log $log) — http://127.0.0.1:$port"
       fi
       [[ -z "${GWSA_ADMIN_NO_OPEN:-}" ]] && open "http://127.0.0.1:$port" 2>/dev/null || true ;;

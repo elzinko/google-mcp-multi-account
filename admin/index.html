@@ -451,9 +451,18 @@ const PRESETS = {
 };
 
 async function api(path, opts) {
-  const r = await fetch(path, { headers: H, ...opts });
+  let r;
+  try {
+    r = await fetch(path, { headers: H, ...opts });
+  } catch (e) {
+    const msg = (e && e.message) || String(e);
+    if (/failed to fetch|networkerror|load failed/i.test(msg)) {
+      throw new Error("connexion perdue avec l'admin (processus arrêté pendant Touch ID, ou admin down) — relance « gwsa admin » puis réessaie");
+    }
+    throw e;
+  }
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || r.status);
+  if (!r.ok) throw new Error(j.error || j.out || r.status);
   return j;
 }
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.style.opacity = 1; setTimeout(() => t.style.opacity = 0, 3000); }
