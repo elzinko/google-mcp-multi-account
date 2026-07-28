@@ -54,11 +54,60 @@ function buildSchemas() {
   return slugs.length ? parts.join("\n\n") : "";
 }
 
-function gwsa(args) {
+// Timeout court pour les commandes snappy (list/lock/…). Unlock/grant/add
+// attendent Touch ID : 20 s tuait le child au milieu du dialogue → connexion
+// HTTP coupée côté navigateur (« Failed to fetch ») si le process admin
+// mourait/redémarrait dans la foulée, ou réponse 500 opaque sinon.
+const GWSA_TIMEOUT_SHORT_MS = 20000;
+const GWSA_TIMEOUT_AUTH_MS = 120000;
+
+function gwsaExitCode(err) {
+  if (!err) return 0;
+  if (err.killed || err.code === "ETIMEDOUT") return 124;
+  if (typeof err.code === "number") return err.code;
+  if (err.code === undefined || err.code === null) return 1;
+  return 1;
+}
+
+function gwsa(args, timeout = GWSA_TIMEOUT_SHORT_MS) {
   return new Promise((resolve) => {
-    execFile(GWSA, args, { timeout: 20000 }, (err, stdout, stderr) =>
-      resolve({ code: err ? (err.code === undefined ? 1 : err.code) : 0, stdout: String(stdout), stderr: String(stderr) }));
+    execFile(GWSA, args, { timeout, killSignal: "SIGTERM" }, (err, stdout, stderr) => {
+      const timedOut = !!(err && (err.killed || err.code === "ETIMEDOUT"));
+      resolve({
+        code: gwsaExitCode(err),
+        timedOut,
+        stdout: String(stdout || ""),
+        stderr: String(stderr || ""),
+      });
+    });
   });
+}
+
+function holdHttpForAuth(req, res) {
+  // Empêche Node de couper la socket pendant l'attente Touch ID (humain).
+  try { req.setTimeout(0); } catch {}
+  try { res.setTimeout(0); } catch {}
+}
+
+function authGwsaResult(r) {
+  if (r.timedOut) {
+    return {
+      status: 504,
+      body: {
+        ok: false,
+        error: "délai dépassé — Touch ID non validé à temps (réessaie)",
+        out: (r.stdout + r.stderr).trim(),
+      },
+    };
+  }
+  const out = (r.stdout + r.stderr).trim();
+  if (r.code) {
+    return {
+      status: 500,
+      body: { ok: false, error: out.slice(0, 300) || "action refusée", out },
+    };
+  }
+  return { status: 200, body: { ok: true, out } };
 }
 
 // provision-gcp.sh — état du setup (status --json) et réparation IAM (sync-iam).
@@ -304,7 +353,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && p === "/api/sync-iam") {
       // Réparation IAM : accorde le rôle aux comptes manquants (idempotent).
       // Touch ID via le script si strongauth. Timeout large (attente humaine + gcloud).
-      const r = await provision(["sync-iam", "--yes"], 120000);
+      holdHttpForAuth(req, res);
+      const r = await provision(["sync-iam", "--yes"], GWSA_TIMEOUT_AUTH_MS);
       return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).slice(-1500) });
     }
     if (req.method === "GET" && p === "/api/doc") {
@@ -378,11 +428,13 @@ const server = http.createServer(async (req, res) => {
         return send(res, r.code ? 500 : 200, { ok: !r.code, out: r.stdout + r.stderr });
       }
       if (action === "unlock") {
+        holdHttpForAuth(req, res);
         const b = await readBody(req);
         const arg = b.minutes === "off" ? "off"
           : String(Math.min(1440, Math.max(1, parseInt(b.minutes, 10) || 60)));
-        const r = await gwsa(["unlock", alias, arg]);
-        return send(res, r.code ? 500 : 200, { ok: !r.code, out: r.stdout + r.stderr });
+        const r = await gwsa(["unlock", alias, arg], GWSA_TIMEOUT_AUTH_MS);
+        const packed = authGwsaResult(r);
+        return send(res, packed.status, packed.body);
       }
       if (action === "revoke") {
         const r = await gwsa(["remove", alias]);
@@ -394,13 +446,20 @@ const server = http.createServer(async (req, res) => {
         const target = String(b.target || "").trim().replace(/[\x00-\x1f"'\\]/g, "");
         if (!target || target.length > 200) return send(res, 400, { error: "dossier invalide" });
         let args;
+        let timeout = GWSA_TIMEOUT_SHORT_MS;
         if (action === "grant") {
+          holdHttpForAuth(req, res);
           const h = Math.min(168, Math.max(1, parseInt(b.hours, 10) || 8));
           args = ["grant", alias, target, String(h)];
+          timeout = GWSA_TIMEOUT_AUTH_MS;
         } else {
           args = ["policy", alias, "allow", target];
         }
-        const r = await gwsa(args);
+        const r = await gwsa(args, timeout);
+        if (action === "grant") {
+          const packed = authGwsaResult(r);
+          return send(res, packed.status, packed.body);
+        }
         return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).trim() });
       }
       if (action === "drive-folder-remove" || action === "grant-revoke") {
@@ -433,6 +492,14 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+server.on("error", (err) => {
+  // Sans handler, un EADDRINUSE (course au démarrage) plantait en « Unhandled
+  // 'error' event » — pidfile orphelin, UI « Failed to fetch ».
+  console.error(`admin listen error: ${err && err.code ? err.code : err}`);
+  process.exit(1);
+});
+server.requestTimeout = Math.max(server.requestTimeout || 0, GWSA_TIMEOUT_AUTH_MS + 30000);
+server.headersTimeout = Math.max(server.headersTimeout || 0, GWSA_TIMEOUT_AUTH_MS + 60000);
 server.listen(PORT, HOST, () => {
   console.log(`Admin gws multi-comptes : http://${HOST}:${PORT} (local uniquement)`);
 });

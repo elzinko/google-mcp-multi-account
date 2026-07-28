@@ -1621,6 +1621,18 @@ else
   fail "touchid : strong_auth_reason ou binaire manquant dans gwsa"
 fi
 
+# Admin : unlock/grant doivent attendre Touch ID > 20 s (sinon Failed to fetch)
+if grep -q 'GWSA_TIMEOUT_AUTH_MS = 120000' admin/server.js \
+  && grep -q 'holdHttpForAuth' admin/server.js \
+  && grep -q 'authGwsaResult' admin/server.js \
+  && grep -q 'server.on("error"' admin/server.js \
+  && grep -q 'connexion perdue avec l'\''admin' admin/index.html \
+  && grep -q 'pidfile fantôme' bin/gwsa; then
+  pass "admin : timeout Touch ID 120s + listen error + message Failed to fetch"
+else
+  fail "admin : garde-fous Touch ID / Failed to fetch manquants"
+fi
+
 # API admin hermétique : grant + drive-folder écrivent bien grants / policy
 AF_ALIAS=zonesapi
 AF_DIR="$GWSA_ROOT/$AF_ALIAS"
