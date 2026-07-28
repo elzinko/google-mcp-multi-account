@@ -7,7 +7,7 @@ version:
 epic:
 status: in-progress
 ready: 2026-07-28
-pr:
+pr: "#52"
 created: 2026-07-28
 ---
 

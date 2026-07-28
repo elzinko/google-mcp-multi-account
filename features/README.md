@@ -30,7 +30,7 @@
 | 0032 | La notification Touch ID doit nommer le compte et le produit, pas l'alias seul | feature | P2 |  | ✅ shipped | #48 |
 | 0036 | Refonte des cartes profil de l'admin — liste, page de compte, zones (spec maquette v11) | feature | P2 |  | ✅ shipped | #44 |
 | 0040 | Le déploiement branche Claude Desktop mais pas Claude Code (CLI) — généraliser | feature | P2 |  | ✅ shipped | #43 |
-| 0041 | Clarifier l'écart policy admin ↔ surface MCP (Drive copie, contenu, modification) | bug | P2 |  | 🟠 in-progress |  |
+| 0041 | Clarifier l'écart policy admin ↔ surface MCP (Drive copie, contenu, modification) | bug | P2 |  | 🟠 in-progress | #52 |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)
 
