@@ -335,8 +335,13 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
         <div class="grid" id="pKeep"></div>
         <p class="note">Nécessite le scope Keep au login (reconnexion) ; API parfois réservée aux comptes Workspace.</p>
       </fieldset>
-      <p class="note">Docs, Sheets, Tasks : libres tant qu'ils ne sont pas dans la policy.
-      Un service configuré est <b>fail closed</b> : tout ce qui n'est pas coché est refusé.</p>
+  <p class="note">Docs, Sheets, Tasks : libres tant qu'ils ne sont pas dans la policy.
+  Un service configuré est <b>fail closed</b> : tout ce qui n'est pas coché est refusé.</p>
+  <p class="note"><b>Policy ≠ tools MCP.</b> Les cases ci-dessus autorisent des
+  appels <code>gwsa</code> / API. Le serveur MCP n'expose qu'un sous-ensemble :
+  Drive = liste / métadonnées (<code>drive_get</code>, pas le contenu) / création
+  zonée — pas de copie, pas de modification d'un fichier existant. Agenda et Keep
+  peuvent être dans la policy sans tool MCP correspondant.</p>
     </div>
     <div class="dlg-policy-foot">
       <button onclick="dPolicy.close()">Annuler</button>
