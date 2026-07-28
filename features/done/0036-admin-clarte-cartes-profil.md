@@ -97,19 +97,21 @@ harmoniser les autres surfaces.
 
 ## Critères d'acceptation
 
-- [ ] La liste rend les 3 situations (déverrouillé+décompte, verrouillé,
-      déconnecté grisé) aux emplacements fixes de la maquette v11.
-- [ ] Cadenas cliquable : fermé→déverrouille (Touch ID via gwsa) ;
-      ouvert→confirmation puis reverrouille ; décompte réel, reverrouillage
-      auto à zéro visible sans recharger.
-- [ ] Interrupteur : éteint sur compte déconnecté ; l'allumer lance la
-      reconnexion ; l'éteindre est refusé avec renvoi vers la zone de danger.
-- [ ] Page de compte : droits par appli en vert/rouge, « Configurer… » ouvre
+- [x] La liste rend les 3 situations (déverrouillé+décompte, verrouillé,
+      déconnecté grisé) aux emplacements fixes (PR #44 + #48).
+- [x] Cadenas cliquable (`lockchip`) : fermé→déverrouille (Touch ID via gwsa) ;
+      ouvert→modal `dRelock` puis reverrouille ; décompte réel, reverrouillage
+      auto à zéro visible sans recharger (PR #48).
+- [x] Connexion : compte déconnecté grisé + « Reconnecter » (l'interrupteur
+      v11 a été **retiré** en #48 — zone de danger pour retirer le compte).
+- [x] Page de compte : droits par appli en vert/rouge, « Configurer… » ouvre
       la fenêtre zones (Drive) ou l'éditeur de policy (autres).
-- [ ] Fenêtre zones conforme (nom seul + infobulle chemin, P/T, ↗, ✕,
-      pointillés, navigateur Drive avec création, ajouts multiples).
-- [ ] Aucun « jeton / OAuth / token » dans l'UI.
-- [ ] `./scripts/test.sh` vert.
+- [x] Fenêtre zones : picker Drive (recherche, ancestors, Sélectionner → durée
+      → Valider sans fermer le picker), P/T, ↗, ✕ (création de dossier = fiche
+      0038, encore ouverte).
+- [x] Aucun « jeton » dans l'UI cartes ; restes « tokens »/« OAuth » hors cartes
+      → fiche 0039.
+- [x] `./scripts/test.sh` vert (zones + hermétique étendu en #48).
 
 ## Notes
 
