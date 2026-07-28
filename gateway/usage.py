@@ -13,6 +13,9 @@ def log_usage(
     client: str,
     decision: str = "ok",
     reason: str = "",
+    *,
+    session_id: str = "",
+    git_root: str = "",
 ) -> None:
     """Best-effort : ne lève jamais, n'empêche jamais la réponse au client."""
     if not USAGE_LOGGER.is_file():
@@ -22,6 +25,10 @@ def log_usage(
     env["GWSA_CLIENT"] = client or "broker"
     env["GWSA_LOG_DECISION"] = decision
     env["GWSA_LOG_REASON"] = reason
+    if session_id:
+        env["GWSA_SESSION_ID"] = session_id
+    if git_root:
+        env["GWSA_GIT_ROOT"] = git_root
     try:
         subprocess.run(
             [python, str(USAGE_LOGGER), str(gwsa_root()), alias, *gws_args],

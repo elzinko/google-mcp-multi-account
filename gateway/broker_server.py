@@ -23,10 +23,12 @@ from pathlib import Path
 from typing import Any
 
 # Réutiliser la logique gateway (lock, policy, config)
-from .config import SYS_PYTHON, POLICY_CHECKER, gwsa_root, upload_spool
+from .config import SYS_PYTHON, POLICY_CHECKER, gwsa_root, profile_dir, upload_spool
 from .errors import GatewayError
-from .profiles import require_unlocked
+from .profiles import is_locked, require_unlocked
+from .sessions import active_drive_zones, is_session_unlocked
 from .usage import log_usage
+from .vault import gws_config_dir, migrate_all
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 4878
@@ -79,9 +81,9 @@ def _gws_bin() -> str:
     return path
 
 
-def run_gws_local(profile_path: Path, args: list[str], timeout: int = 60) -> Any:
+def run_gws_local(alias: str, args: list[str], timeout: int = 60) -> Any:
     env = dict(os.environ)
-    env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] = str(profile_path)
+    env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] = str(gws_config_dir(alias))
     try:
         r = subprocess.run(
             [_gws_bin(), *args],
@@ -111,7 +113,16 @@ def run_gws_local(profile_path: Path, args: list[str], timeout: int = 60) -> Any
         return {"raw": out}
 
 
-def check_policy(profile_path: Path, gws_args: list[str], client: str) -> None:
+def check_policy(
+    profile_path: Path,
+    gws_args: list[str],
+    client: str,
+    *,
+    session_id: str = "",
+    git_root: str = "",
+    session_drive_zones: set[str] | None = None,
+    use_session_grants: bool = False,
+) -> None:
     if not (profile_path / "policy.json").is_file():
         return
     if not POLICY_CHECKER.is_file():
@@ -119,6 +130,13 @@ def check_policy(profile_path: Path, gws_args: list[str], client: str) -> None:
     python = SYS_PYTHON if os.path.isfile(SYS_PYTHON) else "python3"
     env = dict(os.environ)
     env["GWSA_CLIENT"] = client or "broker"
+    if session_id:
+        env["GWSA_SESSION_ID"] = session_id
+    if git_root:
+        env["GWSA_GIT_ROOT"] = git_root
+    if use_session_grants and session_drive_zones is not None:
+        env["GWSA_SESSION_DRIVE_ZONES"] = ",".join(sorted(session_drive_zones))
+        env["GWSA_USE_SESSION_GRANTS"] = "1"
     r = subprocess.run(
         [python, str(POLICY_CHECKER), str(profile_path), *gws_args],
         capture_output=True,
@@ -130,22 +148,61 @@ def check_policy(profile_path: Path, gws_args: list[str], client: str) -> None:
         raise GatewayError(msg, code="policy")
 
 
-def handle_exec(alias: str, args: list[str], client: str) -> Any:
+def _require_access(alias: str, session_id: str) -> Path:
+    d = profile_dir(alias)
+    if not d.is_dir():
+        raise GatewayError(
+            f"profil inconnu « {alias} » — le créer avec : gwsa add {alias}",
+            code="not_found",
+        )
+    if session_id:
+        if is_locked(d) and not is_session_unlocked(session_id, alias):
+            raise GatewayError(
+                f"profil « {alias} » verrouillé pour cette session — "
+                f"demander : gwsa session unlock {session_id} {alias} [minutes]",
+                code="locked",
+            )
+        return d
+    return require_unlocked(alias)
+
+
+def handle_exec(
+    alias: str,
+    args: list[str],
+    client: str,
+    *,
+    session_id: str = "",
+    git_root: str = "",
+) -> Any:
     if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
         raise GatewayError("args doit être une liste de chaînes", code="error")
     if not args:
         raise GatewayError("args vide", code="error")
     try:
-        d = require_unlocked(alias)
+        d = _require_access(alias, session_id)
     except GatewayError as e:
-        # Refus de verrou tracé comme un refus de policy — sinon usage.jsonl
-        # ne voit jamais les tentatives sur profil verrouillé.
         if e.code == "locked":
-            log_usage(alias, args, client, decision="refus", reason="locked")
+            log_usage(
+                alias, args, client, decision="refus", reason="locked",
+                session_id=session_id, git_root=git_root,
+            )
         raise
-    check_policy(d, args, client)
-    result = run_gws_local(d, args)
-    log_usage(alias, args, client)
+
+    session_zones: set[str] | None = None
+    use_session = bool(session_id)
+    if use_session:
+        session_zones = active_drive_zones(session_id, alias)
+        # Plafond manifeste appliqué dans policy-check via GWSA_GIT_ROOT (intersection)
+
+    check_policy(
+        d, args, client,
+        session_id=session_id,
+        git_root=git_root,
+        session_drive_zones=session_zones,
+        use_session_grants=use_session,
+    )
+    result = run_gws_local(alias, args)
+    log_usage(alias, args, client, session_id=session_id, git_root=git_root)
     return result
 
 
@@ -175,8 +232,34 @@ class BrokerHandler(socketserver.StreamRequestHandler):
                 alias = req.get("alias") or ""
                 args = req.get("args") or []
                 client = req.get("client") or "broker"
-                result = handle_exec(alias, args, client)
+                session_id = str(req.get("session_id") or "")
+                git_root = str(req.get("git_root") or "")
+                result = handle_exec(
+                    alias, args, client,
+                    session_id=session_id,
+                    git_root=git_root,
+                )
                 self._reply({"ok": True, "result": result})
+                return
+            if cmd == "session_create":
+                from .sessions import create_child_session, create_session
+                parent = str(req.get("parent_id") or "")
+                client = str(req.get("client") or "broker")
+                if parent:
+                    st = create_child_session(parent, client=client)
+                else:
+                    st = create_session(client=client)
+                self._reply({"ok": True, "result": st.to_json()})
+                return
+            if cmd == "session_revoke_descendants":
+                from .sessions import revoke_descendants
+                sid = str(req.get("session_id") or "")
+                n = revoke_descendants(sid)
+                self._reply({"ok": True, "result": {"revoked": n}})
+                return
+            if cmd == "migrate_vault":
+                moved = migrate_all()
+                self._reply({"ok": True, "result": {"migrated": moved}})
                 return
             self._reply({"ok": False, "code": "error", "error": f"cmd inconnue : {cmd}"})
         except GatewayError as e:
@@ -194,6 +277,7 @@ class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 
 
 def serve(host: str | None = None, port: int | None = None) -> None:
+    migrate_all()
     host = host or broker_host()
     port = port if port is not None else broker_port()
     # Le port EFFECTIF nomme le jeton et le pidfile — pas celui de

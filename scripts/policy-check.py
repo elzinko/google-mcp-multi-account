@@ -190,7 +190,12 @@ def normalize_drive(drive):
 
 
 def active_grants(profile_dir):
-    """Zones temporaires accordées par l'utilisateur (gwsa grant), non expirées."""
+    """Zones temporaires : session MCP (prioritaire) ou session-grants.json legacy."""
+    if os.environ.get("GWSA_USE_SESSION_GRANTS") == "1":
+        raw = os.environ.get("GWSA_SESSION_DRIVE_ZONES", "")
+        if raw.strip():
+            return {z.strip() for z in raw.split(",") if z.strip()}
+        return set()
     try:
         with open(os.path.join(profile_dir, "session-grants.json")) as f:
             g = json.load(f)
@@ -201,9 +206,49 @@ def active_grants(profile_dir):
 
 
 def zone_hint(alias):
-    return ("aucune zone d'écriture active — demander à l'utilisateur une autorisation "
-            "temporaire (« gwsa grant %s \"<dossier>\" [heures] ») ou permanente "
-            "(« gwsa policy %s allow <dossier> » / interface admin)" % (alias, alias))
+    sid = os.environ.get("GWSA_SESSION_ID", "").strip()
+    if sid:
+        return (
+            "aucune zone d'écriture active pour cette session — demander à l'utilisateur "
+            "« gwsa session grant %s %s \"<dossier>\" [heures] » ou access_request "
+            "kind=session_grant (zone limitée à cette conversation)"
+            % (sid, alias)
+        )
+    return (
+        "aucune zone d'écriture active — demander une autorisation temporaire "
+        "(« gwsa session grant <session_id> %s \"<dossier>\" » via MCP, ou legacy "
+        "« gwsa grant %s \"<dossier>\" » partagé poste entier, déprécié) ou permanente "
+        "(« gwsa policy %s allow <dossier> » / interface admin)"
+        % (alias, alias, alias)
+    )
+
+
+def _manifest_drive_cap(alias):
+    """Plafond zones Drive du manifeste projet, ou None si pas de contrainte."""
+    git_root = os.environ.get("GWSA_GIT_ROOT", "").strip()
+    if not git_root:
+        return None
+    try:
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if repo not in sys.path:
+            sys.path.insert(0, repo)
+        from gateway.project import manifest_drive_zones, resolve_project
+        from pathlib import Path
+
+        proj = resolve_project(Path(git_root))
+        if not proj.manifest_valid or not proj.manifest:
+            return None
+        zones = manifest_drive_zones(proj.manifest, alias)
+        return zones if zones else None
+    except Exception:
+        return None
+
+
+def _apply_manifest_cap(alias, zones):
+    cap = _manifest_drive_cap(alias)
+    if cap is None:
+        return zones
+    return zones & cap
 
 
 def check_drive(profile_dir, drive_raw, args, pos):
@@ -270,6 +315,7 @@ def check_drive(profile_dir, drive_raw, args, pos):
         return
 
     zones = set(drive.get("writeFolders") or []) | active_grants(profile_dir)
+    zones = _apply_manifest_cap(alias, zones)
     if not zones:
         deny(profile_dir, args, "drive", zone_hint(alias))
 
@@ -363,6 +409,26 @@ LABELS_FR = {
 }
 
 
+def _manifest_service_cap(alias, service, cat):
+    """None = pas de contrainte ; True/False = plafond manifeste."""
+    git_root = os.environ.get("GWSA_GIT_ROOT", "").strip()
+    if not git_root:
+        return None
+    try:
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if repo not in sys.path:
+            sys.path.insert(0, repo)
+        from gateway.project import manifest_allows_service, resolve_project
+        from pathlib import Path
+
+        proj = resolve_project(Path(git_root))
+        if not proj.manifest_valid or not proj.manifest:
+            return None
+        return manifest_allows_service(proj.manifest, alias, service, cat)
+    except Exception:
+        return None
+
+
 def main():
     if len(sys.argv) < 3:
         return
@@ -420,6 +486,17 @@ def main():
         deny(profile_dir, args, service,
              "%s refusé·e par la policy (« %s %s »)"
              % (LABELS_FR.get(cat, cat), " ".join(resources) or service, raw_method))
+    # Intersection couche projet (.gwsa) : plafond services si déclaré
+    alias = os.path.basename(os.path.abspath(profile_dir))
+    mcap = _manifest_service_cap(alias, service, cat)
+    if mcap is False:
+        deny(
+            profile_dir, args, service,
+            "%s « %s » hors périmètre manifeste projet (.gwsa/manifest.json) — "
+            "éditer le manifeste puis « gwsa project sign », ou access_request "
+            "kind=project_grant"
+            % (LABELS_FR.get(cat, cat), service),
+        )
 
 
 if __name__ == "__main__":
