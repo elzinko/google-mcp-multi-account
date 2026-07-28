@@ -685,8 +685,11 @@ cmd_dev_deploy() {
   [[ -n "$part" ]] || part="branch"
   id="dev-${part}-${sha}"
   target="$(dev_version_dir "$id")"
-  gwsa_root="$DEV_PROD_ROOT"
-  [[ -n "$isolated" ]] && gwsa_root="$DEV_ISOLATED_ROOT"
+  if [[ -n "$isolated" ]]; then
+    gwsa_root="$DEV_ISOLATED_ROOT"
+  else
+    gwsa_root="${GWSA_ROOT:-$DEV_PROD_ROOT}"
+  fi
 
   if port="$(dev_read_meta "$target" broker_port 2>/dev/null)"; then
     : # réutilise le port d'un déploiement précédent du même id
@@ -1054,14 +1057,18 @@ EOF
   admin_url="http://127.0.0.1:${admin_port}"
 
   echo "→ Redémarrage admin (port $admin_port, code déployé)"
-  GWSA_ROOT="$groot" "$gwsa_bin" admin stop
+  GWSA_ADMIN_PORT="$admin_port" GWSA_ROOT="$groot" "$gwsa_bin" admin stop
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -ti "tcp:$admin_port" -sTCP:LISTEN 2>/dev/null | xargs kill 2>/dev/null || true
+    sleep 0.2
+  fi
   if [[ -n "$open_browser" ]]; then
-    GWSA_ROOT="$groot" "$gwsa_bin" admin
+    GWSA_ADMIN_PORT="$admin_port" GWSA_ROOT="$groot" "$gwsa_bin" admin
   else
-    GWSA_ADMIN_NO_OPEN=1 GWSA_ROOT="$groot" "$gwsa_bin" admin
+    GWSA_ADMIN_NO_OPEN=1 GWSA_ADMIN_PORT="$admin_port" GWSA_ROOT="$groot" "$gwsa_bin" admin
   fi
 
-  local admin_pid admin_ps marker_ok marker_msg curl_out
+  local admin_pid admin_ps marker_ok marker_msg curl_out attempt
   sleep 0.5
   admin_pid=""
   if [[ -f "$groot/.admin.pid" ]]; then
@@ -1077,15 +1084,19 @@ EOF
   marker_ok="non"
   marker_msg="admin injoignable"
   if command -v curl >/dev/null 2>&1; then
-    curl_out="$(curl -sf "$admin_url/" 2>/dev/null || true)"
-    if [[ -n "$curl_out" ]]; then
-      if echo "$curl_out" | grep -q 'id="afSearchHits"'; then
-        marker_ok="oui"
-        marker_msg='marqueur PR afSearchHits présent'
-      else
+    curl_out=""
+    for attempt in 1 2 3 4 5 6; do
+      curl_out="$(curl -sf "$admin_url/" 2>/dev/null || true)"
+      if [[ -n "$curl_out" ]]; then
+        if grep -qF 'id="afSearchHits"' <<< "$curl_out"; then
+          marker_ok="oui"
+          marker_msg='marqueur PR afSearchHits présent'
+          break
+        fi
         marker_msg='page servie mais afSearchHits absent'
       fi
-    fi
+      [[ "$attempt" -lt 6 ]] && sleep 0.4
+    done
   else
     marker_msg="curl absent — vérification manuelle"
   fi
