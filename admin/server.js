@@ -6,18 +6,299 @@
 // contrôle d'Origin, execFile sans shell, validation stricte des entrées.
 "use strict";
 const http = require("http");
+const net = require("net");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { execFile, spawn } = require("child_process");
+const { execFile, execFileSync, spawn } = require("child_process");
 
-const PORT = Number(process.env.GWSA_ADMIN_PORT) || 4877;
+const PORT = Number.parseInt(process.env.GWSA_ADMIN_PORT || "4877", 10);
 const HOST = "127.0.0.1";
 const REPO = path.resolve(__dirname, "..");
 const GWSA = path.join(REPO, "bin", "gwsa");
 const ROOT = process.env.GWSA_ROOT || path.join(os.homedir(), ".config", "gws-accounts");
+const DEPLOY_ROOT = process.env.GWSA_DEPLOY_ROOT || path.join(os.homedir(), ".local", "share", "google-mcp");
+const STABLE_ADMIN_PORT = 4877;
+const STABLE_BROKER_PORT = 4878;
+
+function readJson(file) {
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
+}
+
+function readText(file) {
+  try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
+}
+
+function sandboxManifest(dir) {
+  return readJson(path.join(dir, ".sandbox.json"))
+    || readJson(path.join(dir, ".couloir.json"));
+}
+
+function gitField(repo, args) {
+  try {
+    return execFileSync("git", ["-C", repo, ...args], {
+      encoding: "utf8", timeout: 2000, stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch { return ""; }
+}
+
+function gitIdentity(repo) {
+  const branch = gitField(repo, ["rev-parse", "--abbrev-ref", "HEAD"]) || "";
+  const sha = gitField(repo, ["rev-parse", "--short", "HEAD"]) || "";
+  let dirty = false;
+  try {
+    dirty = !!gitField(repo, ["status", "--porcelain"]);
+  } catch {}
+  return { branch: branch || null, sha: sha || null, dirty };
+}
+
+function serverVersion() {
+  const fromFile = readText(path.join(REPO, "VERSION"));
+  if (fromFile) return fromFile;
+  const mf = sandboxManifest(REPO);
+  if (mf && mf.version) return String(mf.version);
+  const g = gitIdentity(REPO);
+  if (g.branch && g.sha) {
+    return g.branch + "@" + g.sha + (g.dirty ? " (dirty)" : " (dev)");
+  }
+  return "dev";
+}
+
+function portListening(port) {
+  return new Promise((resolve) => {
+    const s = net.connect({ host: HOST, port: Number(port) }, () => {
+      s.destroy();
+      resolve(true);
+    });
+    s.on("error", () => resolve(false));
+    s.setTimeout(250, () => { s.destroy(); resolve(false); });
+  });
+}
+
+function mcpConfigPaths() {
+  const home = os.homedir();
+  if (process.env.GWSA_DESKTOP_CONFIG || process.env.GWSA_CURSOR_CONFIG) {
+    return [
+      process.env.GWSA_DESKTOP_CONFIG,
+      process.env.GWSA_CURSOR_CONFIG,
+    ].filter(Boolean);
+  }
+  if (process.platform === "darwin") {
+    return [
+      path.join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json"),
+      path.join(home, ".cursor", "mcp.json"),
+    ];
+  }
+  return [
+    path.join(process.env.XDG_CONFIG_HOME || path.join(home, ".config"), "Claude", "claude_desktop_config.json"),
+    path.join(home, ".cursor", "mcp.json"),
+  ];
+}
+
+/** Entrée stable à protéger (MCP « courant » branché sur current / 4878). */
+const PROTECTED_MCP_NAMES = new Set(["google-multi-account"]);
+
+function isProtectedMcpClient(entry) {
+  if (!entry) return false;
+  if (PROTECTED_MCP_NAMES.has(entry.name)) return true;
+  const bin = String(entry.binary || "");
+  return bin.includes("/google-mcp/current/bin/google-mcp")
+    || (Number(entry.broker_port) === STABLE_BROKER_PORT && entry.name === "google-multi-account");
+}
+
+/**
+ * Retire une entrée mcpServers google-mcp d'un fichier Claude/Cursor.
+ * Refuse les configs hors liste autorisée et l'entrée stable (sauf force).
+ */
+function removeMcpClientEntry(name, configPath, { force = false } = {}) {
+  const allowed = new Set(mcpConfigPaths().map((p) => path.resolve(p)));
+  const cfg = path.resolve(String(configPath || ""));
+  if (!allowed.has(cfg)) {
+    return { ok: false, error: "fichier de config non autorisé" };
+  }
+  if (!name || typeof name !== "string" || name.length > 200) {
+    return { ok: false, error: "nom d'entrée invalide" };
+  }
+  const data = readJson(cfg);
+  if (!data || typeof data !== "object") {
+    return { ok: false, error: "config introuvable ou JSON invalide" };
+  }
+  const servers = data.mcpServers;
+  if (!servers || typeof servers !== "object" || Array.isArray(servers)) {
+    return { ok: false, error: "mcpServers absent" };
+  }
+  const srv = servers[name];
+  if (!srv || typeof srv !== "object") {
+    return { ok: false, error: "entrée introuvable : " + name };
+  }
+  const cmd = String(srv.command || "");
+  if (path.basename(cmd) !== "google-mcp") {
+    return { ok: false, error: "seules les entrées google-mcp peuvent être retirées ici" };
+  }
+  const entry = {
+    name,
+    binary: cmd,
+    broker_port: Number.parseInt((srv.env || {}).GWSA_BROKER_PORT || "4878", 10),
+  };
+  if (isProtectedMcpClient(entry) && !force) {
+    return {
+      ok: false,
+      error: "entrée protégée (MCP stable) — utilise force=true pour outrepasser, ou édite le JSON à la main",
+      protected: true,
+    };
+  }
+  delete servers[name];
+  fs.writeFileSync(cfg, JSON.stringify(data, null, 2) + "\n", { mode: 0o600 });
+  return { ok: true, removed: name, config: cfg };
+}
+
+function scanMcpClients() {
+  const out = [];
+  for (const cfg of mcpConfigPaths()) {
+    const data = readJson(cfg);
+    if (!data || typeof data !== "object") continue;
+    const servers = data.mcpServers || {};
+    for (const [name, srv] of Object.entries(servers)) {
+      if (!srv || typeof srv !== "object") continue;
+      const cmd = String(srv.command || "");
+      if (path.basename(cmd) !== "google-mcp") continue;
+      const env = srv.env || {};
+      const brokerPort = Number.parseInt(env.GWSA_BROKER_PORT || "4878", 10);
+      const rootGuess = cmd.endsWith("/bin/google-mcp")
+        ? cmd.slice(0, -"/bin/google-mcp".length) : "";
+      const entry = {
+        name,
+        config: cfg,
+        binary: cmd,
+        broker_port: brokerPort,
+        version: rootGuess ? (readText(path.join(rootGuess, "VERSION")) || null) : null,
+        deploy_id: rootGuess ? path.basename(rootGuess) : null,
+      };
+      entry.protected = isProtectedMcpClient(entry);
+      out.push(entry);
+    }
+  }
+  return out;
+}
+
+function detectDraftPr(branch) {
+  const envPr = process.env.GWSA_DRAFT_PR || process.env.GWSA_PR;
+  if (envPr && /^\d+$/.test(envPr)) return Number(envPr);
+  if (!branch || branch === "HEAD" || branch === "main" || branch === "master") return null;
+  try {
+    const out = execFileSync("gh", [
+      "pr", "list", "--head", branch, "--state", "open", "--json", "number,isDraft", "--limit", "1",
+    ], { encoding: "utf8", timeout: 2500, stdio: ["ignore", "pipe", "ignore"] });
+    const arr = JSON.parse(out);
+    if (Array.isArray(arr) && arr[0] && arr[0].number) return arr[0].number;
+  } catch {}
+  return null;
+}
+
+function currentDeployId() {
+  try {
+    const cur = fs.readlinkSync(path.join(DEPLOY_ROOT, "current"));
+    return path.basename(cur);
+  } catch { return null; }
+}
+
+async function listDeployments() {
+  const clients = scanMcpClients();
+  const current = currentDeployId();
+  let names = [];
+  try {
+    names = fs.readdirSync(DEPLOY_ROOT, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && e.name !== "current" && !e.name.startsWith(".tmp-"))
+      .map((e) => e.name)
+      .sort();
+  } catch { return []; }
+
+  const out = [];
+  for (const name of names) {
+    const dir = path.join(DEPLOY_ROOT, name);
+    const mf = sandboxManifest(dir);
+    const isSandbox = !!mf;
+    const isCurrent = name === current;
+    const brokerPort = isSandbox
+      ? Number(mf.broker_port)
+      : (isCurrent ? STABLE_BROKER_PORT : null);
+    const adminPort = isSandbox
+      ? Number(mf.admin_port)
+      : (isCurrent ? STABLE_ADMIN_PORT : null);
+    const brokerUp = brokerPort != null ? await portListening(brokerPort) : false;
+    const adminUp = adminPort != null ? await portListening(adminPort) : false;
+    const mcp = clients.filter((c) =>
+      c.deploy_id === name
+      || (brokerPort != null && c.broker_port === brokerPort && (isCurrent || isSandbox)));
+    out.push({
+      id: name,
+      path: dir,
+      version: readText(path.join(dir, "VERSION")) || (mf && mf.version) || null,
+      kind: isSandbox ? "sandbox" : (isCurrent ? "stable-current" : "stable-archive"),
+      is_current: isCurrent,
+      is_sandbox: isSandbox,
+      branch: mf && mf.branch || null,
+      sha: mf && mf.sha || null,
+      broker_port: brokerPort,
+      admin_port: adminPort,
+      broker_up: brokerUp,
+      admin_up: adminUp,
+      admin_url: adminPort != null ? `http://${HOST}:${adminPort}` : null,
+      mcp_clients: mcp.map((c) => ({ name: c.name, config: c.config, broker_port: c.broker_port })),
+      source_repo: mf && mf.source_repo || readText(path.join(dir, ".source")) || null,
+    });
+  }
+  return out;
+}
+
+async function buildMeta() {
+  const mf = sandboxManifest(REPO);
+  const git = gitIdentity(REPO);
+  const version = serverVersion();
+  const brokerPort = mf && mf.broker_port != null
+    ? Number(mf.broker_port)
+    : Number.parseInt(process.env.GWSA_BROKER_PORT || String(STABLE_BROKER_PORT), 10);
+  const sandboxId = (mf && mf.id) || null;
+  const kind = sandboxId
+    ? "sandbox"
+    : (PORT === STABLE_ADMIN_PORT ? "worktree-or-stable" : "custom-port");
+  const branch = (mf && mf.branch) || git.branch;
+  const sha = (mf && mf.sha) || git.sha;
+  const draftPr = detectDraftPr(branch);
+  const lookingAtStablePort = PORT === STABLE_ADMIN_PORT;
+  let corridorHint = null;
+  if (sandboxId) {
+    corridorHint = `sandbox ${sandboxId} (admin ${PORT})`;
+  } else if (lookingAtStablePort) {
+    corridorHint = `port ${STABLE_ADMIN_PORT} — admin du couloir stable / worktree (pas une sandbox dédiée)`;
+  } else {
+    corridorHint = `admin personnalisé sur le port ${PORT}`;
+  }
+  return {
+    version,
+    git_branch: branch,
+    git_sha: sha,
+    git_dirty: !!(mf && mf.dirty) || git.dirty,
+    repo: REPO,
+    worktree: REPO,
+    gwsa_root: ROOT,
+    deploy_root: DEPLOY_ROOT,
+    sandbox_id: sandboxId,
+    sandbox: mf || null,
+    kind,
+    broker_port: brokerPort,
+    admin_port: PORT,
+    stable_admin_port: STABLE_ADMIN_PORT,
+    stable_broker_port: STABLE_BROKER_PORT,
+    looking_at_stable_admin: lookingAtStablePort && !sandboxId,
+    corridor_hint: corridorHint,
+    draft_pr: draftPr,
+    admin_url: `http://${HOST}:${PORT}`,
+  };
+}
 
 const ALIAS_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
+const SESSION_ID_RE = /^[a-f0-9]{16,64}$/;
 const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 const SERVICES = ["drive", "gmail", "calendar", "keep", "docs", "sheets", "tasks"];
 const BOOL_KEYS = ["read", "create", "update", "delete", "send", "drafts", "labels", "share", "settings"];
@@ -213,7 +494,8 @@ async function listProfiles() {
     const alias = e.name;
     if (!ALIAS_RE.test(alias)) continue;
     const dir = path.join(ROOT, alias);
-    const connected = fs.existsSync(path.join(dir, "credentials.enc"));
+    const connected = fs.existsSync(path.join(dir, "credentials.enc"))
+      || fs.existsSync(path.join(ROOT, ".vault", alias, "credentials.enc"));
     const hasLock = fs.existsSync(path.join(dir, ".locked"));
     let unlockedForMin = 0;
     // unlockedUntil : échéance du déverrouillage en epoch SECONDES (0 = verrouillé
@@ -237,6 +519,63 @@ async function listProfiles() {
     out.push({ alias, connected, email, locked: hasLock, unlockedForMin, unlockedUntil, policy, grants });
   }
   return out.sort((a, b) => a.alias.localeCompare(b.alias));
+}
+
+/** Sessions LLM (registre `.sessions/`, fiche 0040) — lecture directe, mutations via gwsa. */
+function listSessions() {
+  const dir = path.join(ROOT, ".sessions");
+  let files = [];
+  try { files = fs.readdirSync(dir).filter((f) => f.endsWith(".json")); } catch { return []; }
+  const now = Date.now() / 1000;
+  const raw = [];
+  for (const f of files) {
+    const data = readJson(path.join(dir, f));
+    if (!data || typeof data !== "object") continue;
+    const sid = String(data.session_id || "");
+    if (!SESSION_ID_RE.test(sid)) continue;
+    raw.push(data);
+  }
+  const childCount = {};
+  for (const data of raw) {
+    const pid = String(data.parent_id || "");
+    if (pid) childCount[pid] = (childCount[pid] || 0) + 1;
+  }
+  const out = raw.map((data) => {
+    const unlocks = {};
+    for (const [alias, until] of Object.entries(data.unlocks || {})) {
+      const u = Number(until) || 0;
+      if (u > now) unlocks[alias] = { until: u, minutes_left: Math.max(0, Math.floor((u - now) / 60)) };
+    }
+    const drive_zones = {};
+    for (const [alias, zones] of Object.entries(data.drive_zones || {})) {
+      if (!Array.isArray(zones)) continue;
+      const active = zones.filter((z) => z && Number(z.expires_at || z.expiresAt || 0) > now)
+        .map((z) => {
+          const exp = Number(z.expires_at || z.expiresAt || 0);
+          return {
+            id: String(z.id || ""),
+            name: String(z.name || ""),
+            expires_at: exp,
+            minutes_left: Math.max(0, Math.floor((exp - now) / 60)),
+          };
+        });
+      if (active.length) drive_zones[alias] = active;
+    }
+    const sid = String(data.session_id || "");
+    return {
+      session_id: sid,
+      parent_id: data.parent_id || null,
+      client: String(data.client || "mcp"),
+      delegated: !!data.delegated,
+      created_at: Number(data.created_at) || 0,
+      last_seen_at: Number(data.last_seen_at) || 0,
+      unlocks,
+      drive_zones,
+      child_count: childCount[sid] || 0,
+    };
+  });
+  out.sort((a, b) => (b.last_seen_at || 0) - (a.last_seen_at || 0));
+  return out;
 }
 
 function validPolicy(p) {
@@ -333,8 +672,76 @@ const server = http.createServer(async (req, res) => {
   if (req.headers["x-gwsa-admin"] !== "1") return send(res, 403, { error: "en-tête admin manquant" });
 
   try {
+    if (req.method === "GET" && p === "/api/meta") {
+      return send(res, 200, await buildMeta());
+    }
+    if (req.method === "GET" && p === "/api/dev") {
+      const meta = await buildMeta();
+      const deployments = await listDeployments();
+      const sandboxes = deployments.filter((d) => d.is_sandbox);
+      return send(res, 200, {
+        ...meta,
+        deployments,
+        sandboxes,
+        mcp_clients: scanMcpClients(),
+        current_deploy: currentDeployId(),
+      });
+    }
+    if (req.method === "POST" && p === "/api/dev/mcp-client/remove") {
+      const b = await readBody(req);
+      const r = removeMcpClientEntry(b.name, b.config, { force: !!b.force });
+      return send(res, r.ok ? 200 : (r.protected ? 403 : 400), r);
+    }
+    if (req.method === "POST" && p === "/api/dev/sandbox/remove") {
+      const b = await readBody(req);
+      const id = String(b.id || "").trim();
+      if (!/^[A-Za-z0-9._-]{1,120}$/.test(id) || id === "current") {
+        return send(res, 400, { error: "id sandbox invalide" });
+      }
+      const r = await gwsa(["sandbox", "remove", id], 60000);
+      return send(res, r.code ? 500 : 200, {
+        ok: !r.code,
+        out: (r.stdout + r.stderr).trim(),
+      });
+    }
     if (req.method === "GET" && p === "/api/profiles") {
       return send(res, 200, { profiles: await listProfiles() });
+    }
+    if (req.method === "GET" && p === "/api/sessions") {
+      return send(res, 200, { sessions: listSessions() });
+    }
+    const sm = p.match(/^\/api\/sessions\/([^/]+)\/(unlock|grant|revoke-descendants|close)$/);
+    if (req.method === "POST" && sm) {
+      const [, sid, action] = sm;
+      if (!SESSION_ID_RE.test(sid)) return send(res, 400, { error: "session_id invalide" });
+      const sessFile = path.join(ROOT, ".sessions", sid + ".json");
+      if (!fs.existsSync(sessFile) && action !== "close") {
+        return send(res, 404, { error: "session inconnue" });
+      }
+      if (action === "unlock") {
+        const b = await readBody(req);
+        if (!ALIAS_RE.test(b.alias || "")) return send(res, 400, { error: "alias invalide" });
+        const mins = String(Math.min(1440, Math.max(1, parseInt(b.minutes, 10) || 60)));
+        const r = await gwsa(["session", "unlock", sid, b.alias, mins], 90000);
+        return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).trim() });
+      }
+      if (action === "grant") {
+        const b = await readBody(req);
+        if (!ALIAS_RE.test(b.alias || "")) return send(res, 400, { error: "alias invalide" });
+        const target = String(b.target || "").trim().replace(/[\x00-\x1f"'\\]/g, "");
+        if (!target || target.length > 200) return send(res, 400, { error: "dossier invalide" });
+        const h = Math.min(168, Math.max(1, parseInt(b.hours, 10) || 8));
+        const r = await gwsa(["session", "grant", sid, b.alias, target, String(h)], 90000);
+        return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).trim() });
+      }
+      if (action === "revoke-descendants") {
+        const r = await gwsa(["session", "revoke-descendants", sid]);
+        return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).trim() });
+      }
+      if (action === "close") {
+        const r = await gwsa(["session", "close", sid]);
+        return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).trim() });
+      }
     }
     if (req.method === "GET" && p === "/api/log") {
       const lines = tailFile(path.join(ROOT, "usage.jsonl"), 300)
