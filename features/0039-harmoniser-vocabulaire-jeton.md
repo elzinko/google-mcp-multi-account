@@ -59,3 +59,6 @@ suivent pas :
 - Le mot « verrouillé » est **conservé** partout : le chat dit déjà « profil
   verrouillé » (refus MCP), le CLI dit lock/unlock, Touch ID aussi. Le
   problème n'a jamais été le verrou — c'était le jeton.
+- **Partiel après #48** : les cartes admin n'utilisent plus « jeton » ; restent
+  « tokens » (dialog déconnexion), bouton « Setup OAuth », et docs/CLI/CLAUDE.md
+  — c'est le reste de *cette* fiche, pas à shipper encore.
