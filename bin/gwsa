@@ -19,7 +19,8 @@
 #   gwsa grant <alias> <dossier> [heures]             Autorisation Drive TEMPORAIRE (défaut 8 h)
 #   gwsa grant <alias> revoke <folderId>              Révoquer une autorisation temporaire
 #   gwsa grants <alias> [clear]                       Lister/vider les autorisations temporaires
-#   gwsa strongauth on|off|status                     Exiger Touch ID / mdp macOS pour unlock & grant
+#   gwsa strongauth on|off|status                     Exiger élicitation signée pour unlock & grant
+#   gwsa elicitation enroll|status                    Enrôler clé biométrique / état (fiche 0001)
 #   gwsa admin [stop]                                 Démarrer/arrêter l'interface web (127.0.0.1:4877)
 #   gwsa broker [status|stop]                         État/arrêt du broker de ce GWSA_ROOT
 #   gwsa dev deploy [--isolated]                      Déployer le clone courant en version dev temporaire
@@ -30,6 +31,9 @@
 #   gwsa dev remove <id>                              Supprimer une version dev temporaire
 #   gwsa update [--check|--to <version>]              Installer la dernière version publiée
 #   gwsa release [patch|minor|major|--print]          Publier une version (semver + CHANGELOG + tag)
+#   gwsa sandbox deploy [--wire …]|wire [--remove …]|list|status|remove  Sandboxes jetables (0041 ; détail : gwsa sandbox --help)
+#   gwsa project show|init|sign                         Manifeste projet .gwsa/ (fiche 0040 phase B)
+#   gwsa couloir …                                      Alias déprécié → sandbox
 #   gwsa remove <alias>                               Déconnecter et supprimer un profil
 #   gwsa <alias> <commande gws…>                      Exécuter gws sur le compte <alias>
 #
@@ -73,7 +77,7 @@ check_alias() {
   [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] \
     || die "alias invalide « $1 » (lettres, chiffres, - et _ uniquement)"
   case "$1" in
-    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth|admin|broker|dev|update|release) die "« $1 » est un mot réservé" ;;
+    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth|elicitation|admin|broker|dev|update|release|session|vault|project|sandbox|couloir) die "« $1 » est un mot réservé" ;;
   esac
 }
 
@@ -115,17 +119,19 @@ strong_auth_reason() { # strong_auth_reason <action> <profile-dir> — email plu
   else printf '%s' "$action"; fi
 }
 
-require_strong_auth() { # require_strong_auth <raison> — Touch ID/mot de passe si activé
+require_signed_elicitation() { # JSON payload — signature biométrique si strongauth (fiche 0001)
   [[ -f "$GWSA_ROOT/.strong-auth" ]] || return 0
-  if ensure_touchid_bin && [[ -x "$TOUCHID_BIN" ]]; then
-    "$TOUCHID_BIN" "$1" || die "authentification forte refusée — action annulée"
-    return 0
-  fi
-  [[ -x "$SYS_SWIFT" ]] \
-    || die "authentification forte activée mais $SYS_SWIFT indisponible (installer : xcode-select --install)"
-  "$SYS_SWIFT" "$REPO_DIR/scripts/touchid.swift" "$1" \
-    || die "authentification forte refusée — action annulée"
+  local payload="${1:-}"
+  [[ -n "$payload" ]] || die "élicitation : payload manquant (bug interne gwsa)"
+  # Précompiler le binaire nommé si possible (raisons UI Touch ID plus claires).
+  ensure_touchid_bin || true
+  REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" GWSA_SYS_SWIFT="$SYS_SWIFT" \
+    GWSA_TOUCHID_BIN="$TOUCHID_BIN" \
+    "$SYS_PYTHON" "$REPO_DIR/scripts/elicitation-cli.py" gate --json "$payload" \
+    || die "élicitation signée refusée — action annulée"
 }
+
+# Point d'entrée élicitation signée (fiche 0001) — voir require_signed_elicitation().
 
 profile_dir() { printf '%s/%s' "$GWSA_ROOT" "$1"; }
 
@@ -169,14 +175,12 @@ cmd_add() { # cmd_add <alias> [email-attendu] [options gws auth login]
   # pour qu'un environnement de test sans secret n'atteigne jamais Touch ID).
   # Sous strongauth, l'email est obligatoire : pas encore de `.email` avant la
   # connexion, et Touch ID doit nommer le compte (fiche 0032), pas l'alias.
+  # La barrière biométrique passe par l'élicitation signée (fiche 0001), pas
+  # require_strong_auth nu — sinon double prompt et pas de payload signé.
   if [[ -z "$expected" && -f "$GWSA_ROOT/.strong-auth" ]]; then
     die "usage : gwsa add <alias> <email> — email requis quand strongauth est actif (Touch ID nomme le compte)"
   fi
-  if [[ -n "$expected" ]]; then
-    require_strong_auth "connecter un nouveau compte Google $expected"
-  else
-    require_strong_auth "connecter un nouveau compte Google $alias"
-  fi
+  require_signed_elicitation "$(printf '{"action":"add_account","alias":"%s","target":"%s"}' "$alias" "${expected:-}")"
   local dir; dir="$(profile_dir "$alias")"
   mkdir -p "$dir"
   cp "$MASTER_SECRET" "$dir/client_secret.json"
@@ -214,6 +218,12 @@ PYEOF
     [[ -n "$rem" ]] && { echo; echo "$rem" >&2; }
   fi
   echo "✓ Profil « $alias » connecté${email:+ — $email}. Test : gwsa $alias auth status"
+  REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.vault import ensure_vault_layout
+ensure_vault_layout(sys.argv[1])
+" "$alias" 2>/dev/null || true
 }
 
 cmd_list() {
@@ -251,6 +261,12 @@ cmd_lock() {
   echo "🔒 Profil « $alias » verrouillé — accès sur demande uniquement (gwsa unlock $alias [minutes])"
 }
 
+unlock_deprecation_warn() { # stderr — gwsa unlock global (poste entier) déprécié (fiche 0040)
+  echo "⚠ gwsa unlock déverrouille le profil pour TOUTES les sessions sur ce poste (legacy)." >&2
+  echo "  Préférer : gwsa session unlock <session_id> <alias> [minutes]" >&2
+  echo "  ou access_request kind=session_unlock via MCP (session active)." >&2
+}
+
 cmd_unlock() {
   local alias="$1"; shift || true
   check_alias "$alias"
@@ -262,8 +278,30 @@ cmd_unlock() {
     || die "durée invalide « $mins » (minutes entières ≥ 1, ou « off » pour retirer le verrou)"
   local dir; dir="$(profile_dir "$alias")"
   [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+  local sid="${GWSA_SESSION_ID:-}"
+  if [[ -n "$sid" ]]; then
+    [[ "$mins" == "off" ]] \
+      && die "« unlock off » permanent est poste entier — exécuter sans GWSA_SESSION_ID"
+    [[ -f "$dir/.locked" ]] || { echo "Profil « $alias » non verrouillé — rien à faire."; return 0; }
+    require_signed_elicitation "$(printf '{"action":"session_unlock","alias":"%s","session_id":"%s","minutes":%s}' "$alias" "$sid" "$mins")"
+    REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import session_unlock
+session_unlock(sys.argv[1], sys.argv[2], int(sys.argv[3]))
+" "$sid" "$alias" "$mins"
+    echo "🔓 session $sid : « $alias » déverrouillé pour $mins min (cette conversation — pas .unlock-until global)."
+    return 0
+  fi
   [[ -f "$dir/.locked" ]] || { echo "Profil « $alias » non verrouillé — rien à faire."; return 0; }
-  require_strong_auth "$(strong_auth_reason "déverrouiller le compte Google" "$dir")"
+  if [[ "$mins" != "off" ]]; then
+    unlock_deprecation_warn
+  fi
+  if [[ "$mins" == "off" ]]; then
+    require_signed_elicitation "$(printf '{"action":"unlock","alias":"%s","target":"off"}' "$alias")"
+  else
+    require_signed_elicitation "$(printf '{"action":"unlock","alias":"%s","minutes":%s}' "$alias" "$mins")"
+  fi
   if [[ "$mins" == "off" ]]; then
     rm -f "$dir/.locked" "$dir/.unlock-until"
     echo "🔓 Verrou retiré : « $alias » est déverrouillé en permanence."
@@ -352,6 +390,12 @@ PYEOF
   esac
 }
 
+grant_deprecation_warn() { # stderr — gwsa grant global (poste entier) déprécié (fiche 0040)
+  echo "⚠ gwsa grant accorde une zone à TOUTES les sessions sur ce poste (legacy)." >&2
+  echo "  Préférer : gwsa session grant <session_id> <alias> <dossier> [heures]" >&2
+  echo "  ou access_request kind=session_grant via MCP (session active)." >&2
+}
+
 cmd_grant() { # gwsa grant <alias> <dossierIdOuNom> [heures] | gwsa grant <alias> revoke <folderId>
   local alias="$1"; shift
   check_alias "$alias"
@@ -375,11 +419,23 @@ PYEOF
   local target="$1" hours="${2:-8}"
   [[ "$hours" =~ ^[0-9]+$ && "$hours" -ge 1 && "$hours" -le 168 ]] \
     || die "durée invalide « $hours » (heures entières, 1 à 168)"
-  local resolved fid fname
+  local resolved fid fname sid="${GWSA_SESSION_ID:-}"
   resolved="$(resolve_folder "$dir" "$target")"
   fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
   [[ -n "$fid" ]] || die "dossier « $target » introuvable ou ambigu — donne son ID (fin de l'URL du dossier dans Drive)"
-  require_strong_auth "$(strong_auth_reason "autoriser l'écriture Drive sous « $fname » pour" "$dir") (${hours} h)"
+  if [[ -n "$sid" ]]; then
+    require_signed_elicitation "$(printf '{"action":"session_grant","alias":"%s","session_id":"%s","target":"%s","hours":%s}' "$alias" "$sid" "$fname" "$hours")"
+    REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import session_grant_drive
+session_grant_drive(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5]))
+" "$sid" "$alias" "$fid" "$fname" "$hours"
+    echo "🕐 session $sid : zone « $fname » pour $hours h (GWSA_SESSION_ID — pas le fichier global session-grants.json)."
+    return 0
+  fi
+  grant_deprecation_warn
+  require_signed_elicitation "$(printf '{"action":"grant","alias":"%s","target":"%s","hours":%s}' "$alias" "$fname" "$hours")"
   "$SYS_PYTHON" - "$G" "$fid" "$fname" "$hours" <<'PYEOF'
 import json, os, sys, time
 path, fid, fname, hours = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
@@ -417,14 +473,211 @@ for e in active:
 PYEOF
 }
 
-cmd_admin() { # gwsa admin [stop] — interface web locale (127.0.0.1:4877), détachée + idempotente
-  local action="${1:-start}" pidf="$GWSA_ROOT/.admin.pid" log="$GWSA_ROOT/admin.log"
+cmd_session() { # gwsa session list|unlock|grant|revoke-descendants|show|close <session_id> …
+  local sub="${1:-}"; shift || true
+  case "$sub" in
+    list)
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import json, os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import list_sessions
+print(json.dumps({'sessions': list_sessions()}, indent=2, ensure_ascii=False))
+"
+      ;;
+    unlock)
+      local sid="${1:-}" alias="${2:-}" mins="${3:-60}"
+      [[ -n "$sid" && -n "$alias" ]] || die "usage : gwsa session unlock <session_id> <alias> [minutes]"
+      check_alias "$alias"
+      require_signed_elicitation "$(printf '{"action":"session_unlock","alias":"%s","session_id":"%s","minutes":%s}' "$alias" "$sid" "$mins")"
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import session_unlock
+session_unlock(sys.argv[1], sys.argv[2], int(sys.argv[3]))
+" "$sid" "$alias" "$mins"
+      echo "🔓 session $sid : « $alias » déverrouillé pour $mins min (cette conversation seulement)."
+      ;;
+    grant)
+      local sid="${1:-}" alias="${2:-}" target="${3:-}" hours="${4:-8}"
+      [[ -n "$sid" && -n "$alias" && -n "$target" ]] \
+        || die "usage : gwsa session grant <session_id> <alias> <dossier> [heures]"
+      check_alias "$alias"
+      local dir; dir="$(profile_dir "$alias")"
+      [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+      [[ "$hours" =~ ^[0-9]+$ && "$hours" -ge 1 && "$hours" -le 168 ]] \
+        || die "durée invalide « $hours »"
+      local resolved fid fname
+      resolved="$(resolve_folder "$dir" "$target")"
+      fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
+      [[ -n "$fid" ]] || die "dossier introuvable"
+      require_signed_elicitation "$(printf '{"action":"session_grant","alias":"%s","session_id":"%s","target":"%s","hours":%s}' "$alias" "$sid" "$fname" "$hours")"
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import session_grant_drive
+session_grant_drive(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5]))
+" "$sid" "$alias" "$fid" "$fname" "$hours"
+      echo "🕐 session $sid : zone « $fname » pour $hours h."
+      ;;
+    revoke-descendants)
+      local sid="${1:-}"; [[ -n "$sid" ]] || die "usage : gwsa session revoke-descendants <session_id>"
+      require_signed_elicitation "$(printf '{"action":"revoke_descendants","session_id":"%s"}' "$sid")"
+      n="$(REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import revoke_descendants
+print(revoke_descendants(sys.argv[1]))
+" "$sid")"
+      echo "✓ $n sous-session(s) purgée(s) pour $sid."
+      ;;
+    show)
+      local sid="${1:-}"; [[ -n "$sid" ]] || die "usage : gwsa session show <session_id>"
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import json, os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import get_session
+s = get_session(sys.argv[1])
+print(json.dumps(s.to_json() if s else {}, indent=2, ensure_ascii=False))
+" "$sid"
+      ;;
+    close)
+      local sid="${1:-}"; [[ -n "$sid" ]] || die "usage : gwsa session close <session_id>"
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import close_session
+close_session(sys.argv[1])
+" "$sid"
+      echo "✓ session $sid purgée (et descendants)."
+      ;;
+    *) die "usage : gwsa session list|unlock|grant|revoke-descendants|show|close …" ;;
+  esac
+}
+
+cmd_elicitation() { # gwsa elicitation enroll|status — clé biométrique (fiche 0001)
+  local sub="${1:-status}"; shift || true
+  case "$sub" in
+    enroll)
+      local mock_flag=""
+      [[ "${1:-}" == "--mock" ]] && mock_flag="--mock"
+      REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" GWSA_SYS_SWIFT="$SYS_SWIFT" \
+        GWSA_ELICITATION_MOCK="${GWSA_ELICITATION_MOCK:-}" \
+        "$SYS_PYTHON" "$REPO_DIR/scripts/elicitation-cli.py" enroll $mock_flag
+      ;;
+    status)
+      REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" \
+        "$SYS_PYTHON" "$REPO_DIR/scripts/elicitation-cli.py" status
+      ;;
+    *) die "usage : gwsa elicitation enroll [--mock] | status" ;;
+  esac
+}
+
+cmd_project() { # gwsa project show|init|sign — manifeste .gwsa/ (phase B + sig 0001)
+  local sub="${1:-show}"; shift || true
+  case "$sub" in
+    show)
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import json, os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.project import resolve_project
+ctx = resolve_project()
+print(json.dumps({
+    'git_root': ctx.git_root,
+    'project_id': ctx.project_id,
+    'manifest_path': ctx.manifest_path,
+    'manifest_valid': ctx.manifest_valid,
+    'verify_error': ctx.verify_error,
+    'manifest': ctx.manifest if ctx.manifest_valid else {},
+}, indent=2, ensure_ascii=False))
+"
+      ;;
+    init)
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import json, os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.project import init_project
+print(json.dumps(init_project(), indent=2, ensure_ascii=False))
+"
+      ;;
+    sign)
+      REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" "$SYS_PYTHON" -c "
+import json, os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.project import sign_manifest
+print(json.dumps(sign_manifest(), indent=2, ensure_ascii=False))
+"
+      ;;
+    *) die "usage : gwsa project show|init|sign" ;;
+  esac
+}
+
+cmd_vault() { # gwsa vault migrate — déplace credentials.enc vers .vault/
+  local sub="${1:-migrate}"
+  case "$sub" in
+    migrate)
+      moved="$(REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.vault import migrate_all
+m = migrate_all()
+print(','.join(m) if m else '')
+")"
+      if [[ -n "$moved" ]]; then
+        echo "✓ vault : profils migrés — $moved"
+      else
+        echo "✓ vault : rien à migrer (déjà en place ou aucun credentials.enc dans les profils)."
+      fi
+      ;;
+    status)
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.config import gwsa_root
+from gateway.vault import is_migrated
+root = gwsa_root()
+for p in sorted(root.glob('*/')):
+    if p.name.startswith('.'): continue
+    if (p / 'policy.json').is_file() or (p / 'credentials.enc').is_file():
+        print(p.name, 'vault' if is_migrated(p.name) else 'legacy')
+"
+      ;;
+    *) die "usage : gwsa vault migrate|status" ;;
+  esac
+}
+
+cmd_sandbox() { # gwsa sandbox deploy|list|status|remove|wire — sandboxes temporaires (fiche 0041)
+  local script="$REPO_DIR/scripts/sandbox.sh"
+  [[ -x "$script" ]] || die "script sandbox introuvable ($script)"
+  exec "$script" "$@"
+}
+
+cmd_couloir() { # alias déprécié → sandbox
+  echo "⚠ « gwsa couloir » est déprécié — utilise « gwsa sandbox »." >&2
+  cmd_sandbox "$@"
+}
+
+cmd_admin() { # gwsa admin [stop] — interface web locale, port GWSA_ADMIN_PORT (défaut 4877)
   local port="${GWSA_ADMIN_PORT:-4877}"
-  admin_listening() { (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; }
+  local action="${1:-start}" pidf="$GWSA_ROOT/.admin-$port.pid" log="$GWSA_ROOT/admin-$port.log"
+  [[ "$port" =~ ^[0-9]+$ && "$port" -ge 1024 && "$port" -le 65535 ]] \
+    || die "GWSA_ADMIN_PORT invalide : « $port »"
+  admin_listening() {
+    # /dev/tcp peut être indisponible (sandbox) : bascule sur lsof.
+    (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null && return 0
+    lsof -ti "tcp:$port" -sTCP:LISTEN >/dev/null 2>&1
+  }
   is_admin_pid() {
     [[ -n "${1:-}" ]] || return 1
     kill -0 "$1" 2>/dev/null || return 1
-    ps -p "$1" -o command= 2>/dev/null | grep -q "admin/server.js"
+    local cmd
+    cmd="$(ps -p "$1" -o command= 2>/dev/null || true)"
+    if [[ -n "$cmd" ]]; then
+      printf '%s' "$cmd" | grep -q "admin/server.js"
+    else
+      # ps indisponible : accepter le pid vivant qui écoute notre port.
+      local p; p="$(lsof -ti "tcp:$port" -sTCP:LISTEN 2>/dev/null | head -1)"
+      [[ "$p" == "$1" ]]
+    fi
   }
   admin_pid_on_port() {
     local p; p="$(lsof -ti "tcp:$port" -sTCP:LISTEN 2>/dev/null | head -1)"
@@ -437,7 +690,7 @@ cmd_admin() { # gwsa admin [stop] — interface web locale (127.0.0.1:4877), dé
       if is_admin_pid "$pid"; then
         kill "$pid" 2>/dev/null || true
         rm -f "$pidf"
-        echo "✓ interface admin arrêtée."
+        echo "✓ interface admin arrêtée (port $port)."
       elif pid="$(admin_pid_on_port)"; then
         kill "$pid" 2>/dev/null || true
         rm -f "$pidf"
@@ -446,8 +699,16 @@ cmd_admin() { # gwsa admin [stop] — interface web locale (127.0.0.1:4877), dé
         echo "⚠ le port $port est occupé mais ce n'est pas notre admin — rien tué."
         echo "  repérer : lsof -i :$port"
       else
-        rm -f "$pidf"
-        echo "Interface admin non démarrée — rien à faire."
+        # rétrocompat : ancien pidfile sans port
+        local legacy="$GWSA_ROOT/.admin.pid"
+        if [[ "$port" == "4877" && -f "$legacy" ]] && is_admin_pid "$(cat "$legacy" 2>/dev/null || true)"; then
+          kill "$(cat "$legacy")" 2>/dev/null || true
+          rm -f "$legacy"
+          echo "✓ interface admin arrêtée (port $port, pidfile legacy)."
+        else
+          rm -f "$pidf"
+          echo "Interface admin non démarrée sur le port $port — rien à faire."
+        fi
       fi ;;
     start)
       command -v node >/dev/null 2>&1 || die "node est requis pour l'interface admin — brew install node"
@@ -465,7 +726,7 @@ cmd_admin() { # gwsa admin [stop] — interface web locale (127.0.0.1:4877), dé
         GWSA_ADMIN_PORT="$port" nohup node "$REPO_DIR/admin/server.js" >> "$log" 2>&1 &
         echo $! > "$pidf"
         # Ne pas se fier au seul pid : un EADDRINUSE tue le process après le
-        # sleep 1, laissant un pidfile fantôme et une UI « Failed to fetch ».
+        # sleep, laissant un pidfile fantôme et une UI « Failed to fetch ».
         local ok="" i
         for i in 1 2 3 4 5 6 7 8; do
           if is_admin_pid "$(cat "$pidf" 2>/dev/null || true)" && admin_listening; then
@@ -478,7 +739,14 @@ cmd_admin() { # gwsa admin [stop] — interface web locale (127.0.0.1:4877), dé
           rm -f "$pidf"
           die "échec du démarrage de l'admin — voir $log"
         fi
-        echo "✓ interface admin démarrée (pid $(cat "$pidf"), log $log) — http://127.0.0.1:$port"
+        local ver="dev"
+        [[ -s "$REPO_DIR/VERSION" ]] && ver="$(tr -d '[:space:]' < "$REPO_DIR/VERSION")"
+        echo "✓ interface admin démarrée (pid $(cat "$pidf"), port $port, log $log)"
+        echo "  → http://127.0.0.1:$port"
+        echo "  repo $REPO_DIR · version $ver"
+        if [[ "$port" == "4877" ]]; then
+          echo "  note : 4877 = admin stable/worktree ; sandbox → GWSA_ADMIN_PORT=<n> depuis le déploiement"
+        fi
       fi
       [[ -z "${GWSA_ADMIN_NO_OPEN:-}" ]] && open "http://127.0.0.1:$port" 2>/dev/null || true ;;
     *) die "usage : gwsa admin [stop]" ;;
@@ -1230,12 +1498,16 @@ main() {
     policy) shift; [[ $# -ge 1 ]] || die "usage : gwsa policy <alias> [show|mode|allow|revoke|clear]"; cmd_policy "$@" ;;
     grant)  shift; [[ $# -ge 1 ]] || die "usage : gwsa grant <alias> <dossier> [heures]"; cmd_grant "$@" ;;
     grants) shift; [[ $# -ge 1 && $# -le 2 ]] || die "usage : gwsa grants <alias> [clear]"; cmd_grants "$@" ;;
+    session) shift; cmd_session "$@" ;;
+    elicitation) shift; cmd_elicitation "$@" ;;
+    project) shift; cmd_project "$@" ;;
+    vault) shift; cmd_vault "$@" ;;
     strongauth)
       shift
       [[ $# -le 1 ]] || die "usage : gwsa strongauth on|off|status"
       case "${1:-status}" in
-        on)  touch "$GWSA_ROOT/.strong-auth"; echo "🔐 Authentification forte ACTIVÉE : unlock et grant exigeront Touch ID / mot de passe macOS." ;;
-        off) require_strong_auth "désactiver l'authentification forte gwsa"; rm -f "$GWSA_ROOT/.strong-auth"; echo "Authentification forte désactivée." ;;
+        on)  touch "$GWSA_ROOT/.strong-auth"; echo "🔐 Authentification forte ACTIVÉE : unlock/grant exigent une élicitation signée (gwsa elicitation enroll si besoin)." ;;
+        off) require_signed_elicitation '{"action":"strongauth_off"}'; rm -f "$GWSA_ROOT/.strong-auth"; echo "Authentification forte désactivée." ;;
         status) [[ -f "$GWSA_ROOT/.strong-auth" ]] && echo "🔐 activée" || echo "désactivée" ;;
         *) die "usage : gwsa strongauth on|off|status" ;;
       esac ;;
@@ -1244,6 +1516,8 @@ main() {
     dev)    shift; cmd_dev "$@" ;;
     update)  shift; cmd_update "$@" ;;
     release) shift; cmd_release "$@" ;;
+    sandbox) shift; cmd_sandbox "$@" ;;
+    couloir) shift; cmd_couloir "$@" ;;
     remove) shift; [[ $# -eq 1 ]] || die "usage : gwsa remove <alias>"; cmd_remove "$@" ;;
     *)
       local alias="$1"; shift
@@ -1258,7 +1532,10 @@ main() {
           GWSA_LOG_DECISION=refus GWSA_LOG_REASON=locked \
             "$SYS_PYTHON" "$USAGE_LOGGER" "$GWSA_ROOT" "$alias" "$@" >/dev/null 2>&1 || true
         fi
-        die "profil « $alias » verrouillé 🔒 — accès sur demande : l'utilisateur doit d'abord exécuter « gwsa unlock $alias [minutes] »"
+        if [[ -n "${GWSA_SESSION_ID:-}" ]]; then
+          die "profil « $alias » verrouillé 🔒 pour cette session — l'utilisateur doit exécuter « gwsa session unlock ${GWSA_SESSION_ID} $alias [minutes] »"
+        fi
+        die "profil « $alias » verrouillé 🔒 — accès sur demande : l'utilisateur doit d'abord exécuter « gwsa unlock $alias [minutes] » (legacy poste entier) ou « gwsa session unlock <session_id> $alias »"
       fi
       if [[ -f "$dir/policy.json" ]]; then
         [[ -f "$POLICY_CHECKER" ]] || die "policy.json présent mais contrôleur absent ($POLICY_CHECKER)"
@@ -1267,7 +1544,12 @@ main() {
       if [[ -f "$USAGE_LOGGER" ]]; then
         "$SYS_PYTHON" "$USAGE_LOGGER" "$GWSA_ROOT" "$alias" "$@" >/dev/null 2>&1 || true
       fi
-      GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" exec gws "$@"
+      GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$("$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, '$REPO_DIR')
+from gateway.vault import gws_config_dir
+print(gws_config_dir(sys.argv[1]))
+" "$alias")" exec gws "$@"
       ;;
   esac
 }

@@ -379,7 +379,7 @@ fi
 
 # MCP tools/list smoke (stdio JSON-RPC, une requête)
 MCP_OUT="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | python3 -m gateway 2>/dev/null | head -1)"
-if echo "$MCP_OUT" | python3 -c 'import json,sys; r=json.load(sys.stdin); names=[t["name"] for t in r["result"]["tools"]]; assert "gmail_list" in names and "gmail_draft_create" in names and "setup_status" in names; assert not any(t["name"]=="gmail_send" for t in r["result"]["tools"]); ar=[t for t in r["result"]["tools"] if t["name"]=="access_request"][0]; assert "add_account" in ar["inputSchema"]["properties"]["kind"]["enum"]; dc=[t for t in r["result"]["tools"] if t["name"]=="drive_create"][0]; assert "content" in dc["inputSchema"]["properties"] and "text/markdown" in dc["inputSchema"]["properties"]["content_type"]["enum"]'; then
+if echo "$MCP_OUT" | python3 -c 'import json,sys; r=json.load(sys.stdin); names=[t["name"] for t in r["result"]["tools"]]; assert "gmail_list" in names and "gmail_draft_create" in names and "setup_status" in names; assert not any(t["name"]=="gmail_send" for t in r["result"]["tools"]); ar=[t for t in r["result"]["tools"] if t["name"]=="access_request"][0]; assert "add_account" in ar["inputSchema"]["properties"]["kind"]["enum"]; assert "project_grant" in ar["inputSchema"]["properties"]["kind"]["enum"]; dc=[t for t in r["result"]["tools"] if t["name"]=="drive_create"][0]; assert "content" in dc["inputSchema"]["properties"] and "text/markdown" in dc["inputSchema"]["properties"]["content_type"]["enum"]'; then
   PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m MCP tools/list (Gmail+Drive+setup_status, pas de send)\n'
 else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m MCP tools/list\n'
@@ -746,11 +746,13 @@ fi
 # Le broker exécute gws depuis le répertoire de dépôt (ADR-0003) : c'est le bac
 # à sable fichiers de gws, qui refuse tout --upload en dehors de son cwd.
 if python3 - <<'PY'
+import os
 import subprocess
 from pathlib import Path
 
 import gateway.broker_server as bs
 from gateway.config import upload_spool
+from gateway.vault import gws_config_dir
 
 captured = {}
 
@@ -764,17 +766,22 @@ def fake(cmd, **kw):
     return Done()
 
 
+alias = "brokercwd"
+prof = Path(os.environ["GWSA_ROOT"]) / alias
+prof.mkdir(parents=True, exist_ok=True)
+expected_cfg = str(gws_config_dir(alias))
+
 bs._gws_bin = lambda: "/usr/bin/true"   # suite hermétique : gws peut être absent
 real_run, subprocess.run = subprocess.run, fake
 try:
-    bs.run_gws_local(Path("/nowhere/profile"), ["drive", "files", "list"])
+    bs.run_gws_local(alias, ["drive", "files", "list"])
 finally:
     subprocess.run = real_run
 
 spool = upload_spool()
 assert captured["cwd"] == str(spool), captured.get("cwd")
 assert spool.is_dir() and spool.stat().st_mode & 0o777 == 0o700, oct(spool.stat().st_mode)
-assert captured["env"]["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] == "/nowhere/profile", captured["env"]
+assert captured["env"]["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] == expected_cfg, captured["env"]
 print("ok")
 PY
 then
@@ -1508,6 +1515,624 @@ out_l="$(GWSA_CLI_LINK="$LINK" relenv "$UPDATE" --force 2>&1)"
   && pass "lien PATH : fichier réel jamais remplacé par un lien" \
   || fail "lien PATH : a écrasé un fichier réel"
 
+section "sessions + vault (fiche 0040)"
+
+SESS_ROOT="$TMP/gwsa-sessions"
+mkdir -p "$SESS_ROOT/alpha"
+echo '{"drive":{"read":true,"create":true,"zonesOnly":true,"writeFolders":[]}}' > "$SESS_ROOT/alpha/policy.json"
+touch "$SESS_ROOT/alpha/.locked"
+PY="/usr/bin/python3"
+[[ -x "$PY" ]] || PY="$(command -v python3)"
+
+export GWSA_ROOT="$SESS_ROOT" PYTHONPATH="$(pwd)"
+out_s="$("$PY" -c "
+from gateway.sessions import create_session, session_unlock, session_grant_drive, active_drive_zones, create_child_session, revoke_descendants
+s1 = create_session(client='test')
+s2 = create_session(client='test')
+session_unlock(s1.session_id, 'alpha', 30)
+session_grant_drive(s1.session_id, 'alpha', 'folderAAA', 'ZoneA', 2)
+z1 = active_drive_zones(s1.session_id, 'alpha')
+z2 = active_drive_zones(s2.session_id, 'alpha')
+child = create_child_session(s1.session_id)
+zc = active_drive_zones(child.session_id, 'alpha')
+print('z1', len(z1), 'z2', len(z2), 'zc', len(zc))
+")"
+[[ "$out_s" == *"z1 1"* && "$out_s" == *"z2 0"* && "$out_s" == *"zc 1"* ]] \
+  && pass "sessions : grants isolés par session, héritage enfant" \
+  || fail "sessions : isolation ou héritage incorrect ($out_s)"
+
+n_rev="$("$PY" -c "
+from gateway.sessions import create_session, create_child_session, revoke_descendants
+p = create_session(client='t')
+c = create_child_session(p.session_id)
+print(revoke_descendants(p.session_id))
+")"
+[[ "$n_rev" == "1" ]] \
+  && pass "sessions : revoke_descendants purge les enfants" \
+  || fail "sessions : revoke_descendants ($n_rev)"
+
+GRANT_FID="GRANTFOLDER1234567890"
+rm -f "$SESS_ROOT/alpha/session-grants.json"
+out_g="$(GWSA_ROOT="$SESS_ROOT" "$GWSA" grant alpha "$GRANT_FID" 8 2>&1)"
+[[ "$out_g" == *"legacy"* && -f "$SESS_ROOT/alpha/session-grants.json" ]] \
+  && pass "grant global : avertissement dépréciation + session-grants.json legacy" \
+  || fail "grant global : dépréciation ou legacy ($out_g)"
+
+sid="$("$PY" -c 'from gateway.sessions import create_session; print(create_session(client="t").session_id)')"
+rm -f "$SESS_ROOT/alpha/session-grants.json"
+GWSA_ROOT="$SESS_ROOT" GWSA_SESSION_ID="$sid" "$GWSA" grant alpha "$GRANT_FID" 8 >/dev/null 2>&1
+z_sess="$("$PY" -c "from gateway.sessions import active_drive_zones; print(len(active_drive_zones('$sid', 'alpha')))")"
+[[ ! -f "$SESS_ROOT/alpha/session-grants.json" && "$z_sess" == "1" ]] \
+  && pass "grant + GWSA_SESSION_ID : registre session seulement" \
+  || fail "grant + GWSA_SESSION_ID : registre session ($z_sess)"
+
+rm -f "$SESS_ROOT/alpha/.unlock-until"
+out_u="$(GWSA_ROOT="$SESS_ROOT" "$GWSA" unlock alpha 30 2>&1)"
+[[ "$out_u" == *"legacy"* && -f "$SESS_ROOT/alpha/.unlock-until" ]] \
+  && pass "unlock global : avertissement dépréciation + .unlock-until legacy" \
+  || fail "unlock global : dépréciation ou legacy ($out_u)"
+
+sid_u="$("$PY" -c 'from gateway.sessions import create_session; print(create_session(client="t").session_id)')"
+rm -f "$SESS_ROOT/alpha/.unlock-until"
+GWSA_ROOT="$SESS_ROOT" GWSA_SESSION_ID="$sid_u" "$GWSA" unlock alpha 30 >/dev/null 2>&1
+u_ok="$("$PY" -c "from gateway.sessions import is_session_unlocked; print(is_session_unlocked('$sid_u', 'alpha'))")"
+[[ ! -f "$SESS_ROOT/alpha/.unlock-until" && "$u_ok" == "True" ]] \
+  && pass "unlock + GWSA_SESSION_ID : registre session seulement" \
+  || fail "unlock + GWSA_SESSION_ID : registre session (unlock=$u_ok)"
+
+sid_u2="$("$PY" -c 'from gateway.sessions import create_session; print(create_session(client="t").session_id)')"
+u2_ok="$("$PY" -c "from gateway.sessions import is_session_unlocked; print(is_session_unlocked('$sid_u2', 'alpha'))")"
+[[ "$u2_ok" == "False" ]] \
+  && pass "unlock session : isolation entre sessions parallèles" \
+  || fail "unlock session : autre session hérite ($u2_ok)"
+
+# list_sessions + admin API sessions (fiche 0040 phase C)
+sid_list="$("$PY" -c "
+from gateway.sessions import create_session, session_unlock, list_sessions
+s = create_session(client='admin-test')
+session_unlock(s.session_id, 'alpha', 20)
+n = len(list_sessions())
+print(s.session_id, n)
+")"
+sid_list_id="${sid_list%% *}"
+n_list="${sid_list##* }"
+[[ -n "$sid_list_id" && "$n_list" -ge 1 ]] \
+  && pass "sessions : list_sessions retourne au moins une session" \
+  || fail "sessions : list_sessions ($sid_list)"
+
+out_slist="$(GWSA_ROOT="$SESS_ROOT" "$GWSA" session list 2>/dev/null)"
+[[ "$out_slist" == *"$sid_list_id"* && "$out_slist" == *'"sessions"'* ]] \
+  && pass "gwsa session list : JSON avec session_id" \
+  || fail "gwsa session list ($out_slist)"
+
+ADMIN_PORT=$((49000 + RANDOM % 1000))
+GWSA_ROOT="$SESS_ROOT" GWSA_ADMIN_PORT="$ADMIN_PORT" node "$(pwd)/admin/server.js" >/dev/null 2>&1 &
+ADMIN_PID=$!
+admin_ready=0
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  if curl -sf -H 'X-GWSA-Admin: 1' "http://127.0.0.1:$ADMIN_PORT/api/sessions" >/dev/null 2>&1; then
+    admin_ready=1; break
+  fi
+  sleep 0.2
+done
+if [[ "$admin_ready" -eq 1 ]]; then
+  admin_get="$(curl -sf -H 'X-GWSA-Admin: 1' "http://127.0.0.1:$ADMIN_PORT/api/sessions")"
+  [[ "$admin_get" == *"$sid_list_id"* ]] \
+    && pass "admin GET /api/sessions : liste la session" \
+    || fail "admin GET /api/sessions ($admin_get)"
+
+  sid_admin="$("$PY" -c 'from gateway.sessions import create_session; print(create_session(client="admin-api").session_id)')"
+  admin_un="$(curl -sf -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
+    -X POST -d '{"alias":"alpha","minutes":25}' \
+    "http://127.0.0.1:$ADMIN_PORT/api/sessions/$sid_admin/unlock")"
+  u_admin="$("$PY" -c "from gateway.sessions import is_session_unlocked; print(is_session_unlocked('$sid_admin', 'alpha'))")"
+  [[ "$admin_un" == *'"ok":true'* && "$u_admin" == "True" ]] \
+    && pass "admin POST unlock session via gwsa" \
+    || fail "admin POST unlock ($admin_un unlock=$u_admin)"
+
+  admin_close="$(curl -sf -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
+    -X POST -d '{}' "http://127.0.0.1:$ADMIN_PORT/api/sessions/$sid_admin/close")"
+  gone="$("$PY" -c "from gateway.sessions import get_session; print(get_session('$sid_admin'))")"
+  [[ "$admin_close" == *'"ok":true'* && "$gone" == "None" ]] \
+    && pass "admin POST close session" \
+    || fail "admin POST close ($admin_close gone=$gone)"
+
+  # anti-CSRF : sans en-tête → 403
+  code_csrf="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$ADMIN_PORT/api/sessions")"
+  [[ "$code_csrf" == "403" ]] \
+    && pass "admin /api/sessions : refuse sans X-GWSA-Admin" \
+    || fail "admin CSRF sessions (code=$code_csrf)"
+else
+  fail "admin server sessions : démarrage timeout port $ADMIN_PORT"
+fi
+kill "$ADMIN_PID" 2>/dev/null || true
+wait "$ADMIN_PID" 2>/dev/null || true
+
+out_close="$("$PY" -c "
+from gateway.sessions import create_session, create_child_session, close_session, get_session, sessions_dir
+p = create_session(client='t')
+c = create_child_session(p.session_id)
+pid, cid = p.session_id, c.session_id
+close_session(pid)
+print('parent', get_session(pid), 'child', get_session(cid))
+")"
+[[ "$out_close" == *"parent None"* && "$out_close" == *"child None"* ]] \
+  && pass "close_session : purge parent + descendants" \
+  || fail "close_session : purge incomplète ($out_close)"
+
+PROJ_ROOT="$TMP/gwsa-proj-inside"
+rm -rf "$PROJ_ROOT"
+git_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+rm -rf "$git_root/.gwsa"
+GWSA_ROOT="$SESS_ROOT" "$GWSA" project init >/dev/null 2>&1
+GWSA_ROOT="$SESS_ROOT" "$GWSA" project sign >/dev/null 2>&1
+out_p="$(GWSA_ROOT="$SESS_ROOT" "$GWSA" project show 2>/dev/null)"
+[[ -n "$git_root" && -f "$git_root/.gwsa/manifest.json" && -f "$git_root/.gwsa/manifest.sig" \
+   && "$out_p" == *'"manifest_valid": true'* ]] \
+  && pass "project : init + sign local + show" \
+  || fail "project : init/sign/show (root=$git_root out=$out_p)"
+rm -rf "$git_root/.gwsa" 2>/dev/null || true
+
+cap_out="$("$PY" -c "
+import os
+from gateway.project import grant_allowed_by_manifest, ProjectContext
+from gateway.sessions import create_session, session_grant_drive, active_drive_zones
+from gateway.errors import GatewayError
+from unittest.mock import patch
+
+m = {'capabilities': {'alpha': {'drive': {'zones': [{'id': 'folderAAA'}]}}}}
+assert not grant_allowed_by_manifest(m, 'alpha', 'folderBBB')
+assert grant_allowed_by_manifest(m, 'alpha', 'folderAAA')
+sid = create_session(client='t').session_id
+ctx = ProjectContext(manifest_valid=True, manifest=m, git_root='/tmp')
+os.environ['GWSA_GIT_ROOT'] = '/tmp'
+with patch('gateway.project.resolve_project', return_value=ctx):
+    try:
+        session_grant_drive(sid, 'alpha', 'folderBBB', 'Bad', 1)
+        raise SystemExit('no reject')
+    except GatewayError:
+        pass
+    session_grant_drive(sid, 'alpha', 'folderAAA', 'ZoneA', 1)
+print(len(active_drive_zones(sid, 'alpha')))
+")"
+[[ "$cap_out" == "1" ]] \
+  && pass "project manifest : grant session ⊆ zones manifeste" \
+  || fail "project manifest : intersection grant ($cap_out)"
+
+# access_request project_grant + plafond services manifeste
+pg_out="$("$PY" -c "
+import os
+from unittest.mock import patch
+from gateway.context import set_session_id
+from gateway.api import access_request
+from gateway.project import ProjectContext
+from gateway.sessions import create_session
+
+sid = create_session(client='t').session_id
+set_session_id(sid)
+m = {'capabilities': {'alpha': {
+  'drive': {'zones': [{'id': 'folderAAA'}]},
+  'gmail': {'read': True, 'drafts': False},
+}}}
+ctx = ProjectContext(manifest_valid=True, manifest=m, git_root='/tmp',
+                     manifest_path='/tmp/.gwsa/manifest.json')
+os.environ['GWSA_GIT_ROOT'] = '/tmp'
+with patch('gateway.project.resolve_project', return_value=ctx):
+    ok = access_request('alpha', 'project_grant', folder='folderAAA', hours=2)
+    assert ok.get('kind') == 'project_grant' and 'session grant' in ok.get('suggested_command','')
+    blocked = access_request('alpha', 'project_grant', folder='folderBBB', hours=2)
+    assert blocked.get('blocked_by_manifest') is True
+from gateway.project import manifest_allows_service
+assert manifest_allows_service(m, 'alpha', 'gmail', 'read') is True
+assert manifest_allows_service(m, 'alpha', 'gmail', 'drafts') is False
+print('ok')
+")"
+[[ "$pg_out" == "ok" ]] \
+  && pass "project_grant : plafond manifeste + services" \
+  || fail "project_grant ($pg_out)"
+
+# policy-check : plafond services via _manifest_service_cap
+svc_cap="$("$PY" -c "
+import importlib.util, os, sys
+from unittest.mock import patch
+from gateway.project import ProjectContext
+
+spec = importlib.util.spec_from_file_location('pc', 'scripts/policy-check.py')
+pc = importlib.util.module_from_spec(spec)
+sys.argv = ['pc']
+spec.loader.exec_module(pc)
+m = {'capabilities': {'alpha': {'gmail': {'read': True, 'drafts': False}}}}
+ctx = ProjectContext(manifest_valid=True, manifest=m, git_root='/tmp')
+os.environ['GWSA_GIT_ROOT'] = '/tmp'
+with patch('gateway.project.resolve_project', return_value=ctx):
+    assert pc._manifest_service_cap('alpha', 'gmail', 'read') is True
+    assert pc._manifest_service_cap('alpha', 'gmail', 'drafts') is False
+print('ok')
+")"
+[[ "$svc_cap" == "ok" ]] \
+  && pass "policy-check : plafond services manifeste" \
+  || fail "policy-check services manifeste ($svc_cap)"
+
+policy <<'EOF'
+{"drive": {"read": true, "create": true, "update": true, "delete": false,
+           "share": false, "zonesOnly": true, "writeFolders": []}}
+EOF
+no_grants
+OLD_PROFILE="$PROFILE"
+PROFILE="$SESS_ROOT/alpha"
+export GWSA_USE_SESSION_GRANTS=1 GWSA_SESSION_DRIVE_ZONES="$GRANT_FID"
+check 0 "policy : zones session MCP (GWSA_SESSION_DRIVE_ZONES)" \
+  drive files create --json "{\"name\":\"x\",\"parents\":[\"$GRANT_FID\"]}"
+unset GWSA_USE_SESSION_GRANTS GWSA_SESSION_DRIVE_ZONES
+PROFILE="$OLD_PROFILE"
+
+mkdir -p "$SESS_ROOT/beta"
+echo 'secret' > "$SESS_ROOT/beta/credentials.enc"
+GWSA_ROOT="$SESS_ROOT" "$PY" -c "
+from gateway.vault import migrate_alias, is_migrated, gws_config_dir
+from pathlib import Path
+assert migrate_alias('beta')
+assert is_migrated('beta')
+assert not Path('$SESS_ROOT/beta/credentials.enc').exists()
+assert gws_config_dir('beta').name == 'beta'
+" 2>/dev/null \
+  && pass "vault : migration credentials.enc vers .vault/" \
+  || fail "vault : migration"
+
+section "élicitation signée (fiche 0001)"
+ELIC_ROOT="$TMP/gwsa-elicitation"
+mkdir -p "$ELIC_ROOT/alpha"
+touch "$ELIC_ROOT/.strong-auth"
+export GWSA_ROOT="$ELIC_ROOT" GWSA_ELICITATION_MOCK=1 PYTHONPATH="$(pwd)"
+"$PY" "$(pwd)/scripts/elicitation-cli.py" enroll --mock >/dev/null 2>&1 \
+  && pass "elicitation : enroll mock" \
+  || fail "elicitation : enroll mock"
+
+gate_ok="$("$PY" -c "
+from gateway.elicitation import run_elicitation_gate, build_payload, sign_mock, consume_nonce, ElicitationError
+run_elicitation_gate({'action': 'session_unlock', 'alias': 'alpha', 'session_id': 'abc', 'minutes': 30})
+p = build_payload('session_unlock', alias='alpha', session_id='abc', minutes=30)
+consume_nonce(p['nonce'], expires_at=p['expires_at'])
+try:
+    consume_nonce(p['nonce'], expires_at=p['expires_at'])
+    raise SystemExit('replay allowed')
+except ElicitationError:
+    pass
+print('ok')
+")"
+[[ "$gate_ok" == "ok" ]] \
+  && pass "elicitation : gate mock + anti-rejeu nonce" \
+  || fail "elicitation : gate mock ($gate_ok)"
+
+tamper="$("$PY" -c "
+from gateway.elicitation import build_payload, sign_mock, verify_signature
+p = build_payload('grant', alias='alpha', target='Z', hours=8)
+sig = sign_mock(p)
+p['hours'] = 99
+print(verify_signature(p, sig))
+")"
+[[ "$tamper" == "False" ]] \
+  && pass "elicitation : payload altéré → signature invalide" \
+  || fail "elicitation : tamper détecté ($tamper)"
+
+sid_e="$("$PY" -c 'from gateway.sessions import create_session; print(create_session(client="t").session_id)')"
+GWSA_ROOT="$ELIC_ROOT" GWSA_SESSION_ID="$sid_e" GWSA_ELICITATION_MOCK=1 \
+  "$GWSA" session unlock "$sid_e" alpha 15 >/dev/null 2>&1 \
+  && pass "elicitation : gwsa session unlock avec strongauth+mock" \
+  || fail "elicitation : gwsa session unlock strongauth"
+
+section "sandbox remove (fiche 0041)"
+SB_DEP="$TMP/sandbox-remove"
+mkdir -p "$SB_DEP/test-sb"
+printf '%s\n' '{"id":"test-sb","broker_port":4899,"admin_port":4898,"version":"dev@abc (dev)"}' \
+  > "$SB_DEP/test-sb/.sandbox.json"
+echo "dev" > "$SB_DEP/test-sb/VERSION"
+GWSA_DEPLOY_ROOT="$SB_DEP" ./scripts/sandbox.sh remove test-sb >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && ! -d "$SB_DEP/test-sb" ]] \
+  && pass "sandbox remove : supprime le répertoire jetable" \
+  || fail "sandbox remove : répertoire encore présent (rc=$rc)"
+
+GWSA_DEPLOY_ROOT="$SB_DEP" ./scripts/sandbox.sh remove current >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 ]] \
+  && pass "sandbox remove current → refus" \
+  || fail "sandbox remove current devrait refuser"
+
+mkdir -p "$SB_DEP/v1.0.0"
+GWSA_DEPLOY_ROOT="$SB_DEP" ./scripts/sandbox.sh remove v1.0.0 >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 ]] \
+  && pass "sandbox remove sans manifeste sandbox → refus" \
+  || fail "sandbox remove archive stable devrait refuser"
+
+# remove sans id → branche courante (préfixe / manifest.branch)
+SB_BR="$TMP/sandbox-branch-rm"
+mkdir -p "$SB_BR"
+# Fabrique un faux « repo » : on utilise le vrai REPO via script, donc on pose
+# deux sandboxes dont le manifeste.branch = branche courante du worktree.
+CUR_BR="$(git rev-parse --abbrev-ref HEAD)"
+CUR_SLUG="$(printf '%s' "$CUR_BR" | tr '[:upper:]' '[:lower:]' | tr '/ ' '--' | tr -cd 'a-z0-9._-' | cut -c1-40)"
+# Nouveau format <slug>-<sha> (sans préfixe dev-)
+SB1="${CUR_SLUG}-aaa1111"
+SB2="${CUR_SLUG}-bbb2222"
+mkdir -p "$SB_BR/$SB1" "$SB_BR/$SB2"
+printf '%s\n' "{\"id\":\"$SB1\",\"broker_port\":4891,\"admin_port\":4890,\"branch\":\"$CUR_BR\",\"version\":\"x\"}" \
+  > "$SB_BR/$SB1/.sandbox.json"
+printf '%s\n' "{\"id\":\"$SB2\",\"broker_port\":4893,\"admin_port\":4892,\"branch\":\"$CUR_BR\",\"version\":\"y\"}" \
+  > "$SB_BR/$SB2/.sandbox.json"
+# Une seule → remove sans id
+rm -rf "$SB_BR/$SB2"
+GWSA_DEPLOY_ROOT="$SB_BR" ./scripts/sandbox.sh remove >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && ! -d "$SB_BR/$SB1" ]] \
+  && pass "sandbox remove sans id : cible la branche courante" \
+  || fail "sandbox remove sans id (rc=$rc)"
+
+# Plusieurs → --all
+mkdir -p "$SB_BR/$SB1" "$SB_BR/$SB2"
+printf '%s\n' "{\"id\":\"$SB1\",\"broker_port\":4891,\"admin_port\":4890,\"branch\":\"$CUR_BR\",\"version\":\"x\"}" \
+  > "$SB_BR/$SB1/.sandbox.json"
+printf '%s\n' "{\"id\":\"$SB2\",\"broker_port\":4893,\"admin_port\":4892,\"branch\":\"$CUR_BR\",\"version\":\"y\"}" \
+  > "$SB_BR/$SB2/.sandbox.json"
+GWSA_DEPLOY_ROOT="$SB_BR" ./scripts/sandbox.sh remove --all >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && ! -d "$SB_BR/$SB1" && ! -d "$SB_BR/$SB2" ]] \
+  && pass "sandbox remove --all : toutes les sandboxes de la branche" \
+  || fail "sandbox remove --all (rc=$rc)"
+
+# Compat : ancien id dev-<slug>-… toujours trouvé sans id (préfixe)
+SB_OLD="dev-${CUR_SLUG}-oldc0de"
+mkdir -p "$SB_BR/$SB_OLD"
+printf '%s\n' "{\"id\":\"$SB_OLD\",\"broker_port\":4895,\"admin_port\":4894,\"branch\":\"$CUR_BR\",\"version\":\"legacy\"}" \
+  > "$SB_BR/$SB_OLD/.sandbox.json"
+GWSA_DEPLOY_ROOT="$SB_BR" ./scripts/sandbox.sh remove >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && ! -d "$SB_BR/$SB_OLD" ]] \
+  && pass "sandbox remove sans id : compat ancien id dev-<slug>-…" \
+  || fail "sandbox remove compat dev-* (rc=$rc)"
+
+section "sandbox deploy --wire (fiche 0041)"
+SB_WIRE_ROOT="$TMP/sandbox-wire-deploy"
+SB_DESK="$TMP/sandbox-wire-desktop.json"
+SB_CUR="$TMP/sandbox-wire-cursor.json"
+# Entrée stable préexistante — ne doit jamais être écrasée
+cat > "$SB_DESK" <<'EOF'
+{
+  "mcpServers": {
+    "google-multi-account": {
+      "command": "/opt/stable/bin/google-mcp",
+      "env": { "GWSA_CLIENT": "claude-desktop", "GWSA_BROKER_PORT": "4878" }
+    }
+  }
+}
+EOF
+cat > "$SB_CUR" <<'EOF'
+{
+  "mcpServers": {
+    "google-multi-account": {
+      "command": "/opt/stable/bin/google-mcp",
+      "env": { "GWSA_CLIENT": "cursor", "GWSA_BROKER_PORT": "4878" }
+    }
+  }
+}
+EOF
+mkdir -p "$SB_WIRE_ROOT"
+# Ports hauts peu susceptibles d'être occupés ; skip code (claude absent OK)
+WIRE_OUT="$(
+  GWSA_DEPLOY_ROOT="$SB_WIRE_ROOT" \
+  GWSA_DESKTOP_CONFIG="$SB_DESK" \
+  GWSA_CURSOR_CONFIG="$SB_CUR" \
+  ./scripts/sandbox.sh deploy --wire desktop,cursor --port 4921 --admin-port 4920 2>&1
+)" || true
+WIRE_ID="$(printf '%s\n' "$WIRE_OUT" | sed -n 's/^[[:space:]]*id[[:space:]]*:[[:space:]]*//p' | head -1)"
+CUR_SHA="$(git rev-parse --short HEAD)"
+EXPECTED_ID_PREFIX="${CUR_SLUG}-${CUR_SHA}"
+[[ -n "$WIRE_ID" && -d "$SB_WIRE_ROOT/$WIRE_ID" ]] \
+  && pass "sandbox deploy --wire : déploiement créé ($WIRE_ID)" \
+  || fail "sandbox deploy --wire : id/déploiement manquant"
+# Id = <slug>-<sha>[-dirty], sans préfixe dev-
+case "$WIRE_ID" in
+  dev-*) fail "sandbox id ne doit plus commencer par dev- (got $WIRE_ID)" ;;
+  "${EXPECTED_ID_PREFIX}"|"${EXPECTED_ID_PREFIX}-dirty")
+    pass "sandbox id format : <slug>-<sha> (pas de préfixe dev-)" ;;
+  *) fail "sandbox id inattendu : $WIRE_ID (attendu ${EXPECTED_ID_PREFIX}[-dirty])" ;;
+esac
+ENTRY="google-multi-account-${WIRE_ID}"
+python3 - "$SB_DESK" "$ENTRY" "$SB_WIRE_ROOT/$WIRE_ID/bin/google-mcp" <<'PY' >/dev/null 2>&1
+import json, sys
+cfg, name, bin_path = sys.argv[1], sys.argv[2], sys.argv[3]
+d = json.load(open(cfg, encoding="utf-8"))
+servers = d["mcpServers"]
+assert "google-multi-account" in servers
+stable = servers["google-multi-account"]
+assert stable["env"]["GWSA_BROKER_PORT"] == "4878"
+assert stable["command"] == "/opt/stable/bin/google-mcp"
+assert name in servers
+e = servers[name]
+assert e["command"] == bin_path
+assert e["env"]["GWSA_BROKER_PORT"] == "4921"
+assert e["env"]["GWSA_CLIENT"] == "claude-desktop"
+assert name != "google-multi-account"
+PY
+[[ $? -eq 0 ]] \
+  && pass "sandbox --wire desktop : entrée suffixée + stable intact" \
+  || fail "sandbox --wire desktop : config Desktop incorrecte"
+
+python3 - "$SB_CUR" "$ENTRY" "$SB_WIRE_ROOT/$WIRE_ID/bin/google-mcp" <<'PY' >/dev/null 2>&1
+import json, sys
+cfg, name, bin_path = sys.argv[1], sys.argv[2], sys.argv[3]
+d = json.load(open(cfg, encoding="utf-8"))
+servers = d["mcpServers"]
+assert servers["google-multi-account"]["env"]["GWSA_BROKER_PORT"] == "4878"
+e = servers[name]
+assert e["command"] == bin_path
+assert e["env"]["GWSA_BROKER_PORT"] == "4921"
+assert e["env"]["GWSA_CLIENT"] == "cursor"
+PY
+[[ $? -eq 0 ]] \
+  && pass "sandbox --wire cursor : entrée suffixée + stable intact" \
+  || fail "sandbox --wire cursor : config Cursor incorrecte"
+
+python3 - "$SB_WIRE_ROOT/$WIRE_ID/.sandbox.json" "$ENTRY" <<'PY' >/dev/null 2>&1
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+assert d.get("mcp_entry") == sys.argv[2]
+assert d["broker_port"] == 4921
+PY
+[[ $? -eq 0 ]] \
+  && pass "sandbox --wire : mcp_entry dans .sandbox.json" \
+  || fail "sandbox --wire : mcp_entry absent du manifeste"
+
+printf '%s\n' "$WIRE_OUT" | grep -q "checklist post-wire\|Suite — checklist\|Redémarrer les clients" \
+  && pass "sandbox deploy --wire : checklist courte (pas le bloc manuel long)" \
+  || fail "sandbox deploy --wire : checklist post-wire absente"
+
+# wire --remove desktop : retire Desktop seulement, conserve Cursor + répertoire
+GWSA_DEPLOY_ROOT="$SB_WIRE_ROOT" \
+GWSA_DESKTOP_CONFIG="$SB_DESK" \
+GWSA_CURSOR_CONFIG="$SB_CUR" \
+  ./scripts/sandbox.sh wire "$WIRE_ID" --remove desktop >/dev/null 2>&1; rc=$?
+python3 - "$SB_DESK" "$SB_CUR" "$ENTRY" <<'PY' >/dev/null 2>&1
+import json, sys
+desk, cur, name = sys.argv[1], sys.argv[2], sys.argv[3]
+d = json.load(open(desk, encoding="utf-8"))
+assert name not in d["mcpServers"]
+assert "google-multi-account" in d["mcpServers"]
+c = json.load(open(cur, encoding="utf-8"))
+assert name in c["mcpServers"], "cursor doit rester branché"
+assert "google-multi-account" in c["mcpServers"]
+PY
+[[ "$rc" -eq 0 && $? -eq 0 && -d "$SB_WIRE_ROOT/$WIRE_ID" ]] \
+  && pass "sandbox wire --remove desktop : Desktop only, dir conservé" \
+  || fail "sandbox wire --remove desktop (rc=$rc)"
+
+# wire --remove (all) : retire aussi Cursor ; dir toujours là
+GWSA_DEPLOY_ROOT="$SB_WIRE_ROOT" \
+GWSA_DESKTOP_CONFIG="$SB_DESK" \
+GWSA_CURSOR_CONFIG="$SB_CUR" \
+  ./scripts/sandbox.sh wire "$WIRE_ID" --remove >/dev/null 2>&1; rc=$?
+python3 - "$SB_CUR" "$ENTRY" <<'PY' >/dev/null 2>&1
+import json, sys
+c = json.load(open(sys.argv[1], encoding="utf-8"))
+assert sys.argv[2] not in c["mcpServers"]
+assert "google-multi-account" in c["mcpServers"]
+PY
+[[ "$rc" -eq 0 && $? -eq 0 && -d "$SB_WIRE_ROOT/$WIRE_ID" ]] \
+  && pass "sandbox wire --remove : tous clients, dir conservé" \
+  || fail "sandbox wire --remove all (rc=$rc)"
+
+# Re-wire pour tester remove nucléaire ensuite
+GWSA_DEPLOY_ROOT="$SB_WIRE_ROOT" \
+GWSA_DESKTOP_CONFIG="$SB_DESK" \
+GWSA_CURSOR_CONFIG="$SB_CUR" \
+  ./scripts/sandbox.sh wire "$WIRE_ID" --wire desktop,cursor >/dev/null 2>&1
+
+# remove doit unwire avant suppression
+GWSA_DEPLOY_ROOT="$SB_WIRE_ROOT" \
+GWSA_DESKTOP_CONFIG="$SB_DESK" \
+GWSA_CURSOR_CONFIG="$SB_CUR" \
+  ./scripts/sandbox.sh remove "$WIRE_ID" >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && ! -d "$SB_WIRE_ROOT/$WIRE_ID" ]] \
+  && pass "sandbox remove après wire : répertoire supprimé" \
+  || fail "sandbox remove après wire : échec (rc=$rc)"
+
+python3 - "$SB_DESK" "$SB_CUR" "$ENTRY" <<'PY' >/dev/null 2>&1
+import json, sys
+desk, cur, name = sys.argv[1], sys.argv[2], sys.argv[3]
+for path in (desk, cur):
+    d = json.load(open(path, encoding="utf-8"))
+    servers = d["mcpServers"]
+    assert name not in servers, path
+    assert "google-multi-account" in servers
+    assert servers["google-multi-account"]["env"]["GWSA_BROKER_PORT"] == "4878"
+PY
+[[ $? -eq 0 ]] \
+  && pass "sandbox remove : unwire suffixé, stable intact" \
+  || fail "sandbox remove : unwire incomplet ou stable touché"
+
+# wire sur sandbox déjà déployée (sans --wire au deploy)
+SB_WIRE2="$TMP/sandbox-wire-later"
+mkdir -p "$SB_WIRE2"
+# Réutiliser ports libres différents
+LATER_OUT="$(
+  GWSA_DEPLOY_ROOT="$SB_WIRE2" \
+  ./scripts/sandbox.sh deploy --port 4923 --admin-port 4922 2>&1
+)" || true
+LATER_ID="$(printf '%s\n' "$LATER_OUT" | sed -n 's/^[[:space:]]*id[[:space:]]*:[[:space:]]*//p' | head -1)"
+printf '%s\n' "$LATER_OUT" | grep -q "sandbox wire\|install-claude-desktop" \
+  && pass "sandbox deploy sans --wire : consignes manuelles / wire" \
+  || fail "sandbox deploy sans --wire : consignes manuelles absentes"
+cat > "$SB_DESK" <<'EOF'
+{"mcpServers": {"google-multi-account": {"command": "/opt/stable/bin/google-mcp", "env": {"GWSA_CLIENT": "claude-desktop", "GWSA_BROKER_PORT": "4878"}}}}
+EOF
+GWSA_DEPLOY_ROOT="$SB_WIRE2" \
+GWSA_DESKTOP_CONFIG="$SB_DESK" \
+GWSA_CURSOR_CONFIG="$SB_CUR" \
+  ./scripts/sandbox.sh wire "$LATER_ID" --wire desktop >/dev/null 2>&1; rc=$?
+python3 - "$SB_DESK" "google-multi-account-${LATER_ID}" <<'PY' >/dev/null 2>&1
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+assert sys.argv[2] in d["mcpServers"]
+assert "google-multi-account" in d["mcpServers"]
+PY
+[[ "$rc" -eq 0 && $? -eq 0 ]] \
+  && pass "sandbox wire : branche Desktop sur sandbox existante" \
+  || fail "sandbox wire sur sandbox existante (rc=$rc)"
+# nettoyage
+GWSA_DEPLOY_ROOT="$SB_WIRE2" \
+GWSA_DESKTOP_CONFIG="$SB_DESK" \
+GWSA_CURSOR_CONFIG="$SB_CUR" \
+  ./scripts/sandbox.sh remove "$LATER_ID" >/dev/null 2>&1 || true
+
+section "admin : retirer entrée MCP (dev panel)"
+MCP_CFG="$TMP/claude-desktop-mcp.json"
+cat > "$MCP_CFG" <<EOF
+{
+  "mcpServers": {
+    "google-multi-account": {
+      "command": "$HOME/.local/share/google-mcp/current/bin/google-mcp",
+      "env": { "GWSA_CLIENT": "claude-desktop", "GWSA_BROKER_PORT": "4878" }
+    },
+    "google-mcp-dev-temp-xyz": {
+      "command": "$HOME/.local/share/google-mcp/dev-temp/bin/google-mcp",
+      "env": { "GWSA_CLIENT": "claude-desktop", "GWSA_BROKER_PORT": "4889" }
+    }
+  }
+}
+EOF
+MCP_ADMIN_PORT=4971
+GWSA_ROOT="$TMP/admin-mcp-root" GWSA_ADMIN_PORT="$MCP_ADMIN_PORT" \
+  GWSA_DESKTOP_CONFIG="$MCP_CFG" GWSA_CURSOR_CONFIG="" \
+  node "$(pwd)/admin/server.js" >/dev/null 2>&1 &
+MCP_ADMIN_PID=$!
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  if curl -sf -H 'X-GWSA-Admin: 1' "http://127.0.0.1:$MCP_ADMIN_PORT/api/dev" >/dev/null 2>&1; then break; fi
+  sleep 0.2
+done
+prot="$(curl -s -o /tmp/mcp-rm-prot.json -w '%{http_code}' -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
+  -d "{\"name\":\"google-multi-account\",\"config\":\"$MCP_CFG\"}" \
+  "http://127.0.0.1:$MCP_ADMIN_PORT/api/dev/mcp-client/remove")"
+[[ "$prot" == "403" ]] \
+  && pass "admin MCP remove : refuse google-multi-account (protégée)" \
+  || fail "admin MCP remove : stable devrait être 403 (got $prot)"
+
+ok_rm="$(curl -s -o /tmp/mcp-rm-ok.json -w '%{http_code}' -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
+  -d "{\"name\":\"google-mcp-dev-temp-xyz\",\"config\":\"$MCP_CFG\"}" \
+  "http://127.0.0.1:$MCP_ADMIN_PORT/api/dev/mcp-client/remove")"
+"$PY" -c "
+import json
+d=json.load(open('$MCP_CFG'))
+assert 'google-mcp-dev-temp-xyz' not in d['mcpServers']
+assert 'google-multi-account' in d['mcpServers']
+" \
+  && [[ "$ok_rm" == "200" ]] \
+  && pass "admin MCP remove : retire l'entrée jetable, garde le stable" \
+  || fail "admin MCP remove : retrait jetable (http=$ok_rm)"
+
+grep -q 'removeMcpClient' admin/index.html \
+  && grep -q 'removeSandbox' admin/index.html \
+  && grep -q '/api/dev/mcp-client/remove' admin/index.html \
+  && pass "admin UI : boutons Retirer MCP + Supprimer sandbox" \
+  || fail "admin UI : marqueurs remove absents"
+
+kill "$MCP_ADMIN_PID" 2>/dev/null || true
+wait "$MCP_ADMIN_PID" 2>/dev/null || true
+
 section "Admin zones — flux authorize (wiring + logique + API)"
 
 AF_HTML=admin/index.html
@@ -1710,7 +2335,8 @@ section "gwsa dev test — déployer, redémarrer l'admin, vérifier afSearchHit
 
 DEVTEST_DEP="$TMP/devdeploy"
 DEVTEST_ROOT="$TMP/devgwsa"
-DEVTEST_PORT=49201
+# Port éphémère : évite les orphelins d'un run précédent sur 49201.
+DEVTEST_PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
 mkdir -p "$DEVTEST_ROOT"
 
 if "$GWSA" dev test --help 2>&1 | grep -q 'gwsa dev test'; then
@@ -1746,10 +2372,14 @@ if command -v node >/dev/null 2>&1; then
   else
     fail "dev test : résumé incomplet — $(echo "$out" | tail -20 | tr '\n' ' ')"
   fi
-  if [[ -f "$DEVTEST_ROOT/.admin.pid" ]]; then
-    apid="$(cat "$DEVTEST_ROOT/.admin.pid" 2>/dev/null || true)"
-    kill "$apid" 2>/dev/null || true
-  fi
+  # pidfile port-spécifique (GWSA_ADMIN_PORT) + legacy .admin.pid
+  for pf in "$DEVTEST_ROOT/.admin-$DEVTEST_PORT.pid" "$DEVTEST_ROOT/.admin.pid"; do
+    if [[ -f "$pf" ]]; then
+      apid="$(cat "$pf" 2>/dev/null || true)"
+      kill "$apid" 2>/dev/null || true
+      rm -f "$pf"
+    fi
+  done
   lsof -ti "tcp:$DEVTEST_PORT" -sTCP:LISTEN 2>/dev/null | xargs kill 2>/dev/null || true
   rm -rf "$DEVTEST_DEP/$dev_id"
 else
