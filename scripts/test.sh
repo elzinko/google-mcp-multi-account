@@ -935,6 +935,108 @@ out_v="$("$INSTALL" --config "$CD/version-shown.json" --print 2>&1)"
   && pass "couloir : le script annonce la version qu'il branche" \
   || fail "couloir : version non affichée"
 
+# --- Branchement Claude Code — install-claude-code.sh (fiche 0040) -----------
+#
+# Hermétique : Claude Code se branche via le CLI `claude` (pas un fichier de
+# config qu'on éditerait). On surcharge le CLI par un MOCK via CLAUDE_BIN — le
+# vrai ~/.claude.json n'est JAMAIS touché (le script ne fait que déléguer).
+
+section "Branchement Claude Code — install-claude-code.sh (délègue au CLI, hermétique)"
+INSTALL_CC="scripts/install-claude-code.sh"
+CCDIR="$TMP/cc"; mkdir -p "$CCDIR/home"
+CCMOCK="$CCDIR/claude"; export CCREG="$CCDIR/registry"; export CCENV="$CCDIR/registry.env"; export CCLOG="$CCDIR/calls.log"
+# Le mock imite `claude mcp get` de façon RÉALISTE : sa sortie cite le binaire ET
+# les variables d'environnement (comme le vrai CLI), pour que le contrôle
+# d'idempotence puisse comparer le port de broker et le client, pas juste le chemin.
+cat > "$CCMOCK" <<'MOCK'
+#!/usr/bin/env bash
+echo "$*" >> "$CCLOG"
+[[ "$1" == mcp ]] || exit 0
+case "$2" in
+  get)    [[ -s "$CCREG" ]] || exit 1
+          echo "  Scope: User"; echo "  Command: $(cat "$CCREG")"; echo "  Environment:"
+          [[ -s "$CCENV" ]] && cat "$CCENV"
+          exit 0 ;;
+  add)    printf '%s\n' "${@: -1}" > "$CCREG"
+          : > "$CCENV"; prev=""
+          for a in "$@"; do [[ "$prev" == "--env" ]] && echo "    $a" >> "$CCENV"; prev="$a"; done
+          exit 0 ;;
+  remove) rm -f "$CCREG" "$CCENV"; exit 0 ;;
+esac
+MOCK
+chmod +x "$CCMOCK"
+MCP_ABS="$(pwd)/bin/google-mcp"
+ccrun() { CLAUDE_BIN="$CCMOCK" HOME="$CCDIR/home" "$INSTALL_CC" "$@"; }
+
+# 1. première fois → mcp add, scope user, bon binaire
+: > "$CCLOG"; rm -f "$CCREG"
+ccrun >/dev/null 2>&1
+[[ "$(cat "$CCREG" 2>/dev/null)" == "$MCP_ABS" ]] \
+  && grep -q "mcp add google-multi-account --scope user" "$CCLOG" \
+  && pass "claude-code : première fois → mcp add scope user sur le bon binaire" \
+  || fail "claude-code : enregistrement initial"
+
+# les --env attendus sont transmis
+grep -q "GWSA_CLIENT=claude-code" "$CCLOG" && grep -q "GWSA_BROKER_PORT=4878" "$CCLOG" \
+  && pass "claude-code : --env GWSA_CLIENT=claude-code + port 4878 transmis" \
+  || fail "claude-code : env manquants"
+
+# 2. relance → idempotent, aucun nouvel add
+: > "$CCLOG"
+out_cc="$(ccrun 2>&1)"
+[[ "$(grep -c "mcp add" "$CCLOG")" == "0" && "$out_cc" == *"rien à faire"* ]] \
+  && pass "claude-code : relance idempotente (aucun mcp add)" \
+  || fail "claude-code : devrait être idempotent"
+
+# 3. pointe ailleurs → remove + re-add sur current
+printf '/ancienne/cible/google-mcp\n' > "$CCREG"; : > "$CCLOG"
+ccrun >/dev/null 2>&1
+[[ "$(grep -c "mcp remove" "$CCLOG")" -ge 1 && "$(cat "$CCREG")" == "$MCP_ABS" ]] \
+  && pass "claude-code : entrée périmée → remove + re-add sur current" \
+  || fail "claude-code : re-pointage"
+
+# 3b. bon binaire mais MAUVAIS port de broker → re-branchement (revue Codex #43 :
+#     ne pas conclure « à jour » sur la seule sous-chaîne du binaire).
+printf '%s\n' "$MCP_ABS" > "$CCREG"
+printf '    GWSA_CLIENT=claude-code\n    GWSA_BROKER_PORT=9999\n' > "$CCENV"; : > "$CCLOG"
+ccrun >/dev/null 2>&1
+[[ "$(grep -c "mcp remove" "$CCLOG")" -ge 1 && "$(grep -c "mcp add" "$CCLOG")" -ge 1 ]] \
+  && grep -q "GWSA_BROKER_PORT=4878" "$CCLOG" \
+  && pass "claude-code : bon binaire mais mauvais port → re-branché sur le bon couloir" \
+  || fail "claude-code : devrait re-brancher quand le port de broker diffère"
+
+# 3c. bon binaire + bon port, mais SANS GWSA_CLIENT → re-branchement (attribution).
+printf '%s\n' "$MCP_ABS" > "$CCREG"
+printf '    GWSA_BROKER_PORT=4878\n' > "$CCENV"; : > "$CCLOG"
+ccrun >/dev/null 2>&1
+[[ "$(grep -c "mcp add" "$CCLOG")" -ge 1 ]] \
+  && pass "claude-code : entrée sans GWSA_CLIENT → re-branchée (attribution du journal)" \
+  || fail "claude-code : devrait re-brancher quand GWSA_CLIENT manque"
+
+# 4. --print : montre la commande, n'invoque JAMAIS le CLI
+: > "$CCLOG"
+out_cc="$(ccrun --print 2>&1)"
+[[ "$out_cc" == *"mcp add google-multi-account --scope user"* && ! -s "$CCLOG" ]] \
+  && pass "claude-code : --print affiche la commande sans invoquer le CLI" \
+  || fail "claude-code : --print a invoqué le CLI ou n'affiche rien"
+
+# 5. claude absent → exit 0 + avertissement (déploiement non cassé)
+out_cc="$(CLAUDE_BIN="$CCDIR/nexistepas" HOME="$CCDIR/home" "$INSTALL_CC" 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$out_cc" == *"introuvable"* ]] \
+  && pass "claude-code : CLI absent → exit 0 + avertissement (déploiement non cassé)" \
+  || fail "claude-code : devrait dégrader gracieusement"
+
+# invariant : délégation PURE au CLI — le script ne redirige aucune écriture vers
+# un fichier de config (pas de « > …claude.json », pas de tempfile/os.replace).
+# Le vrai ~/.claude.json est déjà protégé par le mock ci-dessus ; ici on vérifie
+# qu'aucun chemin de code n'écrit un fichier de config en dur.
+if ! grep -E "(>|>>|tee|os\.replace|mkstemp)[^\"']*claude" "$INSTALL_CC" >/dev/null 2>&1; then
+  pass "claude-code : délégation pure au CLI (aucune écriture directe de config)"
+else
+  fail "claude-code : le script écrit un fichier de config en dur (devrait déléguer)"
+fi
+unset CCREG CCLOG
+
 # --- Déploiement local figé (fiche 0023) ------------------------------------
 
 section "Version du serveur — VERSION généré au déploiement, « dev » dans un clone"

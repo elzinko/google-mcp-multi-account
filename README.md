@@ -47,17 +47,23 @@ Détail / voie manuelle : [docs/setup-oauth.md](docs/setup-oauth.md).
 
 Une commande, comme pour un produit installé : elle prend la dernière version
 publiée, l'installe **hors du clone** (`~/.local/share/google-mcp/<version>/`),
-et branche Claude Desktop dessus — sans toucher à tes autres serveurs MCP, avec
-un backup de la config. Relançable sans risque : elle dit « déjà à jour » quand
-il n'y a rien de neuf.
+et branche **Claude Desktop et Claude Code** dessus (Claude Code seulement si le
+CLI `claude` est présent) — sans toucher à tes autres serveurs MCP, avec un
+backup de la config. Relançable sans risque : elle dit « déjà à jour » quand il
+n'y a rien de neuf.
+
+> Deux clients, deux configs séparées : Claude **Desktop** (son fichier JSON) et
+> Claude **Code** (le CLI, `~/.claude.json`). Le script branche les deux ; si tu
+> n'utilises que l'un, l'autre est simplement ignoré.
 
 Installer hors du clone n'est pas un détail : sinon développer changerait
 l'outil pendant que tu t'en sers, et du code en chantier garderait l'accès à tes
 vrais comptes.
 
 Puis **redémarrer Claude Desktop** (Cmd-Q, puis relancer — fermer la fenêtre ne
-suffit pas). Autres clients (Cursor, Claude Code), branchement manuel et
-couloirs de développement : [docs/mcp-setup.md](docs/mcp-setup.md).
+suffit pas ; côté Claude Code, ouvre un nouveau `claude`). Autres clients
+(Cursor…), branchement manuel et couloirs de développement :
+[docs/mcp-setup.md](docs/mcp-setup.md).
 
 **3 · Demander au LLM d'initialiser tes comptes** — par exemple : « fais le
 point sur mon setup Google ». Il lit l'état du setup (tool `setup_status`), te

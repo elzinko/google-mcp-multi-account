@@ -97,9 +97,12 @@ step "Installation de $TARGET_VERSION"
 "$SRC/scripts/deploy-local.sh" --tag "$TARGET_VERSION" \
   || die "déploiement en échec — rien n'a basculé"
 
-# ── branchement du client, seulement si nécessaire ───────────────
+# ── branchement des clients, seulement si nécessaire ─────────────
+# Deux clients, deux configs séparées : Claude Desktop (fichier JSON dédié) et
+# Claude Code (le CLI `claude`, config ~/.claude.json). On branche les deux.
 step "Branchement"
 INSTALLER="$DEPLOY_ROOT/current/scripts/install-claude-desktop.sh"
+CC_INSTALLER="$DEPLOY_ROOT/current/scripts/install-claude-code.sh"
 CONFIG="${GWSA_DESKTOP_CONFIG:-$HOME/Library/Application Support/Claude/claude_desktop_config.json}"
 EXPECTED="$DEPLOY_ROOT/current/bin/google-mcp"
 
@@ -116,15 +119,30 @@ print(srv.get("command") or "")
 PY
 }
 
+# Claude Desktop
 CURRENT_CMD="$(entry_command)"
 if [[ "$CURRENT_CMD" == "$EXPECTED" ]]; then
-  ok "entrée déjà branchée sur current — config inchangée"
+  ok "Claude Desktop : déjà branché sur current — config inchangée"
 elif [[ -x "$INSTALLER" ]]; then
   "$INSTALLER" --config "$CONFIG" >/dev/null \
-    && ok "entrée Claude Desktop branchée sur $EXPECTED" \
-    || warn "branchement automatique en échec — lance « $INSTALLER »"
+    && ok "Claude Desktop : branché sur $EXPECTED" \
+    || warn "Claude Desktop : branchement automatique en échec — lance « $INSTALLER »"
 else
-  warn "installeur introuvable ($INSTALLER) — branchement à faire à la main"
+  warn "installeur Desktop introuvable ($INSTALLER) — branchement à faire à la main"
+fi
+
+# Claude Code (CLI) — best-effort : seulement si `claude` est installé. Le script
+# délègue au CLI officiel (scope user) et est idempotent (fiche 0040).
+if command -v claude >/dev/null 2>&1; then
+  if [[ -x "$CC_INSTALLER" ]]; then
+    "$CC_INSTALLER" >/dev/null \
+      && ok "Claude Code (CLI) : branché sur $EXPECTED" \
+      || warn "Claude Code : branchement en échec — lance « $CC_INSTALLER »"
+  else
+    warn "installeur Claude Code introuvable ($CC_INSTALLER)"
+  fi
+else
+  ok "CLI « claude » absent — Claude Code non branché (normal si tu n'utilises que Desktop)"
 fi
 
 # ── le poste de commande suit la version installée ───────────────
