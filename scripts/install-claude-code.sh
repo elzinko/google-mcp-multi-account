@@ -98,11 +98,21 @@ get_rc=$?
 set -e
 
 if [[ "$get_rc" -eq 0 ]]; then
-  if grep -qF "$MCP_BIN" <<<"$current"; then
-    ok "Déjà branché sur $MCP_BIN — rien à faire."
+  # Ne conclure « à jour » que si le binaire ET les deux --env (client, broker
+  # port) correspondent à ce que « mcp add » poserait. La seule sous-chaîne du
+  # binaire ne suffit pas : une entrée au même chemin mais sur un autre port de
+  # broker (mauvais couloir) ou sans GWSA_CLIENT (attribution du journal faussée)
+  # serait acceptée à tort, et l'installeur reporterait un faux succès (revue
+  # Codex #43). Le re-branchement repose toujours l'entrée au scope voulu.
+  entry_ok=1
+  for needle in "$MCP_BIN" "GWSA_CLIENT=$GWSA_CLIENT" "GWSA_BROKER_PORT=$BROKER_PORT"; do
+    grep -qF -- "$needle" <<<"$current" || entry_ok=0
+  done
+  if [[ "$entry_ok" -eq 1 ]]; then
+    ok "Déjà branché (binaire, client et port de broker corrects) — rien à faire."
     exit 0
   fi
-  warn "Entrée « $SERVER_NAME » présente mais pointe ailleurs — re-branchement."
+  warn "Entrée « $SERVER_NAME » présente mais différente (binaire, client ou port de broker) — re-branchement."
   "$CLAUDE" mcp remove "$SERVER_NAME" --scope "$SCOPE" >/dev/null 2>&1 \
     || "$CLAUDE" mcp remove "$SERVER_NAME" >/dev/null 2>&1 \
     || warn "retrait de l'ancienne entrée en échec — « $CLAUDE mcp add » va tenter d'écraser"

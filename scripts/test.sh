@@ -944,15 +944,24 @@ out_v="$("$INSTALL" --config "$CD/version-shown.json" --print 2>&1)"
 section "Branchement Claude Code — install-claude-code.sh (délègue au CLI, hermétique)"
 INSTALL_CC="scripts/install-claude-code.sh"
 CCDIR="$TMP/cc"; mkdir -p "$CCDIR/home"
-CCMOCK="$CCDIR/claude"; export CCREG="$CCDIR/registry"; export CCLOG="$CCDIR/calls.log"
+CCMOCK="$CCDIR/claude"; export CCREG="$CCDIR/registry"; export CCENV="$CCDIR/registry.env"; export CCLOG="$CCDIR/calls.log"
+# Le mock imite `claude mcp get` de façon RÉALISTE : sa sortie cite le binaire ET
+# les variables d'environnement (comme le vrai CLI), pour que le contrôle
+# d'idempotence puisse comparer le port de broker et le client, pas juste le chemin.
 cat > "$CCMOCK" <<'MOCK'
 #!/usr/bin/env bash
 echo "$*" >> "$CCLOG"
 [[ "$1" == mcp ]] || exit 0
 case "$2" in
-  get)    [[ -s "$CCREG" ]] && { echo "  Command: $(cat "$CCREG")"; exit 0; }; exit 1 ;;
-  add)    printf '%s\n' "${@: -1}" > "$CCREG"; exit 0 ;;
-  remove) rm -f "$CCREG"; exit 0 ;;
+  get)    [[ -s "$CCREG" ]] || exit 1
+          echo "  Scope: User"; echo "  Command: $(cat "$CCREG")"; echo "  Environment:"
+          [[ -s "$CCENV" ]] && cat "$CCENV"
+          exit 0 ;;
+  add)    printf '%s\n' "${@: -1}" > "$CCREG"
+          : > "$CCENV"; prev=""
+          for a in "$@"; do [[ "$prev" == "--env" ]] && echo "    $a" >> "$CCENV"; prev="$a"; done
+          exit 0 ;;
+  remove) rm -f "$CCREG" "$CCENV"; exit 0 ;;
 esac
 MOCK
 chmod +x "$CCMOCK"
@@ -985,6 +994,24 @@ ccrun >/dev/null 2>&1
 [[ "$(grep -c "mcp remove" "$CCLOG")" -ge 1 && "$(cat "$CCREG")" == "$MCP_ABS" ]] \
   && pass "claude-code : entrée périmée → remove + re-add sur current" \
   || fail "claude-code : re-pointage"
+
+# 3b. bon binaire mais MAUVAIS port de broker → re-branchement (revue Codex #43 :
+#     ne pas conclure « à jour » sur la seule sous-chaîne du binaire).
+printf '%s\n' "$MCP_ABS" > "$CCREG"
+printf '    GWSA_CLIENT=claude-code\n    GWSA_BROKER_PORT=9999\n' > "$CCENV"; : > "$CCLOG"
+ccrun >/dev/null 2>&1
+[[ "$(grep -c "mcp remove" "$CCLOG")" -ge 1 && "$(grep -c "mcp add" "$CCLOG")" -ge 1 ]] \
+  && grep -q "GWSA_BROKER_PORT=4878" "$CCLOG" \
+  && pass "claude-code : bon binaire mais mauvais port → re-branché sur le bon couloir" \
+  || fail "claude-code : devrait re-brancher quand le port de broker diffère"
+
+# 3c. bon binaire + bon port, mais SANS GWSA_CLIENT → re-branchement (attribution).
+printf '%s\n' "$MCP_ABS" > "$CCREG"
+printf '    GWSA_BROKER_PORT=4878\n' > "$CCENV"; : > "$CCLOG"
+ccrun >/dev/null 2>&1
+[[ "$(grep -c "mcp add" "$CCLOG")" -ge 1 ]] \
+  && pass "claude-code : entrée sans GWSA_CLIENT → re-branchée (attribution du journal)" \
+  || fail "claude-code : devrait re-brancher quand GWSA_CLIENT manque"
 
 # 4. --print : montre la commande, n'invoque JAMAIS le CLI
 : > "$CCLOG"
