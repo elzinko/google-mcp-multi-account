@@ -41,6 +41,51 @@ button.small { padding:4px 9px; font-size:13px; border-radius:6px; }
 .b-warn { background:var(--warnbg); color:var(--warn); }
 .b-bad  { background:var(--badbg);  color:var(--bad); }
 .b-mut  { background:var(--bg); color:var(--mut); border:1px solid var(--line); }
+#verBadge { font-family:ui-monospace, monospace; font-size:13px; font-weight:700;
+  background:var(--accbg); color:var(--acc); border:1px solid color-mix(in srgb,var(--acc) 35%,transparent); }
+#ctxStrip { display:none; width:100%; padding:8px 22px; font-size:12.5px; border-bottom:1px solid var(--line);
+  background:color-mix(in srgb,var(--warnbg) 70%,transparent); color:var(--warn); }
+#ctxStrip.show { display:block; }
+#ctxStrip .mono { color:inherit; }
+#ctxStrip a.ctx-link { color:inherit; font-weight:600; text-decoration:underline; cursor:pointer; }
+#ctxStrip a.ctx-link:hover { opacity:.85; }
+.add-account-row { display:flex; justify-content:flex-end; margin:10px 0 0; }
+.btn-add { display:inline-flex; align-items:center; gap:8px; background:var(--card); border:1px solid var(--line);
+  border-radius:12px; padding:13px 16px; font:inherit; font-size:15px; font-weight:600; cursor:pointer; color:var(--acc);
+  transition:border-color .15s, background .15s, box-shadow .15s, transform .08s; }
+.btn-add:hover { border-color:color-mix(in srgb,var(--acc) 45%,var(--line)); background:var(--accbg);
+  box-shadow:0 1px 3px color-mix(in srgb,var(--acc) 12%,transparent); }
+.btn-add:active { transform:scale(0.985); background:color-mix(in srgb,var(--accbg) 65%,var(--acc) 12%);
+  border-color:var(--acc); }
+#dDev { max-width:720px; }
+.devgrid { display:grid; gap:10px; }
+.devcard { border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:var(--bg); }
+.devcard h3 { margin:0 0 6px; font-size:14px; }
+.devmeta { font-size:12.5px; color:var(--mut); display:grid; gap:2px; }
+.devtabs { margin:10px 0 12px; }
+.devtabs button.active { background:var(--accbg); border-color:var(--acc); color:var(--acc); font-weight:600; }
+.devpanel { min-height:400px; max-height:52vh; overflow-y:auto; }
+.dev-tab-panel { min-height:400px; }
+.dev-summary { font-size:14px; line-height:1.65; }
+.dev-summary .mono { font-size:13px; }
+.dev-summary-line { margin:2px 0; }
+.dev-summary-line .lbl { color:var(--mut); font-size:12.5px; min-width:52px; display:inline-block; }
+.sblist { display:grid; gap:8px; }
+.sbcard { border:1px solid var(--line); border-radius:10px; background:var(--bg); cursor:pointer; }
+.sbcard:hover { border-color:var(--mut); }
+.sbcard-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 12px; }
+.sbcard-id { font-weight:600; font-size:13px; }
+.sbcard-detail { border-top:1px solid var(--line); padding:8px 12px 10px; font-size:12.5px; color:var(--mut); display:grid; gap:3px; }
+.sbcard-detail a { color:var(--acc); }
+.portchip { font-size:11.5px; padding:2px 7px; border-radius:6px; font-family:ui-monospace,monospace; }
+.portchip.up { background:var(--okbg); color:var(--ok); }
+.portchip.down { background:var(--bg); color:var(--mut); border:1px solid var(--line); }
+.arch-toggle { display:inline-block; margin-top:10px; border:0; background:transparent; color:var(--acc);
+  cursor:pointer; font-size:13px; padding:0; text-decoration:underline; }
+.arch-list { margin-top:8px; display:grid; gap:4px; font-size:12.5px; color:var(--mut); }
+.mcp-row { padding:8px 0; border-top:1px solid var(--line); }
+.mcp-row:first-child { border-top:0; padding-top:0; }
+.mcp-row b { font-size:14px; }
 .chips { display:flex; gap:6px; flex-wrap:wrap; margin:9px 0 11px; }
 .chip { font-size:12.5px; background:var(--accbg); color:var(--acc); padding:2px 9px; border-radius:6px; }
 .actions { display:flex; gap:8px; flex-wrap:wrap; }
@@ -186,6 +231,13 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
   padding:12px 14px; background:color-mix(in srgb,var(--badbg) 55%,transparent); }
 .danger .drx { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .danger p { margin:0; font-size:12.5px; color:var(--mut); flex:1; min-width:180px; }
+/* Sessions LLM (fiche 0040) */
+.sess-card { border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin:8px 0; background:var(--bg); }
+.sess-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.sess-id { font-family:ui-monospace,monospace; font-size:12.5px; font-weight:700; }
+.sess-meta { font-size:12.5px; color:var(--mut); margin:4px 0 6px; }
+.sess-caps { font-size:13px; margin:4px 0; }
+.sess-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
 /* dialogues de confirmation (verrouillage, etc.) */
 @keyframes dlg-in { from { opacity:0; transform:translateY(10px) scale(.97); } to { opacity:1; transform:none; } }
 @keyframes dlg-backdrop-in { from { opacity:0; } to { opacity:1; } }
@@ -234,19 +286,25 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
 </head>
 <body>
 <header>
-  <h1>🗂️ gws multi-comptes — admin</h1>
-  <button class="primary" onclick="openAdd()">＋ Connecter un compte</button>
+  <h1>gws multi-comptes — admin</h1>
+  <span id="verBadge" class="badge" title="Version du code servi par cette admin">…</span>
   <button onclick="lockAll()">🔒 Tout verrouiller</button>
+  <button onclick="openSessions()">💬 Sessions</button>
   <button onclick="openLog()">📓 Journal</button>
+  <button onclick="openDev()">🛠 Développement</button>
   <button onclick="openSetup()">🩺 Setup</button>
   <button onclick="openDoc()">❓ Doc</button>
 </header>
+<div id="ctxStrip" role="status"></div>
 <main>
   <p class="note">La ligne d'un compte se lit en deux temps.
   <b>Le cadenas</b> : l'accès est-il verrouillé ou déverrouillé ? C'est un bouton — clique dessus.
   <b>Le décompte</b> : le temps restant, en vrai.
   Un compte déconnecté est grisé : « Reconnecter » sur la ligne, ou « + Connecter un compte ».</p>
   <div id="cards"></div>
+  <div class="add-account-row">
+    <button type="button" id="btnAdd" class="btn-add" onclick="openAdd()">＋ Connecter un compte</button>
+  </div>
 </main>
 
 <dialog id="dAdd">
@@ -295,6 +353,44 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
     <button class="danger" onclick="doUnlock('off')">Retirer le verrou</button>
   </div>
   <div class="mtop"><button onclick="dUnlock.close()">Annuler</button></div>
+</dialog>
+
+<dialog id="dSessions">
+  <h2>Sessions LLM</h2>
+  <p class="note">Chaque conversation MCP a ses propres unlock / zones (registre
+    <span class="mono">.sessions/</span>). Unlock ou grant ici = <b>cette session seulement</b>
+    (élicitation signée si strongauth). Fermer le client MCP purge la session.</p>
+  <div id="sessBody" style="max-height:55vh;overflow:auto">Chargement…</div>
+  <div class="mtop"><button onclick="refreshSessions()">Rafraîchir</button>
+    <button onclick="dSessions.close()">Fermer</button></div>
+</dialog>
+
+<dialog id="dSessUnlock">
+  <h2>Unlock session</h2>
+  <p class="note">Session <span class="mono" id="sessUnlockSid"></span></p>
+  <label>Profil</label>
+  <select id="sessUnlockAlias"></select>
+  <label>Durée (minutes)</label>
+  <div class="mtop" style="justify-content:flex-start">
+    <button onclick="doSessUnlock(30)">30 min</button>
+    <button onclick="doSessUnlock(60)">1 h</button>
+    <button onclick="doSessUnlock(240)">4 h</button>
+  </div>
+  <div class="mtop"><button onclick="dSessUnlock.close()">Annuler</button></div>
+</dialog>
+
+<dialog id="dSessGrant">
+  <h2>Zone Drive — session</h2>
+  <p class="note">Session <span class="mono" id="sessGrantSid"></span> — accord temporaire
+    pour cette conversation seulement (pas le fichier global).</p>
+  <label>Profil</label>
+  <select id="sessGrantAlias"></select>
+  <label>Dossier (id Drive ou nom)</label>
+  <input type="text" id="sessGrantTarget" placeholder="id ou nom du dossier">
+  <label>Durée (heures)</label>
+  <input type="number" id="sessGrantHours" value="8" min="1" max="168">
+  <div class="mtop"><button onclick="dSessGrant.close()">Annuler</button>
+    <button class="primary" onclick="doSessGrant()">Accorder</button></div>
 </dialog>
 
 <dialog id="dRevoke">
@@ -406,6 +502,15 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
   <div class="mtop"><button onclick="dSetup.close()">Fermer</button></div>
 </dialog>
 
+<dialog id="dDev">
+  <h2>🛠 Développement</h2>
+  <p class="note">Version du code et couloirs sous <span class="mono">~/.local/share/google-mcp</span>
+    (distinct du projet GCP OAuth du Setup).</p>
+  <div id="devTabs" class="tabs devtabs"></div>
+  <div id="devBody" class="devpanel">Chargement…</div>
+  <div class="mtop"><button onclick="dDev.close()">Fermer</button></div>
+</dialog>
+
 <dialog id="dDoc">
   <h2>Documentation</h2>
   <div class="tabs">
@@ -425,6 +530,7 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
 const $ = (id) => document.getElementById(id);
 const H = { "Content-Type": "application/json", "X-GWSA-Admin": "1" };
 let PROFILES = [], DOCS = null, polTarget = null, unlockTarget = null, revokeTarget = null, relockTarget = null;
+let SESSIONS = [], sessActionSid = null;
 const LOCK_LOADING = new Set();
 const UNLOCK_ANIM = new Set(); // dépliage gauche du timer après unlock
 
@@ -481,8 +587,9 @@ async function renderSetup() {
     '<div class="zone"><b>' + esc(a.alias) + '</b> <span class="mono">' +
     esc(a.email || "?") + "</span> " + (BADGE[a.iam] || esc(a.iam)) + "</div>").join("");
   const missing = (s.accounts || []).filter((a) => a.iam === "missing");
-  const head = '<p class="note">Projet : <span class="mono">' + esc(s.project_id || "?") +
-    "</span> · " + (s.published ? "app publiée" : "app non publiée") + "</p>";
+  const head = '<p class="note">Projet <b>GCP</b> (OAuth) : <span class="mono">' + esc(s.project_id || "?") +
+    "</span> · " + (s.published ? "app publiée" : "app non publiée") +
+    ' — ce n\'est <b>pas</b> la version MCP (voir bandeau / Développement).</p>';
   let action;
   if (missing.length) {
     action = '<div class="mtop" style="justify-content:flex-start">' +
@@ -656,7 +763,7 @@ function finishLockExpand() {
 function renderList() {
   VIEW = { mode: "list", alias: null };
   const el = $("cards");
-  if (!PROFILES.length) { el.innerHTML = '<div class="card">Aucun profil — clique « Connecter un compte ».</div>'; return; }
+  if (!PROFILES.length) { el.innerHTML = '<div class="card">Aucun profil connecté.</div>'; return; }
   el.innerHTML = PROFILES.map((p) => {
     const cls = "prow can" + (p.connected ? "" : " off");
     const lockArea = p.connected
@@ -791,6 +898,119 @@ async function doUnlock(v) {
   toast(v === "off" ? "🔓 verrou retiré de " + unlockTarget : "🔓 " + unlockTarget + " déverrouillé " + v + " min");
 }
 async function lockAll() { try { await api("/api/lockall", { method: "POST", body: "{}" }); toast("🔒 Tous les profils sont verrouillés"); refresh(); } catch (e) { toast("Erreur : " + e.message); } }
+
+function fmtMins(m) {
+  m = Math.max(0, Math.floor(m || 0));
+  return m >= 60 ? Math.floor(m / 60) + "h" + String(m % 60).padStart(2, "0") : m + " min";
+}
+function fillAliasSelect(sel) {
+  sel.innerHTML = PROFILES.filter((p) => p.connected).map((p) =>
+    '<option value="' + esc(p.alias) + '">' + esc(p.alias) + (p.email ? " — " + esc(p.email) : "") + "</option>"
+  ).join("") || '<option value="">(aucun profil)</option>';
+}
+async function openSessions() {
+  $("sessBody").innerHTML = "Chargement…";
+  dSessions.showModal();
+  await refreshSessions();
+}
+async function refreshSessions() {
+  try {
+    if (!PROFILES.length) {
+      try { PROFILES = (await api("/api/profiles")).profiles; } catch {}
+    }
+    SESSIONS = (await api("/api/sessions")).sessions || [];
+    renderSessions();
+  } catch (e) {
+    $("sessBody").innerHTML = '<p class="note">Erreur : ' + esc(e.message) + "</p>";
+  }
+}
+function renderSessions() {
+  if (!SESSIONS.length) {
+    $("sessBody").innerHTML = '<p class="note">Aucune session active. Elles apparaissent quand un client MCP (Claude Desktop, Cursor…) démarre <span class="mono">google-mcp</span>.</p>';
+    return;
+  }
+  $("sessBody").innerHTML = SESSIONS.map((s) => {
+    const short = s.session_id.slice(0, 8) + "…" + s.session_id.slice(-4);
+    const unlockBits = Object.entries(s.unlocks || {}).map(([a, u]) =>
+      '<span class="chip">🔓 ' + esc(a) + " · " + fmtMins(u.minutes_left) + "</span>").join("");
+    const zoneBits = Object.entries(s.drive_zones || {}).flatMap(([a, zs]) =>
+      zs.map((z) => '<span class="chip">🕐 ' + esc(a) + " / " + esc(z.name || z.id) +
+        " · " + fmtMins(z.minutes_left) + "</span>")).join("");
+    const badges = (s.delegated ? '<span class="badge b-mut">sous-session</span> ' : "") +
+      (s.child_count ? '<span class="badge b-warn">' + s.child_count + " enfant(s)</span> " : "") +
+      '<span class="badge b-mut">' + esc(s.client || "mcp") + "</span>";
+    const actions = s.delegated
+      ? '<button class="small danger" onclick="doSessClose(\'' + s.session_id + '\')">Purger</button>'
+      : '<button class="small" onclick="openSessUnlock(\'' + s.session_id + '\')">Unlock</button>' +
+        '<button class="small" onclick="openSessGrant(\'' + s.session_id + '\')">Zone Drive</button>' +
+        (s.child_count ? '<button class="small" onclick="doSessRevokeDesc(\'' + s.session_id + '\')">Révoquer enfants</button>' : "") +
+        '<button class="small danger" onclick="doSessClose(\'' + s.session_id + '\')">Purger</button>';
+    return '<div class="sess-card"><div class="sess-head"><span class="sess-id" title="' +
+      esc(s.session_id) + '">' + esc(short) + "</span>" + badges + "</div>" +
+      (s.parent_id ? '<div class="sess-meta">parent <span class="mono">' + esc(s.parent_id.slice(0, 12)) + "…</span></div>" : "") +
+      '<div class="sess-caps">' + (unlockBits || zoneBits
+        ? unlockBits + zoneBits
+        : '<span class="note">aucune capacité accordée</span>') + "</div>" +
+      '<div class="sess-actions">' + actions + "</div></div>";
+  }).join("");
+}
+function openSessUnlock(sid) {
+  sessActionSid = sid;
+  $("sessUnlockSid").textContent = sid.slice(0, 12) + "…";
+  fillAliasSelect($("sessUnlockAlias"));
+  dSessUnlock.showModal();
+}
+async function doSessUnlock(mins) {
+  const alias = $("sessUnlockAlias").value;
+  if (!alias || !sessActionSid) return toast("Profil requis");
+  try {
+    await api("/api/sessions/" + sessActionSid + "/unlock", {
+      method: "POST", body: JSON.stringify({ alias, minutes: mins }),
+    });
+    dSessUnlock.close();
+    toast("🔓 " + alias + " déverrouillé pour cette session (" + mins + " min)");
+    await refreshSessions();
+  } catch (e) { toast("Erreur : " + e.message); }
+}
+function openSessGrant(sid) {
+  sessActionSid = sid;
+  $("sessGrantSid").textContent = sid.slice(0, 12) + "…";
+  fillAliasSelect($("sessGrantAlias"));
+  $("sessGrantTarget").value = "";
+  $("sessGrantHours").value = "8";
+  dSessGrant.showModal();
+}
+async function doSessGrant() {
+  const alias = $("sessGrantAlias").value;
+  const target = $("sessGrantTarget").value.trim();
+  const hours = parseInt($("sessGrantHours").value, 10) || 8;
+  if (!alias || !target || !sessActionSid) return toast("Profil et dossier requis");
+  try {
+    await api("/api/sessions/" + sessActionSid + "/grant", {
+      method: "POST", body: JSON.stringify({ alias, target, hours }),
+    });
+    dSessGrant.close();
+    toast("🕐 zone accordée à la session");
+    await refreshSessions();
+  } catch (e) { toast("Erreur : " + e.message); }
+}
+async function doSessRevokeDesc(sid) {
+  if (!confirm("Révoquer toutes les sous-sessions de " + sid.slice(0, 8) + "… ?")) return;
+  try {
+    await api("/api/sessions/" + sid + "/revoke-descendants", { method: "POST", body: "{}" });
+    toast("✓ sous-sessions purgées");
+    await refreshSessions();
+  } catch (e) { toast("Erreur : " + e.message); }
+}
+async function doSessClose(sid) {
+  if (!confirm("Purger la session " + sid.slice(0, 8) + "… (et ses enfants) ?")) return;
+  try {
+    await api("/api/sessions/" + sid + "/close", { method: "POST", body: "{}" });
+    toast("✓ session purgée");
+    await refreshSessions();
+  } catch (e) { toast("Erreur : " + e.message); }
+}
+
 function openRevoke(alias) { revokeTarget = alias; $("revokeAlias").textContent = alias; $("revokeConfirm").value = ""; dRevoke.showModal(); }
 async function doRevoke() {
   if ($("revokeConfirm").value.trim() !== revokeTarget) return toast("Alias saisi ≠ « " + revokeTarget + " » — révocation annulée");
@@ -1161,6 +1381,245 @@ async function showDoc(which) {
 }
 async function openDoc() { await showDoc("readme"); dDoc.showModal(); }
 
+function fmtPorts(m) {
+  return "admin :" + (m.admin_port || "?") + " · broker :" + (m.broker_port || "?");
+}
+
+async function loadMeta() {
+  try {
+    const m = await api("/api/meta");
+    const dirty = m.git_dirty ? "*" : "";
+    const verLabel = (m.git_branch && m.git_sha)
+      ? m.git_branch + "@" + m.git_sha + dirty
+      : (m.version || "dev");
+    $("verBadge").textContent = verLabel;
+    $("verBadge").title = "Version servie par cette admin\n" + fmtPorts(m)
+      + (m.worktree ? "\n" + m.worktree : "");
+    const strip = $("ctxStrip");
+    if (m.sandbox_id) {
+      const parts = ["Sandbox", "admin :" + (m.admin_port || "?"), "broker :" + (m.broker_port || "?")];
+      if (m.draft_pr) parts.push("PR #" + m.draft_pr);
+      strip.className = "show";
+      strip.innerHTML = esc(parts.join(" · ")) + ' — <a href="#" class="ctx-link" onclick="openDev();return false">Développement</a> pour les détails';
+    } else {
+      strip.className = "";
+      strip.textContent = "";
+    }
+  } catch {
+    $("verBadge").textContent = "dev";
+    $("ctxStrip").className = "";
+    $("ctxStrip").textContent = "";
+  }
+}
+
+function portChip(label, port, up) {
+  return '<span class="portchip ' + (up ? "up" : "down") + '">' + label + " " + esc(port) + (up ? " ↑" : " ↓") + "</span>";
+}
+
+let DEV_TAB = "instance";
+let DEV_DATA = null;
+let DEV_EXPANDED_SB = new Set();
+let DEV_SHOW_ARCHIVES = false;
+
+async function switchDevTab(tab) {
+  DEV_TAB = tab;
+  renderDevPanel();
+  try {
+    DEV_DATA = await api("/api/dev");
+    renderDevPanel();
+  } catch (e) {
+    toast("Erreur : " + e.message);
+  }
+}
+
+function toggleSb(id) {
+  if (DEV_EXPANDED_SB.has(id)) DEV_EXPANDED_SB.delete(id);
+  else DEV_EXPANDED_SB.add(id);
+  renderDevPanel();
+}
+
+function toggleDevArchives() {
+  DEV_SHOW_ARCHIVES = !DEV_SHOW_ARCHIVES;
+  renderDevPanel();
+}
+
+function renderDevInstance(d) {
+  const gitRef = (d.git_branch && d.git_sha)
+    ? esc(d.git_branch) + "@" + esc(d.git_sha) + (d.git_dirty ? ' <span class="badge b-warn">dirty</span>' : "")
+    : esc(d.version || "?");
+  let html = '<div class="dev-summary">'
+    + '<div class="dev-summary-line"><span class="lbl">code</span> <span class="mono">' + gitRef + "</span></div>"
+    + '<div class="dev-summary-line"><span class="lbl">ports</span> <span class="mono">' + esc(fmtPorts(d)) + "</span></div>";
+  if (d.draft_pr) {
+    html += '<div class="dev-summary-line"><span class="lbl">PR</span> <span class="mono">#' + esc(d.draft_pr) + "</span></div>";
+  }
+  if (d.sandbox_id) {
+    html += '<div class="dev-summary-line"><span class="lbl">sandbox</span> <span class="mono">' + esc(d.sandbox_id) + "</span></div>";
+  }
+  html += "</div>";
+  const wt = d.worktree || d.repo || "";
+  if (wt) {
+    html += '<div class="dev-summary-line" style="margin-top:12px"><span class="lbl">worktree</span> '
+      + '<span class="mono" style="word-break:break-all">' + esc(wt) + "</span></div>";
+  }
+  return html;
+}
+
+function renderDevSandboxes(d) {
+  const sandboxes = d.sandboxes || [];
+  if (!sandboxes.length) {
+    return '<p class="note">Aucune sandbox — <span class="mono">./bin/gwsa sandbox deploy --dev</span></p>';
+  }
+  return '<div class="sblist">' + sandboxes.map((s) => {
+    const open = DEV_EXPANDED_SB.has(s.id);
+    const here = s.admin_port === d.admin_port;
+    const mcp = (s.mcp_clients || []).map((c) => esc(c.name)).join(", ") || "—";
+    return '<div class="sbcard" data-sbid="' + esc(s.id) + '" onclick="toggleSb(this.dataset.sbid)">'
+      + '<div class="sbcard-head">'
+      + '<span class="mono sbcard-id">' + esc(s.id) + "</span>"
+      + (here ? ' <span class="badge b-ok">cette page</span>' : "")
+      + '<span class="spacer"></span>'
+      + portChip("admin", s.admin_port, s.admin_up)
+      + portChip("broker", s.broker_port, s.broker_up)
+      + '<span class="pchev" style="color:var(--mut)">' + (open ? "▾" : "›") + "</span>"
+      + "</div>"
+      + (open ? '<div class="sbcard-detail" onclick="event.stopPropagation()">'
+        + "<div>" + esc(s.version || "") + "</div>"
+        + (s.admin_url ? '<div>URL : <a href="' + esc(s.admin_url) + '" target="_blank" rel="noopener">' + esc(s.admin_url) + "</a></div>" : "")
+        + "<div>MCP : " + mcp + "</div>"
+        + '<div class="mono" style="word-break:break-all">' + esc(s.path) + "</div>"
+        + (here
+          ? '<p class="note" style="margin-top:8px">Tu consultes cette sandbox — ouvre une autre admin pour la supprimer.</p>'
+          : '<div style="margin-top:10px"><button type="button" class="small" onclick="removeSandbox(\'' + esc(s.id).replace(/'/g, "\\'") + '\')">Supprimer cette sandbox</button></div>')
+        + "</div>" : "")
+      + "</div>";
+  }).join("") + "</div>";
+}
+
+function renderDevDeploys(d) {
+  const deps = (d.deployments || []).filter((x) => !x.is_sandbox);
+  const current = deps.find((x) => x.is_current);
+  const archives = deps.filter((x) => !x.is_current);
+  if (!deps.length) return '<p class="note">Aucun déploiement stable.</p>';
+  let html = "";
+  if (current) {
+    html += '<div class="devcard"><h3>Déploiement actif</h3><div class="devmeta">'
+      + '<div><span class="mono">' + esc(current.id) + '</span> <span class="badge b-ok">current</span></div>'
+      + "<div>" + esc(current.version || "") + "</div>"
+      + "<div>" + portChip("admin", current.admin_port, current.admin_up)
+      + " " + portChip("broker", current.broker_port, current.broker_up) + "</div>"
+      + (current.admin_url ? '<div><a href="' + esc(current.admin_url) + '" target="_blank" rel="noopener">' + esc(current.admin_url) + "</a></div>" : "")
+      + "</div></div>";
+  } else {
+    html += '<p class="note">Aucun déploiement marqué <span class="mono">current</span>.</p>';
+  }
+  if (archives.length) {
+    html += '<button type="button" class="arch-toggle" onclick="toggleDevArchives()">'
+      + (DEV_SHOW_ARCHIVES ? "Masquer" : "Voir") + " les archives (" + archives.length + ")</button>";
+    if (DEV_SHOW_ARCHIVES) {
+      html += '<div class="arch-list">' + archives.map((x) =>
+        "<div><span class=\"mono\">" + esc(x.id) + "</span> · " + esc(x.version || "—") + "</div>").join("") + "</div>";
+    }
+  }
+  return html;
+}
+
+function renderDevClients(d) {
+  const clients = d.mcp_clients || [];
+  if (!clients.length) return '<p class="note">Aucune entrée <span class="mono">google-mcp</span> dans Claude / Cursor.</p>';
+  return '<p class="note" style="margin-bottom:10px">Entrées dans les configs clients (Claude Desktop / Cursor). '
+    + 'L’entrée stable <span class="mono">google-multi-account</span> est protégée. '
+    + 'Après suppression : redémarrer le client MCP.</p>'
+    + clients.map((c, i) => {
+      const protected = !!c.protected;
+      const btn = protected
+        ? '<button type="button" class="small" disabled title="MCP stable — non retirable depuis l’admin">Protégée</button>'
+        : '<button type="button" class="small" onclick="removeMcpClient(' + i + ')">Retirer</button>';
+      return '<div class="mcp-row"><div style="display:flex;gap:10px;align-items:flex-start;justify-content:space-between">'
+        + '<div style="min-width:0;flex:1"><b>' + esc(c.name) + "</b>"
+        + (protected ? ' <span class="badge b-ok">stable</span>' : "")
+        + " · broker " + esc(c.broker_port)
+        + (c.version ? " · " + esc(c.version) : "")
+        + '<div class="mono" style="margin-top:3px;word-break:break-all">' + esc(c.binary) + "</div>"
+        + '<div class="mono" style="margin-top:2px;color:var(--mut);word-break:break-all">' + esc(c.config) + "</div>"
+        + "</div>" + btn + "</div></div>";
+    }).join("");
+}
+
+async function removeMcpClient(idx) {
+  const c = (DEV_DATA && DEV_DATA.mcp_clients || [])[idx];
+  if (!c) return;
+  if (c.protected) {
+    toast("Entrée protégée (MCP stable)");
+    return;
+  }
+  if (!confirm("Retirer l'entrée MCP « " + c.name + " » de\n" + c.config + " ?\n\nLe client MCP devra être redémarré.")) return;
+  try {
+    await api("/api/dev/mcp-client/remove", {
+      method: "POST",
+      body: JSON.stringify({ name: c.name, config: c.config }),
+    });
+    toast("Entrée retirée : " + c.name);
+    DEV_DATA = await api("/api/dev");
+    renderDevPanel();
+  } catch (e) {
+    toast("Erreur : " + e.message);
+  }
+}
+
+async function removeSandbox(id) {
+  if (!id) return;
+  if (!confirm("Supprimer la sandbox « " + id + " » ?\nArrêt broker/admin + suppression du répertoire sous ~/.local/share/google-mcp/.")) return;
+  try {
+    await api("/api/dev/sandbox/remove", {
+      method: "POST",
+      body: JSON.stringify({ id }),
+    });
+    toast("Sandbox supprimée : " + id);
+    DEV_EXPANDED_SB.delete(id);
+    DEV_DATA = await api("/api/dev");
+    renderDevPanel();
+  } catch (e) {
+    toast("Erreur : " + e.message);
+  }
+}
+
+function renderDevPanel() {
+  const d = DEV_DATA;
+  if (!d) return;
+  const sandboxes = d.sandboxes || [];
+  const clients = d.mcp_clients || [];
+  const tabs = [
+    { id: "instance", label: "Instance" },
+    { id: "sandboxes", label: "Sandboxes" + (sandboxes.length ? " (" + sandboxes.length + ")" : "") },
+    { id: "deploys", label: "Déploiements" },
+    { id: "clients", label: "Clients MCP" + (clients.length ? " (" + clients.length + ")" : "") },
+  ];
+  $("devTabs").innerHTML = tabs.map((t) =>
+    '<button type="button" class="small' + (DEV_TAB === t.id ? " active" : "") + '" onclick="switchDevTab(\'' + t.id + "')\">" + esc(t.label) + "</button>").join("");
+  const bodies = {
+    instance: renderDevInstance,
+    sandboxes: renderDevSandboxes,
+    deploys: renderDevDeploys,
+    clients: renderDevClients,
+  };
+  const fn = bodies[DEV_TAB] || renderDevInstance;
+  $("devBody").innerHTML = '<div class="dev-tab-panel">' + fn(d) + "</div>";
+}
+
+async function openDev() {
+  $("devBody").innerHTML = "Chargement…";
+  $("devTabs").innerHTML = "";
+  dDev.showModal();
+  try {
+    DEV_DATA = await api("/api/dev");
+    renderDevPanel();
+  } catch (e) {
+    DEV_DATA = null;
+    $("devBody").innerHTML = '<p class="note">Erreur : ' + esc(e.message) + "</p>";
+  }
+}
+
 $("afList").addEventListener("click", afPickClick);
 $("afList").addEventListener("dblclick", afRowDblClick);
 $("afSearchHits").addEventListener("click", afPickClick);
@@ -1173,6 +1632,7 @@ $("afQuery").addEventListener("keydown", (e) => { if (e.key === "Enter") afDoSea
 $("permZones").addEventListener("click", zonesClick);
 $("tmpZones").addEventListener("click", zonesClick);
 refresh();
+loadMeta();
 setInterval(refresh, 8000);
 </script>
 </body>
