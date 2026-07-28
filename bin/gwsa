@@ -233,7 +233,7 @@ cmd_list() {
       [[ -d "$dir" ]] || continue
       found=1
       alias="$(basename "$dir")"
-      if [[ -f "$dir/credentials.enc" ]]; then
+      if [[ -f "$dir/credentials.enc" || -f "$GWSA_ROOT/.vault/$alias/credentials.enc" ]]; then
         email="$(profile_email "$dir")"
         state="connecté${email:+ — $email}"
       else
@@ -1482,8 +1482,21 @@ cmd_remove() {
   check_alias "$alias"
   local dir; dir="$(profile_dir "$alias")"
   [[ -d "$dir" ]] || die "profil inconnu « $alias »"
-  GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws auth logout >/dev/null 2>&1 || true
+  local cfg
+  cfg="$(REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.vault import gws_config_dir
+print(gws_config_dir(sys.argv[1]))
+" "$alias" 2>/dev/null || echo "$dir")"
+  GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$cfg" gws auth logout >/dev/null 2>&1 || true
   rm -rf "$dir"
+  REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.vault import remove_vault_alias
+remove_vault_alias(sys.argv[1])
+" "$alias" 2>/dev/null || rm -rf "$GWSA_ROOT/.vault/$alias"
   echo "✓ Profil « $alias » supprimé."
 }
 
@@ -1526,16 +1539,31 @@ main() {
       local dir; dir="$(profile_dir "$alias")"
       [[ -d "$dir" ]] || die "profil inconnu « $alias » — le créer avec : gwsa add $alias"
       if is_locked "$dir"; then
-        # Journaliser le refus AVANT de mourir — même trace que les refus de
-        # policy, sinon les tentatives sur profil verrouillé restent invisibles.
-        if [[ -f "$USAGE_LOGGER" ]]; then
-          GWSA_LOG_DECISION=refus GWSA_LOG_REASON=locked \
-            "$SYS_PYTHON" "$USAGE_LOGGER" "$GWSA_ROOT" "$alias" "$@" >/dev/null 2>&1 || true
-        fi
+        # Session unlock (GWSA_SESSION_ID) : même sémantique que le broker —
+        # un unlock de session autorise le chemin CLI direct pendant la fenêtre.
+        local session_ok=0
         if [[ -n "${GWSA_SESSION_ID:-}" ]]; then
-          die "profil « $alias » verrouillé 🔒 pour cette session — l'utilisateur doit exécuter « gwsa session unlock ${GWSA_SESSION_ID} $alias [minutes] »"
+          if REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import is_session_unlocked
+sys.exit(0 if is_session_unlocked(sys.argv[1], sys.argv[2]) else 1)
+" "$GWSA_SESSION_ID" "$alias" 2>/dev/null; then
+            session_ok=1
+          fi
         fi
-        die "profil « $alias » verrouillé 🔒 — accès sur demande : l'utilisateur doit d'abord exécuter « gwsa unlock $alias [minutes] » (legacy poste entier) ou « gwsa session unlock <session_id> $alias »"
+        if [[ "$session_ok" -eq 0 ]]; then
+          # Journaliser le refus AVANT de mourir — même trace que les refus de
+          # policy, sinon les tentatives sur profil verrouillé restent invisibles.
+          if [[ -f "$USAGE_LOGGER" ]]; then
+            GWSA_LOG_DECISION=refus GWSA_LOG_REASON=locked \
+              "$SYS_PYTHON" "$USAGE_LOGGER" "$GWSA_ROOT" "$alias" "$@" >/dev/null 2>&1 || true
+          fi
+          if [[ -n "${GWSA_SESSION_ID:-}" ]]; then
+            die "profil « $alias » verrouillé 🔒 pour cette session — l'utilisateur doit exécuter « gwsa session unlock ${GWSA_SESSION_ID} $alias [minutes] »"
+          fi
+          die "profil « $alias » verrouillé 🔒 — accès sur demande : l'utilisateur doit d'abord exécuter « gwsa unlock $alias [minutes] » (legacy poste entier) ou « gwsa session unlock <session_id> $alias »"
+        fi
       fi
       if [[ -f "$dir/policy.json" ]]; then
         [[ -f "$POLICY_CHECKER" ]] || die "policy.json présent mais contrôleur absent ($POLICY_CHECKER)"

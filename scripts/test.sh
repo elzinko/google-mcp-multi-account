@@ -1683,6 +1683,11 @@ from unittest.mock import patch
 m = {'capabilities': {'alpha': {'drive': {'zones': [{'id': 'folderAAA'}]}}}}
 assert not grant_allowed_by_manifest(m, 'alpha', 'folderBBB')
 assert grant_allowed_by_manifest(m, 'alpha', 'folderAAA')
+# zones: [] explicite = plafond vide (deny), ≠ absence de clé zones
+m_empty = {'capabilities': {'alpha': {'drive': {'zones': []}}}}
+assert not grant_allowed_by_manifest(m_empty, 'alpha', 'folderAAA')
+m_no_zones = {'capabilities': {'alpha': {'drive': {'read': True}}}}
+assert grant_allowed_by_manifest(m_no_zones, 'alpha', 'anyFolder')
 sid = create_session(client='t').session_id
 ctx = ProjectContext(manifest_valid=True, manifest=m, git_root='/tmp')
 os.environ['GWSA_GIT_ROOT'] = '/tmp'
@@ -1769,12 +1774,24 @@ PROFILE="$OLD_PROFILE"
 mkdir -p "$SESS_ROOT/beta"
 echo 'secret' > "$SESS_ROOT/beta/credentials.enc"
 GWSA_ROOT="$SESS_ROOT" "$PY" -c "
-from gateway.vault import migrate_alias, is_migrated, gws_config_dir
+from gateway.vault import migrate_alias, is_migrated, gws_config_dir, has_credentials, remove_vault_alias
+from gateway.profiles import list_profiles
 from pathlib import Path
 assert migrate_alias('beta')
 assert is_migrated('beta')
 assert not Path('$SESS_ROOT/beta/credentials.enc').exists()
 assert gws_config_dir('beta').name == 'beta'
+assert has_credentials('beta')
+# re-auth : nouveau credentials.enc profil remplace le vault
+Path('$SESS_ROOT/beta/credentials.enc').write_text('fresh')
+assert migrate_alias('beta')
+assert Path('$SESS_ROOT/.vault/beta/credentials.enc').read_text() == 'fresh'
+assert not Path('$SESS_ROOT/beta/credentials.enc').exists()
+# list_profiles voit le vault
+profs = {p['alias']: p for p in list_profiles()}
+assert profs['beta']['connected'] is True
+remove_vault_alias('beta')
+assert not has_credentials('beta')
 " 2>/dev/null \
   && pass "vault : migration credentials.enc vers .vault/" \
   || fail "vault : migration"

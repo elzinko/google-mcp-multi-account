@@ -9,6 +9,7 @@ from typing import Any
 
 from .config import ALIAS_RE, RESERVED, gwsa_root, profile_dir
 from .errors import GatewayError
+from .vault import has_credentials
 
 
 def validate_alias(alias: str) -> str:
@@ -82,7 +83,7 @@ def list_profiles() -> list[dict[str, Any]]:
         alias = entry.name
         if not ALIAS_RE.match(alias) or alias in RESERVED:
             continue
-        connected = (entry / "credentials.enc").is_file()
+        connected = has_credentials(alias)
         has_lock = (entry / ".locked").is_file()
         unlocked_for_min = 0
         if has_lock:
