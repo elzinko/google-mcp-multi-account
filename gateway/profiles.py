@@ -72,6 +72,16 @@ def _profile_email(dir_path: Path) -> str:
     return first if _EMAIL_RE.fullmatch(first) else ""
 
 
+def profile_email(alias: str) -> str:
+    """Email du compte pour un alias — métadonnée `.email` (ADR-0002).
+
+    Lisible même verrouillé (simple lecture de fichier, zéro exécution gws) ;
+    chaîne vide si le profil n'existe pas ou n'a pas encore de `.email`. Sert à
+    nommer le compte dans les messages d'autorisation (fiche 0047).
+    """
+    return _profile_email(profile_dir(alias))
+
+
 def list_profiles() -> list[dict[str, Any]]:
     root = gwsa_root()
     if not root.is_dir():

@@ -25,7 +25,7 @@ from .context import get_git_root, get_session_id
 from .errors import GatewayError
 from .executor import run_via_broker
 from .profiles import is_locked, list_profiles as _list_profiles
-from .profiles import require_unlocked, validate_alias
+from .profiles import profile_email, require_unlocked, validate_alias
 from .project import git_toplevel
 from .sessions import is_session_unlocked
 from .setup_status import setup_status  # noqa: F401 — re-export pour le dispatch MCP
@@ -644,6 +644,11 @@ def access_request(
             ),
             "suggested_command": f"gwsa add {alias} {email}",
         }
+    # Nommer le compte au moment d'autoriser (fiche 0047) : « alias » (email).
+    # L'email (.email, ADR-0002) est lisible même verrouillé ; repli alias seul
+    # si inconnu. La commande suggérée garde l'alias nu (c'est la clé).
+    acct_email = profile_email(alias)
+    who = f"« {alias} » ({acct_email})" if acct_email else f"« {alias} »"
     if kind in ("session_unlock", "unlock"):
         mins = max(1, min(int(minutes), 1440))
         sid = get_session_id()
@@ -657,7 +662,7 @@ def access_request(
                 "alias": alias,
                 "session_id": sid,
                 "message": (
-                    f"Le profil « {alias} » est verrouillé pour cette session. "
+                    f"Le profil {who} est verrouillé pour cette session. "
                     f"L'utilisateur doit exécuter :\n"
                     f"  gwsa session unlock {sid} {alias} {mins}\n"
                     f"(déverrouillage limité à cette conversation — {mins} min)."
@@ -671,7 +676,7 @@ def access_request(
             "alias": alias,
             "deprecated": True,
             "message": (
-                f"Le profil « {alias} » est verrouillé (accès sur demande). "
+                f"Le profil {who} est verrouillé (accès sur demande). "
                 f"Depuis une conversation MCP, préférer access_request kind=session_unlock "
                 f"(déverrouillage limité à cette session). Sans session MCP active, legacy poste entier :\n"
                 f"  gwsa unlock {alias} {mins}\n"
@@ -746,7 +751,7 @@ def access_request(
                     "blocked_by_manifest": True,
                     "message": (
                         f"« {folder} » n'est pas dans le plafond manifeste projet "
-                        f"pour « {alias} » (.gwsa/manifest.json). "
+                        f"pour {who} (.gwsa/manifest.json). "
                         f"L'humain doit éditer capabilities puis « gwsa project sign », "
                         f"ou choisir une zone déjà déclarée. "
                         f"Session grant hors manifeste serait refusé."
@@ -761,7 +766,7 @@ def access_request(
                 "folder": folder,
                 "session_id": sid,
                 "message": (
-                    f"Zone projet « {folder} » dans le plafond .gwsa/ pour « {alias} ». "
+                    f"Zone projet « {folder} » dans le plafond .gwsa/ pour {who}. "
                     f"Pour l'activer sur cette conversation :\n"
                     f'  gwsa session grant {sid} {alias} "{folder}" {h}\n'
                     f"(intersection policy ∩ manifeste ∩ session — {h} h)."
@@ -780,7 +785,8 @@ def access_request(
                 "session_id": sid,
                 "folder": folder,
                 "message": (
-                    f"Écriture Drive sous « {folder} » refusée pour cette session. "
+                    f"Écriture Drive sous « {folder} » refusée pour cette session "
+                    f"(compte {who}). "
                     f"L'utilisateur doit exécuter :\n"
                     f'  gwsa session grant {sid} {alias} "{folder}" {h}\n'
                     f"(zone valable pour cette conversation seulement — {h} h). "
@@ -797,7 +803,8 @@ def access_request(
             "folder": folder,
             "deprecated": True,
             "message": (
-                f"Écriture Drive sous « {folder} » refusée sans zone active. "
+                f"Écriture Drive sous « {folder} » refusée sans zone active "
+                f"(compte {who}). "
                 f"Depuis une conversation MCP, préférer access_request kind=session_grant "
                 f"ou kind=project_grant (zone limitée à cette session + plafond .gwsa/). "
                 f"Sans session MCP active, legacy poste entier :\n"

@@ -178,20 +178,25 @@ func enroll(to path: String) {
 func promptText(from obj: [String: Any]) -> String {
     let action = obj["action"] as? String ?? ""
     let alias = obj["alias"] as? String ?? ""
+    let email = obj["email"] as? String ?? ""
     let target = obj["target"] as? String ?? ""
     let sid = obj["session_id"] as? String ?? ""
     let minutes = obj["minutes"] as? Int ?? 0
     let hours = obj["hours"] as? Int ?? 0
+    // Nommer le compte à l'instant d'autoriser (fiche 0047) — aligné sur
+    // gateway/elicitation.py:prompt_from_payload. Repli alias seul si inconnu.
+    let who = email.isEmpty ? "« \(alias) »" : "« \(alias) » (\(email))"
+    let acct = email.isEmpty ? alias : "\(alias) · \(email)"
     switch action {
     case "session_unlock":
-        return "gwsa : déverrouiller « \(alias) » pour la session \(sid) (\(minutes) min)"
+        return "gwsa : déverrouiller \(who) pour la session \(sid) (\(minutes) min)"
     case "unlock":
-        if target == "off" { return "gwsa : retirer le verrou permanent sur « \(alias) »" }
-        return "gwsa : déverrouiller « \(alias) » (\(minutes > 0 ? String(minutes) : target) min, poste entier)"
+        if target == "off" { return "gwsa : retirer le verrou permanent sur \(who)" }
+        return "gwsa : déverrouiller \(who) (\(minutes > 0 ? String(minutes) : target) min, poste entier)"
     case "session_grant":
-        return "gwsa : zone session \(sid) — « \(target) » (\(alias), \(hours) h)"
+        return "gwsa : zone session \(sid) — « \(target) » (\(acct), \(hours) h)"
     case "grant":
-        return "gwsa : autoriser l'écriture Drive « \(target) » (\(alias), \(hours) h)"
+        return "gwsa : autoriser l'écriture Drive « \(target) » (\(acct), \(hours) h)"
     case "project_sign":
         return "gwsa : signer le manifeste projet (.gwsa/)"
     case "add_account":

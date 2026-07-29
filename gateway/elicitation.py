@@ -115,20 +115,25 @@ def prompt_from_payload(payload: dict[str, Any]) -> str:
     """Texte Touch ID — doit rester aligné avec elicitation-sign.swift."""
     action = str(payload.get("action") or "")
     alias = str(payload.get("alias") or "")
+    email = str(payload.get("email") or "")
     target = str(payload.get("target") or "")
     sid = str(payload.get("session_id") or "")
     minutes = int(payload.get("minutes") or 0)
     hours = int(payload.get("hours") or 0)
+    # Nommer le compte à l'instant d'autoriser (fiche 0047) : l'email est la
+    # vérité terrain « quelle boîte Gmail ». Repli sur l'alias seul si inconnu.
+    who = f"« {alias} » ({email})" if email else f"« {alias} »"
+    acct = f"{alias} · {email}" if email else alias
     if action == "session_unlock":
-        return f"gwsa : déverrouiller « {alias} » pour la session {sid} ({minutes} min)"
+        return f"gwsa : déverrouiller {who} pour la session {sid} ({minutes} min)"
     if action == "unlock":
         if target == "off":
-            return f"gwsa : retirer le verrou permanent sur « {alias} »"
-        return f"gwsa : déverrouiller « {alias} » ({minutes or target} min, poste entier)"
+            return f"gwsa : retirer le verrou permanent sur {who}"
+        return f"gwsa : déverrouiller {who} ({minutes or target} min, poste entier)"
     if action == "session_grant":
-        return f"gwsa : zone session {sid} — « {target} » ({alias}, {hours} h)"
+        return f"gwsa : zone session {sid} — « {target} » ({acct}, {hours} h)"
     if action == "grant":
-        return f"gwsa : autoriser l'écriture Drive « {target} » ({alias}, {hours} h)"
+        return f"gwsa : autoriser l'écriture Drive « {target} » ({acct}, {hours} h)"
     if action == "project_sign":
         return f"gwsa : signer le manifeste projet (.gwsa/)"
     if action == "add_account":
@@ -148,12 +153,14 @@ def build_payload(
     session_id: str = "",
     minutes: int = 0,
     hours: int = 0,
+    email: str = "",
 ) -> dict[str, Any]:
     now = int(time.time())
     return {
         "v": 1,
         "action": action,
         "alias": alias,
+        "email": email,
         "target": target,
         "session_id": session_id,
         "minutes": int(minutes or 0),
@@ -377,6 +384,7 @@ def run_elicitation_gate(fields: dict[str, Any]) -> None:
     payload = build_payload(
         action,
         alias=str(fields.get("alias") or ""),
+        email=str(fields.get("email") or ""),
         target=str(fields.get("target") or ""),
         session_id=str(fields.get("session_id") or ""),
         minutes=int(fields.get("minutes") or 0),

@@ -2242,6 +2242,57 @@ print(verify_signature(p, sig))
   && pass "elicitation : payload altéré → signature invalide" \
   || fail "elicitation : tamper détecté ($tamper)"
 
+# Fiche 0047 : le prompt d'autorisation nomme le compte (email), pas l'alias seul,
+# et l'email est DANS le payload signé (lié cryptographiquement à la signature).
+acct_ok="$("$PY" -c "
+from gateway.elicitation import prompt_from_payload, build_payload, sign_mock, verify_signature
+u = prompt_from_payload({'action':'session_unlock','alias':'alpha','email':'a@gmail.com','session_id':'s','minutes':30})
+g = prompt_from_payload({'action':'grant','alias':'alpha','email':'a@gmail.com','target':'Z','hours':8})
+bare = prompt_from_payload({'action':'unlock','alias':'alpha','minutes':30})
+assert 'a@gmail.com' in u, u
+assert 'a@gmail.com' in g, g
+assert '@' not in bare and 'alpha' in bare, bare  # email inconnu → repli alias seul
+p = build_payload('session_unlock', alias='alpha', email='a@gmail.com', session_id='s', minutes=30)
+assert p['email'] == 'a@gmail.com', p
+sig = sign_mock(p)
+p2 = dict(p); p2['email'] = 'evil@x.com'
+assert verify_signature(p2, sig) is False, 'email altéré doit invalider la signature'
+print('ok')
+")"
+[[ "$acct_ok" == "ok" ]] \
+  && pass "elicitation : prompt nomme le compte + email signé (fiche 0047)" \
+  || fail "elicitation : compte dans le prompt/payload ($acct_ok)"
+
+# Fiche 0047 / retour Codex PR #75 : aux points d'autorisation, l'email se lit en
+# CACHE-ONLY (.email) — jamais d'exec gws avant le gate Touch ID (invariant de
+# verrou + ADR-0002). On extrait la fonction pure et on la teste seule.
+pec_dir="$TMP/pec"; mkdir -p "$pec_dir/valid" "$pec_dir/missing" "$pec_dir/corrupt"
+printf 'alice@gmail.com\n' > "$pec_dir/valid/.email"
+printf 'pas-un-email\n'    > "$pec_dir/corrupt/.email"
+eval "$(sed -n '/^profile_email_cached()/,/^}/p' bin/gwsa)"
+r_valid="$(profile_email_cached "$pec_dir/valid")"
+r_missing="$(profile_email_cached "$pec_dir/missing")"
+r_corrupt="$(profile_email_cached "$pec_dir/corrupt")"
+n_cached="$(grep -c 'profile_email_cached "' bin/gwsa || true)"  # appels seuls (pas la déf)
+# Sous `set -euo pipefail` (comme bin/gwsa) et la forme appelante exacte
+# « local email; email="$(…)" », la fonction ne doit JAMAIS avorter — même sur
+# .email corrompu (sinon unlock/grant meurt avant le gate — retour Codex P2).
+pec_fn="$TMP/pec_fn.sh"; sed -n '/^profile_email_cached()/,/^}/p' bin/gwsa > "$pec_fn"
+sete_rc=0
+bash -euo pipefail -c '
+  . "$1"
+  c(){ local email; email="$(profile_email_cached "$1")"; printf "%s" "$email"; }
+  c "$2" >/dev/null   # .email corrompu
+  c "$3" >/dev/null   # .email absent
+' _ "$pec_fn" "$pec_dir/corrupt" "$pec_dir/missing" || sete_rc=$?
+if [[ "$r_valid" == "alice@gmail.com" && -z "$r_missing" && -z "$r_corrupt" ]] \
+  && [[ "$n_cached" == 4 && "$sete_rc" == 0 ]] \
+  && ! sed -n '/^profile_email_cached()/,/^}/p' bin/gwsa | sed 's/#.*//' | grep -q 'gws'; then
+  pass "elicitation : email lu cache-only aux points d'autorisation, zéro exec gws (fiche 0047)"
+else
+  fail "elicitation : cache-only (valid=$r_valid missing=[$r_missing] corrupt=[$r_corrupt] sites=$n_cached set-e_rc=$sete_rc)"
+fi
+
 sid_e="$("$PY" -c 'from gateway.sessions import create_session; print(create_session(client="t").session_id)')"
 GWSA_ROOT="$ELIC_ROOT" GWSA_SESSION_ID="$sid_e" GWSA_ELICITATION_MOCK=1 \
   "$GWSA" session unlock "$sid_e" alpha 15 >/dev/null 2>&1 \
@@ -2666,11 +2717,10 @@ else
 fi
 
 if grep -qE 'PRODUCT_SLUG *= *"[A-Za-z0-9._-]+"' gateway/config.py \
-  && grep -q 'strong_auth_reason' bin/gwsa \
   && grep -q 'ensure_sign_bin' bin/gwsa; then
-  pass "touchid : nom produit = source unique (config.PRODUCT_SLUG) + raison email"
+  pass "touchid : nom produit = source unique (config.PRODUCT_SLUG) + binaire nommé"
 else
-  fail "touchid : PRODUCT_SLUG (config) / strong_auth_reason / ensure_sign_bin manquant"
+  fail "touchid : PRODUCT_SLUG (config) / ensure_sign_bin manquant"
 fi
 
 # Non-régression : l'élicitation signée (strongauth) doit EXÉCUTER le binaire
