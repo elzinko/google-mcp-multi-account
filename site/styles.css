@@ -102,12 +102,6 @@ a:hover { color: var(--teal); }
   white-space: nowrap;
 }
 
-.nav-brand span {
-  color: var(--teal-deep);
-  font-weight: 800;
-  letter-spacing: -.02em;
-}
-
 .nav-links {
   margin-left: auto;
   display: flex;
@@ -184,14 +178,20 @@ a:hover { color: var(--teal); }
   margin-top: 1.75rem;
 }
 
+:focus-visible {
+  outline: 2px solid var(--teal-deep);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
 /* ── Hero ── */
 .hero {
   display: grid;
   grid-template-columns: 1.05fr .95fr;
   gap: clamp(2rem, 5vw, 3.5rem);
-  align-items: end;
+  align-items: center;
   padding: clamp(2rem, 6vh, 4.5rem) 0 clamp(3rem, 8vh, 5.5rem);
-  min-height: min(88vh, 820px);
+  min-height: min(74vh, 660px);
   overflow: visible;
 }
 
@@ -230,7 +230,7 @@ a:hover { color: var(--teal); }
 
 .hero-visual {
   position: relative;
-  animation: rise-right 1s var(--ease) .12s both;
+  animation: fade-in 1s var(--ease) .12s both;
 }
 
 .hero-visual img,
@@ -249,11 +249,6 @@ a:hover { color: var(--teal); }
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
-}
-
-@keyframes rise-right {
-  from { opacity: 0; transform: translateX(24px); }
-  to { opacity: 1; transform: none; }
 }
 
 /* ── Sections ── */
@@ -425,6 +420,7 @@ section {
 
 .services li.is-soon {
   color: var(--muted);
+  border-color: var(--muted);
   border-style: dashed;
   background: transparent;
 }
