@@ -2263,6 +2263,25 @@ print('ok')
   && pass "elicitation : prompt nomme le compte + email signé (fiche 0047)" \
   || fail "elicitation : compte dans le prompt/payload ($acct_ok)"
 
+# Fiche 0047 / retour Codex PR #75 : aux points d'autorisation, l'email se lit en
+# CACHE-ONLY (.email) — jamais d'exec gws avant le gate Touch ID (invariant de
+# verrou + ADR-0002). On extrait la fonction pure et on la teste seule.
+pec_dir="$TMP/pec"; mkdir -p "$pec_dir/valid" "$pec_dir/missing" "$pec_dir/corrupt"
+printf 'alice@gmail.com\n' > "$pec_dir/valid/.email"
+printf 'pas-un-email\n'    > "$pec_dir/corrupt/.email"
+eval "$(sed -n '/^profile_email_cached()/,/^}/p' bin/gwsa)"
+r_valid="$(profile_email_cached "$pec_dir/valid")"
+r_missing="$(profile_email_cached "$pec_dir/missing")"
+r_corrupt="$(profile_email_cached "$pec_dir/corrupt")"
+n_cached="$(grep -c 'profile_email_cached "' bin/gwsa || true)"  # appels seuls (pas la déf)
+if [[ "$r_valid" == "alice@gmail.com" && -z "$r_missing" && -z "$r_corrupt" ]] \
+  && [[ "$n_cached" == 4 ]] \
+  && ! sed -n '/^profile_email_cached()/,/^}/p' bin/gwsa | sed 's/#.*//' | grep -q 'gws'; then
+  pass "elicitation : email lu cache-only aux points d'autorisation, zéro exec gws (fiche 0047)"
+else
+  fail "elicitation : cache-only (valid=$r_valid missing=[$r_missing] corrupt=[$r_corrupt] sites=$n_cached)"
+fi
+
 sid_e="$("$PY" -c 'from gateway.sessions import create_session; print(create_session(client="t").session_id)')"
 GWSA_ROOT="$ELIC_ROOT" GWSA_SESSION_ID="$sid_e" GWSA_ELICITATION_MOCK=1 \
   "$GWSA" session unlock "$sid_e" alpha 15 >/dev/null 2>&1 \

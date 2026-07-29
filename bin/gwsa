@@ -169,6 +169,18 @@ profile_email() { # profile_email <dir> — email du compte (métadonnée .email
   printf '%s\n' "$email"
 }
 
+profile_email_cached() { # profile_email_cached <dir> — .email SANS repli gws (fiche 0047)
+  # Aux POINTS D'AUTORISATION (unlock / grant), on lit la métadonnée seule :
+  # jamais exécuter gws avant le gate d'élicitation (invariant de verrou +
+  # « zéro exécution gws » d'ADR-0002). Métadonnée absente/corrompue → vide,
+  # donc le prompt retombe sur l'alias seul (repli documenté). Le backfill des
+  # vieux profils reste le fait de gwsa list/add, en contexte déverrouillé.
+  local dir="$1" cached
+  [[ -s "$dir/.email" ]] || return 0
+  cached="$(head -1 "$dir/.email")"
+  [[ "$cached" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]+$ ]] && printf '%s' "$cached"
+}
+
 cmd_add() { # cmd_add <alias> [email-attendu] [options gws auth login]
   local alias="$1"; shift
   check_alias "$alias"
@@ -284,7 +296,7 @@ cmd_unlock() {
     || die "durée invalide « $mins » (minutes entières ≥ 1, ou « off » pour retirer le verrou)"
   local dir; dir="$(profile_dir "$alias")"
   [[ -d "$dir" ]] || die "profil inconnu « $alias »"
-  local email; email="$(profile_email "$dir")"   # compte nommé dans le prompt (fiche 0047)
+  local email; email="$(profile_email_cached "$dir")"   # compte nommé, sans exec gws (fiche 0047)
   local sid="${GWSA_SESSION_ID:-}"
   if [[ -n "$sid" ]]; then
     [[ "$mins" == "off" ]] \
@@ -408,7 +420,7 @@ cmd_grant() { # gwsa grant <alias> <dossierIdOuNom> [heures] | gwsa grant <alias
   check_alias "$alias"
   local dir; dir="$(profile_dir "$alias")"
   [[ -d "$dir" ]] || die "profil inconnu « $alias »"
-  local email; email="$(profile_email "$dir")"   # compte nommé dans le prompt (fiche 0047)
+  local email; email="$(profile_email_cached "$dir")"   # compte nommé, sans exec gws (fiche 0047)
   local G="$dir/session-grants.json"
   [[ $# -ge 1 ]] || die "usage : gwsa grant $alias <dossier> [heures] | gwsa grant $alias revoke <folderId>"
   if [[ "$1" == "revoke" ]]; then
@@ -498,7 +510,7 @@ print(json.dumps({'sessions': list_sessions()}, indent=2, ensure_ascii=False))
       check_alias "$alias"
       local dir; dir="$(profile_dir "$alias")"
       [[ -d "$dir" ]] || die "profil inconnu « $alias »"
-      local email; email="$(profile_email "$dir")"   # compte nommé dans le prompt (fiche 0047)
+      local email; email="$(profile_email_cached "$dir")"   # compte nommé, sans exec gws (fiche 0047)
       require_signed_elicitation "$(printf '{"action":"session_unlock","alias":"%s","email":"%s","session_id":"%s","minutes":%s}' "$alias" "$email" "$sid" "$mins")"
       REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
 import os, sys
@@ -515,7 +527,7 @@ session_unlock(sys.argv[1], sys.argv[2], int(sys.argv[3]))
       check_alias "$alias"
       local dir; dir="$(profile_dir "$alias")"
       [[ -d "$dir" ]] || die "profil inconnu « $alias »"
-      local email; email="$(profile_email "$dir")"   # compte nommé dans le prompt (fiche 0047)
+      local email; email="$(profile_email_cached "$dir")"   # compte nommé, sans exec gws (fiche 0047)
       [[ "$hours" =~ ^[0-9]+$ && "$hours" -ge 1 && "$hours" -le 168 ]] \
         || die "durée invalide « $hours »"
       local resolved fid fname
