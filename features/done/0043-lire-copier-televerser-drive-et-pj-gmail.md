@@ -5,9 +5,9 @@ type: feature
 priority: P1
 version:
 epic:
-status: in-progress
+status: shipped
 ready: 2026-07-29
-pr:
+pr: "#73"
 created: 2026-07-29
 ---
 
@@ -65,21 +65,21 @@ Hors périmètre, par design : suppression, transfert de propriété,
 
 ## Critères d'acceptation
 
-- [ ] `drive_read` relit un Google Doc déposé (markdown) et un Sheet (CSV) ;
+- [x] `drive_read` relit un Google Doc déposé (markdown) et un Sheet (CSV) ;
       un binaire est refusé avec un message clair ; troncature signalée.
-- [ ] `drive_copy` copie vers une zone autorisée et il est refusé hors zone /
+- [x] `drive_copy` copie vers une zone autorisée et il est refusé hors zone /
       sans parent (policy `files copy` = création zonée).
-- [ ] `drive_upload` dépose un PDF tel quel (multipart, pas de conversion),
+- [x] `drive_upload` dépose un PDF tel quel (multipart, pas de conversion),
       le média transite par le dépôt broker et est effacé même en cas
       d'échec ; refus : fichier absent, trop gros, sous `GWSA_ROOT`, ou hors
       liste blanche (`.downloads` / `GWSA_UPLOAD_ROOTS`).
-- [ ] `gmail_attachment_get` écrit la PJ décodée dans `.downloads` (0600,
+- [x] `gmail_attachment_get` écrit la PJ décodée dans `.downloads` (0600,
       nom assaini et unique), jamais ailleurs, et renvoie le chemin.
-- [ ] Les quatre tools refusent sous verrou de profil, refus journalisé
+- [x] Les quatre tools refusent sous verrou de profil, refus journalisé
       (`usage.jsonl`, reason `locked`).
-- [ ] Aucun appel gws n'omet un paramètre de chemin (famille du bug 0024).
-- [ ] `.downloads` n'apparaît jamais comme un profil.
-- [ ] `./scripts/test.sh` vert (hermétique, sans compte réel ni `gws`).
+- [x] Aucun appel gws n'omet un paramètre de chemin (famille du bug 0024).
+- [x] `.downloads` n'apparaît jamais comme un profil.
+- [x] `./scripts/test.sh` vert (hermétique, sans compte réel ni `gws`).
 
 ## Notes
 
