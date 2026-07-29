@@ -90,7 +90,9 @@ def run_gws(profile_dir: str, args: list[str], timeout: int = 60) -> Any:
     return run_via_broker(alias, args, timeout=timeout)
 
 
-def run_via_broker(alias: str, args: list[str], timeout: int = 60) -> Any:
+def run_via_broker(
+    alias: str, args: list[str], timeout: int = 60, raw_output: bool = False
+) -> Any:
     ensure_broker_running()
     tok = ensure_token()
     payload: dict[str, Any] = {
@@ -100,6 +102,9 @@ def run_via_broker(alias: str, args: list[str], timeout: int = 60) -> Any:
         "args": args,
         "client": client_id(),
     }
+    if raw_output:
+        # Contenu verbatim (drive_read) : le broker renvoie stdout tel quel.
+        payload["raw_output"] = True
     sid = get_session_id()
     if sid:
         payload["session_id"] = sid
