@@ -135,6 +135,23 @@ a:hover { color: var(--teal); }
 
 .nav-cta:hover { background: var(--ink); color: #fff !important; }
 
+.lang-toggle {
+  font-family: var(--font-mono);
+  font-size: .8rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: .42rem .6rem;
+  cursor: pointer;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color .2s var(--ease), border-color .2s var(--ease);
+}
+
+.lang-toggle:hover { color: var(--ink); border-color: var(--ink-soft); }
+
 /* ── Buttons ── */
 .btn {
   display: inline-flex;

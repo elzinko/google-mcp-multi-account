@@ -15,18 +15,19 @@
     <header class="site-nav">
       <a class="nav-brand" href="index.html">google-multi-account</a>
       <ul class="nav-links">
-        <li><a href="index.html#model">Model</a></li>
-        <li><a href="index.html#security">Security</a></li>
-        <li><a href="index.html#install">Install</a></li>
-        <li><a href="docs.html" aria-current="page">Docs</a></li>
+        <li><a href="index.html#model" data-i18n="navModel">Model</a></li>
+        <li><a href="index.html#security" data-i18n="navSecurity">Security</a></li>
+        <li><a href="index.html#install" data-i18n="navInstall">Install</a></li>
+        <li><a href="docs.html" aria-current="page" data-i18n="navDocs">Docs</a></li>
       </ul>
+      <button class="lang-toggle" id="langToggle" type="button" aria-label="Passer en français">FR</button>
       <a class="nav-cta" href="https://github.com/elzinko/google-mcp-multi-account">GitHub</a>
     </header>
 
     <div class="page-hero reveal">
-      <p class="section-kicker">Documentation</p>
-      <h1>Guides, not a README dump.</h1>
-      <p>Every page has a job. The landing introduces <strong>google-multi-account</strong>; here you connect, configure and audit. CLI <code>gwsa</code> / binary <code>google-mcp</code>.</p>
+      <p class="section-kicker" data-i18n="docsKicker">Documentation</p>
+      <h1 data-i18n="docsH1">Guides, not a README dump.</h1>
+      <p data-i18n="docsLede">Every page has a job. The landing introduces <strong>google-multi-account</strong>; here you connect, configure and audit. CLI <code>gwsa</code> / binary <code>google-mcp</code>.</p>
     </div>
 
     <section style="padding-top:0">
@@ -34,55 +35,55 @@
         <li>
           <a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/README.md">
             <span class="doc-name">README</span>
-            <span class="doc-desc">3-step quickstart, product overview, versions.</span>
+            <span class="doc-desc" data-i18n="dcREADME">3-step quickstart, product overview, versions.</span>
           </a>
         </li>
         <li>
           <a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/docs/mcp-setup.md">
             <span class="doc-name">MCP setup</span>
-            <span class="doc-desc">Connect Claude Desktop, Claude Code, Cursor; exposed tools.</span>
+            <span class="doc-desc" data-i18n="dcMcp">Connect Claude Desktop, Claude Code, Cursor; exposed tools.</span>
           </a>
         </li>
         <li>
           <a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/docs/setup-oauth.md">
             <span class="doc-name">OAuth / GCP</span>
-            <span class="doc-desc">Google Cloud project, Desktop client, publishing, IAM.</span>
+            <span class="doc-desc" data-i18n="dcOauth">Google Cloud project, Desktop client, publishing, IAM.</span>
           </a>
         </li>
         <li>
           <a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/docs/usage.md">
-            <span class="doc-name">gwsa usage</span>
-            <span class="doc-desc">Profiles, locks, grants, web admin, Touch ID.</span>
+            <span class="doc-name" data-i18n="dnUsage">gwsa usage</span>
+            <span class="doc-desc" data-i18n="dcUsage">Profiles, locks, grants, web admin, Touch ID.</span>
           </a>
         </li>
         <li>
           <a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/docs/policies.md">
             <span class="doc-name">Policies</span>
-            <span class="doc-desc">Default-deny, services, permanent and temporary Drive zones.</span>
+            <span class="doc-desc" data-i18n="dcPolicies">Default-deny, services, permanent and temporary Drive zones.</span>
           </a>
         </li>
         <li>
           <a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/docs/architecture.md">
             <span class="doc-name">Architecture</span>
-            <span class="doc-desc">MCP, gateway, broker, wrapper — who talks to whom.</span>
+            <span class="doc-desc" data-i18n="dcArch">MCP, gateway, broker, wrapper — who talks to whom.</span>
           </a>
         </li>
         <li>
           <a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/SECURITY.md">
-            <span class="doc-name">Security</span>
-            <span class="doc-desc">Measures in place, honest limits, reporting.</span>
+            <span class="doc-name" data-i18n="dnSecurity">Security</span>
+            <span class="doc-desc" data-i18n="dcSecurity">Measures in place, honest limits, reporting.</span>
           </a>
         </li>
         <li>
           <a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/docs/threat-model.md">
-            <span class="doc-name">Threat model</span>
-            <span class="doc-desc">Trust surfaces and guarantees, phase by phase.</span>
+            <span class="doc-name" data-i18n="dnThreat">Threat model</span>
+            <span class="doc-desc" data-i18n="dcThreat">Trust surfaces and guarantees, phase by phase.</span>
           </a>
         </li>
         <li>
           <a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/docs/critique.md">
             <span class="doc-name">Critique</span>
-            <span class="doc-desc">Strengths, limits, competition — an honest look.</span>
+            <span class="doc-desc" data-i18n="dcCritique">Strengths, limits, competition — an honest look.</span>
           </a>
         </li>
       </ul>
@@ -91,16 +92,67 @@
 
   <footer class="site-footer">
     <div class="wrap">
-      <p><a href="index.html">← Back to product</a></p>
+      <p><a href="index.html" data-i18n="docsBack">← Back to product</a></p>
       <ul class="footer-links">
         <li><a href="https://github.com/elzinko/google-mcp-multi-account">GitHub</a></li>
-        <li><a href="https://buymeacoffee.com/elzinko">Support</a></li>
+        <li><a href="https://buymeacoffee.com/elzinko" data-i18n="footerSupport">Support</a></li>
       </ul>
     </div>
   </footer>
 
   <script>
     document.querySelectorAll('.reveal').forEach(function (n) { n.classList.add('is-in'); });
+  </script>
+
+  <script>
+    (function () {
+      var FR = {
+        navModel: 'Modèle',
+        navSecurity: 'Sécurité',
+        navInstall: 'Installer',
+        navDocs: 'Docs',
+        docsKicker: 'Documentation',
+        docsH1: 'Des guides, pas un dump de README.',
+        docsLede: 'Chaque page a un job. La landing présente <strong>google-multi-account</strong> ; ici tu branches, tu configures, tu audites. CLI <code>gwsa</code> / binaire <code>google-mcp</code>.',
+        dcREADME: 'Quickstart 3 étapes, panorama produit, versions.',
+        dcMcp: 'Brancher Claude Desktop, Claude Code, Cursor ; tools exposés.',
+        dcOauth: 'Projet Google Cloud, client Desktop, publication, IAM.',
+        dnUsage: 'Usage gwsa',
+        dcUsage: 'Profils, verrous, grants, admin web, Touch ID.',
+        dcPolicies: 'Default-deny, services, zones Drive permanentes et temporaires.',
+        dcArch: 'MCP, gateway, broker, wrapper — qui parle à qui.',
+        dnSecurity: 'Sécurité',
+        dcSecurity: 'Mesures en place, limites honnêtes, signalement.',
+        dnThreat: 'Modèle de menace',
+        dcThreat: 'Surfaces de confiance et garanties, phase par phase.',
+        dcCritique: 'Forces, limites, concurrence — un regard honnête.',
+        docsBack: '← Retour produit',
+        footerSupport: 'Soutenir'
+      };
+      var nodes = document.querySelectorAll('[data-i18n]');
+      var EN = {};
+      nodes.forEach(function (n) { EN[n.getAttribute('data-i18n')] = n.innerHTML; });
+      var btn = document.getElementById('langToggle');
+      function apply(lang) {
+        nodes.forEach(function (n) {
+          var k = n.getAttribute('data-i18n');
+          var v = lang === 'fr' ? FR[k] : EN[k];
+          if (v != null) n.innerHTML = v;
+        });
+        document.documentElement.lang = lang;
+        try { localStorage.setItem('gma-lang', lang); } catch (e) {}
+        if (btn) {
+          btn.textContent = lang === 'fr' ? 'EN' : 'FR';
+          btn.setAttribute('aria-label', lang === 'fr' ? 'Switch to English' : 'Passer en français');
+        }
+      }
+      var saved = null;
+      try { saved = localStorage.getItem('gma-lang'); } catch (e) {}
+      if (saved === 'fr') apply('fr');
+      if (btn) btn.addEventListener('click', function () {
+        apply(document.documentElement.lang === 'fr' ? 'en' : 'fr');
+      });
+    })();
   </script>
 </body>
 </html>
