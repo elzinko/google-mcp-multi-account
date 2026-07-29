@@ -7,10 +7,7 @@
 
 <br>
 
-[![CI](https://github.com/elzinko/google-mcp-multi-account/actions/workflows/ci.yml/badge.svg)](https://github.com/elzinko/google-mcp-multi-account/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/elzinko/google-mcp-multi-account?color=0f6e56)](https://github.com/elzinko/google-mcp-multi-account/releases)
-[![License](https://img.shields.io/github/license/elzinko/google-mcp-multi-account?color=1f6feb)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS-1a1a1a?logo=apple&logoColor=white)](#-development)
+[![CI](https://github.com/elzinko/google-mcp-multi-account/actions/workflows/ci.yml/badge.svg)](https://github.com/elzinko/google-mcp-multi-account/actions/workflows/ci.yml) &nbsp;[![Release](https://img.shields.io/github/v/release/elzinko/google-mcp-multi-account?color=0f6e56)](https://github.com/elzinko/google-mcp-multi-account/releases) &nbsp;[![License](https://img.shields.io/github/license/elzinko/google-mcp-multi-account?color=1f6feb)](LICENSE) &nbsp;[![Platform](https://img.shields.io/badge/platform-macOS-1a1a1a?logo=apple&logoColor=white)](#-development)
 
 **[Quickstart](#-quickstart)** · **[How it works](#-how-it-works)** · **[Security](#-security)** · **[Docs](docs/)**
 
