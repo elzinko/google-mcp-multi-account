@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>googlez — Multi-account Google Workspace for agents</title>
-  <meta name="description" content="googlez (@elzinko/googlez) : serveur MCP local multi-comptes Google Workspace (Gmail, Drive, Calendar, Docs, Sheets, Tasks). Verrous, policy default-deny, Touch ID. L’humain garde la main.">
-  <meta property="og:title" content="googlez — Multi-account Google Workspace for agents">
+  <title>google-multi-account — Multi-account Google Workspace for agents</title>
+  <meta name="description" content="google-multi-account : serveur MCP local multi-comptes Google Workspace (Gmail, Drive, Calendar, Docs, Sheets, Tasks). Verrous, policy default-deny, Touch ID. L’humain garde la main.">
+  <meta property="og:title" content="google-multi-account — Multi-account Google Workspace for agents">
   <meta property="og:description" content="Plusieurs comptes Google. Un agent. Toi aux commandes.">
   <meta property="og:type" content="website">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,7 +16,7 @@
 <body>
   <div class="wrap">
     <header class="site-nav">
-      <a class="nav-brand" href="index.html">googlez <span>Multi-account Google Workspace for agents</span></a>
+      <a class="nav-brand" href="index.html">google-multi-account <span>Multi-account Google Workspace for agents</span></a>
       <ul class="nav-links">
         <li><a href="#modele">Modèle</a></li>
         <li><a href="#securite">Sécurité</a></li>
@@ -28,10 +28,10 @@
 
     <section class="hero" aria-label="Présentation">
       <div class="hero-copy">
-        <p class="brand-mark">googlez<span class="brand-sub">Multi-account Google Workspace for agents</span></p>
+        <p class="brand-mark">google-multi-account<span class="brand-sub">Multi-account Google Workspace for agents</span></p>
         <h1>Plusieurs comptes Google. Un agent. Toi aux commandes.</h1>
         <p class="hero-lede">
-          Serveur MCP local (<code>@elzinko/googlez</code>) pour brancher Claude, Cursor et consorts sur Gmail, Drive, Calendar, Docs, Sheets et Tasks — sans cloud tiers, avec verrous et policy.
+          Serveur MCP local (<code>bin/google-mcp</code>) pour brancher Claude, Cursor et consorts sur Gmail, Drive, Calendar, Docs, Sheets et Tasks — sans cloud tiers, avec verrous et policy.
         </p>
         <div class="cta-row">
           <a class="btn btn-primary" href="#installer">Installer</a>
@@ -69,7 +69,7 @@
       <p class="section-kicker">Comment ça marche</p>
       <h2 class="section-title">L’humain ouvre. L’agent exécute dans le cadre.</h2>
       <p class="section-lede">
-        MCP stdio pour le LLM, CLI <code>gwsa</code> (googlez) et admin locale pour toi. Chaque porte — unlock, grant, nouveau compte — reste un geste humain.
+        MCP stdio pour le LLM, CLI <code>gwsa</code> et admin locale pour toi. Chaque porte — unlock, grant, nouveau compte — reste un geste humain.
       </p>
       <ol class="model-steps">
         <li>
@@ -169,7 +169,7 @@ ln -sf "$PWD/bin/gwsa" "$(brew --prefix)/bin/gwsa"
 
   <footer class="site-footer">
     <div class="wrap">
-      <p>MIT · Local first · <strong>googlez</strong> · package <code>@elzinko/googlez</code> · repo <code>google-mcp-multi-account</code></p>
+      <p>MIT · Local first · <strong>google-multi-account</strong> · repo <code>google-mcp-multi-account</code></p>
       <ul class="footer-links">
         <li><a href="docs.html">Doc</a></li>
         <li><a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/SECURITY.md">Sécurité</a></li>

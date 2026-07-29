@@ -1,11 +1,11 @@
-# googlez
+# google-multi-account
 
 **Multi-account Google Workspace for agents** — brancher des agents LLM
 (Claude Desktop, Cursor, Claude Code, …) sur plusieurs comptes Google
 (Gmail, Drive, Calendar, Docs, Sheets, Tasks) — 100 % en local.
 
-> **Produit** : **googlez** · package MCP suggéré : `@elzinko/googlez`  
-> Repo git / binaires encore : `google-mcp-multi-account`, `gwsa`, `google-mcp`.
+> **Produit** : **google-multi-account** — nom du serveur MCP (source de vérité : `gateway/config.py`, `PRODUCT_SLUG`).  
+> Repo git : `google-mcp-multi-account` · CLI : `gwsa` · binaire MCP : `google-mcp`.
 
 > **Page produit** (landing) : ouvrir [`site/index.html`](site/index.html) —
 > ou `cd site && python3 -m http.server 4173` → http://127.0.0.1:4173/  

@@ -1,6 +1,6 @@
-# googlez — site produit (`site/`)
+# google-multi-account — site produit (`site/`)
 
-Landing marketing pour **googlez** (`@elzinko/googlez`) —
+Landing marketing pour **google-multi-account** —
 *Multi-account Google Workspace for agents*.
 
 Les binaires du dépôt restent `gwsa` / `google-mcp` (pas encore renommés).
