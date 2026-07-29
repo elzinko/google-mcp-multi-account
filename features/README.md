@@ -18,6 +18,13 @@
 | 0031 | La suite de tests ne doit jamais pouvoir toucher le PATH réel | bug | P1 |  |  | ✅ shipped | #31 |
 | 0037 | Sémantique de la suppression en zone — corbeille = suppression, racine de zone immuable, avertissement | feature | P1 |  |  | ✅ shipped | #47 |
 | 0043 | Lire, copier, téléverser — contenu Drive et pièces jointes Gmail via MCP | feature | P1 |  |  | ✅ shipped | #73 |
+| 0061 | Déconnexion — modale de confirmation + bouton compact | feature | P1 | v0.4.0 | 0060 | 🔴 todo |  |
+| 0062 | Admin header — réordonner actions + mode Avancé + retirer texte long | feature | P1 | v0.4.0 | 0060 | 🔴 todo |  |
+| 0063 | Remplacer « Tout verrouiller » par icône cadenas + modale d'impact | feature | P1 | v0.4.0 | 0060 | 🔴 todo |  |
+| 0064 | Améliorer le bouton retour « ‹ Comptes » (style + position) | feature | P1 | v0.4.0 | 0060 | 🔴 todo |  |
+| 0065 | Masquer « + Connecter un compte » en vue détail | feature | P1 | v0.4.0 | 0060 | 🔴 todo |  |
+| 0066 | Journal — lisibilité (wrap colonnes, plus de scroll horizontal) | feature | P1 | v0.4.0 | 0060 | 🔴 todo |  |
+| 0067 | Admin branding — corriger le titre de page | feature | P1 | v0.4.0 | 0060 | 🔴 todo |  |
 | 0002 | Durcir le modèle de policy — décisions « default-deny » soulevées par l'audit | feature | P2 |  |  | ✅ shipped | #12 |
 | 0007 | Provisioning GCP idempotent/déclaratif — durcir provision-gcp.sh ou passer à Terraform | feature | P2 |  |  | ✅ shipped | #10 |
 | 0008 | Connexion dynamique d'un nouveau compte via élicitation forte (access_request kind=add_account) | feature | P2 |  |  | ✅ shipped | #7 |
@@ -36,12 +43,17 @@
 | 0045 | Droits par session et par projet git — état des lieux, écarts, pistes | feature | P2 |  |  | 🟠 in-progress |  |
 | 0046 | CLI locale pour déployer des sandboxes temporaires (branche / worktree) | feature | P2 |  |  | 🟠 in-progress |  |
 | 0047 | Au moment d'autoriser un accès, nommer le compte (email) — pas seulement l'alias | feature | P2 |  |  | ✅ shipped | #75 |
+| 0068 | Accessibilité — focus-visible + reduced-motion (cadenas/modales/boutons) | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
+| 0069 | Docs in-app — rework orientation utilisateur | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
+| 0070 | README — quickstart + usage par persona + permissions + contribution | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
+| 0071 | GitHub metadata — description, homepage, topics + badges | chore | P2 | v0.4.0 | 0060 | 🔴 todo |  |
 | 0001 | Élicitation signée — faire monter `gwsa strongauth` de la présence à la signature | feature | P3 |  |  | 🟠 in-progress |  |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)
 
 | # | Titre | Type | Prio | Version | Épic | Statut | PR |
 |---|-------|------|------|---------|------|--------|----|
+| 0060 | Admin UX/UI refresh + docs/README + GitHub metadata | epic | P1 | v0.4.0 |  | 🔴 todo |  |
 | 0017 | Généraliser le projet à d'autres utilisateurs que l'auteur | epic | P2 |  |  | 💡 idea |  |
 
 ## 💡 Idées (non groomées)
