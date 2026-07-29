@@ -2255,12 +2255,23 @@ else
   fail "padlock : marqueurs lockchip / shorten / dRelock manquants"
 fi
 
-if grep -q 'TOUCHID_BIN=' bin/gwsa \
+if grep -qE 'PRODUCT_SLUG *= *"[A-Za-z0-9._-]+"' gateway/config.py \
   && grep -q 'strong_auth_reason' bin/gwsa \
-  && grep -q 'mcp-google-mcp-multi-account' bin/gwsa; then
-  pass "touchid : binaire nommé + raison avec email (gwsa)"
+  && grep -q 'ensure_sign_bin' bin/gwsa; then
+  pass "touchid : nom produit = source unique (config.PRODUCT_SLUG) + raison email"
 else
-  fail "touchid : strong_auth_reason ou binaire manquant dans gwsa"
+  fail "touchid : PRODUCT_SLUG (config) / strong_auth_reason / ensure_sign_bin manquant"
+fi
+
+# Non-régression : l'élicitation signée (strongauth) doit EXÉCUTER le binaire
+# nommé, pas `swift` nu — sinon le dialogue Touch ID réaffiche « swift-frontend »
+# (le bug : GWSA_TOUCHID_BIN était exporté mais jamais lu côté Python).
+if grep -q '_sign_helper_cmd' gateway/elicitation.py \
+  && grep -q 'GWSA_SIGN_BIN' gateway/elicitation.py \
+  && grep -q 'PRODUCT_SLUG' gateway/elicitation.py; then
+  pass "touchid : élicitation signée passe par le binaire nommé (pas swift nu)"
+else
+  fail "touchid : elicitation.py n'utilise pas le binaire nommé (dialogue swift-frontend)"
 fi
 
 # Sous strongauth, add sans email doit refuser avant Touch ID (fiche 0032 / review #50)

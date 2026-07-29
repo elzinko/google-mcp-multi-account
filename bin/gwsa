@@ -68,7 +68,7 @@ USAGE_LOGGER="$REPO_DIR/scripts/log-usage.py"
 # une telle porte rouvrirait exactement le trou qu'on ferme ici.
 SYS_PYTHON="/usr/bin/python3"
 SYS_SWIFT="/usr/bin/swift"
-TOUCHID_BIN="$REPO_DIR/bin/mcp-google-mcp-multi-account"
+SIGN_BIN=""  # chemin du binaire de signature — rempli par ensure_sign_bin (nom = gateway/config.py:PRODUCT_SLUG)
 [[ -x "$SYS_PYTHON" ]] || { echo "gwsa : interpréteur système introuvable ($SYS_PYTHON) — installer les outils en ligne de commande : xcode-select --install" >&2; exit 3; }
 
 die() { echo "gwsa : $*" >&2; exit 3; }
@@ -106,10 +106,19 @@ is_locked() { # is_locked <dir> — vrai si verrouillé ET pas de déverrouillag
   [[ "$(date +%s)" -ge "$until_ts" ]]
 }
 
-ensure_touchid_bin() { # compile le binaire Touch ID nommé (dialogue macOS plus lisible que swift-frontend)
-  [[ -x "$TOUCHID_BIN" ]] && return 0
+ensure_sign_bin() { # compile le helper d'élicitation signée en binaire nommé
+  # Nom = gateway/config.py:PRODUCT_SLUG (SOURCE UNIQUE) → dialogue Touch ID
+  # « google-multi-account » au lieu de « swift-frontend » (cf. fiche 0032).
+  # Artefact isolé dans bin/.build/ (gitignoré). Recompile si le source OU le
+  # wrapper a changé (invalide un binaire d'une version/nom antérieurs).
+  local slug src="$REPO_DIR/scripts/elicitation-sign.swift"
+  slug="$("$SYS_PYTHON" -c 'import sys; sys.path.insert(0, sys.argv[1]); from gateway.config import PRODUCT_SLUG; print(PRODUCT_SLUG)' "$REPO_DIR" 2>/dev/null)" || return 1
+  [[ -n "$slug" ]] || return 1
+  SIGN_BIN="$REPO_DIR/bin/.build/$slug"
+  [[ -x "$SIGN_BIN" && "$SIGN_BIN" -nt "$src" && "$SIGN_BIN" -nt "$REPO_DIR/bin/gwsa" ]] && return 0
   command -v swiftc >/dev/null 2>&1 || return 1
-  swiftc -o "$TOUCHID_BIN" "$REPO_DIR/scripts/touchid.swift" 2>/dev/null
+  mkdir -p "$REPO_DIR/bin/.build"
+  swiftc -o "$SIGN_BIN" "$src" 2>/dev/null
 }
 
 strong_auth_reason() { # strong_auth_reason <action> <profile-dir> — email plutôt qu'alias dans la raison
@@ -123,10 +132,10 @@ require_signed_elicitation() { # JSON payload — signature biométrique si stro
   [[ -f "$GWSA_ROOT/.strong-auth" ]] || return 0
   local payload="${1:-}"
   [[ -n "$payload" ]] || die "élicitation : payload manquant (bug interne gwsa)"
-  # Précompiler le binaire nommé si possible (raisons UI Touch ID plus claires).
-  ensure_touchid_bin || true
+  # Précompiler le binaire nommé si possible (dialogue Touch ID « produit », cf. fiche 0032).
+  ensure_sign_bin || true
   REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" GWSA_SYS_SWIFT="$SYS_SWIFT" \
-    GWSA_TOUCHID_BIN="$TOUCHID_BIN" \
+    GWSA_SIGN_BIN="${SIGN_BIN:-}" \
     "$SYS_PYTHON" "$REPO_DIR/scripts/elicitation-cli.py" gate --json "$payload" \
     || die "élicitation signée refusée — action annulée"
 }
@@ -560,8 +569,9 @@ cmd_elicitation() { # gwsa elicitation enroll|status — clé biométrique (fich
     enroll)
       local mock_flag=""
       [[ "${1:-}" == "--mock" ]] && mock_flag="--mock"
+      ensure_sign_bin || true
       REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" GWSA_SYS_SWIFT="$SYS_SWIFT" \
-        GWSA_ELICITATION_MOCK="${GWSA_ELICITATION_MOCK:-}" \
+        GWSA_SIGN_BIN="${SIGN_BIN:-}" GWSA_ELICITATION_MOCK="${GWSA_ELICITATION_MOCK:-}" \
         "$SYS_PYTHON" "$REPO_DIR/scripts/elicitation-cli.py" enroll $mock_flag
       ;;
     status)
