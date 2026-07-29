@@ -488,8 +488,9 @@ def drive_upload(
     if not any(resolved == a or a in resolved.parents for a in allowed):
         raise GatewayError(
             f"source « {src} » hors des dossiers autorisés au téléversement — "
-            f"déposer le fichier dans .downloads, ou ouvrir son dossier via "
-            f"GWSA_UPLOAD_ROOTS (chemins absolus séparés par « {os.pathsep} »)",
+            f"déposer le fichier dans .downloads, ou déclarer son dossier dans "
+            f"<GWSA_ROOT>/.upload-roots (un chemin absolu par ligne) ou la "
+            f"variable GWSA_UPLOAD_ROOTS",
             code="error",
         )
     size = src.stat().st_size

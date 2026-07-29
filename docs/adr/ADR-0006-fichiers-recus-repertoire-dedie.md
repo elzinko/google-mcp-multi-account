@@ -86,16 +86,21 @@ exfiltrerait un secret local — **atteignable par le seul MCP, sans shell**.
 Dossiers autorisés en lecture :
 
 - `<GWSA_ROOT>/.downloads` — toujours (re-téléverser une PJ reçue) ;
-- ceux déclarés dans `GWSA_UPLOAD_ROOTS` (chemins absolus séparés par
-  `os.pathsep`, `:` sous Unix).
+- ceux déclarés par l'humain, de deux façons cumulables :
+  - **fichier `<GWSA_ROOT>/.upload-roots`** (recommandé) : un chemin absolu par
+    ligne, `#` = commentaire. Il vit avec le reste de la config, donc **survit
+    aux redéploiements** — l'env, lui, est réécrit par les installeurs
+    (`install-claude-*.sh`) et se perd à la mise à jour ;
+  - variable **`GWSA_UPLOAD_ROOTS`** (chemins absolus séparés par `os.pathsep`).
 
 Volontairement **hors du dépôt git** (un livrable n'a pas à vivre dans les
 sources) et **hors de `GWSA_ROOT`** (tokens) : l'humain ouvre explicitement les
 dossiers d'où le LLM peut lire. Par défaut la liste est vide → seul
 `.downloads` est lisible ; déposer le fichier à téléverser dans `.downloads`,
-ou ouvrir son dossier. Un garde dur refuse en outre toute lecture sous
-`GWSA_ROOT` (hors `.downloads`) même si `GWSA_UPLOAD_ROOTS` l'englobait par
-erreur.
+ou déclarer son dossier. Le fichier `.upload-roots` n'est **pas modifiable par
+le LLM** (aucun tool n'écrit sous `GWSA_ROOT`) ; son point en tête le tient hors
+des énumérations de profils. Un garde dur refuse en outre toute lecture sous
+`GWSA_ROOT` (hors `.downloads`) même si la liste blanche l'englobait par erreur.
 
 Une **liste noire** de chemins sensibles a été écartée (fragile, jamais
 exhaustive, fausse assurance). Défense en profondeur au-delà de la liste

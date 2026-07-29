@@ -96,10 +96,12 @@ existe déjà — **jamais d'écrasement**. Symétrie avec le sens montant :
 renvoyé à l'appelant, qui décide ensuite d'un éventuel `cp` — hors gateway.
 
 Côté montant, la **source** de `drive_upload` est restreinte à une **liste
-blanche** (`.downloads` + `GWSA_UPLOAD_ROOTS`), pas au disque entier : le LLM ne
-peut pas lire un chemin arbitraire (ex. `~/.ssh/id_rsa`) et l'exfiltrer vers une
-zone active — défaut-deny, l'humain ouvre explicitement les dossiers lisibles
-([ADR-0006](adr/ADR-0006-fichiers-recus-repertoire-dedie.md)).
+blanche** (`.downloads` + les dossiers déclarés dans `<GWSA_ROOT>/.upload-roots`
+ou `GWSA_UPLOAD_ROOTS`), pas au disque entier : le LLM ne peut pas lire un
+chemin arbitraire (ex. `~/.ssh/id_rsa`) et l'exfiltrer vers une zone active —
+défaut-deny, l'humain seul ouvre les dossiers lisibles (le fichier `.upload-roots`
+n'est pas écrivable par un tool) —
+[ADR-0006](adr/ADR-0006-fichiers-recus-repertoire-dedie.md).
 
 ## Phase 2.1 (prévue) — vault
 

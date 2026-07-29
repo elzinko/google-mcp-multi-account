@@ -243,8 +243,9 @@ TOOLS: list[dict[str, Any]] = [
             "parent_id, sans conversion : un PDF déposé reste un PDF. Soumis "
             "aux zones (policy + grants) comme drive_create ; si refusé : "
             "access_request kind=session_grant. La SOURCE locale doit être dans "
-            ".downloads ou un dossier de la liste blanche GWSA_UPLOAD_ROOTS "
-            "(jamais un chemin arbitraire). Renvoie le propriétaire du fichier créé."
+            ".downloads ou un dossier de la liste blanche (fichier "
+            "<GWSA_ROOT>/.upload-roots ou variable GWSA_UPLOAD_ROOTS) — jamais "
+            "un chemin arbitraire. Renvoie le propriétaire du fichier créé."
         ),
         "inputSchema": {
             "type": "object",

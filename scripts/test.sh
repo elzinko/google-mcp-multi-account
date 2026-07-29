@@ -781,6 +781,19 @@ try:
     raise SystemExit("source hors liste blanche aurait dû être refusée")
 except GatewayError as e:
     assert e.code == "error" and not CALLS, (e.code, CALLS)
+# Déclaration DURABLE par fichier <GWSA_ROOT>/.upload-roots (survit aux
+# redéploiements ; le LLM ne peut pas l'écrire — aucun tool n'écrit sous
+# GWSA_ROOT). Un chemin absolu par ligne, # = commentaire, lignes vides ignorées.
+via_file = Path(os.environ["GWSA_ROOT"]).parent / "via-fichier-0043"
+via_file.mkdir(exist_ok=True)
+roots_conf = Path(os.environ["GWSA_ROOT"]) / ".upload-roots"
+roots_conf.write_text(f"# dossiers ouverts au téléversement\n\n{via_file}\n", encoding="utf-8")
+note = via_file / "note.pdf"
+note.write_bytes(b"%PDF via fichier")
+CALLS.clear()
+r = api.drive_upload(alias, str(note), "FOLDER")
+assert r["ok"] and CALLS, "dossier déclaré par .upload-roots devrait être autorisé"
+roots_conf.unlink()  # ne pas polluer les sections suivantes
 # …sauf .downloads : re-téléverser une pièce jointe reçue est légitime.
 dl_file = download_dir() / "logo.png"
 dl_file.write_bytes(b"\x89PNG faux")
