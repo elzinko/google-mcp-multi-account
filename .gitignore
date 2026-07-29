@@ -23,7 +23,11 @@ __pycache__/
 # Scratch de sprint ezk (éphémère, par-branche)
 SPRINT.md
 
-# Binaire Touch ID compilé localement (swiftc, plateforme-dépendant)
+# Binaires compilés localement (swiftc, plateforme-dépendants) — nom = PRODUCT_SLUG
+bin/.build/
+# Legacy (≤ 0032) : ancien binaire Touch ID à la racine de bin/, laissé sur les
+# clones d'avant 0044 — gardé ignoré pour ne pas salir le worktree après upgrade
+# (sinon deploy-local.sh rejette un worktree « dirty »).
 bin/mcp-google-mcp-multi-account
 
 # Version DÉPLOYÉE — générée par scripts/deploy-local.sh, jamais commitée.

@@ -20,6 +20,14 @@ POLICY_CHECKER = REPO_DIR / "scripts" / "policy-check.py"
 USAGE_LOGGER = REPO_DIR / "scripts" / "log-usage.py"
 SYS_PYTHON = "/usr/bin/python3"
 
+# Nom « produit » du projet — SOURCE DE VÉRITÉ unique.
+# Réutilisé partout dans le code (jamais ré-écrit en dur) :
+#   • basename du binaire de signature → nom affiché dans le dialogue Touch ID ;
+#   • à garder aligné avec le nom du serveur MCP (docs/mcp-setup.md).
+# bin/gwsa et scripts/test.sh le lisent via cette constante (import Python).
+# Rebrand (ex. « googlez ») = changer CETTE SEULE LIGNE.
+PRODUCT_SLUG = "google-multi-account"
+
 
 def gwsa_root() -> Path:
     return Path(os.environ.get("GWSA_ROOT") or Path.home() / ".config" / "gws-accounts")

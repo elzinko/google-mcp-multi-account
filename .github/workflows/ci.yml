@@ -66,4 +66,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: swiftc --parse
-        run: xcrun -sdk macosx swiftc -parse scripts/touchid.swift
+        run: |
+          xcrun -sdk macosx swiftc -parse scripts/touchid.swift
+          xcrun -sdk macosx swiftc -parse scripts/elicitation-sign.swift
