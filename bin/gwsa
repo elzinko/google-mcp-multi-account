@@ -175,10 +175,17 @@ profile_email_cached() { # profile_email_cached <dir> — .email SANS repli gws 
   # « zéro exécution gws » d'ADR-0002). Métadonnée absente/corrompue → vide,
   # donc le prompt retombe sur l'alias seul (repli documenté). Le backfill des
   # vieux profils reste le fait de gwsa list/add, en contexte déverrouillé.
+  # Toujours retourner 0 : bin/gwsa tourne sous `set -euo pipefail` et les
+  # appelants font « local email; email="$(profile_email_cached …)" ». Un statut
+  # non-nul (métadonnée absente/corrompue) ferait avorter unlock/grant AVANT le
+  # gate au lieu du repli alias-seul documenté (retour Codex P2, PR #75).
   local dir="$1" cached
   [[ -s "$dir/.email" ]] || return 0
   cached="$(head -1 "$dir/.email")"
-  [[ "$cached" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]+$ ]] && printf '%s' "$cached"
+  if [[ "$cached" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]+$ ]]; then
+    printf '%s' "$cached"
+  fi
+  return 0
 }
 
 cmd_add() { # cmd_add <alias> [email-attendu] [options gws auth login]

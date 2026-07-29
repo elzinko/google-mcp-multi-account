@@ -2274,12 +2274,23 @@ r_valid="$(profile_email_cached "$pec_dir/valid")"
 r_missing="$(profile_email_cached "$pec_dir/missing")"
 r_corrupt="$(profile_email_cached "$pec_dir/corrupt")"
 n_cached="$(grep -c 'profile_email_cached "' bin/gwsa || true)"  # appels seuls (pas la déf)
+# Sous `set -euo pipefail` (comme bin/gwsa) et la forme appelante exacte
+# « local email; email="$(…)" », la fonction ne doit JAMAIS avorter — même sur
+# .email corrompu (sinon unlock/grant meurt avant le gate — retour Codex P2).
+pec_fn="$TMP/pec_fn.sh"; sed -n '/^profile_email_cached()/,/^}/p' bin/gwsa > "$pec_fn"
+sete_rc=0
+bash -euo pipefail -c '
+  . "$1"
+  c(){ local email; email="$(profile_email_cached "$1")"; printf "%s" "$email"; }
+  c "$2" >/dev/null   # .email corrompu
+  c "$3" >/dev/null   # .email absent
+' _ "$pec_fn" "$pec_dir/corrupt" "$pec_dir/missing" || sete_rc=$?
 if [[ "$r_valid" == "alice@gmail.com" && -z "$r_missing" && -z "$r_corrupt" ]] \
-  && [[ "$n_cached" == 4 ]] \
+  && [[ "$n_cached" == 4 && "$sete_rc" == 0 ]] \
   && ! sed -n '/^profile_email_cached()/,/^}/p' bin/gwsa | sed 's/#.*//' | grep -q 'gws'; then
   pass "elicitation : email lu cache-only aux points d'autorisation, zéro exec gws (fiche 0047)"
 else
-  fail "elicitation : cache-only (valid=$r_valid missing=[$r_missing] corrupt=[$r_corrupt] sites=$n_cached)"
+  fail "elicitation : cache-only (valid=$r_valid missing=[$r_missing] corrupt=[$r_corrupt] sites=$n_cached set-e_rc=$sete_rc)"
 fi
 
 sid_e="$("$PY" -c 'from gateway.sessions import create_session; print(create_session(client="t").session_id)')"
