@@ -78,8 +78,9 @@ Calendar / Docs / Sheets / Tasks.
       tools MCP (sous-ensemble Drive actuel rappelé).
 - [x] `docs/mcp-setup.md` : `drive_get` = métadonnées ; absence de copie /
       update / export de contenu côté MCP.
-- [ ] (Suite) Tool `drive_copy` + tests hermétiques, si on décide d'ouvrir la
-      capacité — hors de cette PR.
+- [x] (Suite) Tool `drive_copy` + tests hermétiques, si on décide d'ouvrir la
+      capacité — fait via la fiche [[0043]] (avec `drive_read` et
+      `drive_upload`).
 
 ## Notes
 

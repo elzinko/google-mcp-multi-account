@@ -186,6 +186,100 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "drive_read",
+        "description": (
+            "Lit le CONTENU d'un fichier Drive en texte (lecture, sous verrou "
+            "comme drive_get). Fichier Google : export texte — markdown par "
+            "défaut pour un Doc, CSV pour un Sheet. Fichier ordinaire : renvoyé "
+            "tel quel s'il est textuel ; les binaires (PDF, images) ne sont pas "
+            "lisibles ici. Sert à relire un document déposé ou un modèle avant "
+            "de le copier."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "alias": {"type": "string"},
+                "file_id": {"type": "string"},
+                "format": {
+                    "type": "string",
+                    "enum": ["text/markdown", "text/plain", "text/html", "text/csv"],
+                    "description": "Format d'export souhaité (fichiers Google seulement)",
+                },
+                "max_chars": {
+                    "type": "integer",
+                    "default": 100000,
+                    "description": "Troncature du contenu renvoyé (1 000–1 000 000)",
+                },
+            },
+            "required": ["alias", "file_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "drive_copy",
+        "description": (
+            "Copie NATIVE d'un fichier Drive (files.copy) vers un dossier de "
+            "zone : un Sheet reste un Sheet, un binaire un binaire — pour "
+            "dupliquer un modèle vers le dossier client. Soumis aux zones côté "
+            "destination (policy + grants) ; si refusé : access_request "
+            "kind=session_grant. Renvoie le propriétaire (owner, owned_by_me)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "alias": {"type": "string"},
+                "file_id": {"type": "string", "description": "Fichier source à copier"},
+                "parent_id": {"type": "string", "description": "ID du dossier destination autorisé"},
+                "name": {"type": "string", "description": "Nom de la copie (défaut : celui de Drive)"},
+            },
+            "required": ["alias", "file_id", "parent_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "drive_upload",
+        "description": (
+            "Téléverse un fichier LOCAL (binaire compris — PDF, image) sous "
+            "parent_id, sans conversion : un PDF déposé reste un PDF. Soumis "
+            "aux zones (policy + grants) comme drive_create ; si refusé : "
+            "access_request kind=session_grant. Renvoie le propriétaire du "
+            "fichier créé."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "alias": {"type": "string"},
+                "path": {"type": "string", "description": "Chemin local du fichier à téléverser"},
+                "parent_id": {"type": "string", "description": "ID du dossier parent autorisé"},
+                "name": {"type": "string", "description": "Nom sur Drive (défaut : nom du fichier)"},
+                "mime_type": {"type": "string", "description": "Type MIME (défaut : deviné de l'extension)"},
+            },
+            "required": ["alias", "path", "parent_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "gmail_attachment_get",
+        "description": (
+            "Télécharge une pièce jointe d'un message Gmail (lecture, sous "
+            "verrou). attachment_id vient de gmail_get (payload.parts[].body."
+            "attachmentId). Le fichier est écrit dans le répertoire de "
+            "téléchargement local dédié (jamais un chemin arbitraire, jamais "
+            "d'écrasement) et son chemin est renvoyé."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "alias": {"type": "string"},
+                "message_id": {"type": "string"},
+                "attachment_id": {"type": "string"},
+                "filename": {"type": "string", "description": "Nom de fichier souhaité (assaini, unifié)"},
+            },
+            "required": ["alias", "message_id", "attachment_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
         "name": "setup_status",
         "description": (
             "État agrégé du setup (LECTURE SEULE) : projet GCP, publication, "
@@ -255,6 +349,31 @@ DISPATCH: dict[str, Callable] = {
         parent=kw.get("parent") or None,
     ),
     "drive_get": lambda **kw: api.drive_get(alias=kw["alias"], file_id=kw["file_id"]),
+    "drive_read": lambda **kw: api.drive_read(
+        alias=kw["alias"],
+        file_id=kw["file_id"],
+        format=kw.get("format") or "",
+        max_chars=int(kw.get("max_chars") or 100_000),
+    ),
+    "drive_copy": lambda **kw: api.drive_copy(
+        alias=kw["alias"],
+        file_id=kw["file_id"],
+        parent_id=kw["parent_id"],
+        name=kw.get("name") or "",
+    ),
+    "drive_upload": lambda **kw: api.drive_upload(
+        alias=kw["alias"],
+        path=kw["path"],
+        parent_id=kw["parent_id"],
+        name=kw.get("name") or "",
+        mime_type=kw.get("mime_type") or "",
+    ),
+    "gmail_attachment_get": lambda **kw: api.gmail_attachment_get(
+        alias=kw["alias"],
+        message_id=kw["message_id"],
+        attachment_id=kw["attachment_id"],
+        filename=kw.get("filename") or "",
+    ),
     "drive_create": lambda **kw: api.drive_create(
         alias=kw["alias"],
         name=kw["name"],

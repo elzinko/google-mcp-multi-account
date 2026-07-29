@@ -1,15 +1,19 @@
 """API publique stable de la gateway (consommée par le serveur MCP)."""
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
+import mimetypes
 import os
+import shutil
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Optional
 
-from .config import client_id, profile_dir, upload_spool
+from .config import client_id, download_dir, gwsa_root, profile_dir, upload_spool
 from .context import get_git_root, get_session_id
 from .errors import GatewayError
 from .executor import run_via_broker
@@ -43,6 +47,17 @@ _CONTENT_TYPES = {
 }
 _GOOGLE_MIME_PREFIX = "application/vnd.google-apps."
 _MAX_CONTENT_BYTES = 1_000_000
+
+# Export texte par défaut selon le type Google (drive_read). Markdown pour un
+# Doc (structure conservée), CSV pour un Sheet ; sinon texte brut.
+_EXPORT_DEFAULTS = {
+    "application/vnd.google-apps.document": "text/markdown",
+    "application/vnd.google-apps.spreadsheet": "text/csv",
+}
+# Types non-Google lisibles tels quels (files get alt=media renvoie du texte).
+_TEXTY_MIMES = {"application/json", "application/xml"}
+_MAX_READ_CHARS = 1_000_000
+_MAX_UPLOAD_BYTES = 50_000_000
 
 
 def profiles_list() -> dict[str, Any]:
@@ -120,8 +135,6 @@ def gmail_create_draft(
     if not to or not subject:
         raise GatewayError("to et subject sont requis", code="error")
     # Message RFC 2822 minimal, encodé raw base64url — gws drafts.create attend --json.
-    import base64
-
     headers = [f"To: {to}", f"Subject: {subject}"]
     if cc:
         headers.append(f"Cc: {cc}")
@@ -291,6 +304,254 @@ def drive_create(
             [*args, "--upload", str(path), "--upload-content-type", ctype],
         )
     return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
+
+
+def _text_of(data: Any) -> str:
+    """Contenu texte d'une réponse broker : gws imprime le média exporté sur
+    stdout, que le broker renvoie tel quel dans {"raw": …} quand ce n'est pas
+    du JSON — et déjà parsé quand c'en est (on re-sérialise alors)."""
+    if isinstance(data, str):
+        return data
+    if isinstance(data, dict) and set(data) == {"raw"} and isinstance(data["raw"], str):
+        return data["raw"]
+    return json.dumps(data, ensure_ascii=False, indent=2)
+
+
+def drive_read(
+    alias: str,
+    file_id: str,
+    format: str = "",
+    max_chars: int = 100_000,
+) -> dict[str, Any]:
+    """Lit le CONTENU d'un fichier Drive en texte (lecture, sous verrou).
+
+    Fichier Google (Doc/Sheet/…) : export vers un format texte — markdown par
+    défaut pour un Doc, CSV pour un Sheet. Fichier ordinaire : téléchargé tel
+    quel s'il est textuel. Les binaires (PDF, images) ne sont pas lisibles ici.
+    """
+    validate_alias(alias)
+    if not file_id:
+        raise GatewayError("file_id requis", code="error")
+    fmt = (format or "").strip().lower()
+    if fmt and fmt not in _CONTENT_TYPES:
+        raise GatewayError(
+            f"format « {fmt} » non supporté — formats texte acceptés : "
+            f"{', '.join(sorted(_CONTENT_TYPES))}",
+            code="error",
+        )
+    max_chars = max(1_000, min(int(max_chars), _MAX_READ_CHARS))
+    meta = _run(
+        alias,
+        ["drive", "files", "get", "--params",
+         json.dumps({"fileId": file_id, "fields": "id,name,mimeType,size"})],
+    )
+    mime = (meta.get("mimeType") or "") if isinstance(meta, dict) else ""
+    name = (meta.get("name") or "") if isinstance(meta, dict) else ""
+    if mime.startswith(_GOOGLE_MIME_PREFIX):
+        export_mime = fmt or _EXPORT_DEFAULTS.get(mime, "text/plain")
+        data = _run(
+            alias,
+            ["drive", "files", "export", "--params",
+             json.dumps({"fileId": file_id, "mimeType": export_mime})],
+        )
+    elif mime.startswith("text/") or mime in _TEXTY_MIMES:
+        export_mime = mime
+        data = _run(
+            alias,
+            ["drive", "files", "get", "--params",
+             json.dumps({"fileId": file_id, "alt": "media"})],
+        )
+    else:
+        raise GatewayError(
+            f"« {name or file_id} » ({mime or 'type inconnu'}) n'est pas lisible "
+            f"en texte — drive_read couvre les fichiers Google (export) et les "
+            f"fichiers texte",
+            code="error",
+        )
+    content = _text_of(data)
+    truncated = len(content) > max_chars
+    return {
+        "ok": True,
+        "alias": alias,
+        "file_id": file_id,
+        "name": name,
+        "mime_type": mime,
+        "export_mime_type": export_mime,
+        "content": content[:max_chars],
+        "truncated": truncated,
+    }
+
+
+def drive_copy(
+    alias: str,
+    file_id: str,
+    parent_id: str,
+    name: str = "",
+) -> dict[str, Any]:
+    """Copie un fichier Drive vers parent_id — soumis aux zones côté destination.
+
+    Copie native (files.copy) : un Sheet reste un Sheet, un binaire un binaire —
+    le cas « dupliquer un modèle vers le dossier client » sans passer par un
+    export/recréation.
+    """
+    validate_alias(alias)
+    if not file_id or not parent_id:
+        raise GatewayError("file_id et parent_id sont requis", code="error")
+    # `parents` dans --json : seul endroit que scripts/policy-check.py lit pour
+    # vérifier la zone d'écriture (même règle que drive_create).
+    body: dict[str, Any] = {"parents": [parent_id]}
+    if name:
+        body["name"] = name
+    data = _run(
+        alias,
+        [
+            "drive", "files", "copy",
+            "--params", json.dumps({"fileId": file_id, "fields": _DRIVE_FILE_FIELDS}),
+            "--json", json.dumps(body),
+        ],
+    )
+    return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
+
+
+def drive_upload(
+    alias: str,
+    path: str,
+    parent_id: str,
+    name: str = "",
+    mime_type: str = "",
+) -> dict[str, Any]:
+    """Téléverse un fichier local (binaire compris) — soumis aux zones Drive.
+
+    Le média transite par le répertoire de dépôt du broker (ADR-0003), sans
+    conversion : un PDF déposé reste un PDF. Jamais de lecture sous GWSA_ROOT
+    (tokens/credentials) — seule exception, le répertoire de téléchargement
+    .downloads (re-téléverser une pièce jointe reçue est un cas légitime).
+    """
+    validate_alias(alias)
+    if not path or not parent_id:
+        raise GatewayError("path et parent_id sont requis", code="error")
+    src = Path(path).expanduser()
+    if not src.is_file():
+        raise GatewayError(f"fichier introuvable : {src}", code="error")
+    resolved = src.resolve()
+    root = gwsa_root().resolve()
+    dl = download_dir().resolve()
+    under_root = resolved == root or root in resolved.parents
+    under_dl = dl in resolved.parents
+    if under_root and not under_dl:
+        raise GatewayError(
+            "lecture refusée sous le répertoire des comptes (tokens/credentials) "
+            "— seul son sous-répertoire .downloads est re-téléversable",
+            code="error",
+        )
+    size = src.stat().st_size
+    if size > _MAX_UPLOAD_BYTES:
+        raise GatewayError(
+            f"fichier trop volumineux ({size} octets, maximum {_MAX_UPLOAD_BYTES})",
+            code="error",
+        )
+    mime = mime_type or mimetypes.guess_type(src.name)[0] or "application/octet-stream"
+    body = {
+        "name": name or src.name,
+        # Pas de mimeType dans le corps : aucune conversion, le fichier garde
+        # le type du média téléversé.
+        "parents": [parent_id],
+    }
+    args = [
+        "drive", "files", "create",
+        "--params", json.dumps({"fields": _DRIVE_FILE_FIELDS}),
+        "--json", json.dumps(body),
+    ]
+    # Même contrainte que _spooled_content : gws n'accepte un média que par un
+    # chemin sous son cwd = le répertoire de dépôt (ADR-0003).
+    fd, tmp = tempfile.mkstemp(
+        dir=str(upload_spool()), prefix="upload-", suffix=src.suffix[:16],
+    )
+    spool = Path(tmp)
+    try:
+        with os.fdopen(fd, "wb") as out, open(src, "rb") as inp:
+            shutil.copyfileobj(inp, out)
+        data = _run(
+            alias,
+            [*args, "--upload", str(spool), "--upload-content-type", mime],
+        )
+    finally:
+        try:
+            spool.unlink()
+        except OSError:
+            pass
+    return {
+        "ok": True,
+        "alias": alias,
+        "result": data,
+        **_ownership(data),
+        "size": size,
+        "mime_type": mime,
+    }
+
+
+def _safe_filename(filename: str) -> str:
+    """Nom de fichier inoffensif : nom de base seul, jamais caché, jamais vide."""
+    base = os.path.basename((filename or "").replace("\\", "/"))
+    # Filtrer séparateurs / deux-points / non-imprimables AVANT de retirer les
+    # points de tête : sinon un caractère-écran (« :.env », « \x00.bashrc »)
+    # masque un point que le filtre promeut ensuite en tête → fichier caché.
+    base = "".join(c for c in base if c.isprintable() and c not in '/\\:')
+    base = base.strip().lstrip(". ")[:120]
+    return base or "piece-jointe.bin"
+
+
+def gmail_attachment_get(
+    alias: str,
+    message_id: str,
+    attachment_id: str,
+    filename: str = "",
+) -> dict[str, Any]:
+    """Télécharge une pièce jointe (lecture, sous verrou) vers .downloads.
+
+    La destination n'est JAMAIS choisie par l'appelant (ADR-0006) : une pièce
+    jointe est un contenu tiers, l'écrire sur un chemin arbitraire serait un
+    vecteur d'attaque. Noms uniques — jamais d'écrasement.
+    """
+    validate_alias(alias)
+    if not message_id or not attachment_id:
+        raise GatewayError("message_id et attachment_id sont requis", code="error")
+    params = {"userId": "me", "messageId": message_id, "id": attachment_id}
+    data = _run(
+        alias,
+        ["gmail", "users", "messages", "attachments", "get",
+         "--params", json.dumps(params)],
+    )
+    b64 = data.get("data") if isinstance(data, dict) else None
+    if not isinstance(b64, str) or not b64:
+        raise GatewayError(
+            "réponse sans données de pièce jointe (message_id / attachment_id "
+            "à vérifier via gmail_get)",
+            code="exec",
+        )
+    raw = base64.urlsafe_b64decode(b64 + "=" * (-len(b64) % 4))
+    base = Path(_safe_filename(filename))
+    dest_dir = download_dir()
+    for i in range(1000):
+        suffix = "" if i == 0 else f"-{i}"
+        dest = dest_dir / f"{base.stem}{suffix}{base.suffix}"
+        try:
+            fd = os.open(dest, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            break
+        except FileExistsError:
+            continue
+    else:
+        raise GatewayError("impossible de créer un nom de fichier unique", code="error")
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(raw)
+    return {
+        "ok": True,
+        "alias": alias,
+        "path": str(dest),
+        "filename": dest.name,
+        "size": len(raw),
+        "sha256": hashlib.sha256(raw).hexdigest(),
+    }
 
 
 def access_request(

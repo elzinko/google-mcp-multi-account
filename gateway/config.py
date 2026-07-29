@@ -46,5 +46,21 @@ def upload_spool() -> Path:
     return d
 
 
+def download_dir() -> Path:
+    """Répertoire des fichiers REÇUS (pièces jointes Gmail) — ADR-0006.
+
+    Les tools qui écrivent en local n'écrivent QUE là : jamais de chemin de
+    destination choisi par le LLM, jamais d'écrasement (noms uniques). Le point
+    en tête le tient hors des énumérations de profils (`ALIAS_RE`).
+    """
+    d = gwsa_root() / ".downloads"
+    d.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(d, 0o700)
+    except OSError:
+        pass
+    return d
+
+
 def client_id() -> str:
     return os.environ.get("GWSA_CLIENT") or "mcp"
