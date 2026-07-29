@@ -76,19 +76,28 @@ transiter par le contexte du modèle n'apporte que de la perte.
   accumulent jusqu'à un ménage humain (même statut que `usage.jsonl` —
   candidat au ménage de la fiche 0028).
 
-## Risque résiduel — lecture locale de `drive_upload`
+## Source de `drive_upload` — liste blanche (défaut-deny)
 
-Le garde de `drive_upload` refuse de lire sous `GWSA_ROOT` (tokens,
-credentials), mais **pas** le reste du disque : c'est délibéré — le cas d'usage
-premier est de téléverser un fichier généré localement (un devis PDF), qui vit
-n'importe où. Un `drive_upload("~/.ssh/id_rsa", <zone accordée>)` induit par
-injection de prompt reste donc possible en théorie.
+Symétrie de `.downloads` côté montant : la **source** d'un `drive_upload` est
+restreinte à une **liste blanche** de dossiers, pas au disque entier. Sinon un
+`drive_upload("~/.ssh/id_rsa", <zone accordée>)` induit par injection de prompt
+exfiltrerait un secret local — **atteignable par le seul MCP, sans shell**.
 
-Ce n'est pas colmaté par une liste noire de chemins (fragile, fausse
-assurance). Les garde-fous réels sont ailleurs : l'écriture Drive exige une
-**zone active** (policy `writeFolders` ou grant humain — jamais accordée par le
-LLM), et l'appel `drive_upload` est **visible** dans la conversation. Le
-téléversement d'un secret est donc gated par un accord humain sur la
-destination et lisible dans la trace. Restreindre l'ensemble lisible à un
-répertoire d'upload configuré serait un durcissement futur possible si le
-besoin l'exige.
+Dossiers autorisés en lecture :
+
+- `<GWSA_ROOT>/.downloads` — toujours (re-téléverser une PJ reçue) ;
+- ceux déclarés dans `GWSA_UPLOAD_ROOTS` (chemins absolus séparés par
+  `os.pathsep`, `:` sous Unix).
+
+Volontairement **hors du dépôt git** (un livrable n'a pas à vivre dans les
+sources) et **hors de `GWSA_ROOT`** (tokens) : l'humain ouvre explicitement les
+dossiers d'où le LLM peut lire. Par défaut la liste est vide → seul
+`.downloads` est lisible ; déposer le fichier à téléverser dans `.downloads`,
+ou ouvrir son dossier. Un garde dur refuse en outre toute lecture sous
+`GWSA_ROOT` (hors `.downloads`) même si `GWSA_UPLOAD_ROOTS` l'englobait par
+erreur.
+
+Une **liste noire** de chemins sensibles a été écartée (fragile, jamais
+exhaustive, fausse assurance). Défense en profondeur au-delà de la liste
+blanche : l'écriture Drive exige de toute façon une **zone active** (grant
+humain, jamais accordée par le LLM) et l'appel reste **visible** dans la trace.

@@ -71,7 +71,8 @@ Hors périmètre, par design : suppression, transfert de propriété,
       sans parent (policy `files copy` = création zonée).
 - [ ] `drive_upload` dépose un PDF tel quel (multipart, pas de conversion),
       le média transite par le dépôt broker et est effacé même en cas
-      d'échec ; refus : fichier absent, trop gros, ou sous `GWSA_ROOT`.
+      d'échec ; refus : fichier absent, trop gros, sous `GWSA_ROOT`, ou hors
+      liste blanche (`.downloads` / `GWSA_UPLOAD_ROOTS`).
 - [ ] `gmail_attachment_get` écrit la PJ décodée dans `.downloads` (0600,
       nom assaini et unique), jamais ailleurs, et renvoie le chemin.
 - [ ] Les quatre tools refusent sous verrou de profil, refus journalisé

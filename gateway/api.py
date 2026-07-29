@@ -13,7 +13,14 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Optional
 
-from .config import client_id, download_dir, gwsa_root, profile_dir, upload_spool
+from .config import (
+    client_id,
+    download_dir,
+    gwsa_root,
+    profile_dir,
+    upload_roots,
+    upload_spool,
+)
 from .context import get_git_root, get_session_id
 from .errors import GatewayError
 from .executor import run_via_broker
@@ -463,12 +470,26 @@ def drive_upload(
     resolved = src.resolve()
     root = gwsa_root().resolve()
     dl = download_dir().resolve()
+    under_dl = resolved == dl or dl in resolved.parents
     under_root = resolved == root or root in resolved.parents
-    under_dl = dl in resolved.parents
+    # Garde 1 (dur) : jamais les tokens/credentials, même si GWSA_UPLOAD_ROOTS
+    # était mal configuré pour englober GWSA_ROOT. Seul .downloads y échappe.
     if under_root and not under_dl:
         raise GatewayError(
             "lecture refusée sous le répertoire des comptes (tokens/credentials) "
             "— seul son sous-répertoire .downloads est re-téléversable",
+            code="error",
+        )
+    # Garde 2 (liste blanche, défaut-deny) : la source doit être .downloads ou
+    # un dossier explicitement ouvert dans GWSA_UPLOAD_ROOTS. Sinon le LLM
+    # pourrait lire un chemin arbitraire (ex. ~/.ssh/id_rsa) et l'exfiltrer vers
+    # une zone Drive active — atteignable par le seul MCP, sans shell (ADR-0006).
+    allowed = [dl, *upload_roots()]
+    if not any(resolved == a or a in resolved.parents for a in allowed):
+        raise GatewayError(
+            f"source « {src} » hors des dossiers autorisés au téléversement — "
+            f"déposer le fichier dans .downloads, ou ouvrir son dossier via "
+            f"GWSA_UPLOAD_ROOTS (chemins absolus séparés par « {os.pathsep} »)",
             code="error",
         )
     size = src.stat().st_size

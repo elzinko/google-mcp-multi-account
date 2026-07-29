@@ -95,12 +95,11 @@ existe déjà — **jamais d'écrasement**. Symétrie avec le sens montant :
 à l'exception de `.downloads` (re-téléverser une PJ reçue). Le chemin final est
 renvoyé à l'appelant, qui décide ensuite d'un éventuel `cp` — hors gateway.
 
-Ce garde ne bloque **que** `GWSA_ROOT` : `drive_upload` peut lire ailleurs sur
-le disque (le cas d'usage est un PDF généré localement). Un dépôt de secret
-local induit par injection reste donc théoriquement possible, mais gated par
-une **zone active** (accord humain sur la destination) et **visible** dans la
-trace — [ADR-0006](adr/ADR-0006-fichiers-recus-repertoire-dedie.md), « Risque
-résiduel ».
+Côté montant, la **source** de `drive_upload` est restreinte à une **liste
+blanche** (`.downloads` + `GWSA_UPLOAD_ROOTS`), pas au disque entier : le LLM ne
+peut pas lire un chemin arbitraire (ex. `~/.ssh/id_rsa`) et l'exfiltrer vers une
+zone active — défaut-deny, l'humain ouvre explicitement les dossiers lisibles
+([ADR-0006](adr/ADR-0006-fichiers-recus-repertoire-dedie.md)).
 
 ## Phase 2.1 (prévue) — vault
 

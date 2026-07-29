@@ -62,5 +62,29 @@ def download_dir() -> Path:
     return d
 
 
+def upload_roots() -> list[Path]:
+    """Dossiers locaux autorisés comme SOURCE de `drive_upload` (liste blanche).
+
+    `.downloads` est toujours autorisé (re-téléverser une PJ reçue) ; pour
+    téléverser un fichier situé ailleurs (un devis PDF généré localement),
+    déclarer son dossier dans `GWSA_UPLOAD_ROOTS` (chemins absolus séparés par
+    `os.pathsep`). Volontairement HORS du dépôt git et HORS de `GWSA_ROOT`
+    (tokens) : l'humain ouvre explicitement ce que le LLM peut lire (ADR-0006).
+    Défaut vide → seul `.downloads` est lisible.
+    """
+    roots: list[Path] = []
+    for part in os.environ.get("GWSA_UPLOAD_ROOTS", "").split(os.pathsep):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            p = Path(part).expanduser()
+            if p.is_dir():
+                roots.append(p.resolve())
+        except OSError:
+            continue
+    return roots
+
+
 def client_id() -> str:
     return os.environ.get("GWSA_CLIENT") or "mcp"

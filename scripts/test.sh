@@ -727,6 +727,9 @@ assert "name" not in json.loads(flags(CALLS[-1])["--json"]), CALLS[-1]
 # 3. drive_upload : binaire local → dépôt broker (ADR-0003) → multipart, sans conversion.
 src_dir = Path(os.environ["GWSA_ROOT"]).parent / "sources-0043"
 src_dir.mkdir(exist_ok=True)
+# Liste blanche : ce dossier est explicitement ouvert (comme le ferait l'humain
+# dans l'env du serveur MCP). Sans ça, la source hors .downloads est refusée.
+os.environ["GWSA_UPLOAD_ROOTS"] = str(src_dir)
 pdf = src_dir / "devis.pdf"
 payload = b"%PDF-1.4 faux binaire \x00\x01\xff"
 pdf.write_bytes(payload)
@@ -764,6 +767,18 @@ secret.write_bytes(b"secret")
 try:
     api.drive_upload(alias, str(secret), "FOLDER")
     raise SystemExit("un fichier du répertoire des comptes aurait dû être refusé")
+except GatewayError as e:
+    assert e.code == "error" and not CALLS, (e.code, CALLS)
+# …et jamais un chemin arbitraire hors liste blanche (ni .downloads ni
+# GWSA_UPLOAD_ROOTS) : c'est le garde anti-exfiltration (P1 revue Codex).
+outside = Path(os.environ["GWSA_ROOT"]).parent / "hors-zone-0043"
+outside.mkdir(exist_ok=True)
+stray = outside / "id_rsa"
+stray.write_bytes(b"-----BEGIN OPENSSH PRIVATE KEY-----")
+CALLS.clear()
+try:
+    api.drive_upload(alias, str(stray), "FOLDER")
+    raise SystemExit("source hors liste blanche aurait dû être refusée")
 except GatewayError as e:
     assert e.code == "error" and not CALLS, (e.code, CALLS)
 # …sauf .downloads : re-téléverser une pièce jointe reçue est légitime.
