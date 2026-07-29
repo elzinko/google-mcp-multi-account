@@ -57,6 +57,11 @@ _EXPORT_DEFAULTS = {
 # Types non-Google lisibles tels quels (files get alt=media renvoie du texte).
 _TEXTY_MIMES = {"application/json", "application/xml"}
 _MAX_READ_CHARS = 1_000_000
+# Plafond en octets d'un fichier lu par drive_read : le broker bufferise tout
+# stdout en mémoire, donc on refuse AVANT de télécharger (quand la taille est
+# connue — fichiers non Google). Les exports Google sont bornés par les limites
+# d'export de Drive.
+_MAX_READ_BYTES = 25_000_000
 _MAX_UPLOAD_BYTES = 50_000_000
 
 
@@ -64,7 +69,9 @@ def profiles_list() -> dict[str, Any]:
     return {"ok": True, "profiles": _list_profiles()}
 
 
-def _run(alias: str, gws_args: list[str], timeout: int = 60) -> Any:
+def _run(
+    alias: str, gws_args: list[str], timeout: int = 60, raw_output: bool = False
+) -> Any:
     sid = get_session_id()
     gro = get_git_root() or git_toplevel()
     try:
@@ -90,7 +97,7 @@ def _run(alias: str, gws_args: list[str], timeout: int = 60) -> Any:
                 session_id=sid, git_root=gro,
             )
         raise
-    return run_via_broker(alias, gws_args, timeout=timeout)
+    return run_via_broker(alias, gws_args, timeout=timeout, raw_output=raw_output)
 
 
 def gmail_list(
@@ -306,15 +313,29 @@ def drive_create(
     return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
 
 
-def _text_of(data: Any) -> str:
-    """Contenu texte d'une réponse broker : gws imprime le média exporté sur
-    stdout, que le broker renvoie tel quel dans {"raw": …} quand ce n'est pas
-    du JSON — et déjà parsé quand c'en est (on re-sérialise alors)."""
-    if isinstance(data, str):
-        return data
-    if isinstance(data, dict) and set(data) == {"raw"} and isinstance(data["raw"], str):
-        return data["raw"]
-    return json.dumps(data, ensure_ascii=False, indent=2)
+def _raw_text(data: Any) -> str:
+    """Texte verbatim d'une réponse broker `raw_output=True` : le broker garantit
+    {"raw": <str>} sans strip ni json.loads — un fichier vide vaut "", un .json
+    est rendu tel quel. On ne re-sérialise jamais (ce serait reformater le fichier)."""
+    raw = data.get("raw") if isinstance(data, dict) else None
+    return raw if isinstance(raw, str) else ""
+
+
+def _reject_oversize(meta: Any, label: str) -> None:
+    """Refuse un fichier trop gros AVANT de le télécharger (le broker bufferise
+    tout stdout en mémoire). `size` n'est renseigné que pour les fichiers non
+    Google — sans lui, on laisse passer (exports Google bornés par Drive)."""
+    size = meta.get("size") if isinstance(meta, dict) else None
+    try:
+        n = int(size)
+    except (TypeError, ValueError):
+        return
+    if n > _MAX_READ_BYTES:
+        raise GatewayError(
+            f"« {label} » ({n} octets) dépasse la limite de lecture "
+            f"({_MAX_READ_BYTES}) — le récupérer via drive_get / webViewLink",
+            code="error",
+        )
 
 
 def drive_read(
@@ -347,19 +368,25 @@ def drive_read(
     )
     mime = (meta.get("mimeType") or "") if isinstance(meta, dict) else ""
     name = (meta.get("name") or "") if isinstance(meta, dict) else ""
+    # raw_output=True : le broker renvoie stdout VERBATIM ({"raw": <texte>}),
+    # sans strip ni json.loads — sinon une fin de ligne saute, un fichier vide
+    # devient "{}", et un .json est reparsé/reformaté (clés dédupliquées).
     if mime.startswith(_GOOGLE_MIME_PREFIX):
         export_mime = fmt or _EXPORT_DEFAULTS.get(mime, "text/plain")
         data = _run(
             alias,
             ["drive", "files", "export", "--params",
              json.dumps({"fileId": file_id, "mimeType": export_mime})],
+            raw_output=True,
         )
     elif mime.startswith("text/") or mime in _TEXTY_MIMES:
+        _reject_oversize(meta, name or file_id)  # taille connue hors Google
         export_mime = mime
         data = _run(
             alias,
             ["drive", "files", "get", "--params",
              json.dumps({"fileId": file_id, "alt": "media"})],
+            raw_output=True,
         )
     else:
         raise GatewayError(
@@ -368,7 +395,7 @@ def drive_read(
             f"fichiers texte",
             code="error",
         )
-    content = _text_of(data)
+    content = _raw_text(data)
     truncated = len(content) > max_chars
     return {
         "ok": True,
@@ -523,12 +550,14 @@ def gmail_attachment_get(
          "--params", json.dumps(params)],
     )
     b64 = data.get("data") if isinstance(data, dict) else None
-    if not isinstance(b64, str) or not b64:
+    if not isinstance(b64, str):
         raise GatewayError(
             "réponse sans données de pièce jointe (message_id / attachment_id "
             "à vérifier via gmail_get)",
             code="exec",
         )
+    # b64 == "" est une pièce jointe légitimement vide (0 octet) : on écrit un
+    # fichier vide plutôt que d'accuser à tort les identifiants.
     raw = base64.urlsafe_b64decode(b64 + "=" * (-len(b64) % 4))
     base = Path(_safe_filename(filename))
     dest_dir = download_dir()

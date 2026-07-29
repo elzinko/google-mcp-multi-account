@@ -81,7 +81,9 @@ def _gws_bin() -> str:
     return path
 
 
-def run_gws_local(alias: str, args: list[str], timeout: int = 60) -> Any:
+def run_gws_local(
+    alias: str, args: list[str], timeout: int = 60, raw_output: bool = False
+) -> Any:
     env = dict(os.environ)
     env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] = str(gws_config_dir(alias))
     try:
@@ -94,13 +96,28 @@ def run_gws_local(alias: str, args: list[str], timeout: int = 60) -> Any:
             # les commandes — sinon gws s'exécute dans le dépôt git.
             cwd=str(upload_spool()),
             capture_output=True,
-            text=True,
+            # Mode raw (drive_read) : stdout capturé en octets, décodé tolérant
+            # plus bas — un fichier texte non-UTF-8 (CSV latin-1) ne doit pas
+            # faire planter le broker. Mode normal : gws imprime du JSON, text=True.
+            text=not raw_output,
             timeout=timeout,
         )
     except subprocess.TimeoutExpired as e:
         raise GatewayError(f"gws timeout après {timeout}s", code="exec") from e
     except FileNotFoundError as e:
         raise GatewayError("binaire gws introuvable", code="exec") from e
+    if raw_output:
+        # Contenu VERBATIM : ni `.strip()` (une fin de ligne fait partie du
+        # fichier), ni `json.loads` (un .json ne doit pas être reparsé/reformaté
+        # ni ses clés dédupliquées). L'appelant reçoit toujours {"raw": <texte>},
+        # même pour un fichier vide (→ "").
+        def _text(b: Any) -> str:
+            return b if isinstance(b, str) else (b or b"").decode("utf-8", "replace")
+        stdout, stderr = _text(r.stdout), _text(r.stderr)
+        if r.returncode != 0:
+            err = (stderr or stdout).strip() or f"exit {r.returncode}"
+            raise GatewayError(f"gws a échoué : {err}", code="exec")
+        return {"raw": stdout}
     if r.returncode != 0:
         err = (r.stderr or r.stdout or "").strip() or f"exit {r.returncode}"
         raise GatewayError(f"gws a échoué : {err}", code="exec")
@@ -173,6 +190,7 @@ def handle_exec(
     *,
     session_id: str = "",
     git_root: str = "",
+    raw_output: bool = False,
 ) -> Any:
     if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
         raise GatewayError("args doit être une liste de chaînes", code="error")
@@ -201,7 +219,7 @@ def handle_exec(
         session_drive_zones=session_zones,
         use_session_grants=use_session,
     )
-    result = run_gws_local(alias, args)
+    result = run_gws_local(alias, args, raw_output=raw_output)
     log_usage(alias, args, client, session_id=session_id, git_root=git_root)
     return result
 
@@ -238,6 +256,7 @@ class BrokerHandler(socketserver.StreamRequestHandler):
                     alias, args, client,
                     session_id=session_id,
                     git_root=git_root,
+                    raw_output=bool(req.get("raw_output")),
                 )
                 self._reply({"ok": True, "result": result})
                 return

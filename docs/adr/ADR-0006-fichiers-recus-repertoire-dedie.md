@@ -75,3 +75,20 @@ transiter par le contexte du modèle n'apporte que de la perte.
 - Le répertoire n'est jamais purgé automatiquement : les fichiers s'y
   accumulent jusqu'à un ménage humain (même statut que `usage.jsonl` —
   candidat au ménage de la fiche 0028).
+
+## Risque résiduel — lecture locale de `drive_upload`
+
+Le garde de `drive_upload` refuse de lire sous `GWSA_ROOT` (tokens,
+credentials), mais **pas** le reste du disque : c'est délibéré — le cas d'usage
+premier est de téléverser un fichier généré localement (un devis PDF), qui vit
+n'importe où. Un `drive_upload("~/.ssh/id_rsa", <zone accordée>)` induit par
+injection de prompt reste donc possible en théorie.
+
+Ce n'est pas colmaté par une liste noire de chemins (fragile, fausse
+assurance). Les garde-fous réels sont ailleurs : l'écriture Drive exige une
+**zone active** (policy `writeFolders` ou grant humain — jamais accordée par le
+LLM), et l'appel `drive_upload` est **visible** dans la conversation. Le
+téléversement d'un secret est donc gated par un accord humain sur la
+destination et lisible dans la trace. Restreindre l'ensemble lisible à un
+répertoire d'upload configuré serait un durcissement futur possible si le
+besoin l'exige.

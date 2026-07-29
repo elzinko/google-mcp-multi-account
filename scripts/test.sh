@@ -611,7 +611,7 @@ def method_of(args):
                                           if a.startswith("-")), len(args))])
 
 
-def fake_run(alias, args, timeout=60):
+def fake_run(alias, args, timeout=60, raw_output=False):
     CALLS.append(args)
     ALL.append(args)
     if "--upload" in args:  # capturer le média AVANT que la gateway ne l'efface
@@ -679,6 +679,37 @@ try:
     raise SystemExit("format binaire aurait dû être refusé")
 except GatewayError as e:
     assert e.code == "error" and not CALLS, (e.code, CALLS)
+
+# Contenu VERBATIM (raw_output) : un fichier vide → "" (jamais "{}"), un .json
+# rendu tel quel (ni reparsé ni reformaté). La vraie garantie broker (pas de
+# strip / json.loads) est testée à part sur run_gws_local ; ici, côté API, on
+# vérifie que drive_read lit bien data["raw"] et signale la troncature dessus.
+META["mimeType"] = "application/vnd.google-apps.document"
+REPLIES["export"] = {"raw": ""}
+r = api.drive_read(alias, "EMPTY")
+assert r["content"] == "" and r["truncated"] is False, r
+REPLIES["export"] = {"raw": '{"a": 1, "a": 2}\n'}
+r = api.drive_read(alias, "JSONDOC")
+assert r["content"] == '{"a": 1, "a": 2}\n', r  # ni dédupliqué ni strippé
+REPLIES.pop("export")
+
+# Fichier non Google trop gros → refus AVANT le téléchargement (size connu),
+# donc aucun appel alt=media n'est émis.
+META["mimeType"] = "text/csv"
+META["size"] = str(api._MAX_READ_BYTES + 1)
+CALLS.clear()
+try:
+    api.drive_read(alias, "BIGCSV")
+    raise SystemExit("fichier trop gros aurait dû être refusé")
+except GatewayError as e:
+    assert e.code == "error", e.code
+    assert not any(
+        method_of(a) == ("drive", "files", "get")
+        and json.loads(flags(a).get("--params", "{}")).get("alt") == "media"
+        for a in CALLS
+    ), CALLS
+META.pop("size")
+META["mimeType"] = "application/vnd.google-apps.document"
 
 # 2. drive_copy : fileId dans --params, destination dans --json (zone vérifiable).
 CALLS.clear()
@@ -799,6 +830,13 @@ for hostile in (":.env", "\x00.bashrc", ":.:", "../.ssh/authorized_keys"):
 r4 = api.gmail_attachment_get(alias, "MSG1", "ATT1")  # sans nom → défaut sain
 assert Path(r4["path"]).parent == download_dir(), r4
 
+# PJ légitimement vide (data présent mais ""): fichier 0 octet écrit, PAS une
+# erreur qui accuserait à tort les identifiants (distinct de « data absent »).
+REPLIES["attachment"] = {"size": 0, "data": ""}
+r5 = api.gmail_attachment_get(alias, "MSG1", "ATT1", filename="vide.txt")
+p5 = Path(r5["path"])
+assert p5.parent == download_dir() and p5.read_bytes() == b"" and r5["size"] == 0, r5
+
 # Réponse sans data → erreur claire, rien d'écrit sur le disque.
 before = set(download_dir().iterdir())
 REPLIES["attachment"] = {"size": 0}
@@ -838,6 +876,73 @@ assert profs and not any(p["alias"].startswith(".") for p in profs), profs
   PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m .uploads / .downloads invisibles des listes de profils\n'
 else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m .uploads / .downloads ne doivent pas apparaître comme des profils\n'
+fi
+
+section "Broker — sortie brute raw_output vs JSON (drive_read, fiche 0043)"
+# drive_read lit du CONTENU, pas du JSON : le broker doit rendre stdout VERBATIM
+# (ni .strip(), ni json.loads, décodage tolérant). La suite API monkeypatche
+# _run et ne touchait jamais ce contrat — ce test exerce run_gws_local pour de
+# vrai (subprocess simulé), sans binaire gws.
+if python3 - <<'PY'
+import gateway.broker_server as bs
+from gateway.errors import GatewayError
+
+
+class FakeCP:
+    def __init__(self, stdout, returncode=0, stderr=b""):
+        self.stdout, self.returncode, self.stderr = stdout, returncode, stderr
+
+
+STATE = {"payload": b"", "rc": 0}
+SEEN = {}
+
+
+def fake_srun(argv, **kw):
+    SEEN["text"] = kw.get("text")
+    p, rc = STATE["payload"], STATE["rc"]
+    if kw.get("text"):          # mode normal : gws imprime du JSON → str
+        return FakeCP(p.decode("utf-8"), rc, "")
+    return FakeCP(p, rc, b"")   # mode raw : octets bruts, décodés par le broker
+
+
+bs._gws_bin = lambda: "/bin/true"
+bs.gws_config_dir = lambda alias: bs.gwsa_root() / alias
+bs.subprocess.run = fake_srun
+
+
+def run(payload, raw, rc=0):
+    STATE["payload"], STATE["rc"] = payload, rc
+    return bs.run_gws_local("acct", ["drive", "files", "get"], raw_output=raw)
+
+
+# --- Mode raw : VERBATIM (le cœur du correctif) ---
+assert run(b"", True) == {"raw": ""}, 'fichier vide → "" et non {}'
+assert SEEN["text"] is False, "raw doit capturer en octets (text=False)"
+assert run(b"l1\nl2\n", True) == {"raw": "l1\nl2\n"}, "fin de ligne préservée (pas de strip)"
+assert run(b'{"a": 1, "a": 2}', True) == {"raw": '{"a": 1, "a": 2}'}, "json NI reparsé NI dédupliqué"
+# CSV latin-1 : décodage tolérant, aucun crash (le bug avant correctif).
+got = run("café\n".encode("latin-1"), True)
+assert got["raw"].startswith("caf") and got["raw"].endswith("\n") and "�" in got["raw"], got
+
+# --- Mode normal (JSON) : comportement historique inchangé ---
+assert run(b"", False) == {}, "vide → {} en mode normal"
+assert SEEN["text"] is True, "normal doit décoder en texte (text=True)"
+assert run(b'{"a": 1, "a": 2}', False) == {"a": 2}, "json parsé (historique)"
+assert run(b"pas du json  ", False) == {"raw": "pas du json"}, "non-json → {'raw': strippé}"
+
+# --- Échec gws : GatewayError propre dans les deux modes ---
+for raw in (True, False):
+    try:
+        run(b"boom", raw, rc=2)
+        raise SystemExit(f"rc!=0 aurait dû lever (raw={raw})")
+    except GatewayError as e:
+        assert e.code == "exec", e.code
+print("ok")
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m broker raw_output (verbatim, tolérant) vs JSON (comportement historique)\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m broker raw_output vs JSON\n'
 fi
 
 section "Gateway — setup_status (lecture seule, dégradation gracieuse)"
