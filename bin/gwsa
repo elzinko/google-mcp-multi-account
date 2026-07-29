@@ -610,7 +610,11 @@ print(json.dumps(init_project(), indent=2, ensure_ascii=False))
 "
       ;;
     sign)
-      REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" "$SYS_PYTHON" -c "
+      # Comme unlock/grant et enroll : précompiler le binaire nommé pour que la
+      # signature du manifeste (élicitation signée) affiche le produit, pas swift.
+      ensure_sign_bin || true
+      REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" GWSA_SYS_SWIFT="$SYS_SWIFT" \
+        GWSA_SIGN_BIN="${SIGN_BIN:-}" "$SYS_PYTHON" -c "
 import json, os, sys
 sys.path.insert(0, os.environ['REPO_DIR'])
 from gateway.project import sign_manifest
