@@ -407,6 +407,32 @@ section {
   background: rgba(255,255,255,.55);
 }
 
+.services-split {
+  margin-top: 2rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem 2.75rem;
+}
+
+.services-group { flex: 1 1 12rem; }
+
+.services-label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: .72rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.services-split .services { margin-top: .7rem; }
+
+.services li.is-mcp {
+  color: var(--teal-deep);
+  border-color: var(--teal);
+  background: var(--teal-soft);
+}
+
 /* Security */
 .security-panel {
   margin-top: 2rem;

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>google-multi-account — Multi-account Google Workspace for agents</title>
-  <meta name="description" content="google-multi-account : serveur MCP local multi-comptes Google Workspace (Gmail, Drive, Calendar, Docs, Sheets, Tasks). Verrous, policy default-deny, Touch ID. L’humain garde la main.">
+  <meta name="description" content="google-multi-account : serveur MCP local multi-comptes pour agents LLM — tools MCP Gmail et Drive (reste du Workspace via la CLI gwsa). Verrous, policy default-deny, Touch ID. L’humain garde la main.">
   <meta property="og:title" content="google-multi-account — Multi-account Google Workspace for agents">
   <meta property="og:description" content="Plusieurs comptes Google. Un agent. Toi aux commandes.">
   <meta property="og:type" content="website">
@@ -31,7 +31,7 @@
         <p class="brand-mark">google-multi-account<span class="brand-sub">Multi-account Google Workspace for agents</span></p>
         <h1>Plusieurs comptes Google. Un agent. Toi aux commandes.</h1>
         <p class="hero-lede">
-          Serveur MCP local (<code>bin/google-mcp</code>) pour brancher Claude, Cursor et consorts sur Gmail, Drive, Calendar, Docs, Sheets et Tasks — sans cloud tiers, avec verrous et policy.
+          Serveur MCP local (<code>bin/google-mcp</code>) pour brancher Claude, Cursor et consorts sur Gmail et Drive — Calendar, Docs, Sheets et Tasks via la CLI <code>gwsa</code> — sans cloud tiers, avec verrous et policy.
         </p>
         <div class="cta-row">
           <a class="btn btn-primary" href="#installer">Installer</a>
@@ -91,14 +91,24 @@
           </div>
         </li>
       </ol>
-      <ul class="services" aria-label="Services Google couverts">
-        <li>Gmail</li>
-        <li>Drive</li>
-        <li>Calendar</li>
-        <li>Docs</li>
-        <li>Sheets</li>
-        <li>Tasks</li>
-      </ul>
+      <div class="services-split">
+        <div class="services-group">
+          <p class="services-label">Côté agent — tools MCP</p>
+          <ul class="services" aria-label="Services accessibles à l’agent via MCP">
+            <li class="is-mcp">Gmail</li>
+            <li class="is-mcp">Drive</li>
+          </ul>
+        </div>
+        <div class="services-group">
+          <p class="services-label">Côté toi — CLI gwsa &amp; skills</p>
+          <ul class="services" aria-label="Services couverts par la CLI">
+            <li>Calendar</li>
+            <li>Docs</li>
+            <li>Sheets</li>
+            <li>Tasks</li>
+          </ul>
+        </div>
+      </div>
     </div>
   </section>
 
