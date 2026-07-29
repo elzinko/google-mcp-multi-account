@@ -113,9 +113,10 @@ la commande exacte à faire exécuter par l’humain (`gwsa unlock` / `gwsa gran
 | `gmail_attachment_get` | Lecture — pièce jointe écrite dans `.downloads` (ADR-0006) | — |
 | `drive_list` / `drive_get` | Lecture, propriétaire compris (`owner`, `owned_by_me`) | — |
 | `drive_read` | Lecture du contenu en texte (Doc → markdown, Sheet → CSV ; pas les binaires) | — |
-| `drive_create` | Création sous `parent_id` (zones), contenu optionnel en upload multipart (ADR-0003) | — |
+| `drive_create` / `drive_update` | Création / modification sous zone, contenu optionnel en upload multipart (ADR-0003) | — |
 | `drive_copy` | Copie native (`files.copy`) sous `parent_id` (zones côté destination) | — |
 | `drive_upload` | Téléversement d’un fichier local (binaire compris) sous `parent_id` (zones), sans conversion | — |
+| `drive_permissions_*` | Partage et transfert de propriété (policy `share`) | — |
 | `access_request` | Texte d’élicitation seulement | — |
 
 Pas de `gwsa_run` générique : surface volontairement réduite.

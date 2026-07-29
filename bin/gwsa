@@ -83,15 +83,27 @@ check_alias() {
 
 resolve_folder() { # resolve_folder <dir> <idOuNom> → "id<TAB>nom" (die si introuvable/ambigu)
   local dir="$1" target="$2"
+  # NOTE: les tokens OAuth résident dans le vault (`GWSA_ROOT/.vault/<alias>/`).
+  # Le profil (`GWSA_ROOT/<alias>/`) ne contient que la policy/lock et ne suffit
+  # donc pas pour un appel `gws` (après migration). On doit utiliser
+  # `gateway.vault.gws_config_dir()` pour résoudre correctement par nom.
+  local alias_name cfg_dir
+  alias_name="$(basename "$dir")"
+  cfg_dir="$(GWSA_ROOT="$GWSA_ROOT" REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c '
+import os, sys
+sys.path.insert(0, os.environ["REPO_DIR"])
+from gateway.vault import gws_config_dir
+print(gws_config_dir(sys.argv[1]))
+' "$alias_name" 2>/dev/null || echo "$dir")"
   if [[ "$target" =~ ^[A-Za-z0-9_-]{20,}$ ]]; then
     local name
-    name="$(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws drive files get --params "{\"fileId\":\"$target\",\"fields\":\"name\"}" 2>/dev/null \
+    name="$(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$cfg_dir" gws drive files get --params "{\"fileId\":\"$target\",\"fields\":\"name\"}" 2>/dev/null \
       | "$SYS_PYTHON" -c 'import json,sys; print(json.load(sys.stdin).get("name",""))' 2>/dev/null || true)"
     printf '%s\t%s' "$target" "${name:-$target}"
     return 0
   fi
   local esc; esc="${target//\'/\\\'}"
-  GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws drive files list --params "{\"q\":\"name='$esc' and mimeType='application/vnd.google-apps.folder' and trashed=false\",\"fields\":\"files(id,name)\"}" 2>/dev/null \
+  GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$cfg_dir" gws drive files list --params "{\"q\":\"name='$esc' and mimeType='application/vnd.google-apps.folder' and trashed=false\",\"fields\":\"files(id,name)\"}" 2>/dev/null \
     | "$SYS_PYTHON" -c '
 import json, sys
 f = json.load(sys.stdin).get("files", [])

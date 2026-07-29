@@ -23,6 +23,24 @@ Par défaut, aucune zone d'écriture Drive. Avant d'écrire :
 2. Attendre que l'utilisateur exécute `gwsa grant …` (ou admin).
 3. Les grants expirent : redemander à chaque session est NORMAL.
 
+## Copie / partage / transfert cross-compte
+
+Pas de « move » natif entre comptes Google. Workflow MCP :
+
+1. **Recopie** (recommandé) : `drive_get` sur A (métadonnées) puis `drive_create`
+   sur B dans sa zone `ZZ-TESTS` avec le même `content` (texte/markdown).
+2. **Partage** : `drive_permissions_create` sur A (`email` = compte B,
+   `role` = reader|writer) — nécessite `drive.share: true` dans la policy
+   (l'humain active via admin ou `gwsa policy`).
+3. **Transfert de propriété** : `drive_permissions_create` avec
+   `transfer_ownership=true`, `role=owner` — **confirmer avec l'humain** ;
+   fichier jetable uniquement en test. Notification Google obligatoire.
+
+Test d'intégration guidé : `tests/manuels/drive-cross-compte/` (perso ↔ mw).
+
+Binaire ou export d'un Doc existant : shell `gwsa <alias> drive files export …`
+puis upload sur B (`files create --upload` ou `drive_create` si texte).
+
 ## Pièges
 
 - `gws` nu ou `GOOGLE_WORKSPACE_CLI_CONFIG_DIR=…` = contourne policy/verrou : interdit.

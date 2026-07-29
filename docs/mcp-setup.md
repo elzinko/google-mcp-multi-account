@@ -99,18 +99,18 @@ Ensuite, mêmes règles que partout :
 | Gmail — pièce jointe | `gmail_attachment_get` | Télécharge une PJ dans le répertoire local dédié `.downloads` — jamais un chemin arbitraire, jamais d'écrasement ([ADR-0006](adr/ADR-0006-fichiers-recus-repertoire-dedie.md)) |
 | Gmail — brouillon | `gmail_draft_create` | Prépare un brouillon ; **aucun tool n'envoie de mail** |
 | Drive — lecture | `drive_list` · `drive_get` · `drive_read` | Liste / inspecte fichiers et dossiers (`webViewLink` compris) et **qui les possède** (`owner`, `owned_by_me`) ; `drive_read` lit le **contenu** en texte (Doc → markdown, Sheet → CSV, fichiers texte tels quels — pas les binaires) |
-| Drive — écriture zonée | `drive_create` · `drive_copy` · `drive_upload` | Sous un parent autorisé (policy zones + grants) : crée un fichier **neuf** avec son contenu texte ([ADR-0003](adr/ADR-0003-contenu-drive-via-depot-broker.md)), **copie** nativement un fichier existant (un Sheet reste un Sheet), ou **téléverse** un fichier local (PDF compris, sans conversion) |
+| Drive — écriture zonée | `drive_create` · `drive_update` · `drive_copy` · `drive_upload` | Sous un parent autorisé (policy zones + grants) : crée / **modifie**, **copie** nativement, ou **téléverse** un fichier local ([ADR-0003](adr/ADR-0003-contenu-drive-via-depot-broker.md)) |
+| Drive — partage | `drive_permissions_list` · `drive_permissions_create` · `drive_permissions_delete` | Liste, accorde ou révoque des partages ; `transfer_ownership=true` pour transférer la propriété (policy `share:true` requise) |
 | Élicitation | `access_request` | kind=`unlock` \| `grant` \| `add_account` : renvoie **la commande à faire exécuter par l'humain** — n'exécute jamais rien |
 
 **Policy admin ≠ surface MCP.** Cocher une case dans l'admin autorise les
 méthodes API correspondantes via `gwsa` ; le MCP en expose un sous-ensemble.
-Depuis la fiche [0043](../features/0043-lire-copier-televerser-drive-et-pj-gmail.md),
-lecture de contenu, copie et téléversement y sont ; il manque encore la
-**modification d'un fichier existant** (`drive_update`) — voir la fiche
-[0041](../features/0041-ecart-policy-surface-mcp.md). Calendar / Keep peuvent
+Depuis les fiches [0043](../features/0043-lire-copier-televerser-drive-et-pj-gmail.md)
+et ce lot (update + permissions), lecture de contenu, copie, téléversement,
+modification et partage/transfert y sont. Calendar / Keep peuvent encore
 figurer dans la policy sans tool MCP (élargissement : fiche
 [0021](../features/0021-couverture-mcp-elargie.md)). Et par design, **aucun
-tool** n'envoie de mail, ne supprime, ni ne transfère de propriété.
+tool** n'envoie de mail ni ne supprime.
 
 Chaque appel traverse la gateway (verrou + policy default-deny) puis le
 broker loopback, et tout est journalisé (`GWSA_CLIENT`). Un refus n'est

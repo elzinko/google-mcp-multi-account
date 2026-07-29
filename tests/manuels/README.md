@@ -12,6 +12,10 @@ Dans une session Claude Code, dire simplement :
 
 > lance le test manuel drive-2-comptes
 
+ou, pour le cross-compte perso ↔ mw (partage / transfert) :
+
+> lance le test manuel drive-cross-compte
+
 Le LLM doit alors lire le `PROTOCOLE.md` du test et le dérouler phase par
 phase. Chaque test a son répertoire, qui contient **tout** :
 
@@ -25,6 +29,8 @@ phase. Chaque test a son répertoire, qui contient **tout** :
 | Test | But | Durée | Prérequis humain |
 |---|---|---|---|
 | [drive-2-comptes](drive-2-comptes/) | Lecture + écriture + modification Drive sur **2 comptes dans un même prompt**, élicitation comprise, nettoyage réversible | ~10 min | Dossier `ZZ-TESTS` à la racine des 2 Drive concernés |
+| [drive-cross-compte](drive-cross-compte/) | **Copie cross-compte**, partage et transfert de propriété entre **perso** et **mw** dans `ZZ-TESTS` | ~15 min | `ZZ-TESTS` sur les 2 Drive ; activer `share` sur le compte source pour les phases partage/transfert |
+| [gwsa-grant-resolve-nom](gwsa-grant-resolve-nom/) | Vérifier que `gwsa grant` résout un dossier par nom (pas seulement par ID) | ~5-8 min | `ZZ-TESTS` à la racine de `perso` et `mw` ; comptes connectés |
 
 ## Conventions (tous les tests)
 

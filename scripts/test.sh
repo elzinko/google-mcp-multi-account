@@ -130,6 +130,19 @@ check 4 "files create — aucune zone active"                  drive files creat
 check 4 "files delete — suppression interdite par la policy" drive files delete --params '{"fileId":"x"}'
 check 4 "permissions create — partage interdit"              drive permissions create --params '{"fileId":"x"}'
 
+section "Drive par zones — partage autorisé (share:true)"
+policy <<EOF
+{"drive": {"read": true, "create": true, "update": true, "delete": false,
+           "share": true, "zonesOnly": true, "writeFolders": ["$ZONE"]}}
+EOF
+
+check 0 "permissions create — partage autorisé si share:true"  drive permissions create --params '{"fileId":"x"}' --json '{"type":"user","role":"reader","emailAddress":"a@b.c"}'
+check 0 "permissions list — lecture toujours autorisée"         drive permissions list --params '{"fileId":"x"}'
+policy <<'EOF'
+{"drive": {"read": true, "create": true, "update": true, "delete": false,
+           "share": false, "zonesOnly": true, "writeFolders": []}}
+EOF
+check 4 "permissions create — partage refusé si share:false"   drive permissions create --params '{"fileId":"x"}' --json '{"type":"user","role":"reader","emailAddress":"a@b.c"}'
 section "Drive par zones — une zone permanente"
 policy <<EOF
 {"drive": {"read": true, "create": true, "update": true, "delete": false,
@@ -403,7 +416,7 @@ fi
 
 # MCP tools/list smoke (stdio JSON-RPC, une requête)
 MCP_OUT="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | python3 -m gateway 2>/dev/null | head -1)"
-if echo "$MCP_OUT" | python3 -c 'import json,sys; r=json.load(sys.stdin); names=[t["name"] for t in r["result"]["tools"]]; assert "gmail_list" in names and "gmail_draft_create" in names and "setup_status" in names; assert not any(t["name"]=="gmail_send" for t in r["result"]["tools"]); ar=[t for t in r["result"]["tools"] if t["name"]=="access_request"][0]; assert "add_account" in ar["inputSchema"]["properties"]["kind"]["enum"]; assert "project_grant" in ar["inputSchema"]["properties"]["kind"]["enum"]; dc=[t for t in r["result"]["tools"] if t["name"]=="drive_create"][0]; assert "content" in dc["inputSchema"]["properties"] and "text/markdown" in dc["inputSchema"]["properties"]["content_type"]["enum"]; assert all(n in names for n in ("drive_read","drive_copy","drive_upload","gmail_attachment_get"))'; then
+if echo "$MCP_OUT" | python3 -c 'import json,sys; r=json.load(sys.stdin); names=[t["name"] for t in r["result"]["tools"]]; assert "gmail_list" in names and "gmail_draft_create" in names and "setup_status" in names; assert not any(t["name"]=="gmail_send" for t in r["result"]["tools"]); ar=[t for t in r["result"]["tools"] if t["name"]=="access_request"][0]; assert "add_account" in ar["inputSchema"]["properties"]["kind"]["enum"]; assert "project_grant" in ar["inputSchema"]["properties"]["kind"]["enum"]; dc=[t for t in r["result"]["tools"] if t["name"]=="drive_create"][0]; assert "content" in dc["inputSchema"]["properties"] and "text/markdown" in dc["inputSchema"]["properties"]["content_type"]["enum"]; assert all(n in names for n in ("drive_read","drive_copy","drive_upload","gmail_attachment_get","drive_update","drive_permissions_list","drive_permissions_create","drive_permissions_delete")); pc=[t for t in r["result"]["tools"] if t["name"]=="drive_permissions_create"][0]; assert pc["inputSchema"]["properties"]["transfer_ownership"]["type"]=="boolean"'; then
   PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m MCP tools/list (Gmail+Drive+setup_status, pas de send)\n'
 else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m MCP tools/list\n'
@@ -904,6 +917,120 @@ assert profs and not any(p["alias"].startswith(".") for p in profs), profs
   PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m .uploads / .downloads invisibles des listes de profils\n'
 else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m .uploads / .downloads ne doivent pas apparaître comme des profils\n'
+fi
+
+section "Gateway — drive_update + permissions (partage / transfert)"
+if python3 - <<'PY'
+import json
+
+import gateway.api as api
+from gateway.errors import GatewayError
+
+CALLS = []
+UPLOAD = {}
+
+
+def fake_run(alias, args, timeout=60):
+    CALLS.append(args)
+    if "--upload" in args:
+        from pathlib import Path
+        p = Path(args[args.index("--upload") + 1])
+        UPLOAD.update(path=p, data=p.read_bytes())
+    if method_of(args) == ("drive", "permissions", "delete"):
+        return {}
+    return {
+        "id": "FILE1",
+        "name": "Livrable",
+        "owners": [{"emailAddress": "alice@gmail.com"}],
+        "ownedByMe": True,
+        "permissions": [
+            {"id": "perm1", "type": "user", "role": "owner",
+             "emailAddress": "alice@gmail.com"},
+        ],
+    }
+
+
+def flags(args):
+    return {a: args[i + 1] for i, a in enumerate(args) if a.startswith("--")}
+
+
+def method_of(args):
+    return tuple(args[: next((i for i, a in enumerate(args) if a.startswith("-")), len(args))])
+
+
+api._run = fake_run
+alias = "testprof"
+
+# drive_update : renommage seul
+api.drive_update(alias, "FILE1", name="v2.md")
+args = CALLS[-1]
+assert method_of(args) == ("drive", "files", "update"), args
+params = json.loads(flags(args)["--params"])
+assert params["fileId"] == "FILE1", params
+assert json.loads(flags(args)["--json"]) == {"name": "v2.md"}
+
+# drive_update : contenu
+CALLS.clear()
+api.drive_update(alias, "FILE1", content="# Titre\n")
+args = CALLS[-1]
+assert "--upload" in args
+assert UPLOAD["data"].decode("utf-8") == "# Titre\n"
+
+# drive_update : au moins un champ requis
+try:
+    api.drive_update(alias, "FILE1")
+    raise SystemExit("drive_update sans name ni content aurait dû échouer")
+except GatewayError as e:
+    assert e.code == "error", e.code
+
+# permissions list
+CALLS.clear()
+api.drive_permissions_list(alias, "FILE1")
+args = CALLS[-1]
+assert method_of(args) == ("drive", "permissions", "list"), args
+assert json.loads(flags(args)["--params"])["fileId"] == "FILE1"
+
+# permissions create (partage reader)
+CALLS.clear()
+api.drive_permissions_create(alias, "FILE1", "bob@example.com", role="writer")
+args = CALLS[-1]
+assert method_of(args) == ("drive", "permissions", "create"), args
+params = json.loads(flags(args)["--params"])
+body = json.loads(flags(args)["--json"])
+assert params["fileId"] == "FILE1" and not params.get("transferOwnership")
+assert body == {"type": "user", "role": "writer", "emailAddress": "bob@example.com"}
+
+# permissions create (transfert propriété)
+CALLS.clear()
+api.drive_permissions_create(
+    alias, "FILE1", "bob@example.com",
+    role="owner", transfer_ownership=True,
+)
+params = json.loads(flags(CALLS[-1])["--params"])
+assert params["transferOwnership"] is True
+assert params["sendNotificationEmail"] is True
+
+# role=owner sans transfer_ownership → refus gateway
+try:
+    api.drive_permissions_create(alias, "FILE1", "bob@example.com", role="owner")
+    raise SystemExit("owner sans transfer_ownership aurait dû échouer")
+except GatewayError as e:
+    assert e.code == "error", e.code
+
+# permissions delete
+CALLS.clear()
+out = api.drive_permissions_delete(alias, "FILE1", "permXYZ")
+args = CALLS[-1]
+assert method_of(args) == ("drive", "permissions", "delete"), args
+params = json.loads(flags(args)["--params"])
+assert params == {"fileId": "FILE1", "permissionId": "permXYZ"}
+assert out["deleted"] == "permXYZ"
+print("ok")
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m drive_update + permissions (args gws + validations)\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m drive_update + permissions\n'
 fi
 
 section "Broker — sortie brute raw_output vs JSON (drive_read, fiche 0043)"
@@ -2717,10 +2844,11 @@ else
 fi
 
 if grep -qE 'PRODUCT_SLUG *= *"[A-Za-z0-9._-]+"' gateway/config.py \
+  && grep -q 'strong_auth_reason' bin/gwsa \
   && grep -q 'ensure_sign_bin' bin/gwsa; then
-  pass "touchid : nom produit = source unique (config.PRODUCT_SLUG) + binaire nommé"
+  pass "touchid : nom produit = source unique (config.PRODUCT_SLUG) + raison email"
 else
-  fail "touchid : PRODUCT_SLUG (config) / ensure_sign_bin manquant"
+  fail "touchid : PRODUCT_SLUG (config) / strong_auth_reason / ensure_sign_bin manquant"
 fi
 
 # Non-régression : l'élicitation signée (strongauth) doit EXÉCUTER le binaire
