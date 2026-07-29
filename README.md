@@ -1,16 +1,25 @@
-# google-multi-account
+<div align="center">
 
-**Multi-account Google Workspace for LLM agents — 100 % local.**
-Connect Claude Desktop, Claude Code or Cursor to *several* Google accounts through a local [MCP](https://modelcontextprotocol.io) server. The agent can *ask* for access; only you grant it.
+<img src="site/assets/readme-hero.svg" alt="google-multi-account — Multi-account Google Workspace for agents" width="840">
 
-[![CI](https://github.com/elzinko/google-mcp-multi-account/actions/workflows/ci.yml/badge.svg)](https://github.com/elzinko/google-mcp-multi-account/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/elzinko/google-mcp-multi-account)](https://github.com/elzinko/google-mcp-multi-account/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+<br>
 
-> **Names** — product / MCP server: `google-multi-account` · git repo: `google-mcp-multi-account` · CLI: `gwsa` · MCP binary: `google-mcp`.
-> **Platform** — macOS (Apple Silicon) today (Keychain, Touch ID, Homebrew). Cross-platform is on the [roadmap](features/0017-generaliser-autres-utilisateurs.md).
+[![CI](https://img.shields.io/github/actions/workflow/status/elzinko/google-mcp-multi-account/ci.yml?branch=main&style=flat-square&logo=github&label=CI)](https://github.com/elzinko/google-mcp-multi-account/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/elzinko/google-mcp-multi-account?style=flat-square&color=0f6e56)](https://github.com/elzinko/google-mcp-multi-account/releases)
+[![License](https://img.shields.io/github/license/elzinko/google-mcp-multi-account?style=flat-square&color=1f6feb)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS-1a1a1a?style=flat-square&logo=apple&logoColor=white)](#-development)
 
-**Product page:** [site/index.html](site/index.html) (landing) · [site/docs.html](site/docs.html) (docs hub).
+**[Quickstart](#-quickstart)** · **[How it works](#-how-it-works)** · **[Security](#-security)** · **[Docs](docs/)** · **[Live page](site/index.html)**
+
+</div>
+
+**Multi-account Google Workspace for LLM agents — 100 % local.** Connect Claude Desktop, Claude Code or Cursor to *several* Google accounts through a local [MCP](https://modelcontextprotocol.io) server. The agent can *ask* for access; only you grant it — every unlock, Drive grant and new account stays a human gesture.
+
+> **Names** — product / MCP server `google-multi-account` · git repo `google-mcp-multi-account` · CLI `gwsa` · MCP binary `google-mcp`.
+
+<div align="center">
+<img src="site/assets/hero-product.svg" alt="The local admin window and an elicited access request: the agent proposes the exact command, you run it" width="600">
+</div>
 
 ---
 
@@ -20,7 +29,7 @@ Connect Claude Desktop, Claude Code or Cursor to *several* Google accounts throu
 - **The human holds every door** — unlock, Drive grant, new account, IAM fix: the agent *proposes the exact command* (elicitation), you run it.
 - **Default-deny by design** — any undeclared service is refused; Gmail tools stop at the draft (no sending); Drive writes stay inside granted folders.
 - **100 % local** — encrypted tokens (AES-256-GCM, master key in the macOS Keychain), per-client audit log. The only cloud step is a one-shot OAuth credential.
-- **Scope today** — **Gmail + Drive** through MCP; **Calendar next**. (Docs, Sheets and Tasks are reachable through the `gwsa` CLI.)
+- **Scope today** — **Gmail + Drive** through MCP; **Calendar next**. Docs, Sheets and Tasks are reachable through the `gwsa` CLI.
 
 ## 🚀 Quickstart
 
@@ -51,7 +60,7 @@ The LLM **can never widen its own access**. Every door opens by a human gesture 
 
 ```mermaid
 flowchart LR
-    USER["Human — unlock / grant / policy"]
+    USER["🧑 Human — unlock / grant / policy"]
     LLM["LLM clients — Desktop / Code / Cursor"]
     MCP["bin/google-mcp — MCP stdio"]
     GW["gateway/ — policy + locks"]
