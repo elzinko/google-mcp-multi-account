@@ -24,7 +24,7 @@ par défaut** : lecture/écriture limitées par policy, verrous, zones Drive, et
 - Profil créé via `gwsa add` → **policy prudente** (Drive zones vides, Gmail sans envoi, services non listés refusés).
 - Service absent de `policy.json` → **default-deny** (sauf `auth` / `schema`).
 - Profil verrouillé → refus via `gwsa` **et** via MCP.
-- Tools MCP : Gmail lecture + brouillons, Drive lecture + create sous zones ; **pas** d’outil d’envoi.
+- Tools MCP : Gmail lecture + brouillons + pièce jointe (→ `.downloads`), Drive lecture (métadonnées + contenu) + create/copy/upload sous zones ; **pas** d’outil d’envoi, de suppression, ni de transfert de propriété.
 - `access_request` propose unlock/grant **sans les exécuter**.
 - Touch ID (`gwsa strongauth`) : présence physique pour unlock/grant (chemin absolu `/usr/bin/swift` + script repo).
 
@@ -81,6 +81,27 @@ Effet de bord favorable : `gws` s'exécute désormais **depuis ce répertoire**,
 donc son bac à sable fichiers n'est plus le dépôt git. Les zones Drive
 s'appliquent inchangées : `parents` reste dans `--json`, seul endroit que
 `policy-check.py` lit pour valider la destination.
+
+## Fichiers reçus (répertoire de téléchargement)
+
+`gmail_attachment_get` matérialise une pièce jointe — **contenu tiers**,
+potentiellement hostile — dans `~/.config/gws-accounts/.downloads/` (0700),
+seule destination possible ([ADR-0006](adr/ADR-0006-fichiers-recus-repertoire-dedie.md)).
+Le tool n'accepte **aucun chemin de destination** : seulement un `filename`
+indicatif, réduit à un nom de base assaini (jamais un séparateur, jamais caché,
+jamais vide). Écriture en `O_CREAT|O_EXCL` (0600), suffixe numérique si le nom
+existe déjà — **jamais d'écrasement**. Symétrie avec le sens montant :
+`drive_upload` refuse de lire sous `GWSA_ROOT` (tokens, credentials, policies),
+à l'exception de `.downloads` (re-téléverser une PJ reçue). Le chemin final est
+renvoyé à l'appelant, qui décide ensuite d'un éventuel `cp` — hors gateway.
+
+Côté montant, la **source** de `drive_upload` est restreinte à une **liste
+blanche** (`.downloads` + les dossiers déclarés dans `<GWSA_ROOT>/.upload-roots`
+ou `GWSA_UPLOAD_ROOTS`), pas au disque entier : le LLM ne peut pas lire un
+chemin arbitraire (ex. `~/.ssh/id_rsa`) et l'exfiltrer vers une zone active —
+défaut-deny, l'humain seul ouvre les dossiers lisibles (le fichier `.upload-roots`
+n'est pas écrivable par un tool) —
+[ADR-0006](adr/ADR-0006-fichiers-recus-repertoire-dedie.md).
 
 ## Phase 2.1 (prévue) — vault
 

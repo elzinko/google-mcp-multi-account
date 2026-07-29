@@ -68,7 +68,7 @@ USAGE_LOGGER="$REPO_DIR/scripts/log-usage.py"
 # une telle porte rouvrirait exactement le trou qu'on ferme ici.
 SYS_PYTHON="/usr/bin/python3"
 SYS_SWIFT="/usr/bin/swift"
-TOUCHID_BIN="$REPO_DIR/bin/mcp-google-mcp-multi-account"
+SIGN_BIN=""  # chemin du binaire de signature — rempli par ensure_sign_bin (nom = gateway/config.py:PRODUCT_SLUG)
 [[ -x "$SYS_PYTHON" ]] || { echo "gwsa : interpréteur système introuvable ($SYS_PYTHON) — installer les outils en ligne de commande : xcode-select --install" >&2; exit 3; }
 
 die() { echo "gwsa : $*" >&2; exit 3; }
@@ -106,27 +106,33 @@ is_locked() { # is_locked <dir> — vrai si verrouillé ET pas de déverrouillag
   [[ "$(date +%s)" -ge "$until_ts" ]]
 }
 
-ensure_touchid_bin() { # compile le binaire Touch ID nommé (dialogue macOS plus lisible que swift-frontend)
-  [[ -x "$TOUCHID_BIN" ]] && return 0
+ensure_sign_bin() { # compile le helper d'élicitation signée en binaire nommé
+  # Nom = gateway/config.py:PRODUCT_SLUG (SOURCE UNIQUE) → dialogue Touch ID
+  # « google-multi-account » au lieu de « swift-frontend » (cf. fiche 0032).
+  # Artefact isolé dans bin/.build/ (gitignoré). Recompile si le source OU le
+  # wrapper a changé (invalide un binaire d'une version/nom antérieurs).
+  local slug src="$REPO_DIR/scripts/elicitation-sign.swift"
+  slug="$("$SYS_PYTHON" -c 'import sys; sys.path.insert(0, sys.argv[1]); from gateway.config import PRODUCT_SLUG; print(PRODUCT_SLUG)' "$REPO_DIR" 2>/dev/null)" || return 1
+  [[ -n "$slug" ]] || return 1
+  SIGN_BIN="$REPO_DIR/bin/.build/$slug"
+  [[ -x "$SIGN_BIN" && "$SIGN_BIN" -nt "$src" && "$SIGN_BIN" -nt "$REPO_DIR/bin/gwsa" ]] && return 0
   command -v swiftc >/dev/null 2>&1 || return 1
-  swiftc -o "$TOUCHID_BIN" "$REPO_DIR/scripts/touchid.swift" 2>/dev/null
+  mkdir -p "$REPO_DIR/bin/.build"
+  swiftc -o "$SIGN_BIN" "$src" 2>/dev/null
 }
 
-strong_auth_reason() { # strong_auth_reason <action> <profile-dir> — email plutôt qu'alias dans la raison
-  local action="$1" dir="$2" email
-  email="$(profile_email "$dir")"
-  if [[ -n "$email" ]]; then printf '%s %s' "$action" "$email"
-  else printf '%s' "$action"; fi
-}
+# NB : le compte est nommé dans le prompt Touch ID via le champ « email » du
+# payload signé (fiche 0047), calculé par profile_email au point de construction —
+# plus de raison ad hoc ici (l'ancien strong_auth_reason était du code mort).
 
 require_signed_elicitation() { # JSON payload — signature biométrique si strongauth (fiche 0001)
   [[ -f "$GWSA_ROOT/.strong-auth" ]] || return 0
   local payload="${1:-}"
   [[ -n "$payload" ]] || die "élicitation : payload manquant (bug interne gwsa)"
-  # Précompiler le binaire nommé si possible (raisons UI Touch ID plus claires).
-  ensure_touchid_bin || true
+  # Précompiler le binaire nommé si possible (dialogue Touch ID « produit », cf. fiche 0032).
+  ensure_sign_bin || true
   REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" GWSA_SYS_SWIFT="$SYS_SWIFT" \
-    GWSA_TOUCHID_BIN="$TOUCHID_BIN" \
+    GWSA_SIGN_BIN="${SIGN_BIN:-}" \
     "$SYS_PYTHON" "$REPO_DIR/scripts/elicitation-cli.py" gate --json "$payload" \
     || die "élicitation signée refusée — action annulée"
 }
@@ -161,6 +167,25 @@ profile_email() { # profile_email <dir> — email du compte (métadonnée .email
     | grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]+' | head -1 || true)"
   [[ -n "$email" ]] && printf '%s\n' "$email" > "$dir/.email"
   printf '%s\n' "$email"
+}
+
+profile_email_cached() { # profile_email_cached <dir> — .email SANS repli gws (fiche 0047)
+  # Aux POINTS D'AUTORISATION (unlock / grant), on lit la métadonnée seule :
+  # jamais exécuter gws avant le gate d'élicitation (invariant de verrou +
+  # « zéro exécution gws » d'ADR-0002). Métadonnée absente/corrompue → vide,
+  # donc le prompt retombe sur l'alias seul (repli documenté). Le backfill des
+  # vieux profils reste le fait de gwsa list/add, en contexte déverrouillé.
+  # Toujours retourner 0 : bin/gwsa tourne sous `set -euo pipefail` et les
+  # appelants font « local email; email="$(profile_email_cached …)" ». Un statut
+  # non-nul (métadonnée absente/corrompue) ferait avorter unlock/grant AVANT le
+  # gate au lieu du repli alias-seul documenté (retour Codex P2, PR #75).
+  local dir="$1" cached
+  [[ -s "$dir/.email" ]] || return 0
+  cached="$(head -1 "$dir/.email")"
+  if [[ "$cached" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]+$ ]]; then
+    printf '%s' "$cached"
+  fi
+  return 0
 }
 
 cmd_add() { # cmd_add <alias> [email-attendu] [options gws auth login]
@@ -278,12 +303,13 @@ cmd_unlock() {
     || die "durée invalide « $mins » (minutes entières ≥ 1, ou « off » pour retirer le verrou)"
   local dir; dir="$(profile_dir "$alias")"
   [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+  local email; email="$(profile_email_cached "$dir")"   # compte nommé, sans exec gws (fiche 0047)
   local sid="${GWSA_SESSION_ID:-}"
   if [[ -n "$sid" ]]; then
     [[ "$mins" == "off" ]] \
       && die "« unlock off » permanent est poste entier — exécuter sans GWSA_SESSION_ID"
     [[ -f "$dir/.locked" ]] || { echo "Profil « $alias » non verrouillé — rien à faire."; return 0; }
-    require_signed_elicitation "$(printf '{"action":"session_unlock","alias":"%s","session_id":"%s","minutes":%s}' "$alias" "$sid" "$mins")"
+    require_signed_elicitation "$(printf '{"action":"session_unlock","alias":"%s","email":"%s","session_id":"%s","minutes":%s}' "$alias" "$email" "$sid" "$mins")"
     REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
 import os, sys
 sys.path.insert(0, os.environ['REPO_DIR'])
@@ -298,9 +324,9 @@ session_unlock(sys.argv[1], sys.argv[2], int(sys.argv[3]))
     unlock_deprecation_warn
   fi
   if [[ "$mins" == "off" ]]; then
-    require_signed_elicitation "$(printf '{"action":"unlock","alias":"%s","target":"off"}' "$alias")"
+    require_signed_elicitation "$(printf '{"action":"unlock","alias":"%s","email":"%s","target":"off"}' "$alias" "$email")"
   else
-    require_signed_elicitation "$(printf '{"action":"unlock","alias":"%s","minutes":%s}' "$alias" "$mins")"
+    require_signed_elicitation "$(printf '{"action":"unlock","alias":"%s","email":"%s","minutes":%s}' "$alias" "$email" "$mins")"
   fi
   if [[ "$mins" == "off" ]]; then
     rm -f "$dir/.locked" "$dir/.unlock-until"
@@ -401,6 +427,7 @@ cmd_grant() { # gwsa grant <alias> <dossierIdOuNom> [heures] | gwsa grant <alias
   check_alias "$alias"
   local dir; dir="$(profile_dir "$alias")"
   [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+  local email; email="$(profile_email_cached "$dir")"   # compte nommé, sans exec gws (fiche 0047)
   local G="$dir/session-grants.json"
   [[ $# -ge 1 ]] || die "usage : gwsa grant $alias <dossier> [heures] | gwsa grant $alias revoke <folderId>"
   if [[ "$1" == "revoke" ]]; then
@@ -424,7 +451,7 @@ PYEOF
   fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
   [[ -n "$fid" ]] || die "dossier « $target » introuvable ou ambigu — donne son ID (fin de l'URL du dossier dans Drive)"
   if [[ -n "$sid" ]]; then
-    require_signed_elicitation "$(printf '{"action":"session_grant","alias":"%s","session_id":"%s","target":"%s","hours":%s}' "$alias" "$sid" "$fname" "$hours")"
+    require_signed_elicitation "$(printf '{"action":"session_grant","alias":"%s","email":"%s","session_id":"%s","target":"%s","hours":%s}' "$alias" "$email" "$sid" "$fname" "$hours")"
     REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
 import os, sys
 sys.path.insert(0, os.environ['REPO_DIR'])
@@ -435,7 +462,7 @@ session_grant_drive(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.
     return 0
   fi
   grant_deprecation_warn
-  require_signed_elicitation "$(printf '{"action":"grant","alias":"%s","target":"%s","hours":%s}' "$alias" "$fname" "$hours")"
+  require_signed_elicitation "$(printf '{"action":"grant","alias":"%s","email":"%s","target":"%s","hours":%s}' "$alias" "$email" "$fname" "$hours")"
   "$SYS_PYTHON" - "$G" "$fid" "$fname" "$hours" <<'PYEOF'
 import json, os, sys, time
 path, fid, fname, hours = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
@@ -488,7 +515,10 @@ print(json.dumps({'sessions': list_sessions()}, indent=2, ensure_ascii=False))
       local sid="${1:-}" alias="${2:-}" mins="${3:-60}"
       [[ -n "$sid" && -n "$alias" ]] || die "usage : gwsa session unlock <session_id> <alias> [minutes]"
       check_alias "$alias"
-      require_signed_elicitation "$(printf '{"action":"session_unlock","alias":"%s","session_id":"%s","minutes":%s}' "$alias" "$sid" "$mins")"
+      local dir; dir="$(profile_dir "$alias")"
+      [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+      local email; email="$(profile_email_cached "$dir")"   # compte nommé, sans exec gws (fiche 0047)
+      require_signed_elicitation "$(printf '{"action":"session_unlock","alias":"%s","email":"%s","session_id":"%s","minutes":%s}' "$alias" "$email" "$sid" "$mins")"
       REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
 import os, sys
 sys.path.insert(0, os.environ['REPO_DIR'])
@@ -504,13 +534,14 @@ session_unlock(sys.argv[1], sys.argv[2], int(sys.argv[3]))
       check_alias "$alias"
       local dir; dir="$(profile_dir "$alias")"
       [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+      local email; email="$(profile_email_cached "$dir")"   # compte nommé, sans exec gws (fiche 0047)
       [[ "$hours" =~ ^[0-9]+$ && "$hours" -ge 1 && "$hours" -le 168 ]] \
         || die "durée invalide « $hours »"
       local resolved fid fname
       resolved="$(resolve_folder "$dir" "$target")"
       fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
       [[ -n "$fid" ]] || die "dossier introuvable"
-      require_signed_elicitation "$(printf '{"action":"session_grant","alias":"%s","session_id":"%s","target":"%s","hours":%s}' "$alias" "$sid" "$fname" "$hours")"
+      require_signed_elicitation "$(printf '{"action":"session_grant","alias":"%s","email":"%s","session_id":"%s","target":"%s","hours":%s}' "$alias" "$email" "$sid" "$fname" "$hours")"
       REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
 import os, sys
 sys.path.insert(0, os.environ['REPO_DIR'])
@@ -560,8 +591,9 @@ cmd_elicitation() { # gwsa elicitation enroll|status — clé biométrique (fich
     enroll)
       local mock_flag=""
       [[ "${1:-}" == "--mock" ]] && mock_flag="--mock"
+      ensure_sign_bin || true
       REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" GWSA_SYS_SWIFT="$SYS_SWIFT" \
-        GWSA_ELICITATION_MOCK="${GWSA_ELICITATION_MOCK:-}" \
+        GWSA_SIGN_BIN="${SIGN_BIN:-}" GWSA_ELICITATION_MOCK="${GWSA_ELICITATION_MOCK:-}" \
         "$SYS_PYTHON" "$REPO_DIR/scripts/elicitation-cli.py" enroll $mock_flag
       ;;
     status)
@@ -600,7 +632,11 @@ print(json.dumps(init_project(), indent=2, ensure_ascii=False))
 "
       ;;
     sign)
-      REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" "$SYS_PYTHON" -c "
+      # Comme unlock/grant et enroll : précompiler le binaire nommé pour que la
+      # signature du manifeste (élicitation signée) affiche le produit, pas swift.
+      ensure_sign_bin || true
+      REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" GWSA_SYS_SWIFT="$SYS_SWIFT" \
+        GWSA_SIGN_BIN="${SIGN_BIN:-}" "$SYS_PYTHON" -c "
 import json, os, sys
 sys.path.insert(0, os.environ['REPO_DIR'])
 from gateway.project import sign_manifest

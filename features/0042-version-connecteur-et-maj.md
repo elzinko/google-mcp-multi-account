@@ -32,7 +32,7 @@ humaine** Claude Desktop (et éventuellement Cursor) + le **parcours de mise à
 jour** post-merge + la **cohabitation** stable / dogfood.
 
 > **Quand l'attaquer** (parties A/B stables) : après merge de la PR V2 (#49) sur
-> `main`. La cohabitation dogfood ([[0041]]) est déjà utilisable sur la branche.
+> `main`. La cohabitation dogfood ([[0046]]) est déjà utilisable sur la branche.
 
 ## Décisions produit (2026-07-28)
 
@@ -49,7 +49,7 @@ Nom stable **fixe** : `google-multi-account`.
 | Rail | Entrée MCP | Ports | Déploiement | Quand |
 |------|------------|-------|-------------|-------|
 | **Stable** (travail quotidien) | `google-multi-account` | broker **4878**, admin **4877** | `~/.local/share/google-mcp/current` → tag `vX.Y.Z` | Prod locale |
-| **Dogfood** (branche / PR / worktree) | nom **suffixé** ex. `google-multi-account-<sandbox-id>` | broker **≥ 4882**, admin **≥ 4879** | `gwsa sandbox deploy --dev` ([[0041]]) | Essayer une feature **sans** toucher le stable |
+| **Dogfood** (branche / PR / worktree) | nom **suffixé** ex. `google-multi-account-<sandbox-id>` | broker **≥ 4882**, admin **≥ 4879** | `gwsa sandbox deploy --dev` ([[0046]]) | Essayer une feature **sans** toucher le stable |
 
 **Oui**, on peut démarrer une version de dev sur un worktree / une branche
 **sans abîmer** le MCP déjà en place — c'est exactement le rôle des sandboxes.
@@ -112,7 +112,7 @@ bascule `current`, nom MCP fixe.
 2. `gwsa update` : bascule `current`, **sans** renommer `google-multi-account`
 3. Redémarrer Claude Desktop ; vérifier version via tool / admin
 
-### C — Activation dogfood (déjà en place via [[0041]], à polir)
+### C — Activation dogfood (déjà en place via [[0046]], à polir)
 
 - Documenter le duo stable + entrée suffixée
 - Boutons admin déjà : Retirer entrée MCP jetable ; Supprimer sandbox
@@ -153,4 +153,4 @@ seulement `current`, pas le dogfood).
 ## Notes
 
 - Découvert en dogfood V2 (2026-07-28) : Connecteurs = nom + permissions, zéro version.
-- Dépendances : [[0026]], [[0029]], [[0030]], [[0028]], [[0041]].
+- Dépendances : [[0026]], [[0029]], [[0030]], [[0028]], [[0046]].

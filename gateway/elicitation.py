@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .config import REPO_DIR, SYS_PYTHON, gwsa_root
+from .config import PRODUCT_SLUG, REPO_DIR, SYS_PYTHON, gwsa_root
 
 ELICITATION_DIR_NAME = ".elicitation"
 PUBLIC_KEY_NAME = "public.der"
@@ -27,6 +27,14 @@ NONCES_NAME = "nonces.json"
 CHALLENGE_TTL_SEC = 300
 MOCK_SIG_PREFIX = "mock:"
 P256_SIG_PREFIX = "p256:"
+
+# Le helper d'élicitation signée est compilé en binaire nommé d'après
+# PRODUCT_SLUG et exécuté à la place de `swift <script>` : macOS affiche alors ce
+# nom (« google-multi-account ») dans le dialogue Touch ID au lieu de
+# « swift-frontend » (cf. fiche 0032, étendue ici au chemin d'élicitation signée).
+# Artefact de build isolé (gitignoré) : recompilable, non déployé.
+SIGN_HELPER_NAME = "elicitation-sign.swift"
+SIGN_BUILD_DIR = REPO_DIR / "bin" / ".build"
 
 
 class ElicitationError(Exception):
@@ -107,20 +115,25 @@ def prompt_from_payload(payload: dict[str, Any]) -> str:
     """Texte Touch ID — doit rester aligné avec elicitation-sign.swift."""
     action = str(payload.get("action") or "")
     alias = str(payload.get("alias") or "")
+    email = str(payload.get("email") or "")
     target = str(payload.get("target") or "")
     sid = str(payload.get("session_id") or "")
     minutes = int(payload.get("minutes") or 0)
     hours = int(payload.get("hours") or 0)
+    # Nommer le compte à l'instant d'autoriser (fiche 0047) : l'email est la
+    # vérité terrain « quelle boîte Gmail ». Repli sur l'alias seul si inconnu.
+    who = f"« {alias} » ({email})" if email else f"« {alias} »"
+    acct = f"{alias} · {email}" if email else alias
     if action == "session_unlock":
-        return f"gwsa : déverrouiller « {alias} » pour la session {sid} ({minutes} min)"
+        return f"gwsa : déverrouiller {who} pour la session {sid} ({minutes} min)"
     if action == "unlock":
         if target == "off":
-            return f"gwsa : retirer le verrou permanent sur « {alias} »"
-        return f"gwsa : déverrouiller « {alias} » ({minutes or target} min, poste entier)"
+            return f"gwsa : retirer le verrou permanent sur {who}"
+        return f"gwsa : déverrouiller {who} ({minutes or target} min, poste entier)"
     if action == "session_grant":
-        return f"gwsa : zone session {sid} — « {target} » ({alias}, {hours} h)"
+        return f"gwsa : zone session {sid} — « {target} » ({acct}, {hours} h)"
     if action == "grant":
-        return f"gwsa : autoriser l'écriture Drive « {target} » ({alias}, {hours} h)"
+        return f"gwsa : autoriser l'écriture Drive « {target} » ({acct}, {hours} h)"
     if action == "project_sign":
         return f"gwsa : signer le manifeste projet (.gwsa/)"
     if action == "add_account":
@@ -140,12 +153,14 @@ def build_payload(
     session_id: str = "",
     minutes: int = 0,
     hours: int = 0,
+    email: str = "",
 ) -> dict[str, Any]:
     now = int(time.time())
     return {
         "v": 1,
         "action": action,
         "alias": alias,
+        "email": email,
         "target": target,
         "session_id": session_id,
         "minutes": int(minutes or 0),
@@ -213,15 +228,30 @@ def verify_mock(payload: dict[str, Any], signature: str) -> bool:
     return hmac.compare_digest(got, expected)
 
 
-def _swift_sign(payload: dict[str, Any]) -> str:
+def _sign_helper_cmd() -> list[str]:
+    """Préfixe de commande du helper d'élicitation signée.
+
+    Préfère le binaire produit compilé (dialogue Touch ID nommé d'après
+    PRODUCT_SLUG, cf. fiche 0032) s'il est présent et exécutable ; à défaut,
+    `swift <script>` (dialogue système « swift-frontend »). GWSA_SIGN_BIN suit le
+    même modèle de confiance que GWSA_SYS_SWIFT : fixé par le wrapper, chemin dur
+    (REPO_DIR) par défaut.
+    """
+    binp = os.environ.get("GWSA_SIGN_BIN") or str(SIGN_BUILD_DIR / PRODUCT_SLUG)
+    if binp and os.access(binp, os.X_OK):
+        return [binp]
     swift = os.environ.get("GWSA_SYS_SWIFT", "/usr/bin/swift")
-    script = REPO_DIR / "scripts" / "elicitation-sign.swift"
+    script = REPO_DIR / "scripts" / SIGN_HELPER_NAME
     if not Path(swift).is_file():
         raise ElicitationError(f"Swift introuvable ({swift}) — xcode-select --install")
     if not script.is_file():
         raise ElicitationError(f"helper de signature absent ({script})")
+    return [swift, str(script)]
+
+
+def _swift_sign(payload: dict[str, Any]) -> str:
     proc = subprocess.run(
-        [swift, str(script), "sign", canonical_json(payload)],
+        [*_sign_helper_cmd(), "sign", canonical_json(payload)],
         capture_output=True,
         text=True,
         timeout=120,
@@ -354,6 +384,7 @@ def run_elicitation_gate(fields: dict[str, Any]) -> None:
     payload = build_payload(
         action,
         alias=str(fields.get("alias") or ""),
+        email=str(fields.get("email") or ""),
         target=str(fields.get("target") or ""),
         session_id=str(fields.get("session_id") or ""),
         minutes=int(fields.get("minutes") or 0),
@@ -370,11 +401,9 @@ def enroll_secure() -> dict[str, Any]:
     """Enrôlement macOS — SE / Keychain, sinon fichier private.p256 + Touch ID."""
     if is_mock_mode() and os.environ.get("GWSA_ELICITATION_MOCK"):
         return enroll_mock()
-    swift = os.environ.get("GWSA_SYS_SWIFT", "/usr/bin/swift")
-    script = REPO_DIR / "scripts" / "elicitation-sign.swift"
     pub = public_key_path()
     proc = subprocess.run(
-        [swift, str(script), "enroll", str(pub)],
+        [*_sign_helper_cmd(), "enroll", str(pub)],
         capture_output=True,
         text=True,
         timeout=60,

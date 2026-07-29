@@ -1,5 +1,5 @@
 ---
-id: 0041
+id: 0046
 title: CLI locale pour déployer des sandboxes temporaires (branche / worktree)
 type: feature
 priority: P2

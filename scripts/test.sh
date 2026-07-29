@@ -107,6 +107,10 @@ check 4 "gmail messages trash — mise à la corbeille refusée" gmail users mes
 check 4 "gmail +reply — assistant d'envoi refusé"            gmail users messages +reply
 check 4 "gmail settings update — réglages refusés"           gmail users settings updateVacation --json '{}'
 check 4 "gmail méthode inconnue — refus par défaut"          gmail users messages frobnicate
+check 0 "gmail attachments get — lecture autorisée"          gmail users messages attachments get --params '{"userId":"me","messageId":"m","id":"a"}'
+check 0 "drive files export — lecture de contenu autorisée"  drive files export --params '{"fileId":"x","mimeType":"text/plain"}'
+check 0 "drive files get alt=media — lecture autorisée"      drive files get --params '{"fileId":"x","alt":"media"}'
+check 4 "drive files copy — création refusée en lecture seule" drive files copy --params '{"fileId":"x"}' --json '{"parents":["z"]}'
 check 4 "drive files update — lecture seule"                 drive files update --params '{"fileId":"x"}'
 check 4 "drive files delete — lecture seule"                 drive files delete --params '{"fileId":"x"}'
 check 4 "calendar events insert — création refusée"          calendar events insert --json '{}'
@@ -135,6 +139,12 @@ EOF
 check 0 "files create dans la zone — autorisé"               drive files create --json "{\"name\":\"x\",\"parents\":[\"$ZONE\"]}"
 check 4 "files create sans parent — refusé"                  drive files create --json '{"name":"x"}'
 check 4 "files create hors zone — refusé (parent inconnu)"   drive files create --json '{"name":"x","parents":["AUTREDOSSIER98765432"]}'
+# fiche 0043 : copy = création zonée (destination), upload = create multipart
+check 0 "files copy vers la zone — autorisé"                 drive files copy --params '{"fileId":"SRC"}' --json "{\"parents\":[\"$ZONE\"]}"
+check 4 "files copy sans parent — refusé"                    drive files copy --params '{"fileId":"SRC"}' --json '{"name":"x"}'
+check 4 "files copy hors zone — refusé (parent inconnu)"     drive files copy --params '{"fileId":"SRC"}' --json '{"parents":["AUTREDOSSIER98765432"]}'
+check 0 "files create --upload (binaire) dans la zone — autorisé" drive files create --json "{\"name\":\"x.pdf\",\"parents\":[\"$ZONE\"]}" --upload ./x.pdf --upload-content-type application/pdf
+check 4 "files create --upload sans parent — refusé"         drive files create --json '{"name":"x.pdf"}' --upload ./x.pdf --upload-content-type application/pdf
 
 section "Drive par zones — autorisation temporaire (élicitation gwsa grant)"
 policy <<'EOF'
@@ -354,6 +364,20 @@ assert entries[0]["decision"] == "refus" and entries[0]["reason"] == "locked", e
 assert entries[0]["alias"] == alias, entries
 assert entries[0]["client"] == os.environ["GWSA_CLIENT"], entries
 
+# fiche 0043 : les nouveaux tools restent derrière le verrou, refus journalisé.
+for call in (
+    lambda: api.drive_read(alias, "FILE1"),
+    lambda: api.drive_copy(alias, "SRC1", "FOLDER"),
+    lambda: api.gmail_attachment_get(alias, "MSG1", "ATT1"),
+):
+    try:
+        call()
+        raise SystemExit("tool 0043 aurait dû refuser (locked)")
+    except GatewayError as e:
+        assert e.code == "locked", e.code
+entries = [json.loads(x) for x in log.read_text().splitlines()]
+assert len(entries) == 4 and all(e["reason"] == "locked" for e in entries), entries
+
 r2 = access_request(alias, "grant", folder="LLM", hours=4)
 assert "gwsa grant" in r2["suggested_command"] and "LLM" in r2["suggested_command"], r2
 
@@ -379,7 +403,7 @@ fi
 
 # MCP tools/list smoke (stdio JSON-RPC, une requête)
 MCP_OUT="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | python3 -m gateway 2>/dev/null | head -1)"
-if echo "$MCP_OUT" | python3 -c 'import json,sys; r=json.load(sys.stdin); names=[t["name"] for t in r["result"]["tools"]]; assert "gmail_list" in names and "gmail_draft_create" in names and "setup_status" in names; assert not any(t["name"]=="gmail_send" for t in r["result"]["tools"]); ar=[t for t in r["result"]["tools"] if t["name"]=="access_request"][0]; assert "add_account" in ar["inputSchema"]["properties"]["kind"]["enum"]; assert "project_grant" in ar["inputSchema"]["properties"]["kind"]["enum"]; dc=[t for t in r["result"]["tools"] if t["name"]=="drive_create"][0]; assert "content" in dc["inputSchema"]["properties"] and "text/markdown" in dc["inputSchema"]["properties"]["content_type"]["enum"]'; then
+if echo "$MCP_OUT" | python3 -c 'import json,sys; r=json.load(sys.stdin); names=[t["name"] for t in r["result"]["tools"]]; assert "gmail_list" in names and "gmail_draft_create" in names and "setup_status" in names; assert not any(t["name"]=="gmail_send" for t in r["result"]["tools"]); ar=[t for t in r["result"]["tools"] if t["name"]=="access_request"][0]; assert "add_account" in ar["inputSchema"]["properties"]["kind"]["enum"]; assert "project_grant" in ar["inputSchema"]["properties"]["kind"]["enum"]; dc=[t for t in r["result"]["tools"] if t["name"]=="drive_create"][0]; assert "content" in dc["inputSchema"]["properties"] and "text/markdown" in dc["inputSchema"]["properties"]["content_type"]["enum"]; assert all(n in names for n in ("drive_read","drive_copy","drive_upload","gmail_attachment_get"))'; then
   PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m MCP tools/list (Gmail+Drive+setup_status, pas de send)\n'
 else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m MCP tools/list\n'
@@ -549,18 +573,404 @@ else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m arguments gws construits (fiche 0024)\n'
 fi
 
-# Le répertoire de dépôt vit dans GWSA_ROOT : il ne doit jamais passer pour un
-# profil (les trois énumérateurs filtrent sur ALIAS_RE).
+section "Gateway — lire / copier / téléverser / pièces jointes (fiche 0043)"
+if python3 - <<'PY'
+import base64
+import hashlib
+import json
+import os
+from pathlib import Path
+
+import gateway.api as api
+from gateway.config import download_dir, upload_spool
+from gateway.errors import GatewayError
+
+# Même famille de bug que la fiche 0024 : chaque méthode gws appelée doit
+# porter TOUS ses paramètres de chemin (« gws schema <méthode> » → path).
+PATH_PARAMS = {
+    ("drive", "files", "get"): {"fileId"},
+    ("drive", "files", "export"): {"fileId", "mimeType"},
+    ("drive", "files", "copy"): {"fileId"},
+    ("drive", "files", "create"): set(),
+    ("gmail", "users", "messages", "attachments", "get"): {"userId", "messageId", "id"},
+}
+
+CALLS = []
+ALL = []
+UPLOAD = {}
+META = {"id": "DOC1", "name": "Devis", "mimeType": "application/vnd.google-apps.document"}
+REPLIES = {}
+
+
+def flags(args):
+    return {a: args[i + 1] for i, a in enumerate(args) if a.startswith("--")}
+
+
+def method_of(args):
+    return tuple(a for a in args[: next((i for i, a in enumerate(args)
+                                          if a.startswith("-")), len(args))])
+
+
+def fake_run(alias, args, timeout=60, raw_output=False):
+    CALLS.append(args)
+    ALL.append(args)
+    if "--upload" in args:  # capturer le média AVANT que la gateway ne l'efface
+        p = Path(args[args.index("--upload") + 1])
+        UPLOAD.update(path=p, data=p.read_bytes(), mode=p.stat().st_mode & 0o777)
+    if REPLIES.get("boom"):
+        raise GatewayError("échec simulé côté gws", code="exec")
+    m = method_of(args)
+    if m == ("drive", "files", "get"):
+        if json.loads(flags(args)["--params"]).get("alt") == "media":
+            return dict(REPLIES.get("media", {"raw": "contenu brut"}))
+        return dict(META)
+    if m == ("drive", "files", "export"):
+        return dict(REPLIES.get("export", {"raw": "# Devis\n\nTexte."}))
+    if m == ("gmail", "users", "messages", "attachments", "get"):
+        return dict(REPLIES["attachment"])
+    return {"id": "NEW1", "name": "x",
+            "owners": [{"emailAddress": "alice@gmail.com"}], "ownedByMe": True}
+
+
+api._run = fake_run
+alias = "testprof"
+
+# 1. drive_read : Google Doc → export markdown par défaut, métadonnées lues avant.
+r = api.drive_read(alias, "DOC1")
+assert r["content"] == "# Devis\n\nTexte." and r["truncated"] is False, r
+assert r["export_mime_type"] == "text/markdown" and r["name"] == "Devis", r
+exp = next(a for a in CALLS if method_of(a) == ("drive", "files", "export"))
+assert json.loads(flags(exp)["--params"])["mimeType"] == "text/markdown", exp
+
+# Sheet → CSV par défaut ; format explicite honoré.
+META["mimeType"] = "application/vnd.google-apps.spreadsheet"
+api.drive_read(alias, "SHEET1")
+assert json.loads(flags(CALLS[-1])["--params"])["mimeType"] == "text/csv", CALLS[-1]
+api.drive_read(alias, "SHEET1", format="text/plain")
+assert json.loads(flags(CALLS[-1])["--params"])["mimeType"] == "text/plain", CALLS[-1]
+
+# Fichier texte ordinaire → files get alt=media (pas d'export).
+META["mimeType"] = "text/markdown"
+r = api.drive_read(alias, "TXT1")
+assert r["content"] == "contenu brut", r
+last = CALLS[-1]
+assert method_of(last) == ("drive", "files", "get"), last
+assert json.loads(flags(last)["--params"])["alt"] == "media", last
+
+# Binaire → refus explicite (drive_read est un tool TEXTE).
+META["mimeType"] = "application/pdf"
+try:
+    api.drive_read(alias, "PDF1")
+    raise SystemExit("un PDF aurait dû être refusé en lecture texte")
+except GatewayError as e:
+    assert e.code == "error", e.code
+
+# Troncature : max_chars respecté ET signalé.
+META["mimeType"] = "application/vnd.google-apps.document"
+REPLIES["export"] = {"raw": "x" * 5000}
+r = api.drive_read(alias, "DOC1", max_chars=1000)
+assert len(r["content"]) == 1000 and r["truncated"] is True, (len(r["content"]), r)
+REPLIES.pop("export")
+
+# Format non textuel : refusé AVANT tout appel gws.
+CALLS.clear()
+try:
+    api.drive_read(alias, "DOC1", format="application/pdf")
+    raise SystemExit("format binaire aurait dû être refusé")
+except GatewayError as e:
+    assert e.code == "error" and not CALLS, (e.code, CALLS)
+
+# Contenu VERBATIM (raw_output) : un fichier vide → "" (jamais "{}"), un .json
+# rendu tel quel (ni reparsé ni reformaté). La vraie garantie broker (pas de
+# strip / json.loads) est testée à part sur run_gws_local ; ici, côté API, on
+# vérifie que drive_read lit bien data["raw"] et signale la troncature dessus.
+META["mimeType"] = "application/vnd.google-apps.document"
+REPLIES["export"] = {"raw": ""}
+r = api.drive_read(alias, "EMPTY")
+assert r["content"] == "" and r["truncated"] is False, r
+REPLIES["export"] = {"raw": '{"a": 1, "a": 2}\n'}
+r = api.drive_read(alias, "JSONDOC")
+assert r["content"] == '{"a": 1, "a": 2}\n', r  # ni dédupliqué ni strippé
+REPLIES.pop("export")
+
+# Fichier non Google trop gros → refus AVANT le téléchargement (size connu),
+# donc aucun appel alt=media n'est émis.
+META["mimeType"] = "text/csv"
+META["size"] = str(api._MAX_READ_BYTES + 1)
+CALLS.clear()
+try:
+    api.drive_read(alias, "BIGCSV")
+    raise SystemExit("fichier trop gros aurait dû être refusé")
+except GatewayError as e:
+    assert e.code == "error", e.code
+    assert not any(
+        method_of(a) == ("drive", "files", "get")
+        and json.loads(flags(a).get("--params", "{}")).get("alt") == "media"
+        for a in CALLS
+    ), CALLS
+META.pop("size")
+META["mimeType"] = "application/vnd.google-apps.document"
+
+# 2. drive_copy : fileId dans --params, destination dans --json (zone vérifiable).
+CALLS.clear()
+r = api.drive_copy(alias, "SRC1", "FOLDER", name="Copie devis")
+f = flags(CALLS[-1])
+assert method_of(CALLS[-1]) == ("drive", "files", "copy"), CALLS[-1]
+assert json.loads(f["--params"])["fileId"] == "SRC1", f
+assert "owners(emailAddress)" in json.loads(f["--params"])["fields"], f
+body = json.loads(f["--json"])
+assert body["parents"] == ["FOLDER"] and body["name"] == "Copie devis", body
+assert r["owner"] == "alice@gmail.com" and r["owned_by_me"] is True, r
+api.drive_copy(alias, "SRC1", "FOLDER")
+assert "name" not in json.loads(flags(CALLS[-1])["--json"]), CALLS[-1]
+
+# 3. drive_upload : binaire local → dépôt broker (ADR-0003) → multipart, sans conversion.
+src_dir = Path(os.environ["GWSA_ROOT"]).parent / "sources-0043"
+src_dir.mkdir(exist_ok=True)
+# Liste blanche : ce dossier est explicitement ouvert (comme le ferait l'humain
+# dans l'env du serveur MCP). Sans ça, la source hors .downloads est refusée.
+os.environ["GWSA_UPLOAD_ROOTS"] = str(src_dir)
+pdf = src_dir / "devis.pdf"
+payload = b"%PDF-1.4 faux binaire \x00\x01\xff"
+pdf.write_bytes(payload)
+CALLS.clear()
+r = api.drive_upload(alias, str(pdf), "FOLDER")
+f = flags(CALLS[-1])
+assert f["--upload-content-type"] == "application/pdf", f
+assert UPLOAD["data"] == payload and UPLOAD["mode"] == 0o600, UPLOAD
+assert UPLOAD["path"].parent == upload_spool(), UPLOAD["path"]
+assert not UPLOAD["path"].exists(), "média non effacé après upload"
+body = json.loads(f["--json"])
+assert body["parents"] == ["FOLDER"] and body["name"] == "devis.pdf", body
+assert "mimeType" not in body, body  # pas de conversion : le PDF reste un PDF
+assert r["owner"] == "alice@gmail.com" and r["size"] == len(payload), r
+
+# Nom et type explicites honorés.
+api.drive_upload(alias, str(pdf), "FOLDER", name="Devis client.pdf",
+                 mime_type="application/x-pdf")
+f = flags(CALLS[-1])
+assert json.loads(f["--json"])["name"] == "Devis client.pdf", f
+assert f["--upload-content-type"] == "application/x-pdf", f
+
+# Fichier introuvable → refus net, aucun appel.
+CALLS.clear()
+try:
+    api.drive_upload(alias, str(src_dir / "absent.bin"), "FOLDER")
+    raise SystemExit("fichier absent aurait dû être refusé")
+except GatewayError as e:
+    assert e.code == "error" and not CALLS, (e.code, CALLS)
+
+# Jamais lire sous GWSA_ROOT (tokens/credentials)…
+secret = Path(os.environ["GWSA_ROOT"]) / "testprof" / "credentials.enc"
+secret.parent.mkdir(parents=True, exist_ok=True)
+secret.write_bytes(b"secret")
+try:
+    api.drive_upload(alias, str(secret), "FOLDER")
+    raise SystemExit("un fichier du répertoire des comptes aurait dû être refusé")
+except GatewayError as e:
+    assert e.code == "error" and not CALLS, (e.code, CALLS)
+# …et jamais un chemin arbitraire hors liste blanche (ni .downloads ni
+# GWSA_UPLOAD_ROOTS) : c'est le garde anti-exfiltration (P1 revue Codex).
+outside = Path(os.environ["GWSA_ROOT"]).parent / "hors-zone-0043"
+outside.mkdir(exist_ok=True)
+stray = outside / "id_rsa"
+stray.write_bytes(b"-----BEGIN OPENSSH PRIVATE KEY-----")
+CALLS.clear()
+try:
+    api.drive_upload(alias, str(stray), "FOLDER")
+    raise SystemExit("source hors liste blanche aurait dû être refusée")
+except GatewayError as e:
+    assert e.code == "error" and not CALLS, (e.code, CALLS)
+# Déclaration DURABLE par fichier <GWSA_ROOT>/.upload-roots (survit aux
+# redéploiements ; le LLM ne peut pas l'écrire — aucun tool n'écrit sous
+# GWSA_ROOT). Un chemin absolu par ligne, # = commentaire, lignes vides ignorées.
+via_file = Path(os.environ["GWSA_ROOT"]).parent / "via-fichier-0043"
+via_file.mkdir(exist_ok=True)
+roots_conf = Path(os.environ["GWSA_ROOT"]) / ".upload-roots"
+roots_conf.write_text(f"# dossiers ouverts au téléversement\n\n{via_file}\n", encoding="utf-8")
+note = via_file / "note.pdf"
+note.write_bytes(b"%PDF via fichier")
+CALLS.clear()
+r = api.drive_upload(alias, str(note), "FOLDER")
+assert r["ok"] and CALLS, "dossier déclaré par .upload-roots devrait être autorisé"
+roots_conf.unlink()  # ne pas polluer les sections suivantes
+# …sauf .downloads : re-téléverser une pièce jointe reçue est légitime.
+dl_file = download_dir() / "logo.png"
+dl_file.write_bytes(b"\x89PNG faux")
+api.drive_upload(alias, str(dl_file), "FOLDER")
+assert UPLOAD["data"] == b"\x89PNG faux", UPLOAD
+dl_file.unlink()
+
+# Taille plafonnée.
+old_max = api._MAX_UPLOAD_BYTES
+api._MAX_UPLOAD_BYTES = 4
+try:
+    api.drive_upload(alias, str(pdf), "FOLDER")
+    raise SystemExit("fichier trop gros aurait dû être refusé")
+except GatewayError as e:
+    assert e.code == "error", e.code
+finally:
+    api._MAX_UPLOAD_BYTES = old_max
+
+# Échec côté gws : le média est nettoyé quand même (finally).
+REPLIES["boom"] = True
+try:
+    api.drive_upload(alias, str(pdf), "FOLDER")
+    raise SystemExit("l'échec gws aurait dû remonter")
+except GatewayError as e:
+    assert e.code == "exec", e.code
+REPLIES.pop("boom")
+assert not UPLOAD["path"].exists(), "média laissé derrière après un échec"
+
+# 4. gmail_attachment_get : PJ décodée dans .downloads, jamais d'écrasement.
+blob = b"\x00\x01logo-binaire\xff"
+REPLIES["attachment"] = {
+    "size": len(blob),
+    "data": base64.urlsafe_b64encode(blob).decode().rstrip("="),
+}
+CALLS.clear()
+r = api.gmail_attachment_get(alias, "MSG1", "ATT1", filename="logo.png")
+p = Path(r["path"])
+assert p.parent == download_dir() and p.name == "logo.png", r
+assert p.read_bytes() == blob and r["size"] == len(blob), r
+assert r["sha256"] == hashlib.sha256(blob).hexdigest(), r
+assert (p.stat().st_mode & 0o777) == 0o600, oct(p.stat().st_mode)
+att = next(a for a in CALLS
+           if method_of(a) == ("gmail", "users", "messages", "attachments", "get"))
+assert json.loads(flags(att)["--params"]) == \
+    {"userId": "me", "messageId": "MSG1", "id": "ATT1"}, att
+
+# Même nom une 2e fois → NOUVEAU fichier (unifié), pas d'écrasement.
+r2 = api.gmail_attachment_get(alias, "MSG1", "ATT1", filename="logo.png")
+assert r2["path"] != r["path"] and Path(r2["path"]).read_bytes() == blob, r2
+
+# Nom hostile → réduit à un nom de base inoffensif, toujours dans .downloads.
+r3 = api.gmail_attachment_get(alias, "MSG1", "ATT1",
+                              filename="../../../../etc/passwd")
+p3 = Path(r3["path"])
+assert p3.parent == download_dir() and ".." not in p3.name and p3.name, r3
+# Nom qui MASQUE un point de tête (« :.env », « \x00.bashrc ») → jamais un
+# fichier caché : le filtre de caractères court AVANT le retrait des points.
+for hostile in (":.env", "\x00.bashrc", ":.:", "../.ssh/authorized_keys"):
+    rh = api.gmail_attachment_get(alias, "MSG1", "ATT1", filename=hostile)
+    ph = Path(rh["path"])
+    assert ph.parent == download_dir() and ph.name and not ph.name.startswith("."), (hostile, rh)
+r4 = api.gmail_attachment_get(alias, "MSG1", "ATT1")  # sans nom → défaut sain
+assert Path(r4["path"]).parent == download_dir(), r4
+
+# PJ légitimement vide (data présent mais ""): fichier 0 octet écrit, PAS une
+# erreur qui accuserait à tort les identifiants (distinct de « data absent »).
+REPLIES["attachment"] = {"size": 0, "data": ""}
+r5 = api.gmail_attachment_get(alias, "MSG1", "ATT1", filename="vide.txt")
+p5 = Path(r5["path"])
+assert p5.parent == download_dir() and p5.read_bytes() == b"" and r5["size"] == 0, r5
+
+# Réponse sans data → erreur claire, rien d'écrit sur le disque.
+before = set(download_dir().iterdir())
+REPLIES["attachment"] = {"size": 0}
+try:
+    api.gmail_attachment_get(alias, "MSG1", "ATT1")
+    raise SystemExit("réponse vide aurait dû échouer")
+except GatewayError as e:
+    assert e.code == "exec", e.code
+assert set(download_dir().iterdir()) == before, "fichier créé malgré l'échec"
+
+# 5. Aucun appel de la fiche n'oublie un paramètre de chemin (famille 0024).
+for args in ALL:
+    m = method_of(args)
+    assert m in PATH_PARAMS, f"méthode {m} inconnue du test — compléter PATH_PARAMS"
+    params = json.loads(flags(args).get("--params", "{}"))
+    missing = PATH_PARAMS[m] - set(params)
+    assert not missing, f"{m} : paramètre(s) de chemin manquant(s) {missing}"
+print("ok")
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m drive_read / drive_copy / drive_upload / gmail_attachment_get (fiche 0043)\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m tools fiche 0043 (lire / copier / téléverser / pièces jointes)\n'
+fi
+
+# Les répertoires de dépôt (.uploads) et de téléchargement (.downloads) vivent
+# dans GWSA_ROOT : ils ne doivent jamais passer pour des profils (les trois
+# énumérateurs filtrent sur ALIAS_RE).
 if python3 -c '
 from gateway.api import profiles_list
-from gateway.config import upload_spool
+from gateway.config import download_dir, upload_spool
 upload_spool()
+download_dir()
 profs = profiles_list()["profiles"]
 assert profs and not any(p["alias"].startswith(".") for p in profs), profs
-' && ! "$GWSA" list 2>/dev/null | grep -q 'uploads'; then
-  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m répertoire de dépôt .uploads invisible des listes de profils\n'
+' && ! "$GWSA" list 2>/dev/null | grep -qE 'uploads|downloads'; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m .uploads / .downloads invisibles des listes de profils\n'
 else
-  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m .uploads ne doit pas apparaître comme un profil\n'
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m .uploads / .downloads ne doivent pas apparaître comme des profils\n'
+fi
+
+section "Broker — sortie brute raw_output vs JSON (drive_read, fiche 0043)"
+# drive_read lit du CONTENU, pas du JSON : le broker doit rendre stdout VERBATIM
+# (ni .strip(), ni json.loads, décodage tolérant). La suite API monkeypatche
+# _run et ne touchait jamais ce contrat — ce test exerce run_gws_local pour de
+# vrai (subprocess simulé), sans binaire gws.
+if python3 - <<'PY'
+import gateway.broker_server as bs
+from gateway.errors import GatewayError
+
+
+class FakeCP:
+    def __init__(self, stdout, returncode=0, stderr=b""):
+        self.stdout, self.returncode, self.stderr = stdout, returncode, stderr
+
+
+STATE = {"payload": b"", "rc": 0}
+SEEN = {}
+
+
+def fake_srun(argv, **kw):
+    SEEN["text"] = kw.get("text")
+    p, rc = STATE["payload"], STATE["rc"]
+    if kw.get("text"):          # mode normal : gws imprime du JSON → str
+        return FakeCP(p.decode("utf-8"), rc, "")
+    return FakeCP(p, rc, b"")   # mode raw : octets bruts, décodés par le broker
+
+
+bs._gws_bin = lambda: "/bin/true"
+bs.gws_config_dir = lambda alias: bs.gwsa_root() / alias
+bs.subprocess.run = fake_srun
+
+
+def run(payload, raw, rc=0):
+    STATE["payload"], STATE["rc"] = payload, rc
+    return bs.run_gws_local("acct", ["drive", "files", "get"], raw_output=raw)
+
+
+# --- Mode raw : VERBATIM (le cœur du correctif) ---
+assert run(b"", True) == {"raw": ""}, 'fichier vide → "" et non {}'
+assert SEEN["text"] is False, "raw doit capturer en octets (text=False)"
+assert run(b"l1\nl2\n", True) == {"raw": "l1\nl2\n"}, "fin de ligne préservée (pas de strip)"
+assert run(b'{"a": 1, "a": 2}', True) == {"raw": '{"a": 1, "a": 2}'}, "json NI reparsé NI dédupliqué"
+# CSV latin-1 : décodage tolérant, aucun crash (le bug avant correctif).
+got = run("café\n".encode("latin-1"), True)
+assert got["raw"].startswith("caf") and got["raw"].endswith("\n") and "�" in got["raw"], got
+
+# --- Mode normal (JSON) : comportement historique inchangé ---
+assert run(b"", False) == {}, "vide → {} en mode normal"
+assert SEEN["text"] is True, "normal doit décoder en texte (text=True)"
+assert run(b'{"a": 1, "a": 2}', False) == {"a": 2}, "json parsé (historique)"
+assert run(b"pas du json  ", False) == {"raw": "pas du json"}, "non-json → {'raw': strippé}"
+
+# --- Échec gws : GatewayError propre dans les deux modes ---
+for raw in (True, False):
+    try:
+        run(b"boom", raw, rc=2)
+        raise SystemExit(f"rc!=0 aurait dû lever (raw={raw})")
+    except GatewayError as e:
+        assert e.code == "exec", e.code
+print("ok")
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m broker raw_output (verbatim, tolérant) vs JSON (comportement historique)\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m broker raw_output vs JSON\n'
 fi
 
 section "Gateway — setup_status (lecture seule, dégradation gracieuse)"
@@ -1832,6 +2242,57 @@ print(verify_signature(p, sig))
   && pass "elicitation : payload altéré → signature invalide" \
   || fail "elicitation : tamper détecté ($tamper)"
 
+# Fiche 0047 : le prompt d'autorisation nomme le compte (email), pas l'alias seul,
+# et l'email est DANS le payload signé (lié cryptographiquement à la signature).
+acct_ok="$("$PY" -c "
+from gateway.elicitation import prompt_from_payload, build_payload, sign_mock, verify_signature
+u = prompt_from_payload({'action':'session_unlock','alias':'alpha','email':'a@gmail.com','session_id':'s','minutes':30})
+g = prompt_from_payload({'action':'grant','alias':'alpha','email':'a@gmail.com','target':'Z','hours':8})
+bare = prompt_from_payload({'action':'unlock','alias':'alpha','minutes':30})
+assert 'a@gmail.com' in u, u
+assert 'a@gmail.com' in g, g
+assert '@' not in bare and 'alpha' in bare, bare  # email inconnu → repli alias seul
+p = build_payload('session_unlock', alias='alpha', email='a@gmail.com', session_id='s', minutes=30)
+assert p['email'] == 'a@gmail.com', p
+sig = sign_mock(p)
+p2 = dict(p); p2['email'] = 'evil@x.com'
+assert verify_signature(p2, sig) is False, 'email altéré doit invalider la signature'
+print('ok')
+")"
+[[ "$acct_ok" == "ok" ]] \
+  && pass "elicitation : prompt nomme le compte + email signé (fiche 0047)" \
+  || fail "elicitation : compte dans le prompt/payload ($acct_ok)"
+
+# Fiche 0047 / retour Codex PR #75 : aux points d'autorisation, l'email se lit en
+# CACHE-ONLY (.email) — jamais d'exec gws avant le gate Touch ID (invariant de
+# verrou + ADR-0002). On extrait la fonction pure et on la teste seule.
+pec_dir="$TMP/pec"; mkdir -p "$pec_dir/valid" "$pec_dir/missing" "$pec_dir/corrupt"
+printf 'alice@gmail.com\n' > "$pec_dir/valid/.email"
+printf 'pas-un-email\n'    > "$pec_dir/corrupt/.email"
+eval "$(sed -n '/^profile_email_cached()/,/^}/p' bin/gwsa)"
+r_valid="$(profile_email_cached "$pec_dir/valid")"
+r_missing="$(profile_email_cached "$pec_dir/missing")"
+r_corrupt="$(profile_email_cached "$pec_dir/corrupt")"
+n_cached="$(grep -c 'profile_email_cached "' bin/gwsa || true)"  # appels seuls (pas la déf)
+# Sous `set -euo pipefail` (comme bin/gwsa) et la forme appelante exacte
+# « local email; email="$(…)" », la fonction ne doit JAMAIS avorter — même sur
+# .email corrompu (sinon unlock/grant meurt avant le gate — retour Codex P2).
+pec_fn="$TMP/pec_fn.sh"; sed -n '/^profile_email_cached()/,/^}/p' bin/gwsa > "$pec_fn"
+sete_rc=0
+bash -euo pipefail -c '
+  . "$1"
+  c(){ local email; email="$(profile_email_cached "$1")"; printf "%s" "$email"; }
+  c "$2" >/dev/null   # .email corrompu
+  c "$3" >/dev/null   # .email absent
+' _ "$pec_fn" "$pec_dir/corrupt" "$pec_dir/missing" || sete_rc=$?
+if [[ "$r_valid" == "alice@gmail.com" && -z "$r_missing" && -z "$r_corrupt" ]] \
+  && [[ "$n_cached" == 4 && "$sete_rc" == 0 ]] \
+  && ! sed -n '/^profile_email_cached()/,/^}/p' bin/gwsa | sed 's/#.*//' | grep -q 'gws'; then
+  pass "elicitation : email lu cache-only aux points d'autorisation, zéro exec gws (fiche 0047)"
+else
+  fail "elicitation : cache-only (valid=$r_valid missing=[$r_missing] corrupt=[$r_corrupt] sites=$n_cached set-e_rc=$sete_rc)"
+fi
+
 sid_e="$("$PY" -c 'from gateway.sessions import create_session; print(create_session(client="t").session_id)')"
 GWSA_ROOT="$ELIC_ROOT" GWSA_SESSION_ID="$sid_e" GWSA_ELICITATION_MOCK=1 \
   "$GWSA" session unlock "$sid_e" alpha 15 >/dev/null 2>&1 \
@@ -2255,12 +2716,22 @@ else
   fail "padlock : marqueurs lockchip / shorten / dRelock manquants"
 fi
 
-if grep -q 'TOUCHID_BIN=' bin/gwsa \
-  && grep -q 'strong_auth_reason' bin/gwsa \
-  && grep -q 'mcp-google-mcp-multi-account' bin/gwsa; then
-  pass "touchid : binaire nommé + raison avec email (gwsa)"
+if grep -qE 'PRODUCT_SLUG *= *"[A-Za-z0-9._-]+"' gateway/config.py \
+  && grep -q 'ensure_sign_bin' bin/gwsa; then
+  pass "touchid : nom produit = source unique (config.PRODUCT_SLUG) + binaire nommé"
 else
-  fail "touchid : strong_auth_reason ou binaire manquant dans gwsa"
+  fail "touchid : PRODUCT_SLUG (config) / ensure_sign_bin manquant"
+fi
+
+# Non-régression : l'élicitation signée (strongauth) doit EXÉCUTER le binaire
+# nommé, pas `swift` nu — sinon le dialogue Touch ID réaffiche « swift-frontend »
+# (le bug : GWSA_TOUCHID_BIN était exporté mais jamais lu côté Python).
+if grep -q '_sign_helper_cmd' gateway/elicitation.py \
+  && grep -q 'GWSA_SIGN_BIN' gateway/elicitation.py \
+  && grep -q 'PRODUCT_SLUG' gateway/elicitation.py; then
+  pass "touchid : élicitation signée passe par le binaire nommé (pas swift nu)"
+else
+  fail "touchid : elicitation.py n'utilise pas le binaire nommé (dialogue swift-frontend)"
 fi
 
 # Sous strongauth, add sans email doit refuser avant Touch ID (fiche 0032 / review #50)
