@@ -221,7 +221,7 @@ Pour une **branche / PR jetable** (sans toucher `current` ni l'entrée stable
 `gwsa sandbox wire` après coup). Unwire sélectif :
 `gwsa sandbox wire --remove desktop` (répertoire conservé) ;
 nucléaire : `gwsa sandbox remove <id>`. Détail : `gwsa sandbox --help` et fiche
-[0041](../features/0041-sandbox-deploy-cli.md).
+[0046](../features/0046-sandbox-deploy-cli.md).
 
 Trois règles, sinon le nom de l'entrée ment sur la version qui répond :
 
