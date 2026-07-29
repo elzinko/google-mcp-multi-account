@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script>document.documentElement.classList.add('js');</script>
+  <title>google-multi-account — Multi-account Google Workspace for agents</title>
+  <meta name="description" content="google-multi-account: a local, multi-account MCP server for LLM agents — Gmail and Drive today, Calendar next. Locks, default-deny policy, Touch ID. The human stays in control.">
+  <meta property="og:title" content="google-multi-account — Multi-account Google Workspace for agents">
+  <meta property="og:description" content="Many Google accounts. One agent. You stay in control.">
+  <meta property="og:type" content="website">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="site-nav">
+      <a class="nav-brand" href="index.html">google-multi-account</a>
+      <ul class="nav-links">
+        <li><a href="#model" data-i18n="navModel">Model</a></li>
+        <li><a href="#security" data-i18n="navSecurity">Security</a></li>
+        <li><a href="#install" data-i18n="navInstall">Install</a></li>
+        <li><a href="docs.html" data-i18n="navDocs">Docs</a></li>
+      </ul>
+      <button class="lang-toggle" id="langToggle" type="button" aria-label="Passer en français">FR</button>
+      <a class="nav-cta" href="https://github.com/elzinko/google-mcp-multi-account">GitHub</a>
+    </header>
+
+    <section class="hero" aria-label="Overview">
+      <div class="hero-copy">
+        <p class="brand-mark" data-i18n="heroEyebrow">Local-first MCP server</p>
+        <h1 data-i18n="heroH1">Multi-account Google Workspace for agents</h1>
+        <p class="hero-lede" data-i18n="heroLede">
+          Local MCP server (<code>bin/google-mcp</code>) that connects Claude, Cursor &amp; co to your Google accounts — Gmail and Drive today, Calendar next — no third-party cloud, with locks and policy.
+        </p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="#install" data-i18n="btnInstall">Install</a>
+          <a class="btn btn-secondary" href="docs.html" data-i18n="btnDocs">Read the docs</a>
+        </div>
+      </div>
+      <div class="hero-visual">
+        <img src="assets/hero-product.svg" width="720" height="560" alt="Preview: multi-account admin and an access request proposed to the human.">
+      </div>
+    </section>
+  </div>
+
+  <section class="problem" id="why">
+    <div class="wrap reveal">
+      <p class="section-kicker" data-i18n="probKicker">The problem</p>
+      <h2 class="section-title" data-i18n="probTitle">An agent with your inbox and no guardrails isn’t a tool.</h2>
+      <p class="section-lede" data-i18n="probLede">
+        Typical Google MCPs open a single account, often far too wide. This product starts from a constraint: the agent can ask, never widen its own access.
+      </p>
+      <div class="problem-grid">
+        <div class="problem-point">
+          <h3 data-i18n="prob1H3">Multi-account, not one token</h3>
+          <p data-i18n="prob1P">Personal, org, client: each profile has its own policy, locks and Drive zones. The agent targets an alias, not “your Google” as a whole.</p>
+        </div>
+        <div class="problem-point">
+          <h3 data-i18n="prob2H3">100&nbsp;% local</h3>
+          <p data-i18n="prob2P">Nothing runs in a middleman SaaS. The only Google Cloud step is the one-shot creation of the OAuth credential.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="model" id="model">
+    <div class="wrap reveal">
+      <p class="section-kicker" data-i18n="modelKicker">How it works</p>
+      <h2 class="section-title" data-i18n="modelTitle">You open the door. The agent acts within the frame.</h2>
+      <p class="section-lede" data-i18n="modelLede">
+        MCP stdio for the LLM, the <code>gwsa</code> CLI and a local admin for you. Every door — unlock, grant, new account — stays a human gesture.
+      </p>
+      <ol class="model-steps">
+        <li>
+          <div>
+            <strong data-i18n="step1Strong">Connect the MCP server</strong>
+            <p data-i18n="step1P">Claude Desktop / Claude Code / Cursor talk to <code>bin/google-mcp</code>. The tools discover profiles and request access cleanly.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <strong data-i18n="step2Strong">Elicitation, not execution</strong>
+            <p data-i18n="step2P">Locked profile or missing Drive zone? The agent proposes the exact command. You (Touch ID optional) run it.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <strong data-i18n="step3Strong">Default-deny policy</strong>
+            <p data-i18n="step3P">Undeclared service = denied. Drive writes limited to granted folders. Gmail tools stop at the draft.</p>
+          </div>
+        </li>
+      </ol>
+      <div class="services-split">
+        <div class="services-group">
+          <p class="services-label" data-i18n="svcAvail">Available now</p>
+          <ul class="services" aria-label="Services available now">
+            <li class="is-mcp">Gmail</li>
+            <li class="is-mcp">Drive</li>
+          </ul>
+        </div>
+        <div class="services-group">
+          <p class="services-label" data-i18n="svcSoon">Coming next</p>
+          <ul class="services" aria-label="Services coming next">
+            <li class="is-soon">Calendar</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="security">
+    <div class="wrap reveal">
+      <p class="section-kicker" data-i18n="secKicker">Security</p>
+      <h2 class="section-title" data-i18n="secTitle">Don’t trust the LLM by default.</h2>
+      <p class="section-lede" data-i18n="secLede">
+        The product stance: every access widening goes through you. The honest detail — limits included — is in the threat model.
+      </p>
+      <dl class="security-panel">
+        <div class="security-row">
+          <dt data-i18n="dtLocks">Locks</dt>
+          <dd data-i18n="ddLocks">Locked profile = no data access, MCP included, until a human unlock.</dd>
+        </div>
+        <div class="security-row">
+          <dt data-i18n="dtDefault">Default-deny</dt>
+          <dd data-i18n="ddDefault">Policy per service and per profile. New account = cautious policy.</dd>
+        </div>
+        <div class="security-row">
+          <dt data-i18n="dtZones">Drive zones</dt>
+          <dd data-i18n="ddZones">Writes only under authorized folders; temporary grants that expire.</dd>
+        </div>
+        <div class="security-row">
+          <dt data-i18n="dtTouchID">Touch ID</dt>
+          <dd data-i18n="ddTouchID">Optional strongauth for unlock, grant and adding an account.</dd>
+        </div>
+        <div class="security-row">
+          <dt data-i18n="dtLocal">Local first</dt>
+          <dd data-i18n="ddLocal">Encrypted tokens, key in the macOS Keychain, per-client audit log.</dd>
+        </div>
+      </dl>
+      <p class="security-note" data-i18n="secNote">
+        Read <a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/SECURITY.md">SECURITY.md</a>
+        and the <a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/docs/threat-model.md">threat model</a>.
+      </p>
+    </div>
+  </section>
+
+  <section class="install" id="install">
+    <div class="wrap reveal">
+      <p class="section-kicker" data-i18n="instKicker">Quickstart</p>
+      <h2 class="section-title" data-i18n="instTitle">Three steps to get going.</h2>
+      <p class="section-lede" data-i18n="instLede">
+        macOS Apple Silicon today. Details and other clients are in the docs.
+      </p>
+      <div class="install-block" tabindex="0" aria-label="Install commands">
+        <pre><code>git clone https://github.com/elzinko/google-mcp-multi-account.git
+cd google-mcp-multi-account
+brew install googleworkspace-cli
+ln -sf "$PWD/bin/gwsa" "$(brew --prefix)/bin/gwsa"
+./scripts/provision-gcp.sh
+./scripts/update.sh</code></pre>
+      </div>
+      <p class="install-hint" data-i18n="instHint">
+        Then restart Claude Desktop (Cmd-Q) and ask: “give me a rundown of my Google setup”.
+        Full guide:
+        <a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/README.md">README</a>
+        ·
+        <a href="docs.html">docs hub</a>.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/elzinko/google-mcp-multi-account" data-i18n="btnRepo">View the repo</a>
+        <a class="btn btn-secondary" href="docs.html" data-i18n="btnDocs2">Documentation</a>
+      </div>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p>MIT · Local first · <strong>google-multi-account</strong> · repo <code>google-mcp-multi-account</code></p>
+      <ul class="footer-links">
+        <li><a href="docs.html" data-i18n="footerDocs">Docs</a></li>
+        <li><a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/SECURITY.md" data-i18n="footerSecurity">Security</a></li>
+        <li><a href="https://github.com/elzinko/google-mcp-multi-account">GitHub</a></li>
+        <li><a href="https://buymeacoffee.com/elzinko" data-i18n="footerSupport">Support</a></li>
+      </ul>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var nodes = document.querySelectorAll('.reveal');
+      if (!('IntersectionObserver' in window) || !nodes.length) {
+        nodes.forEach(function (n) { n.classList.add('is-in'); });
+        return;
+      }
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) {
+            e.target.classList.add('is-in');
+            io.unobserve(e.target);
+          }
+        });
+      }, { threshold: 0.16, rootMargin: '0px 0px -8% 0px' });
+      nodes.forEach(function (n) { io.observe(n); });
+    })();
+  </script>
+
+  <script>
+    (function () {
+      var FR = {
+        navModel: 'Modèle',
+        navSecurity: 'Sécurité',
+        navInstall: 'Installer',
+        navDocs: 'Docs',
+        heroEyebrow: 'Serveur MCP local-first',
+        heroH1: 'Google Workspace multi-comptes, pour agents',
+        heroLede: 'Serveur MCP local (<code>bin/google-mcp</code>) pour brancher Claude, Cursor et consorts sur tes comptes Google — Gmail et Drive aujourd’hui, Calendar bientôt — sans cloud tiers, avec verrous et policy.',
+        btnInstall: 'Installer',
+        btnDocs: 'Lire la doc',
+        probKicker: 'Le problème',
+        probTitle: 'Un agent avec tes mails, sans garde-fou, ce n’est pas un outil.',
+        probLede: 'Les MCP Google classiques ouvrent un seul compte, souvent trop large. Ici le produit part d’une contrainte : l’agent peut demander, jamais s’élargir tout seul.',
+        prob1H3: 'Multi-comptes, pas un seul token',
+        prob1P: 'Perso, asso, client : chaque profil a sa policy, ses verrous, ses zones Drive. L’agent cible un alias, pas « ton Google » en bloc.',
+        prob2H3: '100&nbsp;% local',
+        prob2P: 'Rien ne tourne dans un SaaS intermédiaire. Le seul passage Google Cloud, c’est la création one-shot de l’identifiant OAuth.',
+        modelKicker: 'Comment ça marche',
+        modelTitle: 'L’humain ouvre. L’agent exécute dans le cadre.',
+        modelLede: 'MCP stdio pour le LLM, CLI <code>gwsa</code> et admin locale pour toi. Chaque porte — unlock, grant, nouveau compte — reste un geste humain.',
+        step1Strong: 'Brancher le serveur MCP',
+        step1P: 'Claude Desktop / Claude Code / Cursor parlent à <code>bin/google-mcp</code>. Les tools découvrent les profils et demandent l’accès proprement.',
+        step2Strong: 'Élicitation, pas exécution',
+        step2P: 'Profil verrouillé ou zone Drive manquante ? L’agent propose la commande exacte. Toi (Touch ID optionnel) tu la lances.',
+        step3Strong: 'Policy default-deny',
+        step3P: 'Service non déclaré = refus. Écriture Drive limitée aux dossiers accordés. Les tools Gmail s’arrêtent au brouillon.',
+        svcAvail: 'Disponible',
+        svcSoon: 'Bientôt',
+        secKicker: 'Sécurité',
+        secTitle: 'Ne pas faire confiance au LLM par défaut.',
+        secLede: 'Le parti pris produit : chaque élargissement d’accès passe par toi. Le détail honnête — y compris les limites — est dans le threat model.',
+        dtLocks: 'Verrous',
+        ddLocks: 'Profil verrouillé = aucun accès aux données, MCP compris, jusqu’à un unlock humain.',
+        dtDefault: 'Default-deny',
+        ddDefault: 'Policy par service et par profil. Nouveau compte = policy prudente.',
+        dtZones: 'Zones Drive',
+        ddZones: 'Écriture uniquement sous dossiers autorisés ; grants temporaires qui expirent.',
+        dtTouchID: 'Touch ID',
+        ddTouchID: 'Strongauth optionnel pour unlock, grant et ajout de compte.',
+        dtLocal: 'Local first',
+        ddLocal: 'Tokens chiffrés, clé dans le Trousseau macOS, journal d’audit par client.',
+        secNote: 'Lire <a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/SECURITY.md">SECURITY.md</a> et le <a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/docs/threat-model.md">modèle de menace</a>.',
+        instKicker: 'Quickstart',
+        instTitle: 'Trois gestes pour démarrer.',
+        instLede: 'macOS Apple Silicon aujourd’hui. Le détail et les autres clients sont dans la documentation.',
+        instHint: 'Puis redémarre Claude Desktop (Cmd-Q) et demande : « fais le point sur mon setup Google ». Guide complet : <a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/README.md">README</a> · <a href="docs.html">hub documentation</a>.',
+        btnRepo: 'Voir le dépôt',
+        btnDocs2: 'Documentation',
+        footerDocs: 'Docs',
+        footerSecurity: 'Sécurité',
+        footerSupport: 'Soutenir'
+      };
+      var nodes = document.querySelectorAll('[data-i18n]');
+      var EN = {};
+      nodes.forEach(function (n) { EN[n.getAttribute('data-i18n')] = n.innerHTML; });
+      var btn = document.getElementById('langToggle');
+      function apply(lang) {
+        nodes.forEach(function (n) {
+          var k = n.getAttribute('data-i18n');
+          var v = lang === 'fr' ? FR[k] : EN[k];
+          if (v != null) n.innerHTML = v;
+        });
+        document.documentElement.lang = lang;
+        try { localStorage.setItem('gma-lang', lang); } catch (e) {}
+        if (btn) {
+          btn.textContent = lang === 'fr' ? 'EN' : 'FR';
+          btn.setAttribute('aria-label', lang === 'fr' ? 'Switch to English' : 'Passer en français');
+        }
+      }
+      var saved = null;
+      try { saved = localStorage.getItem('gma-lang'); } catch (e) {}
+      if (saved === 'fr') apply('fr');
+      if (btn) btn.addEventListener('click', function () {
+        apply(document.documentElement.lang === 'fr' ? 'en' : 'fr');
+      });
+    })();
+  </script>
+</body>
+</html>

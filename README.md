@@ -1,207 +1,116 @@
-# google-mcp-multi-account
+<div align="center">
 
-**Brancher des agents LLM (Claude Desktop, Cursor, Claude Code, …) sur plusieurs
-comptes Google — Gmail, Drive, Calendar, Docs, Sheets, Tasks — 100 % en local.**
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="site/assets/readme-hero-dark.svg">
+  <img src="site/assets/readme-hero.svg" alt="google-multi-account — Multi-account Google Workspace for agents" width="840">
+</picture>
 
-[![CI](https://github.com/elzinko/google-mcp-multi-account/actions/workflows/ci.yml/badge.svg)](https://github.com/elzinko/google-mcp-multi-account/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Sécurité](https://img.shields.io/badge/sécurité-modèle_de_menace-blue)](SECURITY.md)
-[![Local first](https://img.shields.io/badge/données-100%25_local-brightgreen)](#sécurité)
-[![macOS](https://img.shields.io/badge/macOS-Touch_ID-black?logo=apple)](docs/usage.md)
-[![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-%E2%98%95-FFDD00)](https://buymeacoffee.com/elzinko)
+<br>
 
-Serveur **MCP** ([Model Context Protocol](https://modelcontextprotocol.io)) local
-([`bin/google-mcp`](bin/google-mcp)) + gateway
-([`gateway/`](gateway/)) pour les clients LLM ; le wrapper [`bin/gwsa`](bin/gwsa)
-et l'admin web pour l'humain. **Rien ne tourne dans le cloud** : le seul passage
-par la console Google Cloud est la création *one-shot* d'un identifiant OAuth.
+[![CI](https://github.com/elzinko/google-mcp-multi-account/actions/workflows/ci.yml/badge.svg)](https://github.com/elzinko/google-mcp-multi-account/actions/workflows/ci.yml) &nbsp;[![Release](https://img.shields.io/github/v/release/elzinko/google-mcp-multi-account?color=0f6e56)](https://github.com/elzinko/google-mcp-multi-account/releases) &nbsp;[![License](https://img.shields.io/github/license/elzinko/google-mcp-multi-account?color=1f6feb)](LICENSE) &nbsp;[![Platform](https://img.shields.io/badge/platform-macOS-1a1a1a?logo=apple&logoColor=white)](#-development)
 
-> **Plateforme : macOS (Apple Silicon).** Requis aujourd'hui — Trousseau (clé de
-> chiffrement), Touch ID, chemins Homebrew. Rendre le projet multi-plateforme
-> (Linux, Intel) et l'ouvrir à d'autres utilisateurs (doc EN, packaging) est à la
-> roadmap : [épic 0017](features/0017-generaliser-autres-utilisateurs.md).
+**[Quickstart](#-quickstart)** · **[How it works](#-how-it-works)** · **[Security](#-security)** · **[Docs](docs/)**
 
-## Quickstart (3 étapes)
+</div>
 
-**1 · Provisionner le projet Google Cloud** (une fois, ~10 min) :
+**Multi-account Google Workspace for LLM agents — 100 % local.** Connect Claude Desktop, Claude Code or Cursor to *several* Google accounts through a local [MCP](https://modelcontextprotocol.io) server. The agent can *ask* for access; only you grant it — every unlock, Drive grant and new account stays a human gesture.
+
+---
+
+## ✨ What you get
+
+- **Multi-account, not one token** — each account is a *profile* with its own policy, locks and Drive zones. The agent targets an alias, never “your Google” as a whole.
+- **The human holds every door** — unlock, Drive grant, new account, IAM fix: the agent *proposes the exact command* (elicitation), you run it.
+- **Default-deny by design** — any undeclared service is refused; Gmail tools stop at the draft (no sending); Drive writes stay inside granted folders.
+- **100 % local** — encrypted tokens (AES-256-GCM, master key in the macOS Keychain), per-client audit log. The only cloud step is a one-shot OAuth credential.
+- **Scope today** — **Gmail + Drive** through MCP; **Calendar next**. Docs, Sheets and Tasks are reachable through the `gwsa` CLI.
+
+## 🚀 Quickstart
+
+macOS Apple Silicon. Three steps — full detail in [docs/setup-oauth.md](docs/setup-oauth.md) and [docs/mcp-setup.md](docs/mcp-setup.md).
 
 ```bash
+# 1 · Provision the Google Cloud project (once, ~10 min)
 git clone https://github.com/elzinko/google-mcp-multi-account.git
 cd google-mcp-multi-account
-brew install googleworkspace-cli                    # le CLI gws
-ln -sf "$PWD/bin/gwsa" "$(brew --prefix)/bin/gwsa"  # le wrapper dans le PATH (amorçage)
-./scripts/provision-gcp.sh                          # crée le projet, active les APIs, te guide
+brew install googleworkspace-cli                    # the gws CLI
+ln -sf "$PWD/bin/gwsa" "$(brew --prefix)/bin/gwsa"  # wrapper on PATH (bootstrap)
+./scripts/provision-gcp.sh                          # creates the project, guides the 2 manual steps
+
+# 2 · Install the server and wire your Claude clients (once)
+./scripts/update.sh                                 # installs outside the clone, wires Desktop + Code
 ```
 
-Le script fait tout l'automatisable et te guide pour les **deux seuls gestes que
-Google interdit d'automatiser** (créer le client OAuth *Desktop app*, publier
-l'app), puis range le `client_secret.json`. Le projet GCP reste une coquille
-vide : rien de déployé, 0 €.
-Détail / voie manuelle : [docs/setup-oauth.md](docs/setup-oauth.md).
-
-**2 · Installer le serveur et le brancher** (une fois) :
+**3 ·** Restart Claude Desktop (Cmd-Q) and ask the LLM: *“give me a rundown of my Google setup”*. It reads the setup state and proposes the exact command for each missing step — you run them. Each connected account becomes a profile:
 
 ```bash
-./scripts/update.sh
+gwsa add personal     # "personal" = your alias · browser → pick account → accept
+gwsa list             # profiles + state
 ```
 
-Une commande, comme pour un produit installé : elle prend la dernière version
-publiée, l'installe **hors du clone** (`~/.local/share/google-mcp/<version>/`),
-et branche **Claude Desktop et Claude Code** dessus (Claude Code seulement si le
-CLI `claude` est présent) — sans toucher à tes autres serveurs MCP, avec un
-backup de la config. Relançable sans risque : elle dit « déjà à jour » quand il
-n'y a rien de neuf.
+## 🧭 How it works
 
-> Deux clients, deux configs séparées : Claude **Desktop** (son fichier JSON) et
-> Claude **Code** (le CLI, `~/.claude.json`). Le script branche les deux ; si tu
-> n'utilises que l'un, l'autre est simplement ignoré.
+The LLM **can never widen its own access**. Every door opens by a human gesture the agent can *request* but not perform.
 
-Installer hors du clone n'est pas un détail : sinon développer changerait
-l'outil pendant que tu t'en sers, et du code en chantier garderait l'accès à tes
-vrais comptes.
-
-Puis **redémarrer Claude Desktop** (Cmd-Q, puis relancer — fermer la fenêtre ne
-suffit pas ; côté Claude Code, ouvre un nouveau `claude`). Autres clients
-(Cursor…), branchement manuel et couloirs de développement :
-[docs/mcp-setup.md](docs/mcp-setup.md).
-
-**3 · Demander au LLM d'initialiser tes comptes** — par exemple : « fais le
-point sur mon setup Google ». Il lit l'état du setup (tool `setup_status`), te
-présente ce qui manque, et te propose **la commande exacte** pour chaque étape —
-c'est toi qui l'exécutes. Chaque compte connecté devient un **profil**, désigné
-par l'**alias** que tu choisis :
-
-```bash
-gwsa add perso        # « perso » = ton alias · navigateur → choisir le compte → accepter
-gwsa add assoc        # répéter pour chaque compte · gwsa list pour voir l'état
-```
-
-> Un `403` au premier appel ? Il manque un rôle IAM au compte — le setup le
-> détecte et affiche la commande exacte ([détail](docs/setup-oauth.md)).
-
-## Comment ça marche
-
-**Le LLM ne peut jamais élargir son propre accès.** Chaque porte — verrou de
-profil, zone d'écriture Drive, nouveau compte, rôle IAM — s'ouvre par un geste
-humain, que le LLM sait *demander* proprement (élicitation) mais jamais exécuter.
-Les quatre parcours, versionnés avec leur prose source dans [diagrams/](diagrams/) :
-
-- **[Setup initial](diagrams/onboarding-setup-initial/)** — les 3 étapes ci-dessus, le reste guidé.
-- **[Lire ses données](diagrams/lecture-donnees-elicitee/)** — verrou → unlock élicité → lecture sous policy.
-- **[Connecter un compte](diagrams/onboarding-add-account-elicite/)** — double barrière physique (Touch ID + consentement OAuth).
-- **[Réparer la dérive IAM](diagrams/onboarding-reparation-iam/)** — détection par deux chemins (`403` rencontré par le LLM, ou contrôle `provision-gcp.sh status`), réparation humaine idempotente.
+<div align="center">
+<img src="site/assets/hero-product.svg" alt="The local admin window and an elicited access request" width="540">
+<br>
+<sub><i>The local admin and an elicited access request — the agent proposes the exact command, you run it.</i></sub>
+</div>
 
 ```mermaid
-flowchart TD
-    USER["Humain — unlock / grant / policy"]
-    LLM["Clients LLM — Desktop / Cursor / Code"]
+flowchart LR
+    USER["🧑 Human — unlock / grant / policy"]
+    LLM["LLM clients — Desktop / Code / Cursor"]
     MCP["bin/google-mcp — MCP stdio"]
-    GW["gateway/ — policy + verrous, broker-ready"]
-    ADMIN["admin web — 127.0.0.1:4877"]
-    GWSA["bin/gwsa — profils · verrous · grants"]
-    GWS["gws — CLI Google Workspace"]
-    GOOGLE["APIs Google"]
-    USER --> ADMIN --> GWSA
+    GW["gateway/ — policy + locks"]
+    GWSA["bin/gwsa — profiles · locks · grants"]
+    GOOGLE["Google APIs"]
     USER --> GWSA
-    LLM --> MCP --> GW --> GWSA --> GWS --> GOOGLE
+    LLM --> MCP --> GW --> GWSA --> GOOGLE
 ```
 
-*Pourquoi un wrapper ?* `gws` ne gère qu'un compte à la fois (multi-comptes natif
-retiré, [issue #293](https://github.com/googleworkspace/cli/issues/293)) ; `gwsa`
-/ la gateway isolent chaque compte via `GOOGLE_WORKSPACE_CLI_CONFIG_DIR`. Un
-broker local ([`bin/google-broker`](bin/google-broker)) est le seul process qui
-exécute `gws` pour les accès aux **données** du MCP. Référence :
-[docs/architecture.md](docs/architecture.md).
+Why a wrapper, the local broker, who talks to whom: [docs/architecture.md](docs/architecture.md). Step-by-step walkthroughs: [diagrams/](diagrams/).
 
-## Utiliser
+## 🔒 Security
 
-- **Depuis un LLM** — les tools MCP par groupe (découverte, Gmail, Drive,
-  élicitation, diagnostic) : [docs/mcp-setup.md](docs/mcp-setup.md). En Claude
-  Code, demander en langage naturel (« liste mes 5 derniers mails du compte perso »).
-- **En ligne de commande & admin web** (`gwsa`, verrous, `gwsa admin`, Touch ID) :
-  [docs/usage.md](docs/usage.md).
-- **Le modèle de policy** (default-deny par service, zones Drive, grants) :
-  [docs/policies.md](docs/policies.md).
+Stance: **don’t trust the LLM by default** — it can *ask*, only a human opens. Per-profile locks (optional Touch ID), zoned Drive writes, no mail sending, encrypted tokens. Guarantees phase by phase, what is *not* yet covered, and how to report a flaw: [SECURITY.md](SECURITY.md) · [docs/threat-model.md](docs/threat-model.md). Honest self-critique (strengths, limits, competition): [docs/critique.md](docs/critique.md).
 
-## Sécurité
+## 🛠 Development
 
-Le parti pris : **ne pas faire confiance au LLM par défaut**. Il peut *demander*
-un accès (élicitation) ; seul un humain l'ouvre. Concrètement :
+```bash
+./scripts/test.sh     # hermetic suite (policy, wrapper, gateway, broker) — no real account, no network
+```
 
-- **Default-deny** — tout service non déclaré dans la policy d'un profil est
-  refusé ; un nouveau compte démarre avec une policy prudente.
-- **Aucun envoi de mail** — les tools MCP s'arrêtent au brouillon Gmail.
-- **Écriture Drive zonée** — limitée à des dossiers autorisés, temporaires par
-  défaut.
-- **Verrous par profil** — un profil verrouillé refuse tout accès aux données,
-  MCP compris, jusqu'à un déverrouillage humain, optionnellement sous **Touch ID**.
-- **Tokens chiffrés** — AES-256-GCM sur disque, clé maître dans le Trousseau
-  macOS ; rien de sensible dans le repo.
-- **Journal d'audit** — chaque appel est tracé avec le client qui l'a émis.
+- **Commands** — `gwsa help` is the index of everything. LLM-guided manual tests: [tests/manuels/](tests/manuels/).
+- **Releases** — the git **tag** is the source of truth; `gwsa release` derives semver from [conventional commits](https://www.conventionalcommits.org/). History: [CHANGELOG.md](CHANGELOG.md).
 
-Le détail — garanties phase par phase, ce qui n'est **pas** encore garanti, et
-comment signaler une faille : [SECURITY.md](SECURITY.md) ·
-[docs/threat-model.md](docs/threat-model.md).
+### Project structure
 
-## Limites connues
+```
+bin/       # google-mcp (MCP server) · gwsa (CLI wrapper) · google-broker
+gateway/   # policy, locks, MCP server, signed elicitation
+scripts/   # provision-gcp · update · release · test
+docs/      # setup, usage, policies, architecture, security, critique
+site/      # product landing + docs hub (English, FR/EN toggle)
+features/  # backlog — one card per feature/bug
+```
 
-- **App OAuth « non vérifiée »** : avertissement Google à la 1re connexion de
-  chaque compte (*Paramètres avancés* → *Accéder à…*). Normal pour une app perso.
-- **Mode Testing = tokens 7 jours** : publier l'app en *Production*
-  ([setup-oauth.md](docs/setup-oauth.md) étape 5) rend les tokens durables.
-- Quotas API gratuits largement suffisants pour un usage personnel. Coût : 0 €.
+<details>
+<summary><b>Naming</b> — product vs repo vs CLI</summary>
 
-> 🔍 **Regard critique complet** (forces, limites, sécurité, position face à la
-> concurrence, risques d'obsolescence) : [docs/critique.md](docs/critique.md).
+Product / MCP server `google-multi-account` (source of truth: `gateway/config.py` `PRODUCT_SLUG`) · git repo `google-mcp-multi-account` · CLI `gwsa` · MCP binary `google-mcp`.
+</details>
 
-## Tests
+## 📚 Further reading
 
-- **Automatiques** : `./scripts/test.sh` — suite hermétique (policy, wrapper,
-  gateway, broker) ; aucun compte réel, aucun réseau.
-- **Manuels** : [tests/manuels/](tests/manuels/) — guidés par un LLM sur de vrais
-  comptes ; il suffit de dire « lance le test manuel drive-2-comptes » (prérequis :
-  un dossier bac à sable `ZZ-TESTS` à la racine des Drive concernés).
-
-## Versions
-
-Le **tag git** est la source de vérité de la version. Le serveur annonce la
-sienne dans le handshake MCP : une version taggée s'il tourne depuis une copie
-installée, `dev` s'il tourne depuis le clone.
-
-| Commande | Ce qu'elle fait |
+| Topic | Where |
 |---|---|
-| `gwsa update` | installe la dernière version publiée et bascule dessus |
-| `gwsa update --check` | dit ce qui est installé / disponible, n'écrit rien |
-| `gwsa update --to v0.1.0` | revient à une version précise |
-| `gwsa release` | publie : semver déduit des commits, CHANGELOG, tag, push |
-| `gwsa release --print` | montre la version qui sortirait, n'écrit rien |
+| Connect a client (Desktop, Code, Cursor); tools exposed | [docs/mcp-setup.md](docs/mcp-setup.md) |
+| OAuth / GCP setup, IAM roles | [docs/setup-oauth.md](docs/setup-oauth.md) |
+| CLI & web admin (`gwsa`, locks, Touch ID) | [docs/usage.md](docs/usage.md) |
+| Policy model (default-deny, Drive zones, grants) | [docs/policies.md](docs/policies.md) |
 
-`gwsa release` déduit le niveau des [conventional commits](https://www.conventionalcommits.org/)
-depuis le dernier tag — `feat` → minor, `BREAKING CHANGE` → major, sinon patch —
-et refuse de publier dans le flou : arbre sale, hors `main`, retard sur
-`origin`, tag déjà posé, rien à publier, tests rouges.
+## License
 
-Ce sont les mêmes commandes que `./scripts/update.sh` et
-`./scripts/release.sh` — `gwsa` leur passe simplement la main, et `gwsa help`
-reste l'index de tout ce qui existe.
-
-`gwsa update` fait aussi pointer le `gwsa` de ton PATH sur la copie installée,
-pour que le poste de commande soit versionné comme le serveur. Le lien du
-quickstart n'est qu'un amorçage. Il ne touche jamais un fichier réel, ni un
-lien dont la cible est étrangère au projet.
-
-Historique des versions : [CHANGELOG.md](CHANGELOG.md). Détail des couloirs
-(brancher plusieurs versions à la fois, développer sans casser celle en
-service) : [docs/mcp-setup.md](docs/mcp-setup.md).
-
-## Maintenance
-
-- `./scripts/sync-skills.sh` — resynchronise les skills officiels après une MàJ de gws.
-- Si le multi-comptes natif (`--account`) revient dans gws
-  ([issue #293](https://github.com/googleworkspace/cli/issues/293)), ce wrapper
-  deviendra un alias trivial.
-
-## Soutenir
-
-Projet développé sur temps libre, sous licence [MIT](LICENSE). S'il te rend
-service, tu peux [m'offrir un café ☕](https://buymeacoffee.com/elzinko).
+[MIT](LICENSE) — built in spare time. If it helps you, [buy me a coffee ☕](https://buymeacoffee.com/elzinko).
