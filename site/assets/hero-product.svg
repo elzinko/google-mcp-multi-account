@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 560" role="img" aria-labelledby="title desc">
+  <title id="title">Product preview</title>
+  <desc id="desc">Admin multi-account window and agent elicitation dialog.</desc>
+  <defs>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity=".96"/>
+      <stop offset="100%" stop-color="#f2f6f7" stop-opacity=".92"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#163039"/>
+      <stop offset="100%" stop-color="#0f242c"/>
+    </linearGradient>
+  </defs>
+  <rect x="36" y="48" width="648" height="464" rx="18" fill="#d7e4e8" opacity=".55"/>
+  <g transform="translate(48,72)">
+    <rect width="420" height="400" rx="14" fill="url(#glass)" stroke="#b7c9cf"/>
+    <rect width="420" height="44" rx="14" fill="#e8f0f2" stroke="#b7c9cf"/>
+    <rect y="30" width="420" height="14" fill="#e8f0f2"/>
+    <circle cx="22" cy="22" r="5" fill="#c27b7b"/>
+    <circle cx="40" cy="22" r="5" fill="#c2a46b"/>
+    <circle cx="58" cy="22" r="5" fill="#6fa88e"/>
+    <text x="84" y="27" font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#3d555e">gwsa admin - 127.0.0.1:4877</text>
+    <text x="28" y="78" font-family="Georgia, serif" font-size="18" fill="#14212b" font-weight="700">Comptes</text>
+    <text x="28" y="98" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#5f737c">Policy default-deny / acces sur demande</text>
+    <g transform="translate(22,118)">
+      <rect width="376" height="64" rx="10" fill="#fff" stroke="#c9d8dd"/>
+      <text x="18" y="28" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="700" fill="#14212b">perso</text>
+      <text x="18" y="46" font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#5f737c">toi@example.com</text>
+      <rect x="250" y="18" width="54" height="28" rx="8" fill="#e1f5ee" stroke="#8ecbb6"/>
+      <circle cx="264" cy="32" r="7" fill="#0f6e56"/>
+      <rect x="318" y="18" width="36" height="28" rx="8" fill="#fcebeb" stroke="#e2a0a0"/>
+      <path d="M330 27h12v10h-12z M332 27v-3a4 4 0 0 1 8 0v3" fill="none" stroke="#a32d2d" stroke-width="1.6"/>
+    </g>
+    <g transform="translate(22,196)">
+      <rect width="376" height="64" rx="10" fill="#fff" stroke="#c9d8dd"/>
+      <text x="18" y="28" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="700" fill="#14212b">asso</text>
+      <text x="18" y="46" font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#5f737c">asso@example.org</text>
+      <rect x="250" y="18" width="54" height="28" rx="8" fill="#e1f5ee" stroke="#8ecbb6"/>
+      <circle cx="264" cy="32" r="7" fill="#0f6e56"/>
+      <rect x="318" y="18" width="36" height="28" rx="8" fill="#e1f5ee" stroke="#8ecbb6"/>
+      <path d="M330 27h12v10h-12z M332 27v-3a4 4 0 0 1 8 0v3" fill="none" stroke="#0f6e56" stroke-width="1.6"/>
+      <path d="M333.5 34.5h5" stroke="#0f6e56" stroke-width="1.6"/>
+    </g>
+    <g transform="translate(22,274)">
+      <rect width="376" height="64" rx="10" fill="#f7fafb" stroke="#c9d8dd"/>
+      <text x="18" y="28" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="700" fill="#14212b">client</text>
+      <text x="18" y="46" font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#5f737c">client@example.com</text>
+      <rect x="250" y="18" width="54" height="28" rx="8" fill="#f6f5f0" stroke="#c9d8dd"/>
+      <circle cx="286" cy="32" r="7" fill="#a3a199"/>
+      <rect x="318" y="18" width="36" height="28" rx="8" fill="#fcebeb" stroke="#e2a0a0"/>
+      <path d="M330 27h12v10h-12z M332 27v-3a4 4 0 0 1 8 0v3" fill="none" stroke="#a32d2d" stroke-width="1.6"/>
+    </g>
+    <text x="28" y="372" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#5f737c">Touch ID requis pour unlock / grant / add</text>
+  </g>
+  <g transform="translate(360,160)">
+    <rect width="300" height="250" rx="14" fill="url(#panel)"/>
+    <text x="22" y="36" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12" fill="#8eb0bb">Agent / Claude / Cursor</text>
+    <text x="22" y="68" font-family="Georgia, serif" font-size="17" fill="#f4f8f9">Acces demande</text>
+    <text x="22" y="96" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12.5" fill="#b7cdd4">Profil "perso" verrouille.</text>
+    <text x="22" y="116" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12.5" fill="#b7cdd4">L'agent ne peut pas s'ouvrir</text>
+    <text x="22" y="136" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12.5" fill="#b7cdd4">la porte lui-meme.</text>
+    <rect x="22" y="160" width="256" height="48" rx="8" fill="#1d3d47" stroke="#2f5966"/>
+    <text x="34" y="180" font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#9fd6c2">gwsa unlock perso 30</text>
+    <text x="34" y="196" font-family="ui-sans-serif, system-ui, sans-serif" font-size="10" fill="#7f9aa3">commande proposee / execution humaine</text>
+    <rect x="22" y="224" width="118" height="34" rx="8" fill="#1f8a72"/>
+    <text x="81" y="245" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="700" fill="#fff">Executer</text>
+    <rect x="150" y="224" width="128" height="34" rx="8" fill="none" stroke="#3d6270"/>
+    <text x="214" y="245" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12" fill="#c5d9e0">Refuser</text>
+  </g>
+</svg>

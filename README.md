@@ -1,7 +1,15 @@
-# google-mcp-multi-account
+# googlez
 
-**Brancher des agents LLM (Claude Desktop, Cursor, Claude Code, …) sur plusieurs
-comptes Google — Gmail, Drive, Calendar, Docs, Sheets, Tasks — 100 % en local.**
+**Multi-account Google Workspace for agents** — brancher des agents LLM
+(Claude Desktop, Cursor, Claude Code, …) sur plusieurs comptes Google
+(Gmail, Drive, Calendar, Docs, Sheets, Tasks) — 100 % en local.
+
+> **Produit** : **googlez** · package MCP suggéré : `@elzinko/googlez`  
+> Repo git / binaires encore : `google-mcp-multi-account`, `gwsa`, `google-mcp`.
+
+> **Page produit** (landing) : ouvrir [`site/index.html`](site/index.html) —
+> ou `cd site && python3 -m http.server 4173` → http://127.0.0.1:4173/  
+> Hub doc : [`site/docs.html`](site/docs.html).
 
 [![CI](https://github.com/elzinko/google-mcp-multi-account/actions/workflows/ci.yml/badge.svg)](https://github.com/elzinko/google-mcp-multi-account/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
