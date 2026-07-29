@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>google-multi-account — Multi-account Google Workspace for agents</title>
-  <meta name="description" content="google-multi-account : serveur MCP local multi-comptes pour agents LLM — tools MCP Gmail et Drive (reste du Workspace via la CLI gwsa). Verrous, policy default-deny, Touch ID. L’humain garde la main.">
+  <meta name="description" content="google-multi-account: a local, multi-account MCP server for LLM agents — Gmail and Drive today, Calendar next. Locks, default-deny policy, Touch ID. The human stays in control.">
   <meta property="og:title" content="google-multi-account — Multi-account Google Workspace for agents">
-  <meta property="og:description" content="Plusieurs comptes Google. Un agent. Toi aux commandes.">
+  <meta property="og:description" content="Many Google accounts. One agent. You stay in control.">
   <meta property="og:type" content="website">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,144 +16,141 @@
 <body>
   <div class="wrap">
     <header class="site-nav">
-      <a class="nav-brand" href="index.html">google-multi-account <span>Multi-account Google Workspace for agents</span></a>
+      <a class="nav-brand" href="index.html">google-multi-account</a>
       <ul class="nav-links">
-        <li><a href="#modele">Modèle</a></li>
-        <li><a href="#securite">Sécurité</a></li>
-        <li><a href="#installer">Installer</a></li>
-        <li><a href="docs.html">Documentation</a></li>
+        <li><a href="#model">Model</a></li>
+        <li><a href="#security">Security</a></li>
+        <li><a href="#install">Install</a></li>
+        <li><a href="docs.html">Docs</a></li>
       </ul>
       <a class="nav-cta" href="https://github.com/elzinko/google-mcp-multi-account">GitHub</a>
     </header>
 
-    <section class="hero" aria-label="Présentation">
+    <section class="hero" aria-label="Overview">
       <div class="hero-copy">
-        <p class="brand-mark">google-multi-account<span class="brand-sub">Multi-account Google Workspace for agents</span></p>
-        <h1>Plusieurs comptes Google. Un agent. Toi aux commandes.</h1>
+        <p class="brand-mark">google-multi-account</p>
+        <h1>Multi-account Google Workspace for agents</h1>
         <p class="hero-lede">
-          Serveur MCP local (<code>bin/google-mcp</code>) pour brancher Claude, Cursor et consorts sur Gmail et Drive — Calendar, Docs, Sheets et Tasks via la CLI <code>gwsa</code> — sans cloud tiers, avec verrous et policy.
+          Local MCP server (<code>bin/google-mcp</code>) that connects Claude, Cursor &amp; co to your Google accounts — Gmail and Drive today, Calendar next — no third-party cloud, with locks and policy.
         </p>
         <div class="cta-row">
-          <a class="btn btn-primary" href="#installer">Installer</a>
-          <a class="btn btn-secondary" href="docs.html">Lire la doc</a>
+          <a class="btn btn-primary" href="#install">Install</a>
+          <a class="btn btn-secondary" href="docs.html">Read the docs</a>
         </div>
       </div>
       <div class="hero-visual">
-        <img src="assets/hero-product.svg" width="720" height="560" alt="Aperçu : admin multi-comptes et demande d’accès proposée à l’humain.">
+        <img src="assets/hero-product.svg" width="720" height="560" alt="Preview: multi-account admin and an access request proposed to the human.">
       </div>
     </section>
   </div>
 
-  <section class="problem" id="pourquoi">
+  <section class="problem" id="why">
     <div class="wrap reveal">
-      <p class="section-kicker">Le problème</p>
-      <h2 class="section-title">Un agent avec tes mails, sans garde-fou, ce n’est pas un outil.</h2>
+      <p class="section-kicker">The problem</p>
+      <h2 class="section-title">An agent with your inbox and no guardrails isn’t a tool.</h2>
       <p class="section-lede">
-        Les MCP Google classiques ouvrent un compte, souvent trop large. Ici le produit part d’une contrainte : l’agent peut demander, jamais s’élargir tout seul.
+        Typical Google MCPs open a single account, often far too wide. This product starts from a constraint: the agent can ask, never widen its own access.
       </p>
       <div class="problem-grid">
         <div class="problem-point">
-          <h3>Multi-comptes, pas un seul token</h3>
-          <p>Perso, asso, client : chaque profil a sa policy, ses verrous, ses zones Drive. L’agent cible un alias, pas « ton Google » en bloc.</p>
+          <h3>Multi-account, not one token</h3>
+          <p>Personal, org, client: each profile has its own policy, locks and Drive zones. The agent targets an alias, not “your Google” as a whole.</p>
         </div>
         <div class="problem-point">
           <h3>100&nbsp;% local</h3>
-          <p>Rien ne tourne dans un SaaS intermédiaire. Le seul passage Google Cloud, c’est la création one-shot de l’identifiant OAuth.</p>
+          <p>Nothing runs in a middleman SaaS. The only Google Cloud step is the one-shot creation of the OAuth credential.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="model" id="modele">
+  <section class="model" id="model">
     <div class="wrap reveal">
-      <p class="section-kicker">Comment ça marche</p>
-      <h2 class="section-title">L’humain ouvre. L’agent exécute dans le cadre.</h2>
+      <p class="section-kicker">How it works</p>
+      <h2 class="section-title">You open the door. The agent acts within the frame.</h2>
       <p class="section-lede">
-        MCP stdio pour le LLM, CLI <code>gwsa</code> et admin locale pour toi. Chaque porte — unlock, grant, nouveau compte — reste un geste humain.
+        MCP stdio for the LLM, the <code>gwsa</code> CLI and a local admin for you. Every door — unlock, grant, new account — stays a human gesture.
       </p>
       <ol class="model-steps">
         <li>
           <div>
-            <strong>Brancher le serveur MCP</strong>
-            <p>Claude Desktop / Claude Code / Cursor parlent à <code>bin/google-mcp</code>. Les tools découvrent les profils et demandent l’accès proprement.</p>
+            <strong>Connect the MCP server</strong>
+            <p>Claude Desktop / Claude Code / Cursor talk to <code>bin/google-mcp</code>. The tools discover profiles and request access cleanly.</p>
           </div>
         </li>
         <li>
           <div>
-            <strong>Élicitation, pas exécution</strong>
-            <p>Profil verrouillé ou zone Drive manquante ? L’agent propose la commande exacte. Toi (Touch ID optionnel) tu la lances.</p>
+            <strong>Elicitation, not execution</strong>
+            <p>Locked profile or missing Drive zone? The agent proposes the exact command. You (Touch ID optional) run it.</p>
           </div>
         </li>
         <li>
           <div>
-            <strong>Policy default-deny</strong>
-            <p>Service non déclaré = refus. Écriture Drive limitée aux dossiers accordés. Les tools Gmail s’arrêtent au brouillon.</p>
+            <strong>Default-deny policy</strong>
+            <p>Undeclared service = denied. Drive writes limited to granted folders. Gmail tools stop at the draft.</p>
           </div>
         </li>
       </ol>
       <div class="services-split">
         <div class="services-group">
-          <p class="services-label">Côté agent — tools MCP</p>
-          <ul class="services" aria-label="Services accessibles à l’agent via MCP">
+          <p class="services-label">Available now</p>
+          <ul class="services" aria-label="Services available now">
             <li class="is-mcp">Gmail</li>
             <li class="is-mcp">Drive</li>
           </ul>
         </div>
         <div class="services-group">
-          <p class="services-label">Côté toi — CLI gwsa &amp; skills</p>
-          <ul class="services" aria-label="Services couverts par la CLI">
-            <li>Calendar</li>
-            <li>Docs</li>
-            <li>Sheets</li>
-            <li>Tasks</li>
+          <p class="services-label">Coming next</p>
+          <ul class="services" aria-label="Services coming next">
+            <li class="is-soon">Calendar</li>
           </ul>
         </div>
       </div>
     </div>
   </section>
 
-  <section id="securite">
+  <section id="security">
     <div class="wrap reveal">
-      <p class="section-kicker">Sécurité</p>
-      <h2 class="section-title">Ne pas faire confiance au LLM par défaut.</h2>
+      <p class="section-kicker">Security</p>
+      <h2 class="section-title">Don’t trust the LLM by default.</h2>
       <p class="section-lede">
-        Le parti pris produit : chaque élargissement d’accès passe par toi. Le détail honnête — y compris les limites — est dans le threat model.
+        The product stance: every access widening goes through you. The honest detail — limits included — is in the threat model.
       </p>
       <dl class="security-panel">
         <div class="security-row">
-          <dt>Verrous</dt>
-          <dd>Profil verrouillé = aucun accès aux données, MCP compris, jusqu’à un unlock humain.</dd>
+          <dt>Locks</dt>
+          <dd>Locked profile = no data access, MCP included, until a human unlock.</dd>
         </div>
         <div class="security-row">
           <dt>Default-deny</dt>
-          <dd>Policy par service et par profil. Nouveau compte = policy prudente.</dd>
+          <dd>Policy per service and per profile. New account = cautious policy.</dd>
         </div>
         <div class="security-row">
-          <dt>Zones Drive</dt>
-          <dd>Écriture uniquement sous dossiers autorisés ; grants temporaires qui expirent.</dd>
+          <dt>Drive zones</dt>
+          <dd>Writes only under authorized folders; temporary grants that expire.</dd>
         </div>
         <div class="security-row">
           <dt>Touch ID</dt>
-          <dd>Strongauth optionnel pour unlock, grant et ajout de compte.</dd>
+          <dd>Optional strongauth for unlock, grant and adding an account.</dd>
         </div>
         <div class="security-row">
           <dt>Local first</dt>
-          <dd>Tokens chiffrés, clé dans le Trousseau macOS, journal d’audit par client.</dd>
+          <dd>Encrypted tokens, key in the macOS Keychain, per-client audit log.</dd>
         </div>
       </dl>
       <p class="security-note">
-        Lire <a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/SECURITY.md">SECURITY.md</a>
-        et le <a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/docs/threat-model.md">modèle de menace</a>.
+        Read <a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/SECURITY.md">SECURITY.md</a>
+        and the <a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/docs/threat-model.md">threat model</a>.
       </p>
     </div>
   </section>
 
-  <section class="install" id="installer">
+  <section class="install" id="install">
     <div class="wrap reveal">
       <p class="section-kicker">Quickstart</p>
-      <h2 class="section-title">Trois gestes pour démarrer.</h2>
+      <h2 class="section-title">Three steps to get going.</h2>
       <p class="section-lede">
-        macOS Apple Silicon aujourd’hui. Le détail et les autres clients sont dans la documentation.
+        macOS Apple Silicon today. Details and other clients are in the docs.
       </p>
       <div class="install-block" tabindex="0">
         <pre><code>git clone https://github.com/elzinko/google-mcp-multi-account.git
@@ -164,14 +161,14 @@ ln -sf "$PWD/bin/gwsa" "$(brew --prefix)/bin/gwsa"
 ./scripts/update.sh</code></pre>
       </div>
       <p class="install-hint">
-        Puis redémarre Claude Desktop (Cmd-Q) et demande : « fais le point sur mon setup Google ».
-        Guide complet :
+        Then restart Claude Desktop (Cmd-Q) and ask: “give me a rundown of my Google setup”.
+        Full guide:
         <a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/README.md">README</a>
         ·
-        <a href="docs.html">hub documentation</a>.
+        <a href="docs.html">docs hub</a>.
       </p>
       <div class="cta-row">
-        <a class="btn btn-primary" href="https://github.com/elzinko/google-mcp-multi-account">Voir le dépôt</a>
+        <a class="btn btn-primary" href="https://github.com/elzinko/google-mcp-multi-account">View the repo</a>
         <a class="btn btn-secondary" href="docs.html">Documentation</a>
       </div>
     </div>
@@ -181,10 +178,10 @@ ln -sf "$PWD/bin/gwsa" "$(brew --prefix)/bin/gwsa"
     <div class="wrap">
       <p>MIT · Local first · <strong>google-multi-account</strong> · repo <code>google-mcp-multi-account</code></p>
       <ul class="footer-links">
-        <li><a href="docs.html">Doc</a></li>
-        <li><a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/SECURITY.md">Sécurité</a></li>
+        <li><a href="docs.html">Docs</a></li>
+        <li><a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/SECURITY.md">Security</a></li>
         <li><a href="https://github.com/elzinko/google-mcp-multi-account">GitHub</a></li>
-        <li><a href="https://buymeacoffee.com/elzinko">Soutenir</a></li>
+        <li><a href="https://buymeacoffee.com/elzinko">Support</a></li>
       </ul>
     </div>
   </footer>
