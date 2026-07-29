@@ -96,9 +96,18 @@ Ensuite, mêmes règles que partout :
 | Diagnostic | `setup_status` | État du setup (projet, publication, IAM par compte) + `next_actions` : commandes à proposer pour compléter/réparer (lecture seule). Guide l'onboarding, même sans shell (Desktop) |
 | Gmail — lecture | `gmail_list` · `gmail_get` | Recherche puis lit les messages d'un compte |
 | Gmail — brouillon | `gmail_draft_create` | Prépare un brouillon ; **aucun tool n'envoie de mail** |
-| Drive — lecture | `drive_list` · `drive_get` | Liste / inspecte fichiers et dossiers (`webViewLink` compris) et **qui les possède** (`owner`, `owned_by_me`) |
-| Drive — écriture zonée | `drive_create` | Crée un fichier sous un parent autorisé (policy zones + grants), **avec son contenu** si `content` est fourni : le markdown devient un Google Doc rédigé ([ADR-0003](adr/ADR-0003-contenu-drive-via-depot-broker.md)) |
+| Drive — lecture | `drive_list` · `drive_get` | Liste / inspecte fichiers et dossiers (`webViewLink` compris) et **qui les possède** (`owner`, `owned_by_me`). **Métadonnées seulement** : pas d'export ni de téléchargement du contenu |
+| Drive — écriture zonée | `drive_create` | Crée un fichier **neuf** sous un parent autorisé (policy zones + grants), **avec son contenu** si `content` est fourni : le markdown devient un Google Doc rédigé ([ADR-0003](adr/ADR-0003-contenu-drive-via-depot-broker.md)) |
 | Élicitation | `access_request` | kind=`unlock` \| `grant` \| `add_account` : renvoie **la commande à faire exécuter par l'humain** — n'exécute jamais rien |
+
+**Policy admin ≠ surface MCP.** Cocher « création » / « modification » dans
+l'admin autorise les méthodes API correspondantes via `gwsa`, mais le MCP
+n'expose pas encore de copie (`files.copy`), de modification d'existant, ni
+de lecture du corps d'un fichier. « Lire puis recréer » n'est donc pas
+possible via `drive_get` + `drive_create` — voir la fiche
+[0041](../features/0041-ecart-policy-surface-mcp.md). Calendar / Keep peuvent
+figurer dans la policy sans tool MCP (élargissement : fiche
+[0021](../features/0021-couverture-mcp-elargie.md)).
 
 Chaque appel traverse la gateway (verrou + policy default-deny) puis le
 broker loopback, et tout est journalisé (`GWSA_CLIENT`). Un refus n'est
