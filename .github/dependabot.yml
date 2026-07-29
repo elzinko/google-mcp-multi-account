@@ -1,0 +1,17 @@
+# Dependabot — mises à jour de sécurité / versions
+# Stack réelle : pas de package.json ni requirements.txt (stdlib + mermaid vendorisé).
+# Uniquement github-actions pour l’instant — ajouter pip/npm quand des manifests existent
+# (sinon Dependabot signale des erreurs « no dependency files »).
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "security"
+    commit-message:
+      prefix: "chore(deps)"
