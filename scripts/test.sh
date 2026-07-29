@@ -2242,6 +2242,27 @@ print(verify_signature(p, sig))
   && pass "elicitation : payload altéré → signature invalide" \
   || fail "elicitation : tamper détecté ($tamper)"
 
+# Fiche 0047 : le prompt d'autorisation nomme le compte (email), pas l'alias seul,
+# et l'email est DANS le payload signé (lié cryptographiquement à la signature).
+acct_ok="$("$PY" -c "
+from gateway.elicitation import prompt_from_payload, build_payload, sign_mock, verify_signature
+u = prompt_from_payload({'action':'session_unlock','alias':'alpha','email':'a@gmail.com','session_id':'s','minutes':30})
+g = prompt_from_payload({'action':'grant','alias':'alpha','email':'a@gmail.com','target':'Z','hours':8})
+bare = prompt_from_payload({'action':'unlock','alias':'alpha','minutes':30})
+assert 'a@gmail.com' in u, u
+assert 'a@gmail.com' in g, g
+assert '@' not in bare and 'alpha' in bare, bare  # email inconnu → repli alias seul
+p = build_payload('session_unlock', alias='alpha', email='a@gmail.com', session_id='s', minutes=30)
+assert p['email'] == 'a@gmail.com', p
+sig = sign_mock(p)
+p2 = dict(p); p2['email'] = 'evil@x.com'
+assert verify_signature(p2, sig) is False, 'email altéré doit invalider la signature'
+print('ok')
+")"
+[[ "$acct_ok" == "ok" ]] \
+  && pass "elicitation : prompt nomme le compte + email signé (fiche 0047)" \
+  || fail "elicitation : compte dans le prompt/payload ($acct_ok)"
+
 sid_e="$("$PY" -c 'from gateway.sessions import create_session; print(create_session(client="t").session_id)')"
 GWSA_ROOT="$ELIC_ROOT" GWSA_SESSION_ID="$sid_e" GWSA_ELICITATION_MOCK=1 \
   "$GWSA" session unlock "$sid_e" alpha 15 >/dev/null 2>&1 \
@@ -2666,11 +2687,10 @@ else
 fi
 
 if grep -qE 'PRODUCT_SLUG *= *"[A-Za-z0-9._-]+"' gateway/config.py \
-  && grep -q 'strong_auth_reason' bin/gwsa \
   && grep -q 'ensure_sign_bin' bin/gwsa; then
-  pass "touchid : nom produit = source unique (config.PRODUCT_SLUG) + raison email"
+  pass "touchid : nom produit = source unique (config.PRODUCT_SLUG) + binaire nommé"
 else
-  fail "touchid : PRODUCT_SLUG (config) / strong_auth_reason / ensure_sign_bin manquant"
+  fail "touchid : PRODUCT_SLUG (config) / ensure_sign_bin manquant"
 fi
 
 # Non-régression : l'élicitation signée (strongauth) doit EXÉCUTER le binaire
