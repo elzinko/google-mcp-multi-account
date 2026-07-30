@@ -555,19 +555,21 @@ def drive_update(
     alias: str,
     file_id: str,
     name: str = "",
-    content: str = "",
+    content: Optional[str] = None,
     content_type: str = "",
     mime_type: str = "",
 ) -> dict[str, Any]:
     """Met à jour un fichier Drive (nom et/ou contenu) — soumis aux zones.
 
-    `file_id` doit être sous une zone autorisée. Avec `content`, le texte part
-    en upload multipart (même contraintes que drive_create).
+    `file_id` doit être sous une zone autorisée. `content=None` = pas de
+    changement de contenu ; `content=""` = upload d'un payload vide (vider
+    le document). Avec un contenu fourni, upload multipart (mêmes contraintes
+    que drive_create).
     """
     validate_alias(alias)
     if not file_id:
         raise GatewayError("file_id requis", code="error")
-    if not name and not content:
+    if not name and content is None:
         raise GatewayError(
             "au moins un de name ou content est requis", code="error",
         )
@@ -581,7 +583,7 @@ def drive_update(
         "--params", json.dumps({"fileId": file_id, "fields": _DRIVE_FILE_FIELDS}),
         "--json", json.dumps(body),
     ]
-    if not content:
+    if content is None:
         data = _run(alias, args)
         return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
     target_mime = mime_type or "application/vnd.google-apps.document"

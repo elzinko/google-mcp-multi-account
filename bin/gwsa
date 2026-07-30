@@ -68,6 +68,10 @@ USAGE_LOGGER="$REPO_DIR/scripts/log-usage.py"
 # une telle porte rouvrirait exactement le trou qu'on ferme ici.
 SYS_PYTHON="/usr/bin/python3"
 SYS_SWIFT="/usr/bin/swift"
+# Même garantie que SYS_PYTHON / SYS_SWIFT : jamais via le PATH (un faux
+# `swiftc` en tête de PATH pourrait compiler un binaire de signature malveillant
+# que require_signed_elicitation ferait ensuite confiance — cf. docs/threat-model.md).
+SYS_SWIFTC="/usr/bin/swiftc"
 SIGN_BIN=""  # chemin du binaire de signature — rempli par ensure_sign_bin (nom = gateway/config.py:PRODUCT_SLUG)
 [[ -x "$SYS_PYTHON" ]] || { echo "gwsa : interpréteur système introuvable ($SYS_PYTHON) — installer les outils en ligne de commande : xcode-select --install" >&2; exit 3; }
 
@@ -128,9 +132,10 @@ ensure_sign_bin() { # compile le helper d'élicitation signée en binaire nommé
   [[ -n "$slug" ]] || return 1
   SIGN_BIN="$REPO_DIR/bin/.build/$slug"
   [[ -x "$SIGN_BIN" && "$SIGN_BIN" -nt "$src" && "$SIGN_BIN" -nt "$REPO_DIR/bin/gwsa" ]] && return 0
-  command -v swiftc >/dev/null 2>&1 || return 1
+  # Chemin absolu uniquement — jamais `command -v swiftc` (PATH hostile).
+  [[ -x "$SYS_SWIFTC" ]] || return 1
   mkdir -p "$REPO_DIR/bin/.build"
-  swiftc -o "$SIGN_BIN" "$src" 2>/dev/null
+  "$SYS_SWIFTC" -o "$SIGN_BIN" "$src" 2>/dev/null
 }
 
 # NB : le compte est nommé dans le prompt Touch ID via le champ « email » du

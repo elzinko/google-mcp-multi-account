@@ -976,6 +976,13 @@ args = CALLS[-1]
 assert "--upload" in args
 assert UPLOAD["data"].decode("utf-8") == "# Titre\n"
 
+# drive_update : content="" explicite → upload vide (≠ absence de content)
+CALLS.clear(); UPLOAD.clear()
+api.drive_update(alias, "FILE1", content="")
+args = CALLS[-1]
+assert "--upload" in args, "content=\"\" doit uploader un payload vide"
+assert UPLOAD["data"] == b"", UPLOAD
+
 # drive_update : au moins un champ requis
 try:
     api.drive_update(alias, "FILE1")
@@ -2844,11 +2851,14 @@ else
 fi
 
 if grep -qE 'PRODUCT_SLUG *= *"[A-Za-z0-9._-]+"' gateway/config.py \
-  && grep -q 'strong_auth_reason' bin/gwsa \
-  && grep -q 'ensure_sign_bin' bin/gwsa; then
-  pass "touchid : nom produit = source unique (config.PRODUCT_SLUG) + raison email"
+  && grep -q 'SYS_SWIFTC="/usr/bin/swiftc"' bin/gwsa \
+  && grep -q 'ensure_sign_bin' bin/gwsa \
+  && grep -qE '^[[:space:]]*"\$SYS_SWIFTC"' bin/gwsa \
+  && ! grep -qE '^[[:space:]]*command -v swiftc' bin/gwsa \
+  && ! grep -qE '^[[:space:]]*swiftc ' bin/gwsa; then
+  pass "touchid : PRODUCT_SLUG + swiftc en chemin absolu (SYS_SWIFTC)"
 else
-  fail "touchid : PRODUCT_SLUG (config) / strong_auth_reason / ensure_sign_bin manquant"
+  fail "touchid : PRODUCT_SLUG / SYS_SWIFTC / ensure_sign_bin manquant (ou swiftc via PATH)"
 fi
 
 # Non-régression : l'élicitation signée (strongauth) doit EXÉCUTER le binaire

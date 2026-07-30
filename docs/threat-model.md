@@ -26,7 +26,7 @@ par défaut** : lecture/écriture limitées par policy, verrous, zones Drive, et
 - Profil verrouillé → refus via `gwsa` **et** via MCP.
 - Tools MCP : Gmail lecture + brouillons + pièce jointe (→ `.downloads`), Drive lecture (métadonnées + contenu) + create/copy/upload sous zones ; **pas** d’outil d’envoi, de suppression, ni de transfert de propriété.
 - `access_request` propose unlock/grant **sans les exécuter**.
-- Touch ID (`gwsa strongauth`) : présence physique pour unlock/grant (chemin absolu `/usr/bin/swift` + script repo).
+- Touch ID (`gwsa strongauth`) : présence physique pour unlock/grant (chemins absolus `/usr/bin/swift` + `/usr/bin/swiftc` + scripts repo — jamais via le PATH).
 
 ## Phase 1 — ce qui n’est **pas** garanti
 

@@ -487,7 +487,8 @@ DISPATCH: dict[str, Callable] = {
         alias=kw["alias"],
         file_id=kw["file_id"],
         name=kw.get("name") or "",
-        content=kw.get("content") or "",
+        # Distinguer absent (None) de "" (vider le fichier) — ne pas faire `or ""`.
+        content=kw["content"] if "content" in kw else None,
         content_type=kw.get("content_type") or "",
         mime_type=kw.get("mime_type") or "",
     ),
