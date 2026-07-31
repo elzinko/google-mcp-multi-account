@@ -19,6 +19,7 @@
 | 0031 | La suite de tests ne doit jamais pouvoir toucher le PATH réel | bug | P1 |  |  | ✅ shipped | #31 |
 | 0037 | Sémantique de la suppression en zone — corbeille = suppression, racine de zone immuable, avertissement | feature | P1 |  |  | ✅ shipped | #47 |
 | 0043 | Lire, copier, téléverser — contenu Drive et pièces jointes Gmail via MCP | feature | P1 |  |  | ✅ shipped | #73 |
+| 0059 | gwsa ne résout plus un dossier par son nom depuis le vault (grant / policy zone) | bug | P1 |  |  | 🔴 todo |  |
 | 0061 | Déconnexion — modale de confirmation + bouton compact | feature | P1 | v0.4.0 | 0060 | 🔴 todo |  |
 | 0062 | Admin header — réordonner actions + mode Avancé + retirer texte long | feature | P1 | v0.4.0 | 0060 | 🔴 todo |  |
 | 0063 | Remplacer « Tout verrouiller » par icône cadenas + modale d'impact | feature | P1 | v0.4.0 | 0060 | 🔴 todo |  |

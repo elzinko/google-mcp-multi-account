@@ -25,6 +25,7 @@ phase. Chaque test a son répertoire, qui contient **tout** :
 | Test | But | Durée | Prérequis humain |
 |---|---|---|---|
 | [drive-2-comptes](drive-2-comptes/) | Lecture + écriture + modification Drive sur **2 comptes dans un même prompt**, élicitation comprise, nettoyage réversible | ~10 min | Dossier `ZZ-TESTS` à la racine des 2 Drive concernés |
+| [gwsa-grant-resolve-nom](gwsa-grant-resolve-nom/) | `gwsa grant` résout un dossier **par son nom** : par compte, refus francs (introuvable / ambigu / corbeille), sans Touch ID gaspillé. N'écrit aucun fichier | ~8 min | Dossier `ZZ-TESTS` à la racine des 2 Drive + **deux** dossiers homonymes `ZZ-AMBIGU` |
 
 ## Conventions (tous les tests)
 
