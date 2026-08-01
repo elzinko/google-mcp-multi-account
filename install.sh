@@ -61,6 +61,10 @@ TARGET="$DEPLOY_ROOT/$LATEST"
 # ── télécharger + figer + basculer current ───────────────────────
 step "Installation"
 if [[ -d "$TARGET" ]]; then
+  # Cible RÉUTILISÉE : valider aussi (une version legacy pré-existante, posée par
+  # un ancien deploy clone, n'a pas d'updater sans clone) — revue Codex P1.
+  [[ -f "$TARGET/scripts/lib-github-release.sh" ]] \
+    || die "$LATEST déjà présent mais antérieur à l'update sans clone — supprime « $TARGET » ou installe depuis un clone"
   ok "$LATEST déjà présent — pas de re-téléchargement"
 else
   base="${GWSA_TARBALL_BASE:-https://github.com/$REPO/archive/refs/tags}"

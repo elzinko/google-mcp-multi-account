@@ -2019,6 +2019,30 @@ ghenv GWSA_DEPLOY_ROOT="$LEGDEP" "$REL/scripts/deploy-local.sh" --github v0.0.9 
   && pass "--github : version sans updater intégré refusée, current jamais posé" \
   || fail "--github : a basculé sur une version non self-updatable"
 
+# cible legacy PRÉ-EXISTANTE (sans lib, ex. ancien deploy clone) → deploy-local
+# --github refuse de basculer, même sans re-téléchargement. Codex P1 (réutilisée).
+LEG2="$TMP/legacydep2"; mkdir -p "$LEG2/v0.5.0/scripts"
+ghenv GWSA_DEPLOY_ROOT="$LEG2" "$REL/scripts/deploy-local.sh" --github v0.5.0 >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 && ! -e "$LEG2/current" ]] \
+  && pass "--github : cible legacy pré-existante refusée (current pas basculé)" \
+  || fail "--github : a basculé sur une cible legacy pré-existante"
+
+# idem côté install.sh : un dossier legacy du dernier tag déjà présent → refus
+LEG3="$TMP/legacydep3"; mkdir -p "$LEG3/v2.0.0/scripts"
+ghenv GWSA_DEPLOY_ROOT="$LEG3" GWSA_CLI_LINK="$LEG3/gwsa" GWSA_SKIP_WIRE=1 \
+  bash install.sh >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 && ! -e "$LEG3/current" ]] \
+  && pass "install.sh : cible legacy pré-existante refusée (current pas basculé)" \
+  || fail "install.sh : a basculé sur une cible legacy pré-existante"
+
+# fork : « gwsa update » sans clone restaure GWSA_REPO depuis .origin. Codex P2.
+printf 'github:someone/fork\n' > "$GHDEP/current/.origin"
+out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
+         "$GHDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
+[[ "$out_u" == *"someone/fork"* ]] \
+  && pass "update sans clone : repo restauré depuis .origin (fork préservé)" \
+  || fail "update sans clone : .origin ignoré (repo par défaut utilisé)"
+
 section "sessions + vault (fiche 0040)"
 
 SESS_ROOT="$TMP/gwsa-sessions"
