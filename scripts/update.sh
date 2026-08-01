@@ -92,6 +92,13 @@ else
     # (ancienne provenance ssh mal parsée) est ignoré plutôt que propagé.
     [[ "$_origin" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] && export GWSA_REPO="$_origin"
   fi
+  # Provenance inconnue : ce dossier vient d'un clone (.source présent mais
+  # invalide → on est dans ce fallback) désormais absent, SANS .origin GitHub
+  # exploitable et sans GWSA_REPO. On ne DEVINE pas le dépôt — sinon on
+  # installerait le code d'upstream à la place du vrai (revue Codex). Refus.
+  if [[ -z "${GWSA_REPO:-}" && -e "$HERE/.source" ]]; then
+    die "provenance inconnue : déploiement issu d'un clone désormais absent, sans .origin GitHub — réinstalle via « curl … | bash » (qui note la provenance), ou précise GWSA_REPO=owner/repo"
+  fi
   # shellcheck source=scripts/lib-github-release.sh
   source "$LIB_GH"
   ok "sans clone — versions lues depuis GitHub $(gh_repo)"

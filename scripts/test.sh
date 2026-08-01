@@ -2158,6 +2158,37 @@ env GWSA_DEPLOY_ROOT="$TMP/portdep" "$PORTC/scripts/deploy-local.sh" --tag v1.0.
   && pass "deploy clone : remote ssh:// avec port normalisé dans .origin (github:someone/portrepo)" \
   || fail "deploy clone : remote ssh:// avec port mal parsé"
 
+# hôte non-GitHub qui CONTIENT « github.com » → jamais pris pour GitHub (Codex round-7).
+NGH="$TMP/notgithub"; mkdir -p "$NGH/scripts" "$NGH/bin"
+cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$NGH/scripts/"
+printf '#!/bin/sh\nexit 0\n' > "$NGH/bin/gwsa"; chmod +x "$NGH/bin/gwsa"
+git -C "$NGH" init -q >/dev/null 2>&1; git -C "$NGH" config user.email t@t; git -C "$NGH" config user.name t
+git -C "$NGH" remote add origin https://notgithub.com/someone/repo.git
+git -C "$NGH" add -A >/dev/null 2>&1; git -C "$NGH" commit -qm x >/dev/null 2>&1; git -C "$NGH" tag v1.0.0
+env GWSA_DEPLOY_ROOT="$TMP/nghdep" "$NGH/scripts/deploy-local.sh" --tag v1.0.0 >/dev/null 2>&1
+[[ ! -e "$TMP/nghdep/v1.0.0/.origin" ]] \
+  && pass "deploy clone : hôte « notgithub.com » non pris pour GitHub (aucun .origin)" \
+  || fail "deploy clone : hôte non-GitHub accepté à tort comme GitHub"
+
+# clone SANS provenance GitHub, supprimé → update REFUSE (pas de fallback upstream) (Codex round-7).
+NOG="$TMP/nogithub"; mkdir -p "$NOG/scripts" "$NOG/bin"
+cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$REL/scripts/update.sh" "$NOG/scripts/"
+cp "$REL/bin/gwsa" "$NOG/bin/"; printf '#!/bin/sh\nexit 0\n' > "$NOG/bin/google-mcp"; chmod +x "$NOG/bin/"*
+git -C "$NOG" init -q >/dev/null 2>&1; git -C "$NOG" config user.email t@t; git -C "$NOG" config user.name t
+git -C "$NOG" add -A >/dev/null 2>&1; git -C "$NOG" commit -qm x >/dev/null 2>&1; git -C "$NOG" tag v1.0.0
+NOGDEP="$TMP/nogdep"
+env GWSA_DEPLOY_ROOT="$NOGDEP" "$NOG/scripts/deploy-local.sh" --tag v1.0.0 >/dev/null 2>&1
+[[ ! -e "$NOGDEP/v1.0.0/.origin" ]] \
+  && pass "deploy clone sans remote : aucun .origin (provenance inconnue)" \
+  || fail "deploy clone sans remote : .origin écrit à tort"
+rm -rf "$NOG"
+out_u="$(env GWSA_TAGS_URL="file://$GHTAGS" GWSA_TARBALL_BASE="file://$GHTB" \
+         GWSA_DEPLOY_ROOT="$NOGDEP" GWSA_CLI_LINK="$TMP/noggwsa" \
+         "$NOGDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
+[[ "$rc" -ne 0 && "$out_u" == *"provenance inconnue"* ]] \
+  && pass "update : clone non-GitHub supprimé → refus (provenance inconnue, pas d'upstream)" \
+  || fail "update : fallback silencieux sur upstream quand provenance inconnue"
+
 section "sessions + vault (fiche 0040)"
 
 SESS_ROOT="$TMP/gwsa-sessions"
