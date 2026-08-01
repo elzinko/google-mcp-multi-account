@@ -1994,6 +1994,31 @@ out_u="$(GWSA_TAGS_URL="file://$TMP/inexistant.json" GWSA_TARBALL_BASE="file://$
   && pass "update : GitHub injoignable → refus, current inchangé (v2.0.0)" \
   || fail "update : mauvais comportement quand GitHub est injoignable"
 
+# --check --to <tag inexistant> : sans clone, refus (comme refs/tags côté clone). Codex P2.
+out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
+         "$GHDEP/current/scripts/update.sh" --check --to v9.9.9 2>&1)"; rc=$?
+[[ "$rc" -ne 0 && "$out_u" == *"introuvable"* ]] \
+  && pass "update --check --to : tag inexistant refusé (validé contre GitHub)" \
+  || fail "update --check --to : tag bidon accepté à tort"
+
+# --to <version self-updatable> : rollback sans clone OK (v0.1.0 embarque l'updater)
+ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_DESKTOP_CONFIG="$TMP/ghdesktop.json" \
+  GWSA_CLI_LINK="$GHBIN/gwsa" "$GHDEP/current/scripts/update.sh" --to v0.1.0 >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$GHDEP/current")")" == "v0.1.0" ]] \
+  && pass "update --to : rollback sans clone vers une version self-updatable (v0.1.0)" \
+  || fail "update --to : rollback sans clone en échec"
+
+# version ANTÉRIEURE à l'update sans clone (sans lib) → refus, current jamais posé. Codex P1.
+LPKG="$TMP/pkg-0.0.9"; mkdir -p "$LPKG"
+git -C "$REL" archive v0.1.0 | tar -x -C "$LPKG"
+rm -f "$LPKG/scripts/lib-github-release.sh"
+tar -czf "$GHTB/v0.0.9.tar.gz" -C "$TMP" pkg-0.0.9; rm -rf "$LPKG"
+LEGDEP="$TMP/legacydep"
+ghenv GWSA_DEPLOY_ROOT="$LEGDEP" "$REL/scripts/deploy-local.sh" --github v0.0.9 >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 && ! -e "$LEGDEP/current" && ! -d "$LEGDEP/v0.0.9" ]] \
+  && pass "--github : version sans updater intégré refusée, current jamais posé" \
+  || fail "--github : a basculé sur une version non self-updatable"
+
 section "sessions + vault (fiche 0040)"
 
 SESS_ROOT="$TMP/gwsa-sessions"

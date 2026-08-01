@@ -46,10 +46,13 @@ command -v gws >/dev/null 2>&1 \
 # ── dernière version publiée ─────────────────────────────────────
 step "Dernière version publiée"
 tags_url="${GWSA_TAGS_URL:-https://api.github.com/repos/$REPO/tags}"
+# `|| true` : sous set -euo pipefail, un curl injoignable OU un grep sans
+# correspondance fait échouer le pipe et avorterait AVANT le die explicite
+# (curl silencieux → « curl | bash » s'arrête sans message). Revue Codex P2.
 LATEST="$(curl -fsSL "$tags_url" 2>/dev/null \
   | grep -oE '"v[0-9]+\.[0-9]+\.[0-9]+"' | tr -d '"' | sed 's/^v//' \
-  | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)"
-[[ -n "$LATEST" ]] || die "impossible de lire la dernière version depuis GitHub ($tags_url)"
+  | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)" || true
+[[ -n "$LATEST" ]] || die "impossible de lire la dernière version depuis GitHub ($tags_url) — réseau ? dépôt ?"
 LATEST="v$LATEST"
 ok "version : $LATEST"
 
@@ -67,6 +70,10 @@ else
   # --strip-components=1 : le tarball GitHub a un dossier racine « <repo>-<tag>/ ».
   curl -fsSL "$url" | tar -xz -C "$tmp" --strip-components=1 \
     || { rm -rf "$tmp"; die "téléchargement/extraction de $LATEST en échec ($url)"; }
+  # Garde-fou (revue Codex P1) : ne pas installer une version antérieure à
+  # l'update sans clone — son « gwsa update » exigerait un clone et mourrait.
+  [[ -f "$tmp/scripts/lib-github-release.sh" ]] \
+    || { rm -rf "$tmp"; die "$LATEST est antérieure à l'update sans clone — attends la prochaine release, ou installe depuis un clone"; }
   printf '%s\n' "$LATEST" > "$tmp/VERSION"
   # Marqueur d'origine : « gwsa update » saura re-tirer depuis GitHub (pas de clone).
   printf '%s\n' "github:$REPO" > "$tmp/.origin"

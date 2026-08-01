@@ -80,8 +80,13 @@ else
   ok "sans clone — versions lues depuis GitHub $(gh_repo)"
   LATEST="$(gh_latest_tag)" || die "impossible de joindre GitHub (dernier tag introuvable) — réessaie plus tard"
   TARGET_VERSION="${WANT:-$LATEST}"
-  # Un tag demandé (--to) n'est pas revérifié ici : le déploiement échoue
-  # proprement si son tarball n'existe pas (404).
+  if [[ -n "$WANT" ]]; then
+    # Comme le chemin clone valide « refs/tags/$WANT » : sans clone, on confirme
+    # le tag contre la liste publiée — sinon « --check --to <typo> » mentirait
+    # (« installerait : v9.9.9 », rc 0). Revue Codex P2.
+    gh_tag_exists "$WANT" \
+      || die "version « $WANT » introuvable sur GitHub $(gh_repo) (ou GitHub injoignable)"
+  fi
 fi
 
 INSTALLED=""

@@ -168,6 +168,11 @@ else
   if [[ "$SOURCE_TYPE" == "github" ]]; then
     gh_download_version "$VERSION" "$tmp" \
       || { rm -rf "$tmp"; die "téléchargement/extraction du tarball $VERSION en échec (GitHub joignable ? tag existant ?)"; }
+    # Garde-fou (revue Codex P1) : ne jamais basculer « current » — donc le gwsa
+    # du PATH — sur une version ANTÉRIEURE à l'update sans clone. Son update.sh
+    # exigerait un clone (.git/.source), et tout « gwsa update » suivant mourrait.
+    [[ -f "$tmp/scripts/lib-github-release.sh" ]] \
+      || { rm -rf "$tmp"; die "$VERSION est antérieure à l'update sans clone (aucun updater intégré) — installe-la depuis un clone si tu y tiens"; }
     # Marqueur d'origine : update.sh sait qu'il doit re-tirer depuis GitHub, pas
     # depuis un clone. Pas de .source — il n'y a pas de clone (fiche 0020).
     printf '%s\n' "github:$(gh_repo)" > "$tmp/.origin"
