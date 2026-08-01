@@ -9,6 +9,28 @@ compte : le tool `setup_status` guide l'initialisation depuis le client LLM.)
 
 Remplace `/ABS/PATH/google-mcp-multi-account` par le chemin absolu du clone.
 
+## Installer sans cloner (curl)
+
+Pour **utiliser** le serveur (pas le développer), pas besoin de cloner le dépôt :
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/elzinko/google-mcp-multi-account/main/install.sh | bash
+```
+
+Ça télécharge la dernière version publiée, la fige dans
+`~/.local/share/google-mcp/`, met `gwsa` sur le PATH et branche les clients.
+Reste le setup Google (OAuth/GCP), affiché à la fin — voir
+[setup-oauth.md](setup-oauth.md).
+
+Mettre à jour plus tard, **toujours sans clone** :
+
+```bash
+gwsa update            # dernière version publiée · --to v0.1.0 pour un retour arrière
+```
+
+`gwsa update` lit la dernière version sur GitHub et bascule `current` dessus. Le
+clone git n'est nécessaire que pour **contribuer** (fiche 0020).
+
 ## Claude Desktop
 
 **Automatique (recommandé)** — le script résout le chemin absolu tout seul,

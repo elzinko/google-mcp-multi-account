@@ -5,7 +5,7 @@ type: feature
 priority: P1
 version:
 epic: 0017
-status: todo
+status: in-progress
 ready: 2026-08-01
 pr:
 created: 2026-07-24
@@ -68,12 +68,16 @@ permissions d'outils), bascule `current` réservée au rail **stable**.
 
 ## Critères d'acceptation
 
-- [ ] Un utilisateur installe **sans cloner le repo** ni éditer un chemin (`curl … | bash`).
-- [ ] `gwsa update` met à jour **sans clone présent** (tarball GitHub), clone = fallback.
-- [ ] Suppression du clone → l'update fonctionne encore.
-- [ ] Nom de connecteur inchangé (`google-multi-account`) après update (pas de reset perms).
-- [ ] Rollback (`--to vX.Y.Z`) et `--check` conservés.
-- [ ] Tests hermétiques verts (aucun accès réseau/compte réel dans `test.sh`).
+- [x] Un utilisateur installe **sans cloner le repo** ni éditer un chemin (`curl … | bash`). — `install.sh`
+- [x] `gwsa update` met à jour **sans clone présent** (tarball GitHub), clone = fallback.
+- [x] Suppression du clone → l'update fonctionne encore (copie marquée `.origin`, ni `.git` ni `.source`).
+- [x] Nom de connecteur inchangé (`google-multi-account`) après update (branchement partagé, pas de reset perms).
+- [x] Rollback (`--to vX.Y.Z`) et `--check` conservés.
+- [x] Tests hermétiques verts (fixtures `file://`, zéro réseau — section dédiée dans `test.sh`).
+
+> **Phase 1 livrée** (branche `feat/0020-install-update-sans-clone`) : `install.sh`
+> (curl · racine du repo), `scripts/lib-github-release.sh`, `deploy-local.sh --github`,
+> `update.sh` bascule GitHub sans clone. **Phase 2** (tap Homebrew) : à suivre.
 
 ## Notes
 

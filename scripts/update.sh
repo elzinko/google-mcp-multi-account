@@ -11,9 +11,9 @@
 #   ./scripts/update.sh --check      # dit installé / disponible, n'écrit rien
 #   ./scripts/update.sh --force      # réinstalle même si déjà à jour
 #
-# Marche aussi depuis la copie installée : deploy-local.sh y note le chemin du
-# clone source dans « .source », et ce script s'y redirige (la copie figée n'a
-# pas de .git, donc pas de tags à consulter).
+# Marche aussi depuis la copie installée (relais par « .source » vers le clone).
+# Sans clone du tout — installé par curl, ou clone supprimé — il lit la dernière
+# version et son tarball depuis GitHub, plus besoin de garder un clone (fiche 0020).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -44,29 +44,44 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ── où sont les versions ? ───────────────────────────────────────
-# Lancé depuis la copie installée : pas de .git, donc on repart vers le clone.
+# Deux chemins (fiche 0020) :
+#   • Contributeur : un clone git est là (ici, ou noté dans .source) → tags git.
+#   • Utilisateur  : aucun clone → dernier tag + tarball depuis GitHub.
+LIB_GH="$(cd "$(dirname "$0")" && pwd)/lib-github-release.sh"
 SRC="$HERE"
-if ! git -C "$SRC" rev-parse --git-dir >/dev/null 2>&1; then
-  if [[ -s "$HERE/.source" ]]; then
-    SRC="$(cat "$HERE/.source")"
-    [[ -d "$SRC" ]] || die "clone source « $SRC » introuvable (noté dans $HERE/.source)"
-    ok "clone source : $SRC"
-  else
-    die "ni dépôt git ni fichier .source dans $HERE — lance ce script depuis le clone"
-  fi
+MODE_SRC="clone"
+if git -C "$SRC" rev-parse --git-dir >/dev/null 2>&1; then
+  MODE_SRC="clone"
+elif [[ -s "$HERE/.source" ]] && git -C "$(cat "$HERE/.source")" rev-parse --git-dir >/dev/null 2>&1; then
+  SRC="$(cat "$HERE/.source")"
+  ok "clone source : $SRC"
+  MODE_SRC="clone"
+else
+  # Ni .git ici, ni .source pointant un clone valide (jamais cloné, ou clone
+  # supprimé) → on tire depuis GitHub. C'est ce qui rend l'update « standard ».
+  MODE_SRC="github"
 fi
-git -C "$SRC" rev-parse --git-dir >/dev/null 2>&1 || die "$SRC n'est pas un dépôt git"
 
 step "Versions"
-git -C "$SRC" fetch --quiet --tags 2>/dev/null || warn "fetch impossible — je travaille avec les tags locaux"
-
-LATEST="$(git -C "$SRC" tag --list 'v[0-9]*' --sort=-v:refname | head -1)"
-[[ -n "$LATEST" ]] || die "aucune version publiée (aucun tag) — « ./scripts/release.sh » d'abord"
-
-TARGET_VERSION="${WANT:-$LATEST}"
-if [[ -n "$WANT" ]]; then
-  git -C "$SRC" rev-parse -q --verify "refs/tags/$WANT" >/dev/null \
-    || die "version « $WANT » inconnue (git -C $SRC tag pour la liste)"
+if [[ "$MODE_SRC" == "clone" ]]; then
+  git -C "$SRC" fetch --quiet --tags 2>/dev/null || warn "fetch impossible — je travaille avec les tags locaux"
+  LATEST="$(git -C "$SRC" tag --list 'v[0-9]*' --sort=-v:refname | head -1)"
+  [[ -n "$LATEST" ]] || die "aucune version publiée (aucun tag) — « ./scripts/release.sh » d'abord"
+  TARGET_VERSION="${WANT:-$LATEST}"
+  if [[ -n "$WANT" ]]; then
+    git -C "$SRC" rev-parse -q --verify "refs/tags/$WANT" >/dev/null \
+      || die "version « $WANT » inconnue (git -C $SRC tag pour la liste)"
+  fi
+else
+  command -v curl >/dev/null 2>&1 || die "curl est requis pour mettre à jour sans clone"
+  [[ -f "$LIB_GH" ]] || die "lib introuvable : $LIB_GH"
+  # shellcheck source=scripts/lib-github-release.sh
+  source "$LIB_GH"
+  ok "sans clone — versions lues depuis GitHub $(gh_repo)"
+  LATEST="$(gh_latest_tag)" || die "impossible de joindre GitHub (dernier tag introuvable) — réessaie plus tard"
+  TARGET_VERSION="${WANT:-$LATEST}"
+  # Un tag demandé (--to) n'est pas revérifié ici : le déploiement échoue
+  # proprement si son tarball n'existe pas (404).
 fi
 
 INSTALLED=""
@@ -94,8 +109,14 @@ fi
 
 # ── installation ─────────────────────────────────────────────────
 step "Installation de $TARGET_VERSION"
-"$SRC/scripts/deploy-local.sh" --tag "$TARGET_VERSION" \
-  || die "déploiement en échec — rien n'a basculé"
+if [[ "$MODE_SRC" == "clone" ]]; then
+  "$SRC/scripts/deploy-local.sh" --tag "$TARGET_VERSION" \
+    || die "déploiement en échec — rien n'a basculé"
+else
+  # Depuis la copie installée : son propre deploy-local.sh sait tirer le tarball.
+  "$HERE/scripts/deploy-local.sh" --github "$TARGET_VERSION" \
+    || die "déploiement en échec — rien n'a basculé"
+fi
 
 # ── branchement des clients, seulement si nécessaire ─────────────
 # Deux clients, deux configs séparées : Claude Desktop (fichier JSON dédié) et

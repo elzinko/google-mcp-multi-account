@@ -1673,7 +1673,7 @@ RELDEP="$TMP/reldeploy"
 RELCONF="$TMP/reldesktop.json"
 mkdir -p "$REL/scripts" "$REL/bin"
 cp scripts/release.sh scripts/update.sh scripts/deploy-local.sh \
-   scripts/install-claude-desktop.sh "$REL/scripts/"
+   scripts/lib-github-release.sh scripts/install-claude-desktop.sh "$REL/scripts/"
 printf '#!/bin/sh\nexit 0\n' > "$REL/scripts/test.sh"; chmod +x "$REL/scripts/test.sh"
 printf '#!/bin/sh\necho faux-mcp\n' > "$REL/bin/google-mcp"; chmod +x "$REL/bin/google-mcp"
 cp bin/gwsa "$REL/bin/gwsa"   # embarqué dans les copies déployées (cf. link_cli)
@@ -1924,6 +1924,75 @@ out_l="$(GWSA_CLI_LINK="$LINK" relenv "$UPDATE" --force 2>&1)"
 [[ ! -L "$LINK" && "$(cat "$LINK")" == *"vrai fichier"* && "$out_l" == *"pas un lien"* ]] \
   && pass "lien PATH : fichier réel jamais remplacé par un lien" \
   || fail "lien PATH : a écrasé un fichier réel"
+
+section "install.sh / update --github — installer & mettre à jour SANS clone (fiche 0020)"
+
+# On rejoue le vrai vecteur « produit » : GitHub sert un tarball par tag. Les
+# fixtures sont fabriquées depuis le faux clone $REL (tags v0.1.0, v1.0.0) et
+# servies en file:// — curl sait les lire, donc zéro réseau, hermétique.
+GHTB="$TMP/gh-tarballs"; mkdir -p "$GHTB"
+for t in v0.1.0 v1.0.0; do
+  git -C "$REL" archive --format=tar.gz --prefix="pkg-${t#v}/" "$t" > "$GHTB/$t.tar.gz"
+done
+GHTAGS="$TMP/gh-tags.json"
+printf '[{"name":"v1.0.0"},{"name":"v0.1.0"}]\n' > "$GHTAGS"
+# env : « ghenv VAR=val cmd » — env parse les NAME=VALUE de tête, y compris ceux
+# passés en argument (un « VAR=val "$@" » nu les prendrait pour un nom de commande).
+ghenv() { env GWSA_TAGS_URL="file://$GHTAGS" GWSA_TARBALL_BASE="file://$GHTB" "$@"; }
+GHDEP="$TMP/ghdeploy"
+GHBIN="$TMP/ghbin"; mkdir -p "$GHBIN"
+
+# deploy-local --github : n'exige pas git, écrit .origin (jamais .source)
+ghenv GWSA_DEPLOY_ROOT="$GHDEP" "$REL/scripts/deploy-local.sh" --github v0.1.0 >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && "$(cat "$GHDEP/v0.1.0/VERSION" 2>/dev/null)" == "v0.1.0" \
+   && "$(cat "$GHDEP/v0.1.0/app.txt" 2>/dev/null)" == "coeur" ]] \
+  && pass "--github : déploie le CONTENU du tag depuis le tarball (sans git)" \
+  || fail "--github : contenu déployé incorrect"
+
+grep -q "^github:" "$GHDEP/v0.1.0/.origin" 2>/dev/null && [[ ! -e "$GHDEP/v0.1.0/.source" ]] \
+  && pass "--github : marqueur .origin, aucun .source (aucun clone)" \
+  || fail "--github : marqueurs d'origine incohérents"
+
+# install.sh : premier install SANS aucun clone (résout le dernier tag via GitHub)
+ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" GWSA_SKIP_WIRE=1 \
+  bash install.sh >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$GHDEP/current")")" == "v1.0.0" ]] \
+  && pass "install.sh : sans clone, installe la dernière version (v1.0.0) et bascule current" \
+  || fail "install.sh : n'installe pas la dernière version"
+
+[[ -L "$GHBIN/gwsa" ]] \
+  && pass "install.sh : pose gwsa sur le PATH (lien désigné)" \
+  || fail "install.sh : gwsa non posé sur le PATH"
+
+[[ -e "$GHDEP/current/.origin" && ! -e "$GHDEP/current/.source" ]] \
+  && pass "install.sh : copie marquée github, prête pour un update sans clone" \
+  || fail "install.sh : marqueurs d'origine incohérents"
+
+# update --check depuis la copie installée SANS clone : lit GitHub, se dit à jour
+out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
+         "$GHDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$out_u" == *"à jour"* ]] \
+  && pass "update --check : sans clone, interroge GitHub et se dit à jour" \
+  || fail "update --check sans clone : sortie inattendue"
+
+# une v2.0.0 paraît → update l'installe, toujours sans clone
+git -C "$REL" commit -q --allow-empty -m "feat: cap v2" >/dev/null 2>&1
+git -C "$REL" tag v2.0.0
+git -C "$REL" archive --format=tar.gz --prefix="pkg-2.0.0/" v2.0.0 > "$GHTB/v2.0.0.tar.gz"
+printf '[{"name":"v2.0.0"},{"name":"v1.0.0"},{"name":"v0.1.0"}]\n' > "$GHTAGS"
+ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_DESKTOP_CONFIG="$TMP/ghdesktop.json" \
+  GWSA_CLI_LINK="$GHBIN/gwsa" "$GHDEP/current/scripts/update.sh" >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$GHDEP/current")")" == "v2.0.0" ]] \
+  && pass "update : sans clone, installe une nouvelle version publiée (v2.0.0)" \
+  || fail "update sans clone : n'a pas installé la nouvelle version"
+
+# GitHub injoignable (tags introuvables) → refus explicite, current intact
+out_u="$(GWSA_TAGS_URL="file://$TMP/inexistant.json" GWSA_TARBALL_BASE="file://$GHTB" \
+         GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
+         "$GHDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
+[[ "$rc" -ne 0 && "$(basename "$(readlink "$GHDEP/current")")" == "v2.0.0" ]] \
+  && pass "update : GitHub injoignable → refus, current inchangé (v2.0.0)" \
+  || fail "update : mauvais comportement quand GitHub est injoignable"
 
 section "sessions + vault (fiche 0040)"
 
