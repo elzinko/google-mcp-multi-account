@@ -2146,6 +2146,18 @@ env GWSA_DEPLOY_ROOT="$TMP/sshdep" "$SSHC/scripts/deploy-local.sh" --tag v1.0.0 
   && pass "deploy clone : remote ssh:// normalisé dans .origin (github:someone/sshrepo)" \
   || fail "deploy clone : remote ssh:// mal parsé"
 
+# provenance ssh:// avec PORT explicite bien normalisée (Codex round-6).
+PORTC="$TMP/portclone"; mkdir -p "$PORTC/scripts" "$PORTC/bin"
+cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$PORTC/scripts/"
+printf '#!/bin/sh\nexit 0\n' > "$PORTC/bin/gwsa"; chmod +x "$PORTC/bin/gwsa"
+git -C "$PORTC" init -q >/dev/null 2>&1; git -C "$PORTC" config user.email t@t; git -C "$PORTC" config user.name t
+git -C "$PORTC" remote add origin ssh://git@github.com:22/someone/portrepo.git
+git -C "$PORTC" add -A >/dev/null 2>&1; git -C "$PORTC" commit -qm x >/dev/null 2>&1; git -C "$PORTC" tag v1.0.0
+env GWSA_DEPLOY_ROOT="$TMP/portdep" "$PORTC/scripts/deploy-local.sh" --tag v1.0.0 >/dev/null 2>&1
+[[ "$(cat "$TMP/portdep/v1.0.0/.origin" 2>/dev/null)" == "github:someone/portrepo" ]] \
+  && pass "deploy clone : remote ssh:// avec port normalisé dans .origin (github:someone/portrepo)" \
+  || fail "deploy clone : remote ssh:// avec port mal parsé"
+
 section "sessions + vault (fiche 0040)"
 
 SESS_ROOT="$TMP/gwsa-sessions"

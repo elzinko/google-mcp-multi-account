@@ -48,7 +48,9 @@ clone_github_origin() {
   local url repo
   url="$(git -C "$1" remote get-url origin 2>/dev/null || true)"
   case "$url" in *github.com*) ;; *) return 0 ;; esac
-  repo="$(printf '%s' "$url" | sed -E 's#^git@github\.com:#https://github.com/#; s#^ssh://[^/]*github\.com/#https://github.com/#; s#^https?://[^/]*github\.com/##; s#\.git$##; s#/$##')"
+  # scp (git@github.com:owner/repo) · ssh://git@github.com[:port]/owner/repo ·
+  # http(s)://[user@]github.com[:port]/owner/repo — port optionnel (revue Codex).
+  repo="$(printf '%s' "$url" | sed -E 's#^git@github\.com:#https://github.com/#; s#^ssh://[^/]*github\.com(:[0-9]+)?/#https://github.com/#; s#^https?://[^/]*github\.com(:[0-9]+)?/##; s#\.git$##; s#/$##')"
   [[ "$repo" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] && printf 'github:%s' "$repo"
 }
 
