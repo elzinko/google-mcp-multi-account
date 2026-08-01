@@ -2120,6 +2120,32 @@ out_u="$(env GWSA_TAGS_URL="file://$GHTAGS" GWSA_TARBALL_BASE="file://$GHTB" \
   && pass "update sans clone : provenance fork préservée après suppression du clone (.origin)" \
   || fail "update sans clone : retombe sur upstream après suppression du clone"
 
+# mode CLONE : réutiliser un dossier venu d'un AUTRE dépôt → refus (Codex round-5).
+XDEP="$TMP/xrepodep"; mkdir -p "$XDEP/v1.0.0"
+printf 'github:elzinko/upstream\n' > "$XDEP/v1.0.0/.origin"        # dossier « upstream »
+XFORK="$TMP/xfork"; mkdir -p "$XFORK/scripts" "$XFORK/bin"
+cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$XFORK/scripts/"
+printf '#!/bin/sh\nexit 0\n' > "$XFORK/bin/gwsa"; chmod +x "$XFORK/bin/gwsa"
+git -C "$XFORK" init -q >/dev/null 2>&1; git -C "$XFORK" config user.email t@t; git -C "$XFORK" config user.name t
+git -C "$XFORK" remote add origin https://github.com/someone/other.git
+git -C "$XFORK" add -A >/dev/null 2>&1; git -C "$XFORK" commit -qm x >/dev/null 2>&1; git -C "$XFORK" tag v1.0.0
+env GWSA_DEPLOY_ROOT="$XDEP" "$XFORK/scripts/deploy-local.sh" --tag v1.0.0 >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 && ! -e "$XDEP/current" && "$(cat "$XDEP/v1.0.0/.origin")" == "github:elzinko/upstream" ]] \
+  && pass "deploy --tag (clone) : cible d'un autre dépôt refusée (provenance ≠)" \
+  || fail "deploy --tag (clone) : a réutilisé une cible d'un autre dépôt"
+
+# provenance ssh:// URI bien normalisée en .origin (Codex round-5).
+SSHC="$TMP/sshclone"; mkdir -p "$SSHC/scripts" "$SSHC/bin"
+cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$SSHC/scripts/"
+printf '#!/bin/sh\nexit 0\n' > "$SSHC/bin/gwsa"; chmod +x "$SSHC/bin/gwsa"
+git -C "$SSHC" init -q >/dev/null 2>&1; git -C "$SSHC" config user.email t@t; git -C "$SSHC" config user.name t
+git -C "$SSHC" remote add origin ssh://git@github.com/someone/sshrepo.git
+git -C "$SSHC" add -A >/dev/null 2>&1; git -C "$SSHC" commit -qm x >/dev/null 2>&1; git -C "$SSHC" tag v1.0.0
+env GWSA_DEPLOY_ROOT="$TMP/sshdep" "$SSHC/scripts/deploy-local.sh" --tag v1.0.0 >/dev/null 2>&1
+[[ "$(cat "$TMP/sshdep/v1.0.0/.origin" 2>/dev/null)" == "github:someone/sshrepo" ]] \
+  && pass "deploy clone : remote ssh:// normalisé dans .origin (github:someone/sshrepo)" \
+  || fail "deploy clone : remote ssh:// mal parsé"
+
 section "sessions + vault (fiche 0040)"
 
 SESS_ROOT="$TMP/gwsa-sessions"

@@ -39,6 +39,19 @@ ok()   { echo "${G}✓${N} $*"; }
 warn() { echo "${Y}⚠${N} $*"; }
 die()  { echo "${R}✗ $*${N}" >&2; exit 1; }
 
+# clone_github_origin <repo_root> → imprime « github:owner/repo » si le remote
+# origin est un dépôt GitHub identifiable, sinon RIEN (refus d'un marqueur
+# invalide). Gère https://, scp (git@github.com:owner/repo) et ssh://git@github.com/…
+# Sert à (1) noter la provenance au deploy clone, (2) refuser de réutiliser un
+# dossier venu d'un AUTRE dépôt (revue Codex).
+clone_github_origin() {
+  local url repo
+  url="$(git -C "$1" remote get-url origin 2>/dev/null || true)"
+  case "$url" in *github.com*) ;; *) return 0 ;; esac
+  repo="$(printf '%s' "$url" | sed -E 's#^git@github\.com:#https://github.com/#; s#^ssh://[^/]*github\.com/#https://github.com/#; s#^https?://[^/]*github\.com/##; s#\.git$##; s#/$##')"
+  [[ "$repo" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] && printf 'github:%s' "$repo"
+}
+
 # ── arguments ────────────────────────────────────────────────────
 DRY=""
 MODE="deploy"
@@ -177,6 +190,14 @@ if [[ -d "$TARGET" ]]; then
     #     d'un autre dépôt et les updates suivants viseraient la mauvaise source (P2).
     [[ "$(cat "$TARGET/.origin" 2>/dev/null)" == "github:$(gh_repo)" ]] \
       || die "$VERSION déjà déployé depuis un autre dépôt (.origin ≠ github:$(gh_repo)) — supprime « $TARGET » ou choisis un GWSA_DEPLOY_ROOT distinct"
+  else
+    # Mode clone : même risque de collision de tag entre dépôts (ex. dossier posé
+    # depuis upstream, puis --tag depuis un fork). Si la provenance du dossier
+    # diffère du remote de CE clone, ne pas le réutiliser (revue Codex). On ne
+    # refuse que quand les deux provenances sont connues et diffèrent.
+    _want="$(clone_github_origin "$REPO_ROOT")"; _have="$(cat "$TARGET/.origin" 2>/dev/null || true)"
+    [[ -z "$_want" || -z "$_have" || "$_have" == "$_want" ]] \
+      || die "$VERSION déjà déployé depuis un autre dépôt ($_have ≠ $_want) — supprime « $TARGET » ou choisis un GWSA_DEPLOY_ROOT distinct"
   fi
   ok "$VERSION déjà déployé — pas de réécriture"
 else
@@ -200,17 +221,11 @@ else
     # Le clone source, pour que « update.sh » sache où chercher les versions
     # quand il est lancé depuis la copie installée (qui n'a pas de .git).
     printf '%s\n' "$REPO_ROOT" > "$tmp/.source"
-    # Provenance : note aussi le dépôt distant (owner/repo) pour qu'un « gwsa
-    # update » vise le BON dépôt si le clone est supprimé plus tard (fallback
-    # GitHub) — sinon un déploiement depuis un fork retomberait sur upstream
-    # (revue Codex). Best-effort, GitHub seulement.
-    _rorigin="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || true)"
-    case "$_rorigin" in
-      *github.com*)
-        _rrepo="$(printf '%s' "$_rorigin" | sed -E 's#^git@github\.com:#https://github.com/#; s#^https?://[^/]*github\.com/##; s#\.git$##')"
-        case "$_rrepo" in */*) printf '%s\n' "github:$_rrepo" > "$tmp/.origin" ;; esac
-        ;;
-    esac
+    # Provenance : note aussi le dépôt distant pour qu'un « gwsa update » vise le
+    # BON dépôt si le clone est supprimé (fallback GitHub) — sinon un déploiement
+    # depuis un fork retomberait sur upstream (revue Codex). Best-effort.
+    _ori="$(clone_github_origin "$REPO_ROOT")"
+    [[ -n "$_ori" ]] && printf '%s\n' "$_ori" > "$tmp/.origin"
   fi
   printf '%s\n' "$VERSION" > "$tmp/VERSION"
   mv "$tmp" "$TARGET"

@@ -87,7 +87,10 @@ else
   # Un GWSA_REPO explicite dans l'environnement garde la priorité.
   if [[ -z "${GWSA_REPO:-}" && -s "$HERE/.origin" ]]; then
     _origin="$(cat "$HERE/.origin")"
-    case "$_origin" in github:*/*) export GWSA_REPO="${_origin#github:}" ;; esac
+    _origin="${_origin#github:}"
+    # N'exporter qu'un « owner/repo » bien formé — un marqueur malformé
+    # (ancienne provenance ssh mal parsée) est ignoré plutôt que propagé.
+    [[ "$_origin" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] && export GWSA_REPO="$_origin"
   fi
   # shellcheck source=scripts/lib-github-release.sh
   source "$LIB_GH"
