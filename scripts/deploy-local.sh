@@ -200,6 +200,17 @@ else
     # Le clone source, pour que « update.sh » sache où chercher les versions
     # quand il est lancé depuis la copie installée (qui n'a pas de .git).
     printf '%s\n' "$REPO_ROOT" > "$tmp/.source"
+    # Provenance : note aussi le dépôt distant (owner/repo) pour qu'un « gwsa
+    # update » vise le BON dépôt si le clone est supprimé plus tard (fallback
+    # GitHub) — sinon un déploiement depuis un fork retomberait sur upstream
+    # (revue Codex). Best-effort, GitHub seulement.
+    _rorigin="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || true)"
+    case "$_rorigin" in
+      *github.com*)
+        _rrepo="$(printf '%s' "$_rorigin" | sed -E 's#^git@github\.com:#https://github.com/#; s#^https?://[^/]*github\.com/##; s#\.git$##')"
+        case "$_rrepo" in */*) printf '%s\n' "github:$_rrepo" > "$tmp/.origin" ;; esac
+        ;;
+    esac
   fi
   printf '%s\n' "$VERSION" > "$tmp/VERSION"
   mv "$tmp" "$TARGET"

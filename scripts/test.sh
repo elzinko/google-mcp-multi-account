@@ -2078,6 +2078,48 @@ out_d="$(ghenv GWSA_DEPLOY_ROOT="$TMP/dghnoval" "$REL/scripts/deploy-local.sh" -
   && pass "deploy-local --github sans valeur : die d'usage (pas d'abandon silencieux)" \
   || fail "deploy-local --github sans valeur : abandon silencieux"
 
+# install.sh recycle le broker après bascule current (revue Codex round-4) : le
+# gwsa de la copie doit recevoir « broker stop ». Tag dont le gwsa logue l'appel.
+BRK="$TMP/brokerpkg"; mkdir -p "$BRK/scripts" "$BRK/bin"
+cp "$REL/scripts/lib-github-release.sh" "$BRK/scripts/"
+cat > "$BRK/bin/gwsa" <<EOF
+#!/usr/bin/env bash
+[ "\$1 \$2" = "broker stop" ] && : > "$TMP/broker-stop.log"
+exit 0
+EOF
+chmod +x "$BRK/bin/gwsa"
+git -C "$BRK" init -q >/dev/null 2>&1; git -C "$BRK" config user.email t@t; git -C "$BRK" config user.name t
+git -C "$BRK" add -A >/dev/null 2>&1; git -C "$BRK" commit -qm x >/dev/null 2>&1; git -C "$BRK" tag v3.0.0
+git -C "$BRK" archive --format=tar.gz --prefix="pkg-3.0.0/" v3.0.0 > "$GHTB/v3.0.0.tar.gz"
+printf '[{"name":"v3.0.0"},{"name":"v2.0.0"},{"name":"v1.0.0"},{"name":"v0.1.0"}]\n' > "$GHTAGS"
+rm -f "$TMP/broker-stop.log"
+ghenv GWSA_DEPLOY_ROOT="$TMP/brokerdep" GWSA_CLI_LINK="$TMP/brokerdep/gwsa" GWSA_SKIP_WIRE=1 \
+  bash install.sh >/dev/null 2>&1
+[[ -f "$TMP/broker-stop.log" ]] \
+  && pass "install.sh : recycle le broker après bascule current (broker stop appelé)" \
+  || fail "install.sh : broker non recyclé en ré-install"
+
+# provenance fork : un deploy clone note aussi .origin (remote GitHub), donc si le
+# clone est supprimé, l'update sans clone vise le BON dépôt, pas upstream. Codex round-4.
+FORK="$TMP/forkclone"; mkdir -p "$FORK/scripts" "$FORK/bin"
+cp "$REL/scripts/lib-github-release.sh" "$REL/scripts/deploy-local.sh" "$REL/scripts/update.sh" "$FORK/scripts/"
+cp "$REL/bin/gwsa" "$FORK/bin/"; printf '#!/bin/sh\nexit 0\n' > "$FORK/bin/google-mcp"; chmod +x "$FORK/bin/"*
+git -C "$FORK" init -q >/dev/null 2>&1; git -C "$FORK" config user.email t@t; git -C "$FORK" config user.name t
+git -C "$FORK" remote add origin https://github.com/someone/forkrepo.git
+git -C "$FORK" add -A >/dev/null 2>&1; git -C "$FORK" commit -qm x >/dev/null 2>&1; git -C "$FORK" tag v1.0.0
+FORKDEP="$TMP/forkdeploy"
+env GWSA_DEPLOY_ROOT="$FORKDEP" "$FORK/scripts/deploy-local.sh" --tag v1.0.0 >/dev/null 2>&1
+[[ "$(cat "$FORKDEP/v1.0.0/.origin" 2>/dev/null)" == "github:someone/forkrepo" ]] \
+  && pass "deploy clone : provenance remote notée dans .origin (github:someone/forkrepo)" \
+  || fail "deploy clone : .origin de provenance manquant/incorrect"
+rm -rf "$FORK"
+out_u="$(env GWSA_TAGS_URL="file://$GHTAGS" GWSA_TARBALL_BASE="file://$GHTB" \
+         GWSA_DEPLOY_ROOT="$FORKDEP" GWSA_CLI_LINK="$TMP/forkgwsa" \
+         "$FORKDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
+[[ "$out_u" == *"someone/forkrepo"* ]] \
+  && pass "update sans clone : provenance fork préservée après suppression du clone (.origin)" \
+  || fail "update sans clone : retombe sur upstream après suppression du clone"
+
 section "sessions + vault (fiche 0040)"
 
 SESS_ROOT="$TMP/gwsa-sessions"

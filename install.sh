@@ -93,6 +93,13 @@ fi
 ln -sfn "$TARGET" "$CURRENT_LINK"
 ok "current → $LATEST"
 
+# Recycler le broker : un broker déjà lancé continue de servir l'ANCIEN code
+# après un ré-install (comme update/deploy-local — revue Codex). Best-effort :
+# à la première install il n'y a pas de broker, c'est sans effet.
+if [[ -x "$CURRENT_LINK/bin/gwsa" ]]; then
+  "$CURRENT_LINK/bin/gwsa" broker stop >/dev/null 2>&1 || true
+fi
+
 # ── gwsa sur le PATH ─────────────────────────────────────────────
 step "gwsa sur le PATH"
 link="${GWSA_CLI_LINK:-}"
