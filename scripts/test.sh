@@ -2189,6 +2189,25 @@ out_u="$(env GWSA_TAGS_URL="file://$GHTAGS" GWSA_TARBALL_BASE="file://$GHTB" \
   && pass "update : clone non-GitHub supprimé → refus (provenance inconnue, pas d'upstream)" \
   || fail "update : fallback silencieux sur upstream quand provenance inconnue"
 
+# hôte GitHub en CASSE MIXTE (les hôtes sont insensibles à la casse) ; le chemin
+# owner/repo reste sensible à la casse (Codex round-8).
+CASE="$TMP/caseclone"; mkdir -p "$CASE/scripts" "$CASE/bin"
+cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$CASE/scripts/"
+printf '#!/bin/sh\nexit 0\n' > "$CASE/bin/gwsa"; chmod +x "$CASE/bin/gwsa"
+git -C "$CASE" init -q >/dev/null 2>&1; git -C "$CASE" config user.email t@t; git -C "$CASE" config user.name t
+git -C "$CASE" remote add origin https://GitHub.com/someone/CaseRepo.git
+git -C "$CASE" add -A >/dev/null 2>&1; git -C "$CASE" commit -qm x >/dev/null 2>&1; git -C "$CASE" tag v1.0.0
+env GWSA_DEPLOY_ROOT="$TMP/casedep" "$CASE/scripts/deploy-local.sh" --tag v1.0.0 >/dev/null 2>&1
+[[ "$(cat "$TMP/casedep/v1.0.0/.origin" 2>/dev/null)" == "github:someone/CaseRepo" ]] \
+  && pass "deploy clone : hôte « GitHub.com » (casse mixte) reconnu, chemin owner/repo préservé" \
+  || fail "deploy clone : hôte en casse mixte non reconnu"
+
+# la requête de tags par défaut demande per_page=100 (rollback validable > 30 tags). Codex round-8.
+tags_url_def="$(unset GWSA_TAGS_URL; GWSA_REPO=owner/repo; . "$REL/scripts/lib-github-release.sh"; gh_tags_url)"
+[[ "$tags_url_def" == *"per_page=100"* ]] \
+  && pass "lib : requête de tags par défaut élargie (per_page=100)" \
+  || fail "lib : per_page absent de la requête de tags"
+
 section "sessions + vault (fiche 0040)"
 
 SESS_ROOT="$TMP/gwsa-sessions"

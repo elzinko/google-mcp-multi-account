@@ -47,12 +47,14 @@ die()  { echo "${R}✗ $*${N}" >&2; exit 1; }
 clone_github_origin() {
   local url repo
   url="$(git -C "$1" remote get-url origin 2>/dev/null || true)"
-  case "$url" in *github.com*) ;; *) return 0 ;; esac
-  # scp (git@github.com:owner/repo) · ssh://[user@]github.com[:port]/owner/repo ·
-  # http(s)://[user@]github.com[:port]/owner/repo. Le hôte doit être EXACTEMENT
-  # github.com : « ([^/@]*@)? » ne consomme qu'un userinfo, donc « notgithub.com »
-  # ou « github.com.evil.com » ne matchent pas (revue Codex). Port optionnel.
-  repo="$(printf '%s' "$url" | sed -E 's#^git@github\.com:#https://github.com/#; s#^ssh://([^/@]*@)?github\.com(:[0-9]+)?/#https://github.com/#; s#^https?://([^/@]*@)?github\.com(:[0-9]+)?/##; s#\.git$##; s#/$##')"
+  # Préfiltre insensible à la casse (les noms d'hôte le sont — revue Codex).
+  case "$(printf '%s' "$url" | tr 'A-Z' 'a-z')" in *github.com*) ;; *) return 0 ;; esac
+  # Hôte EXACTEMENT github.com, schéma/hôte insensibles à la casse (classes
+  # [Gg]… ) ; le chemin owner/repo, lui, reste sensible à la casse (on ne
+  # lowercase pas l'URL). « ([^/@]*@)? » = userinfo optionnel, donc
+  # « notgithub.com »/« github.com.evil.com » ne matchent pas. Port optionnel.
+  # Formes : scp (git@github.com:owner/repo) · ssh://[user@]host[:port]/… · http(s)://…
+  repo="$(printf '%s' "$url" | sed -E 's#^git@[Gg][Ii][Tt][Hh][Uu][Bb]\.[Cc][Oo][Mm]:#https://github.com/#; s#^[Ss][Ss][Hh]://([^/@]*@)?[Gg][Ii][Tt][Hh][Uu][Bb]\.[Cc][Oo][Mm](:[0-9]+)?/#https://github.com/#; s#^[Hh][Tt][Tt][Pp][Ss]?://([^/@]*@)?[Gg][Ii][Tt][Hh][Uu][Bb]\.[Cc][Oo][Mm](:[0-9]+)?/##; s#\.git$##; s#/$##')"
   [[ "$repo" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] && printf 'github:%s' "$repo"
 }
 

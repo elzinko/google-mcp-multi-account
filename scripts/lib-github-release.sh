@@ -22,7 +22,10 @@
 gh_repo() { printf '%s' "${GWSA_REPO:-elzinko/google-mcp-multi-account}"; }
 
 gh_tags_url() {
-  printf '%s' "${GWSA_TAGS_URL:-https://api.github.com/repos/$(gh_repo)/tags}"
+  # per_page=100 : une seule requête couvre jusqu'à 100 tags (au lieu de 30 par
+  # défaut) — donc « --to <vieux tag> » reste validable quand l'historique grossit.
+  # Pagination complète (page 2+) différée : YAGNI tant que < 100 releases (Codex).
+  printf '%s' "${GWSA_TAGS_URL:-https://api.github.com/repos/$(gh_repo)/tags?per_page=100}"
 }
 
 gh_tarball_url() { # $1=tag → URL du tarball de ce tag
