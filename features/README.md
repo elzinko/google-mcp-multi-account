@@ -12,6 +12,7 @@
 | 0014 | Journaliser les refus de verrou dans usage.jsonl (decision:refus, reason:locked) | bug | P1 |  |  | ✅ shipped | #17 |
 | 0015 | Email de profil = métadonnée persistée (.email) — zéro exécution gws hors broker | refactor | P1 |  |  | ✅ shipped | #18 |
 | 0019 | English public surfaces — landing, docs & product copy | feature | P1 |  | 0017 | 🔴 todo |  |
+| 0020 | Installer & mettre à jour sans clone — installeur curl puis tap Homebrew | feature | P1 |  | 0017 | 🔴 todo |  |
 | 0024 | Fiabiliser les tools Gmail/Drive du MCP — brouillon cassé, Drive sans contenu ni propriétaire | bug | P1 |  |  | ✅ shipped | #26 |
 | 0025 | Couloirs étanches — chaque version branchée parle à son propre broker | bug | P1 |  |  | ✅ shipped | #27 |
 | 0029 | Publier et mettre à jour en une commande (release semver + update façon installeur) | feature | P1 |  |  | ✅ shipped | #28 |
@@ -49,6 +50,7 @@
 | 0069 | Docs in-app — rework orientation utilisateur | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
 | 0070 | README — quickstart + usage par persona + permissions + contribution | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
 | 0071 | GitHub metadata — description, homepage, topics + badges | chore | P2 | v0.4.0 | 0060 | 🔴 todo |  |
+| 0072 | Site de doc en ligne (MkDocs Material + landing) déployé sur Vercel | feature | P2 |  | 0017 | 🔴 todo |  |
 | 0001 | Élicitation signée — faire monter `gwsa strongauth` de la présence à la signature | feature | P3 |  |  | 🟠 in-progress |  |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)
@@ -63,7 +65,6 @@
 | # | Titre | Type | Prio | Version | Épic | Statut | PR |
 |---|-------|------|------|---------|------|--------|----|
 | 0006 | Harnais hybride pour les tests manuels — script pour la mécanique, LLM pour la glu | feature | P2 |  |  | 💡 idea |  |
-| 0020 | Packaging installable — sortir du git clone + symlink codé en dur | feature | P2 |  | 0017 | 💡 idea |  |
 | 0026 | Savoir quelle version répond — version annoncée par les tools, dérive détectée | feature | P2 |  |  | 💡 idea |  |
 | 0035 | Accès rapide à l'admin + visualisation des zones (icône barre de menus ?) | feature | P2 |  |  | 💡 idea |  |
 | 0038 | Créer un dossier-zone rapidement, geste humain (sans passer par le LLM) | feature | P2 |  |  | 💡 idea |  |
