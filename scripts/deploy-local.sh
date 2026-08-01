@@ -59,7 +59,10 @@ while [[ $# -gt 0 ]]; do
     -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "argument inconnu « $1 » (voir --help)" ;;
   esac
-  shift
+  # `|| break` : un flag à valeur en dernière position (« --github »/« --tag »/
+  # « --rollback » nu) a déjà vidé $@ ; sans ça, ce shift échoue et set -e avorte
+  # en silence avant le die d'usage (revue adversariale P3).
+  shift || break
 done
 
 current_version() { # nom de la version pointée par current (vide si aucune)
@@ -162,12 +165,18 @@ fi
 step "Déploiement"
 mkdir -p "$DEPLOY_ROOT"
 if [[ -d "$TARGET" ]]; then
-  # Cible RÉUTILISÉE : valider avant de basculer. Une version legacy posée par un
-  # ancien deploy clone n'a pas d'updater sans clone — ne jamais y basculer
-  # current/gwsa, sinon « gwsa update » redeviendrait dépendant d'un clone
-  # (revue Codex P1, cible pré-existante).
-  if [[ "$SOURCE_TYPE" == "github" && ! -f "$TARGET/scripts/lib-github-release.sh" ]]; then
-    die "$VERSION déjà déployé mais antérieur à l'update sans clone — current n'est pas basculé dessus (supprime « $TARGET » ou passe par un clone)"
+  # Cible RÉUTILISÉE : valider avant de basculer (revue Codex, cibles réutilisées).
+  if [[ "$SOURCE_TYPE" == "github" ]]; then
+    # (a) une version legacy (ancien deploy clone) n'a pas d'updater sans clone —
+    #     ne jamais y basculer current/gwsa, sinon « gwsa update » redeviendrait
+    #     dépendant d'un clone (P1).
+    [[ -f "$TARGET/scripts/lib-github-release.sh" ]] \
+      || die "$VERSION déjà déployé mais antérieur à l'update sans clone — current n'est pas basculé dessus (supprime « $TARGET » ou passe par un clone)"
+    # (b) collision de tag ENTRE DÉPÔTS : ne pas réutiliser un dossier venu d'un
+    #     autre repo (son .origin diffère), sinon current basculerait sur le code
+    #     d'un autre dépôt et les updates suivants viseraient la mauvaise source (P2).
+    [[ "$(cat "$TARGET/.origin" 2>/dev/null)" == "github:$(gh_repo)" ]] \
+      || die "$VERSION déjà déployé depuis un autre dépôt (.origin ≠ github:$(gh_repo)) — supprime « $TARGET » ou choisis un GWSA_DEPLOY_ROOT distinct"
   fi
   ok "$VERSION déjà déployé — pas de réécriture"
 else

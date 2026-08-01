@@ -2043,6 +2043,41 @@ out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
   && pass "update sans clone : repo restauré depuis .origin (fork préservé)" \
   || fail "update sans clone : .origin ignoré (repo par défaut utilisé)"
 
+# cible réutilisée venant d'un AUTRE dépôt (self-updatable mais .origin différent)
+# → refus : ne pas basculer current sur le code d'un autre repo. Codex P2 cross-repo.
+LEG4="$TMP/legacydep4"; mkdir -p "$LEG4/v0.7.0/scripts"
+cp "$REL/scripts/lib-github-release.sh" "$LEG4/v0.7.0/scripts/"
+printf 'github:someone/other\n' > "$LEG4/v0.7.0/.origin"
+ghenv GWSA_DEPLOY_ROOT="$LEG4" "$REL/scripts/deploy-local.sh" --github v0.7.0 >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 && ! -e "$LEG4/current" ]] \
+  && pass "--github : cible réutilisée d'un autre dépôt refusée (.origin ≠ repo demandé)" \
+  || fail "--github : a réutilisé une cible d'un autre dépôt"
+
+# régression P1 (revue adversariale) : une install SOUS un dépôt git ancêtre (ex.
+# $HOME dotfiles) ne doit PAS être prise pour un clone. Sur l'ancien code,
+# « git rev-parse » remontait jusqu'à ce .git → mode clone → « aucune version ».
+GA="$TMP/git-ancestor"; mkdir -p "$GA"; git -C "$GA" init -q >/dev/null 2>&1
+GADEP="$GA/.local/share/google-mcp"
+ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/gwsa" GWSA_SKIP_WIRE=1 bash install.sh >/dev/null 2>&1
+out_u="$(ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/gwsa" \
+         "$GADEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$out_u" == *"GitHub"* && "$out_u" != *"aucune version"* ]] \
+  && pass "update : install sous un dépôt git ancêtre → mode github (marqueurs, pas walk-up)" \
+  || fail "update : détecté à tort comme clone sous un ancêtre git"
+
+# régression P3 : « update --to » sans valeur → pas d'abandon silencieux (retombe latest)
+out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
+         "$GHDEP/current/scripts/update.sh" --check --to 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$out_u" == *"disponible"* ]] \
+  && pass "update --to sans valeur : retombe sur latest (pas d'abandon silencieux)" \
+  || fail "update --to sans valeur : abandon silencieux (set -e)"
+
+# régression P3 : « deploy-local --github » sans valeur → die d'usage (pas silencieux)
+out_d="$(ghenv GWSA_DEPLOY_ROOT="$TMP/dghnoval" "$REL/scripts/deploy-local.sh" --github 2>&1)"; rc=$?
+[[ "$rc" -ne 0 && "$out_d" == *"usage"* ]] \
+  && pass "deploy-local --github sans valeur : die d'usage (pas d'abandon silencieux)" \
+  || fail "deploy-local --github sans valeur : abandon silencieux"
+
 section "sessions + vault (fiche 0040)"
 
 SESS_ROOT="$TMP/gwsa-sessions"

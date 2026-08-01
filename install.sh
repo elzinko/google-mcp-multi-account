@@ -61,10 +61,16 @@ TARGET="$DEPLOY_ROOT/$LATEST"
 # ── télécharger + figer + basculer current ───────────────────────
 step "Installation"
 if [[ -d "$TARGET" ]]; then
-  # Cible RÉUTILISÉE : valider aussi (une version legacy pré-existante, posée par
-  # un ancien deploy clone, n'a pas d'updater sans clone) — revue Codex P1.
+  # Cible RÉUTILISÉE : valider avant de basculer (revue Codex).
+  # (a) une version legacy pré-existante (ancien deploy clone) n'a pas d'updater
+  #     sans clone → n'y bascule jamais current/gwsa (P1).
   [[ -f "$TARGET/scripts/lib-github-release.sh" ]] \
     || die "$LATEST déjà présent mais antérieur à l'update sans clone — supprime « $TARGET » ou installe depuis un clone"
+  # (b) collision de tag entre dépôts : ne pas réutiliser un dossier venu d'un
+  #     autre repo (.origin différent), sinon current basculerait sur le code
+  #     d'un autre dépôt (P2, réutilisation cross-repo).
+  [[ "$(cat "$TARGET/.origin" 2>/dev/null)" == "github:$REPO" ]] \
+    || die "$LATEST déjà présent mais installé depuis un autre dépôt (.origin ≠ github:$REPO) — supprime « $TARGET » ou change GWSA_DEPLOY_ROOT"
   ok "$LATEST déjà présent — pas de re-téléchargement"
 else
   base="${GWSA_TARBALL_BASE:-https://github.com/$REPO/archive/refs/tags}"

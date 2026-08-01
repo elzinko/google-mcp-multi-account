@@ -40,7 +40,9 @@ while [[ $# -gt 0 ]]; do
     -h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "argument inconnu « $1 » (voir --help)" ;;
   esac
-  shift
+  # `|| break` : un flag à valeur en dernière position (« --to » nu) a déjà vidé
+  # $@ ; sans ça, ce shift échoue et set -e avorte en silence (revue adversariale P3).
+  shift || break
 done
 
 # ── où sont les versions ? ───────────────────────────────────────
@@ -49,16 +51,20 @@ done
 #   • Utilisateur  : aucun clone → dernier tag + tarball depuis GitHub.
 LIB_GH="$(cd "$(dirname "$0")" && pwd)/lib-github-release.sh"
 SRC="$HERE"
-MODE_SRC="clone"
-if git -C "$SRC" rev-parse --git-dir >/dev/null 2>&1; then
-  MODE_SRC="clone"
+MODE_SRC="github"
+# Détection par MARQUEURS, jamais par « git rev-parse » nu : rev-parse REMONTE
+# l'arborescence, donc une install sous un ancêtre git (ex. $HOME en dépôt
+# dotfiles) serait prise à tort pour un clone, ignorant .origin — l'update sans
+# clone casserait, ou pire git-archiverait le mauvais dépôt (revue adversariale P1).
+if [[ -e "$HERE/.git" ]] && git -C "$HERE" rev-parse --git-dir >/dev/null 2>&1; then
+  # Vrai clone À CE niveau : contributeur lançant depuis le clone.
+  SRC="$HERE"; MODE_SRC="clone"
 elif [[ -s "$HERE/.source" ]] && git -C "$(cat "$HERE/.source")" rev-parse --git-dir >/dev/null 2>&1; then
-  SRC="$(cat "$HERE/.source")"
-  ok "clone source : $SRC"
-  MODE_SRC="clone"
+  # Copie installée DEPUIS un clone : relais vers le clone source noté dans .source.
+  SRC="$(cat "$HERE/.source")"; ok "clone source : $SRC"; MODE_SRC="clone"
 else
-  # Ni .git ici, ni .source pointant un clone valide (jamais cloné, ou clone
-  # supprimé) → on tire depuis GitHub. C'est ce qui rend l'update « standard ».
+  # .origin (install sans clone), clone supprimé, ou rien d'exploitable → GitHub.
+  # C'est ce qui rend l'update « standard » et robuste à un ancêtre git fortuit.
   MODE_SRC="github"
 fi
 
