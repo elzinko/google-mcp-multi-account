@@ -5,9 +5,9 @@ type: feature
 priority: P2
 version:
 epic: 0017
-status: in-progress
+status: shipped
 ready: 2026-08-01
-pr:
+pr: "#79"
 created: 2026-08-01
 updated: 2026-08-01
 ---
