@@ -28,12 +28,13 @@ jobs:
       - name: Syntaxe bash
         run: |
           bash -n bin/gwsa
+          bash -n install.sh
           for f in scripts/*.sh; do bash -n "$f"; done
 
       - name: shellcheck (erreurs bloquantes uniquement)
         run: |
           if command -v shellcheck >/dev/null 2>&1; then
-            shellcheck -S error bin/gwsa scripts/*.sh
+            shellcheck -S error bin/gwsa install.sh scripts/*.sh
           else
             echo "::warning::shellcheck absent de ce runner — étape sautée"
           fi
