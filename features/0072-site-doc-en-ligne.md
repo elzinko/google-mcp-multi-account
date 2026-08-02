@@ -5,10 +5,11 @@ type: feature
 priority: P2
 version:
 epic: 0017
-status: todo
+status: in-progress
 ready: 2026-08-01
 pr:
 created: 2026-08-01
+updated: 2026-08-01
 ---
 
 ## Contexte / Problème
@@ -46,11 +47,28 @@ aux standards d'un produit connu (Docker, Stripe…).
 
 ## Critères d'acceptation
 
-- [ ] Site accessible en ligne sur `docs.elzinko.fr`.
-- [ ] Recherche, navigation latérale et dark mode fonctionnels.
-- [ ] Les pages viennent de `docs/*.md` (pas de simples liens vers GitHub).
-- [ ] La landing existante est conservée comme accueil.
-- [ ] Build reproductible (une commande) + déploiement documenté.
+- [ ] Site accessible en ligne sur `docs.elzinko.fr` (connexion Vercel + DNS — geste humain, voir ci-dessous).
+- [x] Recherche, navigation latérale et dark/light fonctionnels (Material — build vérifié localement).
+- [x] Les pages viennent de `docs/*.md` (pas de simples liens vers GitHub).
+- [x] La landing existante (`site/`) est conservée (intacte, non touchée).
+- [x] Build reproductible (`python3 -m pip install -r requirements-docs.txt && mkdocs build`).
+
+## Livré (Phase 1) — branche `feat/0072-site-doc-en-ligne`
+
+- `mkdocs.yml` (Material : nav curée, recherche FR, dark/light, cartes, icônes).
+- `docs/index.md` : accueil produit (pitch + quickstart `curl` + liens).
+- `requirements-docs.txt`, `vercel.json` (build + `outputDirectory: _site`), `.gitignore` (`_site/`).
+- Build **vérifié** dans un venv (`rc=0`) + rendu contrôlé au navigateur (light).
+
+### Reste à faire (gestes humains / suite)
+
+- **Déploiement Vercel** (dashboard, non scriptable par le LLM) : importer le repo,
+  laisser `vercel.json` piloter le build, puis ajouter le domaine `docs.elzinko.fr`.
+- **Liens vers les sources** (`../scripts/`, `../features/`, `../SECURITY.md`…) :
+  19 warnings de build — liens hors `docs/`. À convertir en URLs GitHub (idéalement
+  avec la passe EN [[0019]] pour ne pas éditer les docs deux fois).
+- **Landing → docs** : repointer le lien « Docs » de `site/` vers `docs.elzinko.fr`
+  une fois le domaine en ligne.
 
 ## Notes
 

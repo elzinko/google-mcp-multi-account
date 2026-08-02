@@ -1,0 +1,88 @@
+site_name: google-multi-account
+site_description: Google Workspace multi-comptes pour agents LLM — 100 % local.
+site_url: https://docs.elzinko.fr/
+repo_url: https://github.com/elzinko/google-mcp-multi-account
+repo_name: elzinko/google-mcp-multi-account
+edit_uri: edit/main/docs/
+copyright: MIT — construit sur le temps libre.
+
+# docs/ = source markdown (déjà dans le repo) ; _site/ = build servi par Vercel
+# (à part du site/ fait main, la landing). Voir fiche 0072.
+docs_dir: docs
+site_dir: _site
+
+theme:
+  name: material
+  language: fr
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Passer en mode sombre
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Passer en mode clair
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+plugins:
+  - search:
+      lang: fr
+
+nav:
+  - Accueil: index.md
+  - Démarrer:
+      - Installer & mettre à jour: mcp-setup.md
+      - OAuth / Google Cloud: setup-oauth.md
+  - Utiliser:
+      - CLI & admin (gwsa): usage.md
+      - Modèle de policy: policies.md
+  - Sécurité:
+      - Modèle de menace: threat-model.md
+      - Critique honnête: critique.md
+  - Sous le capot:
+      - Architecture: architecture.md
+  - Contribuer:
+      - Validation des PR: PR_VALIDATION.md
+      - Sécurité GitHub: github-security.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/elzinko/google-mcp-multi-account
+      name: GitHub
