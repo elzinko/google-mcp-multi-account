@@ -33,3 +33,6 @@ bin/mcp-google-mcp-multi-account
 # Version DÉPLOYÉE — générée par scripts/deploy-local.sh, jamais commitée.
 # C'est son absence qui fait qu'un clone de travail s'annonce « dev » (fiche 0023).
 VERSION
+
+# Doc en ligne — build MkDocs, généré par « mkdocs build », jamais committé (fiche 0072).
+_site/

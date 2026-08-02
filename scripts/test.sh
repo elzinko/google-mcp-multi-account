@@ -1807,7 +1807,7 @@ RELDEP="$TMP/reldeploy"
 RELCONF="$TMP/reldesktop.json"
 mkdir -p "$REL/scripts" "$REL/bin"
 cp scripts/release.sh scripts/update.sh scripts/deploy-local.sh \
-   scripts/install-claude-desktop.sh "$REL/scripts/"
+   scripts/lib-github-release.sh scripts/install-claude-desktop.sh "$REL/scripts/"
 printf '#!/bin/sh\nexit 0\n' > "$REL/scripts/test.sh"; chmod +x "$REL/scripts/test.sh"
 printf '#!/bin/sh\necho faux-mcp\n' > "$REL/bin/google-mcp"; chmod +x "$REL/bin/google-mcp"
 cp bin/gwsa "$REL/bin/gwsa"   # embarqué dans les copies déployées (cf. link_cli)
@@ -2058,6 +2058,289 @@ out_l="$(GWSA_CLI_LINK="$LINK" relenv "$UPDATE" --force 2>&1)"
 [[ ! -L "$LINK" && "$(cat "$LINK")" == *"vrai fichier"* && "$out_l" == *"pas un lien"* ]] \
   && pass "lien PATH : fichier réel jamais remplacé par un lien" \
   || fail "lien PATH : a écrasé un fichier réel"
+
+section "install.sh / update --github — installer & mettre à jour SANS clone (fiche 0020)"
+
+# On rejoue le vrai vecteur « produit » : GitHub sert un tarball par tag. Les
+# fixtures sont fabriquées depuis le faux clone $REL (tags v0.1.0, v1.0.0) et
+# servies en file:// — curl sait les lire, donc zéro réseau, hermétique.
+GHTB="$TMP/gh-tarballs"; mkdir -p "$GHTB"
+for t in v0.1.0 v1.0.0; do
+  git -C "$REL" archive --format=tar.gz --prefix="pkg-${t#v}/" "$t" > "$GHTB/$t.tar.gz"
+done
+GHTAGS="$TMP/gh-tags.json"
+printf '[{"name":"v1.0.0"},{"name":"v0.1.0"}]\n' > "$GHTAGS"
+# env : « ghenv VAR=val cmd » — env parse les NAME=VALUE de tête, y compris ceux
+# passés en argument (un « VAR=val "$@" » nu les prendrait pour un nom de commande).
+ghenv() { env GWSA_TAGS_URL="file://$GHTAGS" GWSA_TARBALL_BASE="file://$GHTB" "$@"; }
+GHDEP="$TMP/ghdeploy"
+GHBIN="$TMP/ghbin"; mkdir -p "$GHBIN"
+
+# deploy-local --github : n'exige pas git, écrit .origin (jamais .source)
+ghenv GWSA_DEPLOY_ROOT="$GHDEP" "$REL/scripts/deploy-local.sh" --github v0.1.0 >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && "$(cat "$GHDEP/v0.1.0/VERSION" 2>/dev/null)" == "v0.1.0" \
+   && "$(cat "$GHDEP/v0.1.0/app.txt" 2>/dev/null)" == "coeur" ]] \
+  && pass "--github : déploie le CONTENU du tag depuis le tarball (sans git)" \
+  || fail "--github : contenu déployé incorrect"
+
+grep -q "^github:" "$GHDEP/v0.1.0/.origin" 2>/dev/null && [[ ! -e "$GHDEP/v0.1.0/.source" ]] \
+  && pass "--github : marqueur .origin, aucun .source (aucun clone)" \
+  || fail "--github : marqueurs d'origine incohérents"
+
+# install.sh : premier install SANS aucun clone (résout le dernier tag via GitHub)
+ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" GWSA_SKIP_WIRE=1 \
+  bash install.sh >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$GHDEP/current")")" == "v1.0.0" ]] \
+  && pass "install.sh : sans clone, installe la dernière version (v1.0.0) et bascule current" \
+  || fail "install.sh : n'installe pas la dernière version"
+
+[[ -L "$GHBIN/gwsa" ]] \
+  && pass "install.sh : pose gwsa sur le PATH (lien désigné)" \
+  || fail "install.sh : gwsa non posé sur le PATH"
+
+[[ -e "$GHDEP/current/.origin" && ! -e "$GHDEP/current/.source" ]] \
+  && pass "install.sh : copie marquée github, prête pour un update sans clone" \
+  || fail "install.sh : marqueurs d'origine incohérents"
+
+# update --check depuis la copie installée SANS clone : lit GitHub, se dit à jour
+out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
+         "$GHDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$out_u" == *"à jour"* ]] \
+  && pass "update --check : sans clone, interroge GitHub et se dit à jour" \
+  || fail "update --check sans clone : sortie inattendue"
+
+# une v2.0.0 paraît → update l'installe, toujours sans clone
+git -C "$REL" commit -q --allow-empty -m "feat: cap v2" >/dev/null 2>&1
+git -C "$REL" tag v2.0.0
+git -C "$REL" archive --format=tar.gz --prefix="pkg-2.0.0/" v2.0.0 > "$GHTB/v2.0.0.tar.gz"
+printf '[{"name":"v2.0.0"},{"name":"v1.0.0"},{"name":"v0.1.0"}]\n' > "$GHTAGS"
+ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_DESKTOP_CONFIG="$TMP/ghdesktop.json" \
+  GWSA_CLI_LINK="$GHBIN/gwsa" "$GHDEP/current/scripts/update.sh" >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$GHDEP/current")")" == "v2.0.0" ]] \
+  && pass "update : sans clone, installe une nouvelle version publiée (v2.0.0)" \
+  || fail "update sans clone : n'a pas installé la nouvelle version"
+
+# GitHub injoignable (tags introuvables) → refus explicite, current intact
+out_u="$(GWSA_TAGS_URL="file://$TMP/inexistant.json" GWSA_TARBALL_BASE="file://$GHTB" \
+         GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
+         "$GHDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
+[[ "$rc" -ne 0 && "$(basename "$(readlink "$GHDEP/current")")" == "v2.0.0" ]] \
+  && pass "update : GitHub injoignable → refus, current inchangé (v2.0.0)" \
+  || fail "update : mauvais comportement quand GitHub est injoignable"
+
+# --check --to <tag inexistant> : sans clone, refus (comme refs/tags côté clone). Codex P2.
+out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
+         "$GHDEP/current/scripts/update.sh" --check --to v9.9.9 2>&1)"; rc=$?
+[[ "$rc" -ne 0 && "$out_u" == *"introuvable"* ]] \
+  && pass "update --check --to : tag inexistant refusé (validé contre GitHub)" \
+  || fail "update --check --to : tag bidon accepté à tort"
+
+# --to <version self-updatable> : rollback sans clone OK (v0.1.0 embarque l'updater)
+ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_DESKTOP_CONFIG="$TMP/ghdesktop.json" \
+  GWSA_CLI_LINK="$GHBIN/gwsa" "$GHDEP/current/scripts/update.sh" --to v0.1.0 >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$GHDEP/current")")" == "v0.1.0" ]] \
+  && pass "update --to : rollback sans clone vers une version self-updatable (v0.1.0)" \
+  || fail "update --to : rollback sans clone en échec"
+
+# version ANTÉRIEURE à l'update sans clone (sans lib) → refus, current jamais posé. Codex P1.
+LPKG="$TMP/pkg-0.0.9"; mkdir -p "$LPKG"
+git -C "$REL" archive v0.1.0 | tar -x -C "$LPKG"
+rm -f "$LPKG/scripts/lib-github-release.sh"
+tar -czf "$GHTB/v0.0.9.tar.gz" -C "$TMP" pkg-0.0.9; rm -rf "$LPKG"
+LEGDEP="$TMP/legacydep"
+ghenv GWSA_DEPLOY_ROOT="$LEGDEP" "$REL/scripts/deploy-local.sh" --github v0.0.9 >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 && ! -e "$LEGDEP/current" && ! -d "$LEGDEP/v0.0.9" ]] \
+  && pass "--github : version sans updater intégré refusée, current jamais posé" \
+  || fail "--github : a basculé sur une version non self-updatable"
+
+# cible legacy PRÉ-EXISTANTE (sans lib, ex. ancien deploy clone) → deploy-local
+# --github refuse de basculer, même sans re-téléchargement. Codex P1 (réutilisée).
+LEG2="$TMP/legacydep2"; mkdir -p "$LEG2/v0.5.0/scripts"
+ghenv GWSA_DEPLOY_ROOT="$LEG2" "$REL/scripts/deploy-local.sh" --github v0.5.0 >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 && ! -e "$LEG2/current" ]] \
+  && pass "--github : cible legacy pré-existante refusée (current pas basculé)" \
+  || fail "--github : a basculé sur une cible legacy pré-existante"
+
+# idem côté install.sh : un dossier legacy du dernier tag déjà présent → refus
+LEG3="$TMP/legacydep3"; mkdir -p "$LEG3/v2.0.0/scripts"
+ghenv GWSA_DEPLOY_ROOT="$LEG3" GWSA_CLI_LINK="$LEG3/gwsa" GWSA_SKIP_WIRE=1 \
+  bash install.sh >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 && ! -e "$LEG3/current" ]] \
+  && pass "install.sh : cible legacy pré-existante refusée (current pas basculé)" \
+  || fail "install.sh : a basculé sur une cible legacy pré-existante"
+
+# fork : « gwsa update » sans clone restaure GWSA_REPO depuis .origin. Codex P2.
+printf 'github:someone/fork\n' > "$GHDEP/current/.origin"
+out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
+         "$GHDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
+[[ "$out_u" == *"someone/fork"* ]] \
+  && pass "update sans clone : repo restauré depuis .origin (fork préservé)" \
+  || fail "update sans clone : .origin ignoré (repo par défaut utilisé)"
+
+# cible réutilisée venant d'un AUTRE dépôt (self-updatable mais .origin différent)
+# → refus : ne pas basculer current sur le code d'un autre repo. Codex P2 cross-repo.
+LEG4="$TMP/legacydep4"; mkdir -p "$LEG4/v0.7.0/scripts"
+cp "$REL/scripts/lib-github-release.sh" "$LEG4/v0.7.0/scripts/"
+printf 'github:someone/other\n' > "$LEG4/v0.7.0/.origin"
+ghenv GWSA_DEPLOY_ROOT="$LEG4" "$REL/scripts/deploy-local.sh" --github v0.7.0 >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 && ! -e "$LEG4/current" ]] \
+  && pass "--github : cible réutilisée d'un autre dépôt refusée (.origin ≠ repo demandé)" \
+  || fail "--github : a réutilisé une cible d'un autre dépôt"
+
+# régression P1 (revue adversariale) : une install SOUS un dépôt git ancêtre (ex.
+# $HOME dotfiles) ne doit PAS être prise pour un clone. Sur l'ancien code,
+# « git rev-parse » remontait jusqu'à ce .git → mode clone → « aucune version ».
+GA="$TMP/git-ancestor"; mkdir -p "$GA"; git -C "$GA" init -q >/dev/null 2>&1
+GADEP="$GA/.local/share/google-mcp"
+ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/gwsa" GWSA_SKIP_WIRE=1 bash install.sh >/dev/null 2>&1
+out_u="$(ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/gwsa" \
+         "$GADEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$out_u" == *"GitHub"* && "$out_u" != *"aucune version"* ]] \
+  && pass "update : install sous un dépôt git ancêtre → mode github (marqueurs, pas walk-up)" \
+  || fail "update : détecté à tort comme clone sous un ancêtre git"
+
+# régression P3 : « update --to » sans valeur → pas d'abandon silencieux (retombe latest)
+out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
+         "$GHDEP/current/scripts/update.sh" --check --to 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$out_u" == *"disponible"* ]] \
+  && pass "update --to sans valeur : retombe sur latest (pas d'abandon silencieux)" \
+  || fail "update --to sans valeur : abandon silencieux (set -e)"
+
+# régression P3 : « deploy-local --github » sans valeur → die d'usage (pas silencieux)
+out_d="$(ghenv GWSA_DEPLOY_ROOT="$TMP/dghnoval" "$REL/scripts/deploy-local.sh" --github 2>&1)"; rc=$?
+[[ "$rc" -ne 0 && "$out_d" == *"usage"* ]] \
+  && pass "deploy-local --github sans valeur : die d'usage (pas d'abandon silencieux)" \
+  || fail "deploy-local --github sans valeur : abandon silencieux"
+
+# install.sh recycle le broker après bascule current (revue Codex round-4) : le
+# gwsa de la copie doit recevoir « broker stop ». Tag dont le gwsa logue l'appel.
+BRK="$TMP/brokerpkg"; mkdir -p "$BRK/scripts" "$BRK/bin"
+cp "$REL/scripts/lib-github-release.sh" "$BRK/scripts/"
+cat > "$BRK/bin/gwsa" <<EOF
+#!/usr/bin/env bash
+[ "\$1 \$2" = "broker stop" ] && : > "$TMP/broker-stop.log"
+exit 0
+EOF
+chmod +x "$BRK/bin/gwsa"
+git -C "$BRK" init -q >/dev/null 2>&1; git -C "$BRK" config user.email t@t; git -C "$BRK" config user.name t
+git -C "$BRK" add -A >/dev/null 2>&1; git -C "$BRK" commit -qm x >/dev/null 2>&1; git -C "$BRK" tag v3.0.0
+git -C "$BRK" archive --format=tar.gz --prefix="pkg-3.0.0/" v3.0.0 > "$GHTB/v3.0.0.tar.gz"
+printf '[{"name":"v3.0.0"},{"name":"v2.0.0"},{"name":"v1.0.0"},{"name":"v0.1.0"}]\n' > "$GHTAGS"
+rm -f "$TMP/broker-stop.log"
+ghenv GWSA_DEPLOY_ROOT="$TMP/brokerdep" GWSA_CLI_LINK="$TMP/brokerdep/gwsa" GWSA_SKIP_WIRE=1 \
+  bash install.sh >/dev/null 2>&1
+[[ -f "$TMP/broker-stop.log" ]] \
+  && pass "install.sh : recycle le broker après bascule current (broker stop appelé)" \
+  || fail "install.sh : broker non recyclé en ré-install"
+
+# provenance fork : un deploy clone note aussi .origin (remote GitHub), donc si le
+# clone est supprimé, l'update sans clone vise le BON dépôt, pas upstream. Codex round-4.
+FORK="$TMP/forkclone"; mkdir -p "$FORK/scripts" "$FORK/bin"
+cp "$REL/scripts/lib-github-release.sh" "$REL/scripts/deploy-local.sh" "$REL/scripts/update.sh" "$FORK/scripts/"
+cp "$REL/bin/gwsa" "$FORK/bin/"; printf '#!/bin/sh\nexit 0\n' > "$FORK/bin/google-mcp"; chmod +x "$FORK/bin/"*
+git -C "$FORK" init -q >/dev/null 2>&1; git -C "$FORK" config user.email t@t; git -C "$FORK" config user.name t
+git -C "$FORK" remote add origin https://github.com/someone/forkrepo.git
+git -C "$FORK" add -A >/dev/null 2>&1; git -C "$FORK" commit -qm x >/dev/null 2>&1; git -C "$FORK" tag v1.0.0
+FORKDEP="$TMP/forkdeploy"
+env GWSA_DEPLOY_ROOT="$FORKDEP" "$FORK/scripts/deploy-local.sh" --tag v1.0.0 >/dev/null 2>&1
+[[ "$(cat "$FORKDEP/v1.0.0/.origin" 2>/dev/null)" == "github:someone/forkrepo" ]] \
+  && pass "deploy clone : provenance remote notée dans .origin (github:someone/forkrepo)" \
+  || fail "deploy clone : .origin de provenance manquant/incorrect"
+rm -rf "$FORK"
+out_u="$(env GWSA_TAGS_URL="file://$GHTAGS" GWSA_TARBALL_BASE="file://$GHTB" \
+         GWSA_DEPLOY_ROOT="$FORKDEP" GWSA_CLI_LINK="$TMP/forkgwsa" \
+         "$FORKDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
+[[ "$out_u" == *"someone/forkrepo"* ]] \
+  && pass "update sans clone : provenance fork préservée après suppression du clone (.origin)" \
+  || fail "update sans clone : retombe sur upstream après suppression du clone"
+
+# mode CLONE : réutiliser un dossier venu d'un AUTRE dépôt → refus (Codex round-5).
+XDEP="$TMP/xrepodep"; mkdir -p "$XDEP/v1.0.0"
+printf 'github:elzinko/upstream\n' > "$XDEP/v1.0.0/.origin"        # dossier « upstream »
+XFORK="$TMP/xfork"; mkdir -p "$XFORK/scripts" "$XFORK/bin"
+cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$XFORK/scripts/"
+printf '#!/bin/sh\nexit 0\n' > "$XFORK/bin/gwsa"; chmod +x "$XFORK/bin/gwsa"
+git -C "$XFORK" init -q >/dev/null 2>&1; git -C "$XFORK" config user.email t@t; git -C "$XFORK" config user.name t
+git -C "$XFORK" remote add origin https://github.com/someone/other.git
+git -C "$XFORK" add -A >/dev/null 2>&1; git -C "$XFORK" commit -qm x >/dev/null 2>&1; git -C "$XFORK" tag v1.0.0
+env GWSA_DEPLOY_ROOT="$XDEP" "$XFORK/scripts/deploy-local.sh" --tag v1.0.0 >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 && ! -e "$XDEP/current" && "$(cat "$XDEP/v1.0.0/.origin")" == "github:elzinko/upstream" ]] \
+  && pass "deploy --tag (clone) : cible d'un autre dépôt refusée (provenance ≠)" \
+  || fail "deploy --tag (clone) : a réutilisé une cible d'un autre dépôt"
+
+# provenance ssh:// URI bien normalisée en .origin (Codex round-5).
+SSHC="$TMP/sshclone"; mkdir -p "$SSHC/scripts" "$SSHC/bin"
+cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$SSHC/scripts/"
+printf '#!/bin/sh\nexit 0\n' > "$SSHC/bin/gwsa"; chmod +x "$SSHC/bin/gwsa"
+git -C "$SSHC" init -q >/dev/null 2>&1; git -C "$SSHC" config user.email t@t; git -C "$SSHC" config user.name t
+git -C "$SSHC" remote add origin ssh://git@github.com/someone/sshrepo.git
+git -C "$SSHC" add -A >/dev/null 2>&1; git -C "$SSHC" commit -qm x >/dev/null 2>&1; git -C "$SSHC" tag v1.0.0
+env GWSA_DEPLOY_ROOT="$TMP/sshdep" "$SSHC/scripts/deploy-local.sh" --tag v1.0.0 >/dev/null 2>&1
+[[ "$(cat "$TMP/sshdep/v1.0.0/.origin" 2>/dev/null)" == "github:someone/sshrepo" ]] \
+  && pass "deploy clone : remote ssh:// normalisé dans .origin (github:someone/sshrepo)" \
+  || fail "deploy clone : remote ssh:// mal parsé"
+
+# provenance ssh:// avec PORT explicite bien normalisée (Codex round-6).
+PORTC="$TMP/portclone"; mkdir -p "$PORTC/scripts" "$PORTC/bin"
+cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$PORTC/scripts/"
+printf '#!/bin/sh\nexit 0\n' > "$PORTC/bin/gwsa"; chmod +x "$PORTC/bin/gwsa"
+git -C "$PORTC" init -q >/dev/null 2>&1; git -C "$PORTC" config user.email t@t; git -C "$PORTC" config user.name t
+git -C "$PORTC" remote add origin ssh://git@github.com:22/someone/portrepo.git
+git -C "$PORTC" add -A >/dev/null 2>&1; git -C "$PORTC" commit -qm x >/dev/null 2>&1; git -C "$PORTC" tag v1.0.0
+env GWSA_DEPLOY_ROOT="$TMP/portdep" "$PORTC/scripts/deploy-local.sh" --tag v1.0.0 >/dev/null 2>&1
+[[ "$(cat "$TMP/portdep/v1.0.0/.origin" 2>/dev/null)" == "github:someone/portrepo" ]] \
+  && pass "deploy clone : remote ssh:// avec port normalisé dans .origin (github:someone/portrepo)" \
+  || fail "deploy clone : remote ssh:// avec port mal parsé"
+
+# hôte non-GitHub qui CONTIENT « github.com » → jamais pris pour GitHub (Codex round-7).
+NGH="$TMP/notgithub"; mkdir -p "$NGH/scripts" "$NGH/bin"
+cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$NGH/scripts/"
+printf '#!/bin/sh\nexit 0\n' > "$NGH/bin/gwsa"; chmod +x "$NGH/bin/gwsa"
+git -C "$NGH" init -q >/dev/null 2>&1; git -C "$NGH" config user.email t@t; git -C "$NGH" config user.name t
+git -C "$NGH" remote add origin https://notgithub.com/someone/repo.git
+git -C "$NGH" add -A >/dev/null 2>&1; git -C "$NGH" commit -qm x >/dev/null 2>&1; git -C "$NGH" tag v1.0.0
+env GWSA_DEPLOY_ROOT="$TMP/nghdep" "$NGH/scripts/deploy-local.sh" --tag v1.0.0 >/dev/null 2>&1
+[[ ! -e "$TMP/nghdep/v1.0.0/.origin" ]] \
+  && pass "deploy clone : hôte « notgithub.com » non pris pour GitHub (aucun .origin)" \
+  || fail "deploy clone : hôte non-GitHub accepté à tort comme GitHub"
+
+# clone SANS provenance GitHub, supprimé → update REFUSE (pas de fallback upstream) (Codex round-7).
+NOG="$TMP/nogithub"; mkdir -p "$NOG/scripts" "$NOG/bin"
+cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$REL/scripts/update.sh" "$NOG/scripts/"
+cp "$REL/bin/gwsa" "$NOG/bin/"; printf '#!/bin/sh\nexit 0\n' > "$NOG/bin/google-mcp"; chmod +x "$NOG/bin/"*
+git -C "$NOG" init -q >/dev/null 2>&1; git -C "$NOG" config user.email t@t; git -C "$NOG" config user.name t
+git -C "$NOG" add -A >/dev/null 2>&1; git -C "$NOG" commit -qm x >/dev/null 2>&1; git -C "$NOG" tag v1.0.0
+NOGDEP="$TMP/nogdep"
+env GWSA_DEPLOY_ROOT="$NOGDEP" "$NOG/scripts/deploy-local.sh" --tag v1.0.0 >/dev/null 2>&1
+[[ ! -e "$NOGDEP/v1.0.0/.origin" ]] \
+  && pass "deploy clone sans remote : aucun .origin (provenance inconnue)" \
+  || fail "deploy clone sans remote : .origin écrit à tort"
+rm -rf "$NOG"
+out_u="$(env GWSA_TAGS_URL="file://$GHTAGS" GWSA_TARBALL_BASE="file://$GHTB" \
+         GWSA_DEPLOY_ROOT="$NOGDEP" GWSA_CLI_LINK="$TMP/noggwsa" \
+         "$NOGDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
+[[ "$rc" -ne 0 && "$out_u" == *"provenance inconnue"* ]] \
+  && pass "update : clone non-GitHub supprimé → refus (provenance inconnue, pas d'upstream)" \
+  || fail "update : fallback silencieux sur upstream quand provenance inconnue"
+
+# hôte GitHub en CASSE MIXTE (les hôtes sont insensibles à la casse) ; le chemin
+# owner/repo reste sensible à la casse (Codex round-8).
+CASE="$TMP/caseclone"; mkdir -p "$CASE/scripts" "$CASE/bin"
+cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$CASE/scripts/"
+printf '#!/bin/sh\nexit 0\n' > "$CASE/bin/gwsa"; chmod +x "$CASE/bin/gwsa"
+git -C "$CASE" init -q >/dev/null 2>&1; git -C "$CASE" config user.email t@t; git -C "$CASE" config user.name t
+git -C "$CASE" remote add origin https://GitHub.com/someone/CaseRepo.git
+git -C "$CASE" add -A >/dev/null 2>&1; git -C "$CASE" commit -qm x >/dev/null 2>&1; git -C "$CASE" tag v1.0.0
+env GWSA_DEPLOY_ROOT="$TMP/casedep" "$CASE/scripts/deploy-local.sh" --tag v1.0.0 >/dev/null 2>&1
+[[ "$(cat "$TMP/casedep/v1.0.0/.origin" 2>/dev/null)" == "github:someone/CaseRepo" ]] \
+  && pass "deploy clone : hôte « GitHub.com » (casse mixte) reconnu, chemin owner/repo préservé" \
+  || fail "deploy clone : hôte en casse mixte non reconnu"
+
+# la requête de tags par défaut demande per_page=100 (rollback validable > 30 tags). Codex round-8.
+tags_url_def="$(unset GWSA_TAGS_URL; GWSA_REPO=owner/repo; . "$REL/scripts/lib-github-release.sh"; gh_tags_url)"
+[[ "$tags_url_def" == *"per_page=100"* ]] \
+  && pass "lib : requête de tags par défaut élargie (per_page=100)" \
+  || fail "lib : per_page absent de la requête de tags"
 
 section "sessions + vault (fiche 0040)"
 
