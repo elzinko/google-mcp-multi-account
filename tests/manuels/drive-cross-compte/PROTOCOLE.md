@@ -59,10 +59,12 @@ Conventions : MCP de préférence ; shell via `GWSA_CLIENT=claude-code gwsa …`
 
 ### Phase 0 — état des lieux (lecture seule)
 
-- `profiles_list` : confoncer `perso` et `mw`, noter emails et verrous.
-- `drive_list` sur chaque compte avec `query` contenant `name = 'ZZ-TESTS'`
-  et `trashed=false` — noter l'**ID** de chaque dossier (ou demander à
-  l'humain si ambigu / absent).
+- `profiles_list` : confirmer `perso` et `mw`, noter emails et verrous.
+- **IDs des dossiers `ZZ-TESTS`** : les reprendre des **prérequis** ci-dessus. La
+  re-vérification par nom (`drive_list` avec `name = 'ZZ-TESTS'` et
+  `trashed=false`) **exige les profils déverrouillés** — un profil verrouillé
+  refuse toute lecture Drive — donc la faire **après la phase 1**, ou l'humain
+  confirme les IDs.
 - Annoncer le plan : création → copie → partage (si share actif).
 
 ### Phase 1 — élicitation « unlock »

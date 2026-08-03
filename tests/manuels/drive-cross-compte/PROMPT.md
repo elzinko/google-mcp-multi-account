@@ -15,4 +15,5 @@ les liens à vérifier au fur et à mesure, et ne nettoie qu'après mon accord.
 - Prérequis : un dossier **`ZZ-TESTS`** à la racine du Drive de **chaque** compte
   (créé par l'humain, interface web — voir PROTOCOLE.md).
 - Complète le test [drive-2-comptes](../drive-2-comptes/) : ici on ajoute
-  **copie cross-compte**, **partage** et **transfert de propriété**.
+  **copie cross-compte** et **partage** (le transfert de propriété est hors de
+  cette version).
