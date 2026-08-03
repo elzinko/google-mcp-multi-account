@@ -146,6 +146,11 @@ def check_policy(
         raise GatewayError(f"contrôleur policy absent ({POLICY_CHECKER})", code="error")
     python = SYS_PYTHON if os.path.isfile(SYS_PYTHON) else "python3"
     env = dict(os.environ)
+    # CONFIG_DIR du vault pour les lectures gws de policy-check (under_allowed) :
+    # après la migration vault (fiche 0040), les creds ne sont plus dans
+    # profile_path ; sans ça, la remontée des parents échoue → tout drive_update /
+    # copie / création en sous-dossier est refusé à tort (revue sécurité F1).
+    env["GWSA_GWS_CONFIG_DIR"] = str(gws_config_dir(profile_path.name))
     env["GWSA_CLIENT"] = client or "broker"
     if session_id:
         env["GWSA_SESSION_ID"] = session_id

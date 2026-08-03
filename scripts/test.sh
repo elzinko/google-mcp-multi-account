@@ -159,6 +159,29 @@ check 4 "files copy hors zone — refusé (parent inconnu)"     drive files copy
 check 0 "files create --upload (binaire) dans la zone — autorisé" drive files create --json "{\"name\":\"x.pdf\",\"parents\":[\"$ZONE\"]}" --upload ./x.pdf --upload-content-type application/pdf
 check 4 "files create --upload sans parent — refusé"         drive files create --json '{"name":"x.pdf"}' --upload ./x.pdf --upload-content-type application/pdf
 
+# ── F1 (revue sécurité) : drive_update d'un fichier DANS la zone (non-hermétique) ──
+# Les tests ci-dessus ne valident que des cibles dont le parent EST la zone
+# (court-circuit « file_id in allowed », sans gws). Un drive_update porte un
+# fileId qui n'est pas lui-même la zone : under_allowed doit REMONTER les parents
+# via gws. Après migration vault, gws n'a de creds qu'au CONFIG_DIR vault, que le
+# broker passe via GWSA_GWS_CONFIG_DIR. Faux gws qui ne rend le parent qu'avec ce dir.
+F1BIN="$TMP/f1bin"; mkdir -p "$F1BIN"; F1VAULT="$TMP/f1-vault-cfg"
+cat > "$F1BIN/gws" <<EOF
+#!/usr/bin/env bash
+if [ "\$GOOGLE_WORKSPACE_CLI_CONFIG_DIR" = "$F1VAULT" ]; then
+  printf '{"id":"CHILDINZONE","parents":["$ZONE"]}\n'
+else
+  printf '{}\n'
+fi
+EOF
+chmod +x "$F1BIN/gws"
+PATH="$F1BIN:$PATH" GWSA_GWS_CONFIG_DIR="$F1VAULT" \
+  python3 "$CHECKER" "$PROFILE" drive files update --params '{"fileId":"CHILDINZONE"}' >/dev/null 2>&1
+if [[ $? -eq 0 ]]; then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "F1 : drive_update d'un fichier DANS la zone autorisé (parent remonté via CONFIG_DIR vault)"; else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "F1 : drive_update en zone refusé à tort — under_allowed ne voit pas le vault"; fi
+PATH="$F1BIN:$PATH" \
+  python3 "$CHECKER" "$PROFILE" drive files update --params '{"fileId":"CHILDINZONE"}' >/dev/null 2>&1
+if [[ $? -eq 4 ]]; then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "F1 : sans CONFIG_DIR vault → refusé (le trou d'avant le fix est exercé)"; else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "F1 : sans vault, refus attendu"; fi
+
 section "Drive par zones — autorisation temporaire (élicitation gwsa grant)"
 policy <<'EOF'
 {"drive": {"read": true, "create": true, "update": true, "delete": false,
