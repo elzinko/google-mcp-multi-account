@@ -12,7 +12,6 @@
 | 0014 | Journaliser les refus de verrou dans usage.jsonl (decision:refus, reason:locked) | bug | P1 |  |  | ✅ shipped | #17 |
 | 0015 | Email de profil = métadonnée persistée (.email) — zéro exécution gws hors broker | refactor | P1 |  |  | ✅ shipped | #18 |
 | 0019 | English public surfaces — landing, docs & product copy | feature | P1 |  | 0017 | 🔴 todo |  |
-| 0020 | Installer & mettre à jour sans clone — installeur curl puis tap Homebrew | feature | P1 |  | 0017 | 🔴 todo |  |
 | 0024 | Fiabiliser les tools Gmail/Drive du MCP — brouillon cassé, Drive sans contenu ni propriétaire | bug | P1 |  |  | ✅ shipped | #26 |
 | 0025 | Couloirs étanches — chaque version branchée parle à son propre broker | bug | P1 |  |  | ✅ shipped | #27 |
 | 0029 | Publier et mettre à jour en une commande (release semver + update façon installeur) | feature | P1 |  |  | ✅ shipped | #28 |
@@ -50,7 +49,6 @@
 | 0069 | Docs in-app — rework orientation utilisateur | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
 | 0070 | README — quickstart + usage par persona + permissions + contribution | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
 | 0071 | GitHub metadata — description, homepage, topics + badges | chore | P2 | v0.4.0 | 0060 | 🔴 todo |  |
-| 0072 | Site de doc en ligne (MkDocs Material + landing) déployé sur Vercel | feature | P2 |  | 0017 | 🔴 todo |  |
 | 0001 | Élicitation signée — faire monter `gwsa strongauth` de la présence à la signature | feature | P3 |  |  | 🟠 in-progress |  |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)
@@ -76,4 +74,4 @@
 | 0028 | Ménage des versions déployées (+ CHANGELOG et releases GitHub) | chore | P3 |  |  | 💡 idea |  |
 | 0034 | Mettre à jour le protocole du test manuel drive-2-comptes (limites périmées + nouvelles phases) | chore | P3 |  |  | 💡 idea |  |
 
-> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0022, 0023, 0024, 0025, 0027, 0029, 0030, 0031, 0032, 0036, 0037, 0040, 0043, 0044, 0047.
+> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0020, 0022, 0023, 0024, 0025, 0027, 0029, 0030, 0031, 0032, 0036, 0037, 0040, 0043, 0044, 0047, 0072.
