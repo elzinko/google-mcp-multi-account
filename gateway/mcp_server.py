@@ -367,7 +367,7 @@ TOOLS: list[dict[str, Any]] = [
                 "transfer_ownership": {
                     "type": "boolean",
                     "default": False,
-                    "description": "true = transfert de propriété vers email",
+                    "description": "true = invite email à devenir propriétaire (writer pendingOwner + notification) ; le destinataire accepte depuis son Drive (comptes @gmail.com)",
                 },
                 "send_notification": {
                     "type": "boolean",

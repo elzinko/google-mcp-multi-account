@@ -1053,15 +1053,19 @@ body = json.loads(flags(args)["--json"])
 assert params["fileId"] == "FILE1" and not params.get("transferOwnership")
 assert body == {"type": "user", "role": "writer", "emailAddress": "bob@example.com"}
 
-# permissions create (transfert propriété)
+# permissions create (transfert propriété → invitation pendingOwner, flux consumer)
 CALLS.clear()
 api.drive_permissions_create(
     alias, "FILE1", "bob@example.com",
     role="owner", transfer_ownership=True,
 )
-params = json.loads(flags(CALLS[-1])["--params"])
-assert params["transferOwnership"] is True
-assert params["sendNotificationEmail"] is True
+args = CALLS[-1]
+params = json.loads(flags(args)["--params"])
+body = json.loads(flags(args)["--json"])
+# consumer @gmail.com : pas de transfert DIRECT (Google le rejette) — writer + pendingOwner
+assert "transferOwnership" not in params, params
+assert params.get("sendNotificationEmail") is True
+assert body["role"] == "writer" and body.get("pendingOwner") is True, body
 
 # role=owner sans transfer_ownership → refus gateway
 try:

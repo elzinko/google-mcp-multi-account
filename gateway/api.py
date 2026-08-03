@@ -659,10 +659,12 @@ def drive_permissions_create(
     transfer_ownership: bool = False,
     send_notification: bool = False,
 ) -> dict[str, Any]:
-    """Partage un fichier ou transfère la propriété (policy share requise).
+    """Partage un fichier ou invite à en devenir propriétaire (policy share requise).
 
-    `transfer_ownership=true` : le compte courant devient writer, `email` devient
-    propriétaire. Action visible — confirmer avec l'humain avant d'appeler.
+    `transfer_ownership=true` (comptes consumer @gmail.com) : invite `email` comme
+    writer « pendingOwner » + notification ; le destinataire ACCEPTE la propriété
+    depuis son Drive. Le compte courant reste propriétaire jusque-là. Action
+    visible — confirmer avec l'humain avant d'appeler.
     """
     validate_alias(alias)
     # Booléens STRICTS : « transfer_ownership » est destructif (don de propriété).
@@ -699,15 +701,22 @@ def drive_permissions_create(
         "fields": _PERMISSION_FIELDS,
         "sendNotificationEmail": bool(send_notification),
     }
-    if transfer_ownership:
-        params["transferOwnership"] = True
-        # Google exige une notification pour les transferts de propriété.
-        params["sendNotificationEmail"] = True
-    body = {
+    body: dict[str, Any] = {
         "type": "user",
         "role": role,
         "emailAddress": email,
     }
+    if transfer_ownership:
+        # Comptes consumer (@gmail.com — les comptes de ce projet) : un transfert
+        # NE se fait PAS en créant directement une permission « owner » (Google le
+        # rejette). On invite le destinataire comme « writer » marqué pendingOwner,
+        # avec notification ; il ACCEPTE ensuite la propriété depuis son Drive
+        # (revue Codex). Le transfert direct (transferOwnership=true) n'est valable
+        # qu'en intra-organisation Workspace — hors périmètre ici. Le compte courant
+        # reste propriétaire jusqu'à l'acceptation.
+        body["role"] = "writer"
+        body["pendingOwner"] = True
+        params["sendNotificationEmail"] = True
     data = _run(
         alias,
         [
