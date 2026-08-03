@@ -665,6 +665,13 @@ def drive_permissions_create(
     propriétaire. Action visible — confirmer avec l'humain avant d'appeler.
     """
     validate_alias(alias)
+    # Booléens STRICTS : « transfer_ownership » est destructif (don de propriété).
+    # Le dispatch MCP ne valide pas le schéma → une chaîne "false" ne doit jamais
+    # être coercée en vrai (revue Codex). On refuse tout non-booléen.
+    if not isinstance(transfer_ownership, bool):
+        raise GatewayError("transfer_ownership doit être un booléen (true/false)", code="error")
+    if not isinstance(send_notification, bool):
+        raise GatewayError("send_notification doit être un booléen (true/false)", code="error")
     if not file_id or not email:
         raise GatewayError("file_id et email sont requis", code="error")
     if "@" not in email:

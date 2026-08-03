@@ -196,6 +196,15 @@ print(",".join(sorted(d.keys())))
 ' 'a","x":"b')"
 if [[ "$F4KEYS" == "fields,q" ]]; then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "F4 : nom malveillant → --params JSON valide, aucune clé injectée (q,fields seuls)"; else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "F4 : injection --params possible ($F4KEYS)"; fi
 
+# ── P1 (revue Codex #4) : payload de grant SIGNÉ encodé en JSON, pas printf ──
+# Une cible avec métacaractères JSON est préservée EXACTEMENT (une seule clé
+# "target") : l'invite Touch ID affiche le dossier réellement résolu — pas de
+# duplicate-key qui montrerait « benign » tout en accordant autre chose.
+GTGT='evil","target":"benign'
+GP="$(python3 -c 'import json,sys; print(json.dumps({"action":"grant","alias":sys.argv[1],"email":sys.argv[2],"target":sys.argv[3],"hours":int(sys.argv[4])}))' alpha a@b "$GTGT" 8)"
+GT="$(printf '%s' "$GP" | python3 -c 'import json,sys; print(json.load(sys.stdin)["target"])' 2>/dev/null)"
+if [[ "$GT" == "$GTGT" ]]; then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "P1 : payload de grant en JSON — cible malveillante préservée, pas d'injection de clé"; else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "P1 : payload de grant injectable ($GT)"; fi
+
 section "Drive par zones — autorisation temporaire (élicitation gwsa grant)"
 policy <<'EOF'
 {"drive": {"read": true, "create": true, "update": true, "delete": false,
@@ -1058,6 +1067,16 @@ assert params["sendNotificationEmail"] is True
 try:
     api.drive_permissions_create(alias, "FILE1", "bob@example.com", role="owner")
     raise SystemExit("owner sans transfer_ownership aurait dû échouer")
+except GatewayError as e:
+    assert e.code == "error", e.code
+
+# P2 (revue Codex #4) : transfer_ownership non-booléen (chaîne "false") → refus,
+# jamais coercé en vrai transfert (action destructive)
+try:
+    api.drive_permissions_create(
+        alias, "FILE1", "bob@example.com", role="owner", transfer_ownership="false",
+    )
+    raise SystemExit("transfer_ownership='false' (chaîne) aurait dû être refusé")
 except GatewayError as e:
     assert e.code == "error", e.code
 

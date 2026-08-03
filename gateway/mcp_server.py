@@ -507,8 +507,10 @@ DISPATCH: dict[str, Callable] = {
         file_id=kw["file_id"],
         email=kw["email"],
         role=kw.get("role") or "reader",
-        transfer_ownership=bool(kw.get("transfer_ownership")),
-        send_notification=bool(kw.get("send_notification")),
+        # Valeurs BRUTES (pas de bool() permissif) : l'API rejette tout non-booléen
+        # — un "false" (chaîne) ne doit pas devenir un transfert de propriété.
+        transfer_ownership=kw.get("transfer_ownership", False),
+        send_notification=kw.get("send_notification", False),
     ),
     "drive_permissions_delete": lambda **kw: api.drive_permissions_delete(
         alias=kw["alias"],
