@@ -335,6 +335,10 @@ TOOLS: list[dict[str, Any]] = [
                 "alias": {"type": "string"},
                 "file_id": {"type": "string"},
                 "page_size": {"type": "integer", "default": 100},
+                "page_token": {
+                    "type": "string",
+                    "description": "Jeton de page suivante (nextPageToken du résultat précédent) — au-delà de 100 permissions",
+                },
             },
             "required": ["alias", "file_id"],
             "additionalProperties": False,
@@ -496,6 +500,7 @@ DISPATCH: dict[str, Callable] = {
         alias=kw["alias"],
         file_id=kw["file_id"],
         page_size=int(kw.get("page_size") or 100),
+        page_token=kw.get("page_token") or "",
     ),
     "drive_permissions_create": lambda **kw: api.drive_permissions_create(
         alias=kw["alias"],

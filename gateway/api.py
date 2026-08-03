@@ -562,9 +562,12 @@ def drive_update(
     """Met à jour un fichier Drive (nom et/ou contenu) — soumis aux zones.
 
     `file_id` doit être sous une zone autorisée. `content=None` = pas de
-    changement de contenu ; `content=""` = upload d'un payload vide (vider
-    le document). Avec un contenu fourni, upload multipart (mêmes contraintes
-    que drive_create).
+    changement de contenu ; `content=""` = payload vide (vider le fichier).
+
+    ⚠ Avec un `content`, c'est un **remplacement INTÉGRAL** du contenu (media
+    upload), pas une édition partielle. Réservé aux fichiers **non-natifs** :
+    un fichier Google natif (Doc/Sheet/Slide) ne s'édite pas par media upload
+    (API Docs/Sheets non implémentée) → refus explicite (revue F5).
     """
     validate_alias(alias)
     if not file_id:
@@ -586,7 +589,24 @@ def drive_update(
     if content is None:
         data = _run(alias, args)
         return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
-    target_mime = mime_type or "application/vnd.google-apps.document"
+    # content = remplacement INTÉGRAL (media upload). On lit d'abord le vrai
+    # mimeType : un fichier Google natif ne s'édite pas ainsi (média ≠ contenu
+    # structuré) → refus plutôt qu'échec silencieux / corruption d'un binaire
+    # (revue F5 / Codex P1). « content » réservé aux fichiers non-natifs.
+    current = _run(
+        alias,
+        ["drive", "files", "get", "--params",
+         json.dumps({"fileId": file_id, "fields": "mimeType"})],
+    )
+    current_mime = current.get("mimeType", "") if isinstance(current, dict) else ""
+    if current_mime.startswith("application/vnd.google-apps."):
+        raise GatewayError(
+            f"drive_update ne peut pas remplacer le contenu d'un fichier Google "
+            f"natif ({current_mime}) — édition via l'API Docs/Sheets non "
+            f"implémentée ; « content » n'est supporté que sur un fichier non-natif",
+            code="error",
+        )
+    target_mime = mime_type or current_mime or "text/plain"
     ctype = _content_type_for(content_type, target_mime)
     with _spooled_content(content, ctype) as path:
         data = _run(
@@ -605,8 +625,14 @@ def drive_permissions_list(
     alias: str,
     file_id: str,
     page_size: int = 100,
+    page_token: str = "",
 ) -> dict[str, Any]:
-    """Liste les permissions d'un fichier (lecture)."""
+    """Liste les permissions d'un fichier (lecture).
+
+    Au-delà de 100 permissions, le résultat porte `nextPageToken` : le rappeler
+    via `page_token` pour la page suivante — sinon les permissions au-delà de la
+    1ʳᵉ page seraient omises et `drive_permissions_delete` inopérant dessus (F6).
+    """
     validate_alias(alias)
     if not file_id:
         raise GatewayError("file_id requis", code="error")
@@ -616,6 +642,8 @@ def drive_permissions_list(
         "pageSize": page_size,
         "fields": f"permissions({_PERMISSION_FIELDS}),nextPageToken",
     }
+    if page_token:
+        params["pageToken"] = page_token
     data = _run(
         alias,
         ["drive", "permissions", "list", "--params", json.dumps(params)],

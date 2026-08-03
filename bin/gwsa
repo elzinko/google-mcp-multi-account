@@ -106,8 +106,20 @@ print(gws_config_dir(sys.argv[1]))
     printf '%s\t%s' "$target" "${name:-$target}"
     return 0
   fi
-  local esc; esc="${target//\'/\\\'}"
-  GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$cfg_dir" gws drive files list --params "{\"q\":\"name='$esc' and mimeType='application/vnd.google-apps.folder' and trashed=false\",\"fields\":\"files(id,name)\"}" 2>/dev/null \
+  # Construire --params via un vrai encodeur JSON (revue F4) : le nom de dossier
+  # est échappé pour le langage q de Drive (\ puis apostrophe), PUIS json.dumps
+  # encode le tout — sinon un " ou un \ dans le nom casse le JSON ou injecte des
+  # clés --params. chr(39)/chr(92) évitent apostrophe/antislash littéraux ici.
+  local params
+  params="$("$SYS_PYTHON" -c '
+import json, sys
+Q = chr(39); B = chr(92)
+name = sys.argv[1].replace(B, B + B).replace(Q, B + Q)
+q = "name=" + Q + name + Q + " and mimeType=" + Q + "application/vnd.google-apps.folder" + Q + " and trashed=false"
+sys.stdout.write(json.dumps({"q": q, "fields": "files(id,name)"}))
+' "$target" 2>/dev/null)"
+  [[ -n "$params" ]] || return 0
+  GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$cfg_dir" gws drive files list --params "$params" 2>/dev/null \
     | "$SYS_PYTHON" -c '
 import json, sys
 f = json.load(sys.stdin).get("files", [])

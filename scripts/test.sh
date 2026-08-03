@@ -182,6 +182,20 @@ PATH="$F1BIN:$PATH" \
   python3 "$CHECKER" "$PROFILE" drive files update --params '{"fileId":"CHILDINZONE"}' >/dev/null 2>&1
 if [[ $? -eq 4 ]]; then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "F1 : sans CONFIG_DIR vault → refusé (le trou d'avant le fix est exercé)"; else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "F1 : sans vault, refus attendu"; fi
 
+# ── F4 (revue sécurité) : resolve_folder échappe le nom en JSON, pas d'injection ──
+# Réplique l'algo d'échappement de bin/gwsa (\ puis apostrophe pour le langage q,
+# PUIS json.dumps). Un nom malveillant portant ",": doit rester DANS la valeur q,
+# jamais devenir une clé --params ; et un " ne doit pas casser le JSON.
+F4KEYS="$(python3 -c '
+import json, sys
+Q = chr(39); B = chr(92)
+name = sys.argv[1].replace(B, B + B).replace(Q, B + Q)
+q = "name=" + Q + name + Q + " and mimeType=" + Q + "x" + Q + " and trashed=false"
+d = json.loads(json.dumps({"q": q, "fields": "files(id,name)"}))
+print(",".join(sorted(d.keys())))
+' 'a","x":"b')"
+if [[ "$F4KEYS" == "fields,q" ]]; then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "F4 : nom malveillant → --params JSON valide, aucune clé injectée (q,fields seuls)"; else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "F4 : injection --params possible ($F4KEYS)"; fi
+
 section "Drive par zones — autorisation temporaire (élicitation gwsa grant)"
 policy <<'EOF'
 {"drive": {"read": true, "create": true, "update": true, "delete": false,
@@ -1055,6 +1069,39 @@ assert method_of(args) == ("drive", "permissions", "delete"), args
 params = json.loads(flags(args)["--params"])
 assert params == {"fileId": "FILE1", "permissionId": "permXYZ"}
 assert out["deleted"] == "permXYZ"
+
+# F5 (revue sécurité) : content sur un fichier Google NATIF → refus (pas de
+# corruption / échec silencieux) ; drive_update lit d'abord le vrai mimeType.
+def fake_run_native(alias, args, timeout=60):
+    if method_of(args) == ("drive", "files", "get"):
+        return {"id": "FILE1", "mimeType": "application/vnd.google-apps.document"}
+    return {"id": "FILE1"}
+api._run = fake_run_native
+try:
+    api.drive_update(alias, "FILE1", content="# x\n")
+    raise SystemExit("drive_update content sur un Doc natif aurait dû être refusé")
+except GatewayError as e:
+    assert e.code == "error", e.code
+
+# F5 : sur un fichier NON-natif (blob), content passe et est bien uploadé
+UP2 = {}
+def fake_run_blob(alias, args, timeout=60):
+    if "--upload" in args:
+        from pathlib import Path
+        UP2["data"] = Path(args[args.index("--upload") + 1]).read_bytes()
+    if method_of(args) == ("drive", "files", "get"):
+        return {"id": "FILE1", "mimeType": "text/plain"}
+    return {"id": "FILE1"}
+api._run = fake_run_blob
+api.drive_update(alias, "FILE1", content="hello")
+assert UP2.get("data", b"").decode() == "hello", UP2
+
+# F6 (revue sécurité) : drive_permissions_list transmet page_token → pageToken
+api._run = fake_run
+CALLS.clear()
+api.drive_permissions_list(alias, "FILE1", page_token="TOK2")
+assert json.loads(flags(CALLS[-1])["--params"]).get("pageToken") == "TOK2", CALLS[-1]
+
 print("ok")
 PY
 then
