@@ -462,7 +462,7 @@ fi
 
 # MCP tools/list smoke (stdio JSON-RPC, une requête)
 MCP_OUT="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | python3 -m gateway 2>/dev/null | head -1)"
-if echo "$MCP_OUT" | python3 -c 'import json,sys; r=json.load(sys.stdin); names=[t["name"] for t in r["result"]["tools"]]; assert "gmail_list" in names and "gmail_draft_create" in names and "setup_status" in names; assert not any(t["name"]=="gmail_send" for t in r["result"]["tools"]); ar=[t for t in r["result"]["tools"] if t["name"]=="access_request"][0]; assert "add_account" in ar["inputSchema"]["properties"]["kind"]["enum"]; assert "project_grant" in ar["inputSchema"]["properties"]["kind"]["enum"]; dc=[t for t in r["result"]["tools"] if t["name"]=="drive_create"][0]; assert "content" in dc["inputSchema"]["properties"] and "text/markdown" in dc["inputSchema"]["properties"]["content_type"]["enum"]; assert all(n in names for n in ("drive_read","drive_copy","drive_upload","gmail_attachment_get","drive_update","drive_permissions_list","drive_permissions_create","drive_permissions_delete")); pc=[t for t in r["result"]["tools"] if t["name"]=="drive_permissions_create"][0]; assert pc["inputSchema"]["properties"]["transfer_ownership"]["type"]=="boolean"'; then
+if echo "$MCP_OUT" | python3 -c 'import json,sys; r=json.load(sys.stdin); names=[t["name"] for t in r["result"]["tools"]]; assert "gmail_list" in names and "gmail_draft_create" in names and "setup_status" in names; assert not any(t["name"]=="gmail_send" for t in r["result"]["tools"]); ar=[t for t in r["result"]["tools"] if t["name"]=="access_request"][0]; assert "add_account" in ar["inputSchema"]["properties"]["kind"]["enum"]; assert "project_grant" in ar["inputSchema"]["properties"]["kind"]["enum"]; dc=[t for t in r["result"]["tools"] if t["name"]=="drive_create"][0]; assert "content" in dc["inputSchema"]["properties"] and "text/markdown" in dc["inputSchema"]["properties"]["content_type"]["enum"]; assert all(n in names for n in ("drive_read","drive_copy","drive_upload","gmail_attachment_get","drive_update","drive_permissions_list","drive_permissions_create","drive_permissions_delete")); pc=[t for t in r["result"]["tools"] if t["name"]=="drive_permissions_create"][0]; assert "transfer_ownership" not in pc["inputSchema"]["properties"] and "owner" not in pc["inputSchema"]["properties"]["role"]["enum"]'; then
   PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m MCP tools/list (Gmail+Drive+setup_status, pas de send)\n'
 else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m MCP tools/list\n'
@@ -1053,34 +1053,26 @@ body = json.loads(flags(args)["--json"])
 assert params["fileId"] == "FILE1" and not params.get("transferOwnership")
 assert body == {"type": "user", "role": "writer", "emailAddress": "bob@example.com"}
 
-# permissions create (transfert propriété → invitation pendingOwner, flux consumer)
-CALLS.clear()
-api.drive_permissions_create(
-    alias, "FILE1", "bob@example.com",
-    role="owner", transfer_ownership=True,
-)
-args = CALLS[-1]
-params = json.loads(flags(args)["--params"])
-body = json.loads(flags(args)["--json"])
-# consumer @gmail.com : pas de transfert DIRECT (Google le rejette) — writer + pendingOwner
-assert "transferOwnership" not in params, params
-assert params.get("sendNotificationEmail") is True
-assert body["role"] == "writer" and body.get("pendingOwner") is True, body
-# le masque de champs expose pendingOwner (sinon invitation ≡ writer normal)
-assert "pendingOwner" in params["fields"], params["fields"]
-
-# role=owner sans transfer_ownership → refus gateway
+# transfert de propriété : RETIRÉ de cette version → refus (déplacé en PR dédiée)
+try:
+    api.drive_permissions_create(
+        alias, "FILE1", "bob@example.com", role="owner", transfer_ownership=True,
+    )
+    raise SystemExit("transfer_ownership aurait dû être refusé (PR dédiée)")
+except GatewayError as e:
+    assert e.code == "error", e.code
+# role=owner seul → refus aussi (owner n'est plus un rôle de partage valide)
 try:
     api.drive_permissions_create(alias, "FILE1", "bob@example.com", role="owner")
-    raise SystemExit("owner sans transfer_ownership aurait dû échouer")
+    raise SystemExit("role=owner aurait dû être refusé")
 except GatewayError as e:
     assert e.code == "error", e.code
 
 # P2 (revue Codex #4) : transfer_ownership non-booléen (chaîne "false") → refus,
-# jamais coercé en vrai transfert (action destructive)
+# jamais coercé (la validation booléenne demeure même transfert retiré)
 try:
     api.drive_permissions_create(
-        alias, "FILE1", "bob@example.com", role="owner", transfer_ownership="false",
+        alias, "FILE1", "bob@example.com", role="writer", transfer_ownership="false",
     )
     raise SystemExit("transfer_ownership='false' (chaîne) aurait dû être refusé")
 except GatewayError as e:

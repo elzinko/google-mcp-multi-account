@@ -347,32 +347,26 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "drive_permissions_create",
         "description": (
-            "Partage un fichier avec un utilisateur (reader/commenter/writer) ou "
-            "transfère la propriété (transfer_ownership=true, role=owner). "
+            "Partage un fichier avec un utilisateur (reader/commenter/writer). "
             "Nécessite drive.share:true dans la policy. Action visible — confirmer "
-            "avec l'humain avant d'appeler. Les transferts envoient une "
-            "notification Google (non désactivable)."
+            "avec l'humain avant d'appeler. (Transfert de propriété : hors de cette "
+            "version, PR dédiée non prête.)"
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "alias": {"type": "string", "description": "Profil propriétaire actuel"},
+                "alias": {"type": "string", "description": "Profil propriétaire"},
                 "file_id": {"type": "string"},
                 "email": {"type": "string", "description": "Destinataire du partage"},
                 "role": {
                     "type": "string",
-                    "enum": ["reader", "commenter", "writer", "owner"],
+                    "enum": ["reader", "commenter", "writer"],
                     "default": "reader",
-                },
-                "transfer_ownership": {
-                    "type": "boolean",
-                    "default": False,
-                    "description": "true = invite email à devenir propriétaire (writer pendingOwner + notification) ; le destinataire accepte depuis son Drive (comptes @gmail.com)",
                 },
                 "send_notification": {
                     "type": "boolean",
                     "default": False,
-                    "description": "Envoyer un email de notification (ignoré si transfert)",
+                    "description": "Envoyer un email de notification au destinataire",
                 },
             },
             "required": ["alias", "file_id", "email"],
@@ -507,9 +501,7 @@ DISPATCH: dict[str, Callable] = {
         file_id=kw["file_id"],
         email=kw["email"],
         role=kw.get("role") or "reader",
-        # Valeurs BRUTES (pas de bool() permissif) : l'API rejette tout non-booléen
-        # — un "false" (chaîne) ne doit pas devenir un transfert de propriété.
-        transfer_ownership=kw.get("transfer_ownership", False),
+        # Valeur BRUTE (pas de bool() permissif) : l'API rejette tout non-booléen.
         send_notification=kw.get("send_notification", False),
     ),
     "drive_permissions_delete": lambda **kw: api.drive_permissions_delete(
