@@ -574,10 +574,13 @@ session_unlock(sys.argv[1], sys.argv[2], int(sys.argv[3]))
       [[ "$hours" =~ ^[0-9]+$ && "$hours" -ge 1 && "$hours" -le 168 ]] \
         || die "durée invalide « $hours »"
       local resolved fid fname
+      # Barrière AVANT le lookup Drive authentifié (revue sécurité) : signer la
+      # cible BRUTE, résoudre le nom seulement après Touch ID / déverrouillage
+      # (idem cmd_grant — la route explicite « session grant » avait été oubliée).
+      require_signed_elicitation "$(printf '{"action":"session_grant","alias":"%s","email":"%s","session_id":"%s","target":"%s","hours":%s}' "$alias" "$email" "$sid" "$target" "$hours")"
       resolved="$(resolve_folder "$dir" "$target")"
       fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
       [[ -n "$fid" ]] || die "dossier introuvable"
-      require_signed_elicitation "$(printf '{"action":"session_grant","alias":"%s","email":"%s","session_id":"%s","target":"%s","hours":%s}' "$alias" "$email" "$sid" "$fname" "$hours")"
       REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
 import os, sys
 sys.path.insert(0, os.environ['REPO_DIR'])
