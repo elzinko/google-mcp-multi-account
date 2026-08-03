@@ -665,6 +665,14 @@ const server = http.createServer(async (req, res) => {
   }
   if (!p.startsWith("/api/")) return send(res, 404, { error: "introuvable" });
 
+  // Anti-DNS-rebinding : n'accepter que l'hôte loopback sur lequel on écoute.
+  // Une page attaquante rebindée garde SON header Host (ex. attacker.com:PORT),
+  // donc ceci la rejette même quand l'Origin est omis sur un GET same-origin.
+  const host = req.headers.host;
+  if (host !== `127.0.0.1:${PORT}` && host !== `localhost:${PORT}`) {
+    return send(res, 403, { error: "hôte refusé" });
+  }
+
   const origin = req.headers.origin;
   if (origin && origin !== `http://${HOST}:${PORT}` && origin !== `http://localhost:${PORT}`) {
     return send(res, 403, { error: "origine refusée" });
