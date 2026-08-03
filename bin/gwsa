@@ -476,11 +476,15 @@ PYEOF
   [[ "$hours" =~ ^[0-9]+$ && "$hours" -ge 1 && "$hours" -le 168 ]] \
     || die "durée invalide « $hours » (heures entières, 1 à 168)"
   local resolved fid fname sid="${GWSA_SESSION_ID:-}"
-  resolved="$(resolve_folder "$dir" "$target")"
-  fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
-  [[ -n "$fid" ]] || die "dossier « $target » introuvable ou ambigu — donne son ID (fin de l'URL du dossier dans Drive)"
+  # Barrière (Touch ID / déverrouillage) AVANT toute lecture Drive : la
+  # résolution par nom fait un lookup Drive AUTHENTIFIÉ (via le vault) — la faire
+  # précéder le gate laisserait sonder l'existence d'un nom sans franchir Touch ID
+  # (revue sécurité). On signe la cible BRUTE, puis on résout.
   if [[ -n "$sid" ]]; then
-    require_signed_elicitation "$(printf '{"action":"session_grant","alias":"%s","email":"%s","session_id":"%s","target":"%s","hours":%s}' "$alias" "$email" "$sid" "$fname" "$hours")"
+    require_signed_elicitation "$(printf '{"action":"session_grant","alias":"%s","email":"%s","session_id":"%s","target":"%s","hours":%s}' "$alias" "$email" "$sid" "$target" "$hours")"
+    resolved="$(resolve_folder "$dir" "$target")"
+    fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
+    [[ -n "$fid" ]] || die "dossier « $target » introuvable ou ambigu — donne son ID (fin de l'URL du dossier dans Drive)"
     REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
 import os, sys
 sys.path.insert(0, os.environ['REPO_DIR'])
@@ -491,7 +495,10 @@ session_grant_drive(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.
     return 0
   fi
   grant_deprecation_warn
-  require_signed_elicitation "$(printf '{"action":"grant","alias":"%s","email":"%s","target":"%s","hours":%s}' "$alias" "$email" "$fname" "$hours")"
+  require_signed_elicitation "$(printf '{"action":"grant","alias":"%s","email":"%s","target":"%s","hours":%s}' "$alias" "$email" "$target" "$hours")"
+  resolved="$(resolve_folder "$dir" "$target")"
+  fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
+  [[ -n "$fid" ]] || die "dossier « $target » introuvable ou ambigu — donne son ID (fin de l'URL du dossier dans Drive)"
   "$SYS_PYTHON" - "$G" "$fid" "$fname" "$hours" <<'PYEOF'
 import json, os, sys, time
 path, fid, fname, hours = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])

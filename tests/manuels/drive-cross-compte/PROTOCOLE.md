@@ -95,11 +95,14 @@ Horodatage : `TS=$(date +%Y%m%d-%H%M%S)`.
 1. `drive_create` sur **perso** :
    - `parent_id` = ID zone `ZZ-TESTS` de perso
    - `name` = `cross-${TS}.md`
+   - `mime_type` = `text/markdown` — **fichier non-natif (blob)**. Un Google Doc
+     natif (mime_type par défaut) n'est **pas** modifiable en contenu par
+     `drive_update` (revue sécurité F5) ; on crée donc un blob éditable.
    - `content` = markdown distinct, ex. :
      `# Cross-compte perso→mw\n\nCréé le ${TS} depuis **perso**.`
 2. Noter `file_id`, `webViewLink`, `owner` — vérifier `owned_by_me: true`.
-3. `drive_update` : renommer en `cross-${TS}-v2.md` et ajouter une ligne au
-   contenu — vérifier via `drive_get`.
+3. `drive_update` : renommer en `cross-${TS}-v2.md` et **remplacer** le contenu
+   (remplacement intégral, pas d'ajout partiel) — vérifier via `drive_get`.
 
 ### Phase 4 — recopie cross-compte (perso → mw)
 
