@@ -550,6 +550,192 @@ def _safe_filename(filename: str) -> str:
     return base or "piece-jointe.bin"
 
 
+
+def drive_update(
+    alias: str,
+    file_id: str,
+    name: str = "",
+    content: Optional[str] = None,
+    content_type: str = "",
+    mime_type: str = "",
+) -> dict[str, Any]:
+    """Met à jour un fichier Drive (nom et/ou contenu) — soumis aux zones.
+
+    `file_id` doit être sous une zone autorisée. `content=None` = pas de
+    changement de contenu ; `content=""` = payload vide (vider le fichier).
+
+    ⚠ Avec un `content`, c'est un **remplacement INTÉGRAL** du contenu (media
+    upload), pas une édition partielle. Réservé aux fichiers **non-natifs** :
+    un fichier Google natif (Doc/Sheet/Slide) ne s'édite pas par media upload
+    (API Docs/Sheets non implémentée) → refus explicite (revue F5).
+    """
+    validate_alias(alias)
+    if not file_id:
+        raise GatewayError("file_id requis", code="error")
+    if not name and content is None:
+        raise GatewayError(
+            "au moins un de name ou content est requis", code="error",
+        )
+    body: dict[str, Any] = {}
+    if name:
+        body["name"] = name
+    if mime_type:
+        body["mimeType"] = mime_type
+    args = [
+        "drive", "files", "update",
+        "--params", json.dumps({"fileId": file_id, "fields": _DRIVE_FILE_FIELDS}),
+        "--json", json.dumps(body),
+    ]
+    if content is None:
+        data = _run(alias, args)
+        return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
+    # content = remplacement INTÉGRAL (media upload). On lit d'abord le vrai
+    # mimeType : un fichier Google natif ne s'édite pas ainsi (média ≠ contenu
+    # structuré) → refus plutôt qu'échec silencieux / corruption d'un binaire
+    # (revue F5 / Codex P1). « content » réservé aux fichiers non-natifs.
+    current = _run(
+        alias,
+        ["drive", "files", "get", "--params",
+         json.dumps({"fileId": file_id, "fields": "mimeType"})],
+    )
+    current_mime = current.get("mimeType", "") if isinstance(current, dict) else ""
+    if current_mime.startswith("application/vnd.google-apps."):
+        raise GatewayError(
+            f"drive_update ne peut pas remplacer le contenu d'un fichier Google "
+            f"natif ({current_mime}) — édition via l'API Docs/Sheets non "
+            f"implémentée ; « content » n'est supporté que sur un fichier non-natif",
+            code="error",
+        )
+    target_mime = mime_type or current_mime or "text/plain"
+    ctype = _content_type_for(content_type, target_mime)
+    with _spooled_content(content, ctype) as path:
+        data = _run(
+            alias,
+            [*args, "--upload", str(path), "--upload-content-type", ctype],
+        )
+    return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
+
+
+_PERMISSION_FIELDS = (
+    "id,type,role,emailAddress,displayName,deleted,permissionDetails"
+)
+
+
+def drive_permissions_list(
+    alias: str,
+    file_id: str,
+    page_size: int = 100,
+    page_token: str = "",
+) -> dict[str, Any]:
+    """Liste les permissions d'un fichier (lecture).
+
+    Au-delà de 100 permissions, le résultat porte `nextPageToken` : le rappeler
+    via `page_token` pour la page suivante — sinon les permissions au-delà de la
+    1ʳᵉ page seraient omises et `drive_permissions_delete` inopérant dessus (F6).
+    """
+    validate_alias(alias)
+    if not file_id:
+        raise GatewayError("file_id requis", code="error")
+    page_size = max(1, min(int(page_size), 100))
+    params = {
+        "fileId": file_id,
+        "pageSize": page_size,
+        "fields": f"permissions({_PERMISSION_FIELDS}),nextPageToken",
+    }
+    if page_token:
+        params["pageToken"] = page_token
+    data = _run(
+        alias,
+        ["drive", "permissions", "list", "--params", json.dumps(params)],
+    )
+    return {"ok": True, "alias": alias, "result": data}
+
+
+def drive_permissions_create(
+    alias: str,
+    file_id: str,
+    email: str,
+    role: str = "reader",
+    transfer_ownership: bool = False,
+    send_notification: bool = False,
+) -> dict[str, Any]:
+    """Partage un fichier avec un utilisateur (reader/commenter/writer).
+
+    Nécessite `drive.share:true` dans la policy. Action visible — confirmer avec
+    l'humain avant d'appeler. Le transfert de propriété (`transfer_ownership`) est
+    déplacé dans une PR dédiée (non prête) et refusé ici.
+    """
+    validate_alias(alias)
+    # Booléens STRICTS : « transfer_ownership » est destructif (don de propriété).
+    # Le dispatch MCP ne valide pas le schéma → une chaîne "false" ne doit jamais
+    # être coercée en vrai (revue Codex). On refuse tout non-booléen.
+    if not isinstance(transfer_ownership, bool):
+        raise GatewayError("transfer_ownership doit être un booléen (true/false)", code="error")
+    if not isinstance(send_notification, bool):
+        raise GatewayError("send_notification doit être un booléen (true/false)", code="error")
+    if not file_id or not email:
+        raise GatewayError("file_id et email sont requis", code="error")
+    if "@" not in email:
+        raise GatewayError("email invalide", code="error")
+    role = (role or "reader").lower().strip()
+    # Transfert de propriété RETIRÉ de cette version : destructif, garde de sécurité
+    # à concevoir (zones / grant de session / Touch ID) et à valider sur de vrais
+    # comptes @gmail.com → déplacé dans une PR dédiée, non prête. Ici : partage
+    # lecture/écriture seulement.
+    if transfer_ownership:
+        raise GatewayError(
+            "transfert de propriété non disponible dans cette version "
+            "(fonction déplacée dans une PR dédiée, non prête)",
+            code="error",
+        )
+    allowed_roles = {"reader", "commenter", "writer"}
+    if role not in allowed_roles:
+        raise GatewayError(
+            f"role « {role} » invalide — valeurs : {', '.join(sorted(allowed_roles))}",
+            code="error",
+        )
+    params: dict[str, Any] = {
+        "fileId": file_id,
+        "fields": _PERMISSION_FIELDS,
+        "sendNotificationEmail": bool(send_notification),
+    }
+    body: dict[str, Any] = {
+        "type": "user",
+        "role": role,
+        "emailAddress": email,
+    }
+    data = _run(
+        alias,
+        [
+            "drive", "permissions", "create",
+            "--params", json.dumps(params),
+            "--json", json.dumps(body),
+        ],
+    )
+    return {
+        "ok": True,
+        "alias": alias,
+        "result": data,
+        "transfer_ownership": transfer_ownership,
+    }
+
+
+def drive_permissions_delete(
+    alias: str,
+    file_id: str,
+    permission_id: str,
+) -> dict[str, Any]:
+    """Révoque une permission (policy share requise)."""
+    validate_alias(alias)
+    if not file_id or not permission_id:
+        raise GatewayError("file_id et permission_id sont requis", code="error")
+    params = {"fileId": file_id, "permissionId": permission_id}
+    _run(
+        alias,
+        ["drive", "permissions", "delete", "--params", json.dumps(params)],
+    )
+    return {"ok": True, "alias": alias, "deleted": permission_id}
+
 def gmail_attachment_get(
     alias: str,
     message_id: str,

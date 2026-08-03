@@ -31,7 +31,7 @@ Prompt de lancement : voir [PROMPT.md](PROMPT.md).
 Conventions : toutes les commandes agent passent par
 `GWSA_CLIENT=claude-code gwsa …` (jamais `gws` nu), ou par les tools MCP
 équivalents quand ils existent (`profiles_list`, `drive_list`, `drive_get`,
-`drive_create`, `access_request`).
+`drive_create`, `drive_update`, `drive_permissions_*`, `access_request`).
 
 ### Phase 0 — état des lieux (lecture seule)
 
@@ -181,13 +181,12 @@ les grants expirent tout seuls, verrous et grants se referment automatiquement
 | Refus de zone alors que le grant vient d'être posé | Grant expiré ou zone d'un autre compte | `gwsa grants <alias>`, re-granter |
 | L'agent propose de déverrouiller lui-même | Interdit (CLAUDE.md) | C'est l'humain qui exécute unlock/grant, toujours |
 
-## Limites v1 connues (constatées en écrivant ce protocole)
+## Limites connues (mises à jour 2026-07)
 
-- Le serveur MCP n'expose ni `drive_update` ni upload de contenu : les
-  modifications passent par `gwsa … drive files update --upload` (autorisé
-  par CLAUDE.md). Candidat backlog : tool MCP `drive_update`.
-- **Corbeille = suppression (fiche 0037, livrée)** : `files update {"trashed":true}`
-  est classé *delete* — refusé sous `delete:false`, et la **racine d'une zone**
-  n'est jamais corbeillable (frontière immuable, même sous `delete:true`). Le
-  nettoyage des dossiers de zone est donc un geste humain (Phase 6). Ferme la
-  question ouverte de la fiche 0002.
+- `drive_update` et `drive_permissions_*` sont exposés en MCP ; les phases 3
+  peuvent les utiliser à la place de `gwsa … files update --upload`.
+- **Corbeille = suppression (fiche 0037)** : nettoyage des dossiers de zone =
+  geste humain (Phase 6). Voir aussi [drive-cross-compte](../drive-cross-compte/)
+  pour partage / transfert entre comptes.
+- Copie cross-compte : pas de move natif — recopie via `drive_create` ou
+  export shell + upload (protocole dédié drive-cross-compte).

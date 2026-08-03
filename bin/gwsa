@@ -68,6 +68,10 @@ USAGE_LOGGER="$REPO_DIR/scripts/log-usage.py"
 # une telle porte rouvrirait exactement le trou qu'on ferme ici.
 SYS_PYTHON="/usr/bin/python3"
 SYS_SWIFT="/usr/bin/swift"
+# Même garantie que SYS_PYTHON / SYS_SWIFT : jamais via le PATH (un faux
+# `swiftc` en tête de PATH pourrait compiler un binaire de signature malveillant
+# que require_signed_elicitation ferait ensuite confiance — cf. docs/threat-model.md).
+SYS_SWIFTC="/usr/bin/swiftc"
 SIGN_BIN=""  # chemin du binaire de signature — rempli par ensure_sign_bin (nom = gateway/config.py:PRODUCT_SLUG)
 [[ -x "$SYS_PYTHON" ]] || { echo "gwsa : interpréteur système introuvable ($SYS_PYTHON) — installer les outils en ligne de commande : xcode-select --install" >&2; exit 3; }
 
@@ -83,15 +87,39 @@ check_alias() {
 
 resolve_folder() { # resolve_folder <dir> <idOuNom> → "id<TAB>nom" (die si introuvable/ambigu)
   local dir="$1" target="$2"
+  # NOTE: les tokens OAuth résident dans le vault (`GWSA_ROOT/.vault/<alias>/`).
+  # Le profil (`GWSA_ROOT/<alias>/`) ne contient que la policy/lock et ne suffit
+  # donc pas pour un appel `gws` (après migration). On doit utiliser
+  # `gateway.vault.gws_config_dir()` pour résoudre correctement par nom.
+  local alias_name cfg_dir
+  alias_name="$(basename "$dir")"
+  cfg_dir="$(GWSA_ROOT="$GWSA_ROOT" REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c '
+import os, sys
+sys.path.insert(0, os.environ["REPO_DIR"])
+from gateway.vault import gws_config_dir
+print(gws_config_dir(sys.argv[1]))
+' "$alias_name" 2>/dev/null || echo "$dir")"
   if [[ "$target" =~ ^[A-Za-z0-9_-]{20,}$ ]]; then
     local name
-    name="$(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws drive files get --params "{\"fileId\":\"$target\",\"fields\":\"name\"}" 2>/dev/null \
+    name="$(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$cfg_dir" gws drive files get --params "{\"fileId\":\"$target\",\"fields\":\"name\"}" 2>/dev/null \
       | "$SYS_PYTHON" -c 'import json,sys; print(json.load(sys.stdin).get("name",""))' 2>/dev/null || true)"
     printf '%s\t%s' "$target" "${name:-$target}"
     return 0
   fi
-  local esc; esc="${target//\'/\\\'}"
-  GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws drive files list --params "{\"q\":\"name='$esc' and mimeType='application/vnd.google-apps.folder' and trashed=false\",\"fields\":\"files(id,name)\"}" 2>/dev/null \
+  # Construire --params via un vrai encodeur JSON (revue F4) : le nom de dossier
+  # est échappé pour le langage q de Drive (\ puis apostrophe), PUIS json.dumps
+  # encode le tout — sinon un " ou un \ dans le nom casse le JSON ou injecte des
+  # clés --params. chr(39)/chr(92) évitent apostrophe/antislash littéraux ici.
+  local params
+  params="$("$SYS_PYTHON" -c '
+import json, sys
+Q = chr(39); B = chr(92)
+name = sys.argv[1].replace(B, B + B).replace(Q, B + Q)
+q = "name=" + Q + name + Q + " and mimeType=" + Q + "application/vnd.google-apps.folder" + Q + " and trashed=false"
+sys.stdout.write(json.dumps({"q": q, "fields": "files(id,name)"}))
+' "$target" 2>/dev/null)"
+  [[ -n "$params" ]] || return 0
+  GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$cfg_dir" gws drive files list --params "$params" 2>/dev/null \
     | "$SYS_PYTHON" -c '
 import json, sys
 f = json.load(sys.stdin).get("files", [])
@@ -116,9 +144,10 @@ ensure_sign_bin() { # compile le helper d'élicitation signée en binaire nommé
   [[ -n "$slug" ]] || return 1
   SIGN_BIN="$REPO_DIR/bin/.build/$slug"
   [[ -x "$SIGN_BIN" && "$SIGN_BIN" -nt "$src" && "$SIGN_BIN" -nt "$REPO_DIR/bin/gwsa" ]] && return 0
-  command -v swiftc >/dev/null 2>&1 || return 1
+  # Chemin absolu uniquement — jamais `command -v swiftc` (PATH hostile).
+  [[ -x "$SYS_SWIFTC" ]] || return 1
   mkdir -p "$REPO_DIR/bin/.build"
-  swiftc -o "$SIGN_BIN" "$src" 2>/dev/null
+  "$SYS_SWIFTC" -o "$SIGN_BIN" "$src" 2>/dev/null
 }
 
 # NB : le compte est nommé dans le prompt Touch ID via le champ « email » du
@@ -447,11 +476,15 @@ PYEOF
   [[ "$hours" =~ ^[0-9]+$ && "$hours" -ge 1 && "$hours" -le 168 ]] \
     || die "durée invalide « $hours » (heures entières, 1 à 168)"
   local resolved fid fname sid="${GWSA_SESSION_ID:-}"
-  resolved="$(resolve_folder "$dir" "$target")"
-  fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
-  [[ -n "$fid" ]] || die "dossier « $target » introuvable ou ambigu — donne son ID (fin de l'URL du dossier dans Drive)"
+  # Barrière (Touch ID / déverrouillage) AVANT toute lecture Drive : la
+  # résolution par nom fait un lookup Drive AUTHENTIFIÉ (via le vault) — la faire
+  # précéder le gate laisserait sonder l'existence d'un nom sans franchir Touch ID
+  # (revue sécurité). On signe la cible BRUTE, puis on résout.
   if [[ -n "$sid" ]]; then
-    require_signed_elicitation "$(printf '{"action":"session_grant","alias":"%s","email":"%s","session_id":"%s","target":"%s","hours":%s}' "$alias" "$email" "$sid" "$fname" "$hours")"
+    require_signed_elicitation "$("$SYS_PYTHON" -c 'import json,sys; print(json.dumps({"action":"session_grant","alias":sys.argv[1],"email":sys.argv[2],"session_id":sys.argv[3],"target":sys.argv[4],"hours":int(sys.argv[5])}))' "$alias" "$email" "$sid" "$target" "$hours")"
+    resolved="$(resolve_folder "$dir" "$target")"
+    fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
+    [[ -n "$fid" ]] || die "dossier « $target » introuvable ou ambigu — donne son ID (fin de l'URL du dossier dans Drive)"
     REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
 import os, sys
 sys.path.insert(0, os.environ['REPO_DIR'])
@@ -462,7 +495,10 @@ session_grant_drive(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.
     return 0
   fi
   grant_deprecation_warn
-  require_signed_elicitation "$(printf '{"action":"grant","alias":"%s","email":"%s","target":"%s","hours":%s}' "$alias" "$email" "$fname" "$hours")"
+  require_signed_elicitation "$("$SYS_PYTHON" -c 'import json,sys; print(json.dumps({"action":"grant","alias":sys.argv[1],"email":sys.argv[2],"target":sys.argv[3],"hours":int(sys.argv[4])}))' "$alias" "$email" "$target" "$hours")"
+  resolved="$(resolve_folder "$dir" "$target")"
+  fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
+  [[ -n "$fid" ]] || die "dossier « $target » introuvable ou ambigu — donne son ID (fin de l'URL du dossier dans Drive)"
   "$SYS_PYTHON" - "$G" "$fid" "$fname" "$hours" <<'PYEOF'
 import json, os, sys, time
 path, fid, fname, hours = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
@@ -538,10 +574,13 @@ session_unlock(sys.argv[1], sys.argv[2], int(sys.argv[3]))
       [[ "$hours" =~ ^[0-9]+$ && "$hours" -ge 1 && "$hours" -le 168 ]] \
         || die "durée invalide « $hours »"
       local resolved fid fname
+      # Barrière AVANT le lookup Drive authentifié (revue sécurité) : signer la
+      # cible BRUTE, résoudre le nom seulement après Touch ID / déverrouillage
+      # (idem cmd_grant — la route explicite « session grant » avait été oubliée).
+      require_signed_elicitation "$("$SYS_PYTHON" -c 'import json,sys; print(json.dumps({"action":"session_grant","alias":sys.argv[1],"email":sys.argv[2],"session_id":sys.argv[3],"target":sys.argv[4],"hours":int(sys.argv[5])}))' "$alias" "$email" "$sid" "$target" "$hours")"
       resolved="$(resolve_folder "$dir" "$target")"
       fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
       [[ -n "$fid" ]] || die "dossier introuvable"
-      require_signed_elicitation "$(printf '{"action":"session_grant","alias":"%s","email":"%s","session_id":"%s","target":"%s","hours":%s}' "$alias" "$email" "$sid" "$fname" "$hours")"
       REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
 import os, sys
 sys.path.insert(0, os.environ['REPO_DIR'])

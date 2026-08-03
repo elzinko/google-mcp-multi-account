@@ -294,6 +294,103 @@ TOOLS: list[dict[str, Any]] = [
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
     },
     {
+        "name": "drive_update",
+        "description": (
+            "Met à jour un fichier Drive (renommage et/ou contenu texte). "
+            "Soumis aux zones (policy + grants). Au moins un de name ou content "
+            "est requis. Si refusé : access_request kind=session_grant."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "alias": {"type": "string"},
+                "file_id": {"type": "string"},
+                "name": {"type": "string", "description": "Nouveau nom (optionnel)"},
+                "content": {
+                    "type": "string",
+                    "description": "Nouveau contenu texte (optionnel, upload multipart)",
+                },
+                "content_type": {
+                    "type": "string",
+                    "enum": ["text/markdown", "text/plain", "text/html", "text/csv"],
+                },
+                "mime_type": {
+                    "type": "string",
+                    "description": "Type MIME cible si content fourni",
+                },
+            },
+            "required": ["alias", "file_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "drive_permissions_list",
+        "description": (
+            "Liste les permissions (partages) d'un fichier Drive (lecture). "
+            "Utile avant/après partage ou transfert de propriété."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "alias": {"type": "string"},
+                "file_id": {"type": "string"},
+                "page_size": {"type": "integer", "default": 100},
+                "page_token": {
+                    "type": "string",
+                    "description": "Jeton de page suivante (nextPageToken du résultat précédent) — au-delà de 100 permissions",
+                },
+            },
+            "required": ["alias", "file_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "drive_permissions_create",
+        "description": (
+            "Partage un fichier avec un utilisateur (reader/commenter/writer). "
+            "Nécessite drive.share:true dans la policy. Action visible — confirmer "
+            "avec l'humain avant d'appeler. (Transfert de propriété : hors de cette "
+            "version, PR dédiée non prête.)"
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "alias": {"type": "string", "description": "Profil propriétaire"},
+                "file_id": {"type": "string"},
+                "email": {"type": "string", "description": "Destinataire du partage"},
+                "role": {
+                    "type": "string",
+                    "enum": ["reader", "commenter", "writer"],
+                    "default": "reader",
+                },
+                "send_notification": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Envoyer un email de notification au destinataire",
+                },
+            },
+            "required": ["alias", "file_id", "email"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "drive_permissions_delete",
+        "description": (
+            "Révoque une permission sur un fichier (policy share requise). "
+            "permission_id vient de drive_permissions_list."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "alias": {"type": "string"},
+                "file_id": {"type": "string"},
+                "permission_id": {"type": "string"},
+            },
+            "required": ["alias", "file_id", "permission_id"],
+            "additionalProperties": False,
+        },
+    },
+    {
         "name": "access_request",
         "description": (
             "Demande d'élicitation humaine : kind=session_unlock / session_grant / "
@@ -383,6 +480,34 @@ DISPATCH: dict[str, Callable] = {
         mime_type=kw.get("mime_type") or "application/vnd.google-apps.document",
         content=kw.get("content") or "",
         content_type=kw.get("content_type") or "",
+    ),
+    "drive_update": lambda **kw: api.drive_update(
+        alias=kw["alias"],
+        file_id=kw["file_id"],
+        name=kw.get("name") or "",
+        # Distinguer absent (None) de "" (vider le fichier) — ne pas faire `or ""`.
+        content=kw["content"] if "content" in kw else None,
+        content_type=kw.get("content_type") or "",
+        mime_type=kw.get("mime_type") or "",
+    ),
+    "drive_permissions_list": lambda **kw: api.drive_permissions_list(
+        alias=kw["alias"],
+        file_id=kw["file_id"],
+        page_size=int(kw.get("page_size") or 100),
+        page_token=kw.get("page_token") or "",
+    ),
+    "drive_permissions_create": lambda **kw: api.drive_permissions_create(
+        alias=kw["alias"],
+        file_id=kw["file_id"],
+        email=kw["email"],
+        role=kw.get("role") or "reader",
+        # Valeur BRUTE (pas de bool() permissif) : l'API rejette tout non-booléen.
+        send_notification=kw.get("send_notification", False),
+    ),
+    "drive_permissions_delete": lambda **kw: api.drive_permissions_delete(
+        alias=kw["alias"],
+        file_id=kw["file_id"],
+        permission_id=kw["permission_id"],
     ),
     "access_request": lambda **kw: api.access_request(
         alias=kw["alias"],

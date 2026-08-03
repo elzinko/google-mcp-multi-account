@@ -110,7 +110,11 @@ def gws_json(profile_dir, args):
     """Interroge gws en lecture. Toute défaillance (binaire absent, timeout,
     sortie illisible) renvoie {} : l'appelant conclut alors « parent inconnu »,
     donc refus — fail closed, jamais de crash ni d'autorisation par accident."""
-    env = dict(os.environ, GOOGLE_WORKSPACE_CLI_CONFIG_DIR=profile_dir)
+    # Après migration vault (fiche 0040), les creds ne sont plus dans profile_dir :
+    # le broker passe le vrai CONFIG_DIR via GWSA_GWS_CONFIG_DIR (revue sécurité F1).
+    # Repli sur profile_dir pour un usage direct / legacy non migré.
+    cfg = os.environ.get("GWSA_GWS_CONFIG_DIR") or profile_dir
+    env = dict(os.environ, GOOGLE_WORKSPACE_CLI_CONFIG_DIR=cfg)
     try:
         r = subprocess.run(["gws"] + args, env=env, capture_output=True,
                            text=True, timeout=20)

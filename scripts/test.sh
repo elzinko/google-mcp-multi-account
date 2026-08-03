@@ -130,6 +130,19 @@ check 4 "files create — aucune zone active"                  drive files creat
 check 4 "files delete — suppression interdite par la policy" drive files delete --params '{"fileId":"x"}'
 check 4 "permissions create — partage interdit"              drive permissions create --params '{"fileId":"x"}'
 
+section "Drive par zones — partage autorisé (share:true)"
+policy <<EOF
+{"drive": {"read": true, "create": true, "update": true, "delete": false,
+           "share": true, "zonesOnly": true, "writeFolders": ["$ZONE"]}}
+EOF
+
+check 0 "permissions create — partage autorisé si share:true"  drive permissions create --params '{"fileId":"x"}' --json '{"type":"user","role":"reader","emailAddress":"a@b.c"}'
+check 0 "permissions list — lecture toujours autorisée"         drive permissions list --params '{"fileId":"x"}'
+policy <<'EOF'
+{"drive": {"read": true, "create": true, "update": true, "delete": false,
+           "share": false, "zonesOnly": true, "writeFolders": []}}
+EOF
+check 4 "permissions create — partage refusé si share:false"   drive permissions create --params '{"fileId":"x"}' --json '{"type":"user","role":"reader","emailAddress":"a@b.c"}'
 section "Drive par zones — une zone permanente"
 policy <<EOF
 {"drive": {"read": true, "create": true, "update": true, "delete": false,
@@ -145,6 +158,52 @@ check 4 "files copy sans parent — refusé"                    drive files copy
 check 4 "files copy hors zone — refusé (parent inconnu)"     drive files copy --params '{"fileId":"SRC"}' --json '{"parents":["AUTREDOSSIER98765432"]}'
 check 0 "files create --upload (binaire) dans la zone — autorisé" drive files create --json "{\"name\":\"x.pdf\",\"parents\":[\"$ZONE\"]}" --upload ./x.pdf --upload-content-type application/pdf
 check 4 "files create --upload sans parent — refusé"         drive files create --json '{"name":"x.pdf"}' --upload ./x.pdf --upload-content-type application/pdf
+
+# ── F1 (revue sécurité) : drive_update d'un fichier DANS la zone (non-hermétique) ──
+# Les tests ci-dessus ne valident que des cibles dont le parent EST la zone
+# (court-circuit « file_id in allowed », sans gws). Un drive_update porte un
+# fileId qui n'est pas lui-même la zone : under_allowed doit REMONTER les parents
+# via gws. Après migration vault, gws n'a de creds qu'au CONFIG_DIR vault, que le
+# broker passe via GWSA_GWS_CONFIG_DIR. Faux gws qui ne rend le parent qu'avec ce dir.
+F1BIN="$TMP/f1bin"; mkdir -p "$F1BIN"; F1VAULT="$TMP/f1-vault-cfg"
+cat > "$F1BIN/gws" <<EOF
+#!/usr/bin/env bash
+if [ "\$GOOGLE_WORKSPACE_CLI_CONFIG_DIR" = "$F1VAULT" ]; then
+  printf '{"id":"CHILDINZONE","parents":["$ZONE"]}\n'
+else
+  printf '{}\n'
+fi
+EOF
+chmod +x "$F1BIN/gws"
+PATH="$F1BIN:$PATH" GWSA_GWS_CONFIG_DIR="$F1VAULT" \
+  python3 "$CHECKER" "$PROFILE" drive files update --params '{"fileId":"CHILDINZONE"}' >/dev/null 2>&1
+if [[ $? -eq 0 ]]; then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "F1 : drive_update d'un fichier DANS la zone autorisé (parent remonté via CONFIG_DIR vault)"; else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "F1 : drive_update en zone refusé à tort — under_allowed ne voit pas le vault"; fi
+PATH="$F1BIN:$PATH" \
+  python3 "$CHECKER" "$PROFILE" drive files update --params '{"fileId":"CHILDINZONE"}' >/dev/null 2>&1
+if [[ $? -eq 4 ]]; then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "F1 : sans CONFIG_DIR vault → refusé (le trou d'avant le fix est exercé)"; else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "F1 : sans vault, refus attendu"; fi
+
+# ── F4 (revue sécurité) : resolve_folder échappe le nom en JSON, pas d'injection ──
+# Réplique l'algo d'échappement de bin/gwsa (\ puis apostrophe pour le langage q,
+# PUIS json.dumps). Un nom malveillant portant ",": doit rester DANS la valeur q,
+# jamais devenir une clé --params ; et un " ne doit pas casser le JSON.
+F4KEYS="$(python3 -c '
+import json, sys
+Q = chr(39); B = chr(92)
+name = sys.argv[1].replace(B, B + B).replace(Q, B + Q)
+q = "name=" + Q + name + Q + " and mimeType=" + Q + "x" + Q + " and trashed=false"
+d = json.loads(json.dumps({"q": q, "fields": "files(id,name)"}))
+print(",".join(sorted(d.keys())))
+' 'a","x":"b')"
+if [[ "$F4KEYS" == "fields,q" ]]; then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "F4 : nom malveillant → --params JSON valide, aucune clé injectée (q,fields seuls)"; else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "F4 : injection --params possible ($F4KEYS)"; fi
+
+# ── P1 (revue Codex #4) : payload de grant SIGNÉ encodé en JSON, pas printf ──
+# Une cible avec métacaractères JSON est préservée EXACTEMENT (une seule clé
+# "target") : l'invite Touch ID affiche le dossier réellement résolu — pas de
+# duplicate-key qui montrerait « benign » tout en accordant autre chose.
+GTGT='evil","target":"benign'
+GP="$(python3 -c 'import json,sys; print(json.dumps({"action":"grant","alias":sys.argv[1],"email":sys.argv[2],"target":sys.argv[3],"hours":int(sys.argv[4])}))' alpha a@b "$GTGT" 8)"
+GT="$(printf '%s' "$GP" | python3 -c 'import json,sys; print(json.load(sys.stdin)["target"])' 2>/dev/null)"
+if [[ "$GT" == "$GTGT" ]]; then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "P1 : payload de grant en JSON — cible malveillante préservée, pas d'injection de clé"; else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "P1 : payload de grant injectable ($GT)"; fi
 
 section "Drive par zones — autorisation temporaire (élicitation gwsa grant)"
 policy <<'EOF'
@@ -403,7 +462,7 @@ fi
 
 # MCP tools/list smoke (stdio JSON-RPC, une requête)
 MCP_OUT="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | python3 -m gateway 2>/dev/null | head -1)"
-if echo "$MCP_OUT" | python3 -c 'import json,sys; r=json.load(sys.stdin); names=[t["name"] for t in r["result"]["tools"]]; assert "gmail_list" in names and "gmail_draft_create" in names and "setup_status" in names; assert not any(t["name"]=="gmail_send" for t in r["result"]["tools"]); ar=[t for t in r["result"]["tools"] if t["name"]=="access_request"][0]; assert "add_account" in ar["inputSchema"]["properties"]["kind"]["enum"]; assert "project_grant" in ar["inputSchema"]["properties"]["kind"]["enum"]; dc=[t for t in r["result"]["tools"] if t["name"]=="drive_create"][0]; assert "content" in dc["inputSchema"]["properties"] and "text/markdown" in dc["inputSchema"]["properties"]["content_type"]["enum"]; assert all(n in names for n in ("drive_read","drive_copy","drive_upload","gmail_attachment_get"))'; then
+if echo "$MCP_OUT" | python3 -c 'import json,sys; r=json.load(sys.stdin); names=[t["name"] for t in r["result"]["tools"]]; assert "gmail_list" in names and "gmail_draft_create" in names and "setup_status" in names; assert not any(t["name"]=="gmail_send" for t in r["result"]["tools"]); ar=[t for t in r["result"]["tools"] if t["name"]=="access_request"][0]; assert "add_account" in ar["inputSchema"]["properties"]["kind"]["enum"]; assert "project_grant" in ar["inputSchema"]["properties"]["kind"]["enum"]; dc=[t for t in r["result"]["tools"] if t["name"]=="drive_create"][0]; assert "content" in dc["inputSchema"]["properties"] and "text/markdown" in dc["inputSchema"]["properties"]["content_type"]["enum"]; assert all(n in names for n in ("drive_read","drive_copy","drive_upload","gmail_attachment_get","drive_update","drive_permissions_list","drive_permissions_create","drive_permissions_delete")); pc=[t for t in r["result"]["tools"] if t["name"]=="drive_permissions_create"][0]; assert "transfer_ownership" not in pc["inputSchema"]["properties"] and "owner" not in pc["inputSchema"]["properties"]["role"]["enum"]'; then
   PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m MCP tools/list (Gmail+Drive+setup_status, pas de send)\n'
 else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m MCP tools/list\n'
@@ -904,6 +963,168 @@ assert profs and not any(p["alias"].startswith(".") for p in profs), profs
   PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m .uploads / .downloads invisibles des listes de profils\n'
 else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m .uploads / .downloads ne doivent pas apparaître comme des profils\n'
+fi
+
+section "Gateway — drive_update + permissions (partage / transfert)"
+if python3 - <<'PY'
+import json
+
+import gateway.api as api
+from gateway.errors import GatewayError
+
+CALLS = []
+UPLOAD = {}
+
+
+def fake_run(alias, args, timeout=60):
+    CALLS.append(args)
+    if "--upload" in args:
+        from pathlib import Path
+        p = Path(args[args.index("--upload") + 1])
+        UPLOAD.update(path=p, data=p.read_bytes())
+    if method_of(args) == ("drive", "permissions", "delete"):
+        return {}
+    return {
+        "id": "FILE1",
+        "name": "Livrable",
+        "owners": [{"emailAddress": "alice@gmail.com"}],
+        "ownedByMe": True,
+        "permissions": [
+            {"id": "perm1", "type": "user", "role": "owner",
+             "emailAddress": "alice@gmail.com"},
+        ],
+    }
+
+
+def flags(args):
+    return {a: args[i + 1] for i, a in enumerate(args) if a.startswith("--")}
+
+
+def method_of(args):
+    return tuple(args[: next((i for i, a in enumerate(args) if a.startswith("-")), len(args))])
+
+
+api._run = fake_run
+alias = "testprof"
+
+# drive_update : renommage seul
+api.drive_update(alias, "FILE1", name="v2.md")
+args = CALLS[-1]
+assert method_of(args) == ("drive", "files", "update"), args
+params = json.loads(flags(args)["--params"])
+assert params["fileId"] == "FILE1", params
+assert json.loads(flags(args)["--json"]) == {"name": "v2.md"}
+
+# drive_update : contenu
+CALLS.clear()
+api.drive_update(alias, "FILE1", content="# Titre\n")
+args = CALLS[-1]
+assert "--upload" in args
+assert UPLOAD["data"].decode("utf-8") == "# Titre\n"
+
+# drive_update : content="" explicite → upload vide (≠ absence de content)
+CALLS.clear(); UPLOAD.clear()
+api.drive_update(alias, "FILE1", content="")
+args = CALLS[-1]
+assert "--upload" in args, "content=\"\" doit uploader un payload vide"
+assert UPLOAD["data"] == b"", UPLOAD
+
+# drive_update : au moins un champ requis
+try:
+    api.drive_update(alias, "FILE1")
+    raise SystemExit("drive_update sans name ni content aurait dû échouer")
+except GatewayError as e:
+    assert e.code == "error", e.code
+
+# permissions list
+CALLS.clear()
+api.drive_permissions_list(alias, "FILE1")
+args = CALLS[-1]
+assert method_of(args) == ("drive", "permissions", "list"), args
+assert json.loads(flags(args)["--params"])["fileId"] == "FILE1"
+
+# permissions create (partage reader)
+CALLS.clear()
+api.drive_permissions_create(alias, "FILE1", "bob@example.com", role="writer")
+args = CALLS[-1]
+assert method_of(args) == ("drive", "permissions", "create"), args
+params = json.loads(flags(args)["--params"])
+body = json.loads(flags(args)["--json"])
+assert params["fileId"] == "FILE1" and not params.get("transferOwnership")
+assert body == {"type": "user", "role": "writer", "emailAddress": "bob@example.com"}
+
+# transfert de propriété : RETIRÉ de cette version → refus (déplacé en PR dédiée)
+try:
+    api.drive_permissions_create(
+        alias, "FILE1", "bob@example.com", role="owner", transfer_ownership=True,
+    )
+    raise SystemExit("transfer_ownership aurait dû être refusé (PR dédiée)")
+except GatewayError as e:
+    assert e.code == "error", e.code
+# role=owner seul → refus aussi (owner n'est plus un rôle de partage valide)
+try:
+    api.drive_permissions_create(alias, "FILE1", "bob@example.com", role="owner")
+    raise SystemExit("role=owner aurait dû être refusé")
+except GatewayError as e:
+    assert e.code == "error", e.code
+
+# P2 (revue Codex #4) : transfer_ownership non-booléen (chaîne "false") → refus,
+# jamais coercé (la validation booléenne demeure même transfert retiré)
+try:
+    api.drive_permissions_create(
+        alias, "FILE1", "bob@example.com", role="writer", transfer_ownership="false",
+    )
+    raise SystemExit("transfer_ownership='false' (chaîne) aurait dû être refusé")
+except GatewayError as e:
+    assert e.code == "error", e.code
+
+# permissions delete
+CALLS.clear()
+out = api.drive_permissions_delete(alias, "FILE1", "permXYZ")
+args = CALLS[-1]
+assert method_of(args) == ("drive", "permissions", "delete"), args
+params = json.loads(flags(args)["--params"])
+assert params == {"fileId": "FILE1", "permissionId": "permXYZ"}
+assert out["deleted"] == "permXYZ"
+
+# F5 (revue sécurité) : content sur un fichier Google NATIF → refus (pas de
+# corruption / échec silencieux) ; drive_update lit d'abord le vrai mimeType.
+def fake_run_native(alias, args, timeout=60):
+    if method_of(args) == ("drive", "files", "get"):
+        return {"id": "FILE1", "mimeType": "application/vnd.google-apps.document"}
+    return {"id": "FILE1"}
+api._run = fake_run_native
+try:
+    api.drive_update(alias, "FILE1", content="# x\n")
+    raise SystemExit("drive_update content sur un Doc natif aurait dû être refusé")
+except GatewayError as e:
+    assert e.code == "error", e.code
+
+# F5 : sur un fichier NON-natif (blob), content passe et est bien uploadé
+UP2 = {}
+def fake_run_blob(alias, args, timeout=60):
+    if "--upload" in args:
+        from pathlib import Path
+        UP2["data"] = Path(args[args.index("--upload") + 1]).read_bytes()
+    if method_of(args) == ("drive", "files", "get"):
+        return {"id": "FILE1", "mimeType": "text/plain"}
+    return {"id": "FILE1"}
+api._run = fake_run_blob
+api.drive_update(alias, "FILE1", content="hello")
+assert UP2.get("data", b"").decode() == "hello", UP2
+
+# F6 (revue sécurité) : drive_permissions_list transmet page_token → pageToken
+api._run = fake_run
+CALLS.clear()
+api.drive_permissions_list(alias, "FILE1", page_token="TOK2")
+assert json.loads(flags(CALLS[-1])["--params"]).get("pageToken") == "TOK2", CALLS[-1]
+
+print("ok")
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m drive_update + permissions (args gws + validations)\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m drive_update + permissions\n'
 fi
 
 section "Broker — sortie brute raw_output vs JSON (drive_read, fiche 0043)"
@@ -3000,10 +3221,14 @@ else
 fi
 
 if grep -qE 'PRODUCT_SLUG *= *"[A-Za-z0-9._-]+"' gateway/config.py \
-  && grep -q 'ensure_sign_bin' bin/gwsa; then
-  pass "touchid : nom produit = source unique (config.PRODUCT_SLUG) + binaire nommé"
+  && grep -q 'SYS_SWIFTC="/usr/bin/swiftc"' bin/gwsa \
+  && grep -q 'ensure_sign_bin' bin/gwsa \
+  && grep -qE '^[[:space:]]*"\$SYS_SWIFTC"' bin/gwsa \
+  && ! grep -qE '^[[:space:]]*command -v swiftc' bin/gwsa \
+  && ! grep -qE '^[[:space:]]*swiftc ' bin/gwsa; then
+  pass "touchid : PRODUCT_SLUG + swiftc en chemin absolu (SYS_SWIFTC)"
 else
-  fail "touchid : PRODUCT_SLUG (config) / ensure_sign_bin manquant"
+  fail "touchid : PRODUCT_SLUG / SYS_SWIFTC / ensure_sign_bin manquant (ou swiftc via PATH)"
 fi
 
 # Non-régression : l'élicitation signée (strongauth) doit EXÉCUTER le binaire
