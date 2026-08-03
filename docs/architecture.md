@@ -116,7 +116,7 @@ la commande exacte à faire exécuter par l’humain (`gwsa unlock` / `gwsa gran
 | `drive_create` / `drive_update` | Création / modification sous zone, contenu optionnel en upload multipart (ADR-0003) | — |
 | `drive_copy` | Copie native (`files.copy`) sous `parent_id` (zones côté destination) | — |
 | `drive_upload` | Téléversement d’un fichier local (binaire compris) sous `parent_id` (zones), sans conversion | — |
-| `drive_permissions_*` | Partage et transfert de propriété (policy `share`) | — |
+| `drive_permissions_*` | Partage lecture/écriture (policy `share`) — transfert de propriété hors périmètre (PR dédiée) | — |
 | `access_request` | Texte d’élicitation seulement | — |
 
 Pas de `gwsa_run` générique : surface volontairement réduite.
