@@ -617,7 +617,9 @@ def drive_update(
 
 
 _PERMISSION_FIELDS = (
-    "id,type,role,emailAddress,displayName,deleted,permissionDetails"
+    # pendingOwner : distinguer une invitation de transfert (writer pendingOwner)
+    # d'un simple partage writer — indispensable à la vérif du transfert (revue Codex).
+    "id,type,role,emailAddress,displayName,deleted,pendingOwner,permissionDetails"
 )
 
 

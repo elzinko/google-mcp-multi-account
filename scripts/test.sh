@@ -1066,6 +1066,8 @@ body = json.loads(flags(args)["--json"])
 assert "transferOwnership" not in params, params
 assert params.get("sendNotificationEmail") is True
 assert body["role"] == "writer" and body.get("pendingOwner") is True, body
+# le masque de champs expose pendingOwner (sinon invitation ≡ writer normal)
+assert "pendingOwner" in params["fields"], params["fields"]
 
 # role=owner sans transfer_ownership → refus gateway
 try:
