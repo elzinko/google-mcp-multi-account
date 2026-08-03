@@ -2,7 +2,8 @@
 
 Protocole **guidé** pour prouver, en une session, les opérations Drive
 **entre deux comptes** : création, lecture, **recopie** A→B, **partage**,
-**transfert de propriété** (si policy le permet), puis nettoyage réversible.
+puis nettoyage réversible. (Le transfert de propriété est **hors de cette
+version** — voir phase 7.)
 
 **Bac à sable** : tout se passe sous `ZZ-TESTS` à la racine de chaque Drive.
 Rien d'autre n'est touché (default-deny + zones).
@@ -26,8 +27,8 @@ Inverser A/B en fin de test (phase optionnelle) pour couvrir les deux sens.
    - **perso** : `1JXzDlNxr-9ZMypNTTc0kK5_EyPrK370Y`
    - **mw** : `1JuH5JubmsEqkjwCinzAWO8eGUT5TIv-Z`
 2. **Profils connectés** : `gwsa list` montre `perso` et `mw` connectés.
-3. **Partage / transfert** : la policy prudente a `drive.share: false`. Pour
-   les phases 6–7, l'humain active le partage **temporairement** via l'admin
+3. **Partage** : la policy prudente a `drive.share: false`. Pour la
+   phase 6, l'humain active le partage **temporairement** via l'admin
    (`http://127.0.0.1:4877`) ou en éditant la policy :
    - cocher **partage** sur le profil **source** (`perso` en premier run)
    - remettre `share: false` après le test si souhaité
@@ -44,7 +45,7 @@ Inverser A/B en fin de test (phase optionnelle) pour couvrir les deux sens.
 | `drive_create` | Créer avec contenu (Google Doc depuis markdown) |
 | `drive_update` | Modifier nom/contenu en zone |
 | `drive_permissions_list` | Lister les partages |
-| `drive_permissions_create` | Partager ou transférer la propriété |
+| `drive_permissions_create` | Partager un fichier (reader/commenter/writer) |
 | `drive_permissions_delete` | Révoquer un partage de test |
 | `access_request` | Élicitation unlock / grant |
 
@@ -62,7 +63,7 @@ Conventions : MCP de préférence ; shell via `GWSA_CLIENT=claude-code gwsa …`
 - `drive_list` sur chaque compte avec `query` contenant `name = 'ZZ-TESTS'`
   et `trashed=false` — noter l'**ID** de chaque dossier (ou demander à
   l'humain si ambigu / absent).
-- Annoncer le plan : création → copie → partage → transfert (si share actif).
+- Annoncer le plan : création → copie → partage (si share actif).
 
 ### Phase 1 — élicitation « unlock »
 
@@ -187,7 +188,7 @@ fait l'objet d'une **PR dédiée, non prête**. → **Skip** cette phase ici.
 | Transfert échoue | share:false ou fichier dans Shared Drive | Activer share ; tester sur My Drive |
 | `owned_by_me: null` | Drive partagé / délai API | Re-lire après quelques secondes |
 
-## Workflow agent — résumé copie / transfert cross-compte
+## Workflow agent — résumé copie / partage cross-compte
 
 ```
 perso (zone ZZ-TESTS)                    mw (zone ZZ-TESTS)
@@ -195,10 +196,8 @@ perso (zone ZZ-TESTS)                    mw (zone ZZ-TESTS)
 drive_create(content=…)  ──recopie──►  drive_create(même content)
        │                                      ▲
        │ partage (share:true)                 │
-       └─ drive_permissions_create ───────────┘ (lecture)
-       │
-       └─ drive_permissions_create            (fichier jetable seulement)
-          transfer_ownership=true  ────────► propriétaire = mw
+       └─ drive_permissions_create ───────────┘ (lecture/écriture)
 ```
 
-Pas de tool « move cross-compte » : recopie + partage + transfert optionnel.
+Pas de tool « move cross-compte » : recopie + partage. (Transfert de propriété
+**hors de cette version** — voir phase 7.)
