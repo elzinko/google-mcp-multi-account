@@ -144,13 +144,28 @@ le contenu connu vers le compte B.
 3. `drive_permissions_list` sur perso : la permission mw apparaît.
 4. L'humain vérifie dans Drive (compte mw) que le fichier partagé est visible.
 
-### Phase 7 — transfert de propriété (hors de cette version)
+### Phase 7 — transfert de propriété (optionnel, confirmé)
 
-Le transfert de propriété (`drive_permissions_create transfer_ownership`) a été
-**retiré** de cette version et est **refusé** par le serveur : action destructive,
-garde de sécurité à concevoir (zones / grant de session / Touch ID) et à valider
-sur de vrais comptes @gmail.com (flux `pendingOwner` = invitation à accepter). Il
-fait l'objet d'une **PR dédiée, non prête**. → **Skip** cette phase ici.
+⚠️ **Action sensible** : invite **mw** à devenir propriétaire. Accord explicite requis.
+
+Rappel (comptes @gmail.com / **consumer**) : le transfert n'est **pas direct**,
+c'est une **invitation en attente** (`pendingOwner`) que le destinataire
+**accepte** ensuite depuis son Drive — Google n'autorise pas la création directe
+d'une permission `owner` pour ces comptes.
+
+1. Créer un **fichier jetable** dédié (`transfert-${TS}.md`, `mime_type` non-natif
+   comme phase 3) sur perso — ne pas transférer un original.
+2. Après confirmation humaine :
+   - `drive_permissions_create` : `email` = mw, `role` = `owner`,
+     `transfer_ownership` = `true`.
+   → l'agent crée en réalité un partage **writer `pendingOwner`** + notification.
+3. `drive_get` sur perso : `owned_by_me` reste **`true`** (transfert **en
+   attente**) ; la permission de mw doit être marquée `pendingOwner`.
+4. **Humain, côté mw** : ouvrir le fichier dans Drive et **accepter** (ou refuser)
+   la propriété. Ce geste d'acceptation n'a **pas** de tool MCP — c'est Google.
+5. Après acceptation : `drive_get` via **mw** → `owned_by_me: true` ; sur perso →
+   `owned_by_me: false`.
+6. Si `share:false` sur perso : **skip documenté** — « transfert non testé ».
 
 ### Phase 8 — contrôles négatifs
 
