@@ -262,6 +262,15 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
 .caps { display:flex; flex-wrap:wrap; gap:8px; }
 .cap { font-size:12.5px; font-weight:600; } .cap.y { color:var(--ok); } .cap.n { color:var(--bad); }
 .cap .d { color:var(--mut); font-weight:400; }
+/* « Autres services » repliés (revue P4) : Drive/Gmail en avant, le reste ici. */
+.svc-more { margin-top:4px; border-top:1px solid var(--line); }
+.svc-more > summary { cursor:pointer; padding:11px 0 9px; font-weight:600; color:var(--acc);
+  list-style:none; display:flex; align-items:center; gap:8px; }
+.svc-more > summary::-webkit-details-marker { display:none; }
+.svc-more > summary::before { content:"›"; color:var(--mut); font-weight:700; transition:transform .15s; }
+.svc-more[open] > summary::before { transform:rotate(90deg); }
+.svc-more > summary .note { font-weight:400; }
+.svc-more-note { margin:0 0 6px; }
 .danger { margin-top:18px; border:1px solid color-mix(in srgb,var(--bad) 35%,var(--line)); border-radius:10px;
   padding:12px 14px; background:color-mix(in srgb,var(--badbg) 55%,transparent); }
 .danger .drx { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
@@ -967,17 +976,33 @@ function renderDetail(alias) {
   if (!p || !p.connected) return renderList();
   VIEW = { mode: "detail", alias };
   syncChrome();
-  const rows = SVCDEF.filter((s) => ["drive","gmail","calendar","keep"].includes(s.key) || (p.policy && p.policy[s.key]))
-    .map((s) => {
-      const rules = p.policy && p.policy[s.key];
-      return '<div class="srow"><span class="sname">' + s.name + '</span><span class="caps">' + capsHtml(s.key, rules, !!p.policy) + "</span>" +
-        '<span class="actions"><button class="small" onclick="openPolicy(\'' + alias + '\')">Configurer…</button></span></div>';
-    }).join("");
+  const svcRow = (s) => {
+    const rules = p.policy && p.policy[s.key];
+    return '<div class="srow"><span class="sname">' + s.name + '</span><span class="caps">' +
+      capsHtml(s.key, rules, !!p.policy) + "</span>" +
+      '<span class="actions"><button class="small" onclick="openPolicy(\'' + alias + '\')">Configurer…</button></span></div>';
+  };
+  const byKey = (k) => SVCDEF.find((s) => s.key === k);
+  // Primaire = ce que l'assistant utilise via MCP aujourd'hui (Gmail + Drive).
+  const primary = ["drive", "gmail"].map(byKey).filter(Boolean).map(svcRow).join("");
+  // Autres : Agenda/Keep (MCP à venir) toujours ; Docs/Sheets/Tâches uniquement si
+  // présents dans la policy — repliés par défaut pour ne pas encombrer (revue P4).
+  const others = SVCDEF.filter((s) =>
+    ["calendar", "keep"].includes(s.key) ||
+    (["docs", "sheets", "tasks"].includes(s.key) && p.policy && p.policy[s.key]));
+  const othersHtml = others.length
+    ? '<details class="svc-more"><summary>Autres services <span class="note">— ' +
+        others.map((s) => s.name).join(" · ") + "</span></summary>" +
+        '<p class="note svc-more-note">L\'assistant n\'utilise que <b>Drive</b> et <b>Gmail</b> via le MCP aujourd\'hui ' +
+        "(Agenda, Keep à venir ; le reste en ligne de commande). <b>Docs/Sheets</b> sont des fichiers Drive, mais " +
+        "éditer leur contenu passe par une API distincte — d'où une permission séparée.</p>" +
+        others.map(svcRow).join("") + "</details>"
+    : "";
   $("cards").innerHTML = '<div class="detail"><div class="dhead">' +
     '<button class="back" onclick="renderList()" aria-label="Retour à la liste des comptes">' + BACK_ICON + "Comptes</button>" +
     '<div class="drow"><span class="dmail">' + esc(p.email || alias) + "</span>" +
       lockHtml(p) + "</div></div>" +
-    '<div class="dbody"><p class="plabel">Droits par application</p>' + rows +
+    '<div class="dbody"><p class="plabel">Droits par application</p>' + primary + othersHtml +
     '<div class="danger"><div class="drx">' +
       "<p>Retirer ce compte de l'outil — réversible (reconnexion complète). L'impact s'affiche avant confirmation.</p>" +
       '<button class="danger small" onclick="openDisconnect(\'' + alias + '\')">Déconnecter…</button></div></div></div></div>';
