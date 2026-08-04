@@ -616,6 +616,22 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
   </div>
 </dialog>
 
+<dialog id="dConfirm" class="dlg-confirm">
+  <div class="dlg-confirm-inner">
+    <div class="dlg-confirm-head">
+      <span class="dlg-confirm-icon" id="confirmIcon" aria-hidden="true"></span>
+      <div class="dlg-confirm-titles">
+        <h2 id="confirmTitle"></h2>
+        <p class="dlg-confirm-sub" id="confirmBody"></p>
+      </div>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" id="confirmCancel">Annuler</button>
+      <button type="button" id="confirmOk" class="danger-solid">Confirmer</button>
+    </div>
+  </div>
+</dialog>
+
 <div id="toast"></div>
 
 <script src="/vendor/mermaid.min.js"></script>
@@ -666,31 +682,66 @@ async function api(path, opts) {
 }
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.style.opacity = 1; setTimeout(() => t.style.opacity = 0, 3000); }
 
-async function openSetup() { $("setupBody").innerHTML = "Chargement…"; dSetup.showModal(); await renderSetup(); }
+// Confirmation stylée (aux couleurs de l'app) en remplacement de confirm() natif.
+// Renvoie une Promise<bool>. Icône triangle d'alerte ; bouton rouge par défaut.
+const WARN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
+let _confirmResolve = null;
+function uiConfirm({ title, body, confirmLabel = "Confirmer", danger = true }) {
+  $("confirmTitle").textContent = title;
+  $("confirmBody").textContent = body || "";
+  const ok = $("confirmOk");
+  ok.textContent = confirmLabel;
+  ok.className = danger ? "danger-solid" : "primary";
+  $("confirmIcon").className = "dlg-confirm-icon" + (danger ? "" : " info");
+  $("confirmIcon").innerHTML = WARN_ICON;
+  return new Promise((resolve) => { _confirmResolve = resolve; dConfirm.showModal(); });
+}
+function _confirmSettle(v) { const r = _confirmResolve; _confirmResolve = null; if (dConfirm.open) dConfirm.close(); if (r) r(v); }
+$("confirmOk").addEventListener("click", () => _confirmSettle(true));
+$("confirmCancel").addEventListener("click", () => _confirmSettle(false));
+dConfirm.addEventListener("close", () => { if (_confirmResolve) _confirmSettle(false); }); // Échap / backdrop
+
+let LAST_SETUP = null;
+let IAM_PROPAGATING = null; // Set<email> réparés, en attente de propagation Google (~2 min)
+async function openSetup() { IAM_PROPAGATING = null; $("setupBody").innerHTML = "Chargement…"; dSetup.showModal(); await renderSetup(); }
+async function recheckIam() { IAM_PROPAGATING = null; await renderSetup(); }
 async function renderSetup() {
   let r;
   try { r = await api("/api/setup"); }
   catch (e) { $("setupBody").innerHTML = '<p class="note">Erreur : ' + esc(e.message) + "</p>"; return; }
   if (!r.ok) { $("setupBody").innerHTML = '<p class="note">' + esc(r.error || "indisponible") + "</p>"; return; }
   const s = r.setup;
+  LAST_SETUP = s;
   const BADGE = { ok: '<span class="badge b-ok">accès OK</span>',
                   missing: '<span class="badge b-bad">sans rôle IAM</span>',
                   unknown: '<span class="badge b-mut">non vérifié</span>' };
+  // Un compte toujours « missing » juste après réparation = propagation Google en
+  // cours (~2 min), pas un échec — badge d'attente au lieu du rouge « sans rôle ».
+  const prop = IAM_PROPAGATING;
+  const isProp = (a) => !!(prop && a.iam === "missing" && prop.has((a.email || "").toLowerCase()));
   const rows = (s.accounts || []).map((a) =>
-    '<div class="zone"><b>' + esc(a.alias) + '</b> <span class="mono">' +
-    esc(a.email || "?") + "</span> " + (BADGE[a.iam] || esc(a.iam)) + "</div>").join("");
+    '<div class="zone"><b>' + esc(a.alias) + '</b> <span class="mono">' + esc(a.email || "?") + "</span> " +
+    (isProp(a) ? '<span class="badge b-warn">propagation ~2 min</span>' : (BADGE[a.iam] || esc(a.iam))) +
+    "</div>").join("");
   const missing = (s.accounts || []).filter((a) => a.iam === "missing");
+  const stillMissing = missing.filter((a) => !isProp(a));
+  const propagating = missing.filter(isProp);
   const head = '<p class="note">Projet <b>GCP</b> (OAuth) : <span class="mono">' + esc(s.project_id || "?") +
     "</span> · " + (s.published ? "app publiée" : "app non publiée") +
     ' — ce n\'est <b>pas</b> la version MCP (voir bandeau / Développement).</p>';
   let action;
-  if (missing.length) {
+  if (stillMissing.length) {
     action = '<div class="mtop" style="justify-content:flex-start">' +
       '<button class="primary" id="syncBtn" onclick="doSyncIam()">🔧 Réparer l\'accès (' +
-      missing.length + ")</button></div>" +
+      stillMissing.length + ")</button></div>" +
       '<p class="note">Accorde le rôle <span class="mono">serviceUsageConsumer</span> aux comptes ci-dessus ' +
       "(Touch ID si l'authentification forte est activée). Requiert que ta session <span class=\"mono\">gcloud</span> " +
       "active soit le propriétaire du projet.</p>";
+  } else if (propagating.length) {
+    action = '<div class="mtop" style="justify-content:flex-start">' +
+      '<button class="small" id="recheckBtn" onclick="recheckIam()">↻ Revérifier</button></div>' +
+      '<p class="note">⏳ Accès accordé — <b>propagation Google en cours (~2 min)</b>. Les comptes ci-dessus ' +
+      "passeront en « accès OK » d'ici là ; clique « Revérifier » dans un moment (ou rouvre le Setup).</p>";
   } else if (s.iam_checked) {
     action = '<p class="note">✓ Tous les comptes connectés ont accès au projet.</p>';
   } else {
@@ -702,9 +753,17 @@ async function renderSetup() {
 async function doSyncIam() {
   const btn = $("syncBtn");
   if (btn) { btn.disabled = true; btn.textContent = "Réparation… (Touch ID ?)"; }
-  try { const r = await api("/api/sync-iam", { method: "POST", body: "{}" });
-    toast(r.ok ? "✓ Accès IAM réparé (propagation ~2 min)" : "Échec — voir le détail"); }
-  catch (e) { toast("Erreur : " + e.message); }
+  // Comptes visés AVANT le sync : on les marquera « propagation » après succès,
+  // pour ne pas les réafficher « sans rôle IAM » (le check IAM immédiat est périmé).
+  const before = new Set(((LAST_SETUP && LAST_SETUP.accounts) || [])
+    .filter((a) => a.iam === "missing").map((a) => (a.email || "").toLowerCase()));
+  let ok = false;
+  try {
+    const r = await api("/api/sync-iam", { method: "POST", body: "{}" });
+    ok = !!r.ok;
+    toast(ok ? "✓ Accès accordé — propagation Google ~2 min" : "Échec — voir le détail (session gcloud propriétaire du projet ?)");
+  } catch (e) { toast("Erreur : " + e.message); }
+  if (ok && before.size) IAM_PROPAGATING = before;
   await renderSetup();
   refresh();
 }
@@ -1117,7 +1176,7 @@ async function doSessGrant() {
   } catch (e) { toast("Erreur : " + e.message); }
 }
 async function doSessRevokeDesc(sid) {
-  if (!confirm("Révoquer toutes les sous-sessions de " + sid.slice(0, 8) + "… ?")) return;
+  if (!(await uiConfirm({ title: "Révoquer les sous-sessions ?", body: "Toutes les sous-sessions de " + sid.slice(0, 8) + "… perdront leurs accès. La session parente est conservée.", confirmLabel: "Révoquer" }))) return;
   try {
     await api("/api/sessions/" + sid + "/revoke-descendants", { method: "POST", body: "{}" });
     toast("✓ sous-sessions purgées");
@@ -1125,7 +1184,7 @@ async function doSessRevokeDesc(sid) {
   } catch (e) { toast("Erreur : " + e.message); }
 }
 async function doSessClose(sid) {
-  if (!confirm("Purger la session " + sid.slice(0, 8) + "… (et ses enfants) ?")) return;
+  if (!(await uiConfirm({ title: "Purger cette session ?", body: "La session " + sid.slice(0, 8) + "… et ses sous-sessions seront retirées du registre. Réversible : le client MCP en recrée une au besoin.", confirmLabel: "Purger" }))) return;
   try {
     await api("/api/sessions/" + sid + "/close", { method: "POST", body: "{}" });
     toast("✓ session purgée");
@@ -1738,7 +1797,7 @@ async function removeMcpClient(idx) {
     toast("Entrée protégée (MCP stable)");
     return;
   }
-  if (!confirm("Retirer l'entrée MCP « " + c.name + " » de\n" + c.config + " ?\n\nLe client MCP devra être redémarré.")) return;
+  if (!(await uiConfirm({ title: "Retirer cette entrée MCP ?", body: "« " + c.name + " » sera retirée de " + c.config + ". Le client MCP devra être redémarré.", confirmLabel: "Retirer" }))) return;
   try {
     await api("/api/dev/mcp-client/remove", {
       method: "POST",
@@ -1754,7 +1813,7 @@ async function removeMcpClient(idx) {
 
 async function removeSandbox(id) {
   if (!id) return;
-  if (!confirm("Supprimer la sandbox « " + id + " » ?\nArrêt broker/admin + suppression du répertoire sous ~/.local/share/google-mcp/.")) return;
+  if (!(await uiConfirm({ title: "Supprimer cette sandbox ?", body: "« " + id + " » : arrêt broker/admin puis suppression du répertoire sous ~/.local/share/google-mcp/.", confirmLabel: "Supprimer" }))) return;
   try {
     await api("/api/dev/sandbox/remove", {
       method: "POST",
