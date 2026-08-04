@@ -123,6 +123,20 @@ legend { font-weight:600; font-size:14px; padding:0 6px; }
 table { width:100%; border-collapse:collapse; font-size:13px; }
 th, td { text-align:left; padding:5px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
 td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
+/* Journal (fiche 0066) : largeurs maîtrisées + wrap + vue dense → plus de scroll horizontal. */
+.logwrap { max-height:55vh; overflow-y:auto; overflow-x:hidden; }
+#logTable { table-layout:fixed; }
+#logTable th, #logTable td { vertical-align:top; overflow-wrap:anywhere; word-break:break-word; }
+#logTable col.c-when { width:122px; }
+#logTable col.c-client { width:84px; }
+#logTable col.c-acct { width:86px; }
+#logTable col.c-dec { width:108px; }
+#logTable td.cmd { white-space:normal; color:var(--txt); }
+#logTable .note { margin:3px 0 0; }
+#logTable.dense th, #logTable.dense td { padding:3px 7px; font-size:12px; }
+#logTable.dense col.c-when { width:94px; }
+#logTable.dense .badge { font-size:11.5px; padding:1px 7px; }
+#logDenseBtn.active { background:var(--accbg); border-color:var(--acc); color:var(--acc); }
 .docbody { max-height:58vh; overflow:auto; font-size:14px; line-height:1.6; padding-right:6px; }
 .docbody h1 { font-size:19px; margin:14px 0 8px; } .docbody h2 { font-size:16.5px; margin:14px 0 6px; }
 .docbody h3 { font-size:15px; margin:12px 0 4px; }
@@ -540,10 +554,11 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
 <dialog id="dLog">
   <h2>Journal des accès</h2>
   <p class="note">Qui (client LLM via <span class="mono">GWSA_CLIENT</span>), quel compte, quelle commande, décision.</p>
-  <div style="max-height:55vh;overflow:auto"><table id="logTable">
+  <div class="logwrap"><table id="logTable">
+    <colgroup><col class="c-when"><col class="c-client"><col class="c-acct"><col class="c-cmd"><col class="c-dec"></colgroup>
     <thead><tr><th>Quand</th><th>Client</th><th>Compte</th><th>Commande</th><th>Décision</th></tr></thead>
     <tbody></tbody></table></div>
-  <div class="mtop"><button onclick="dLog.close()">Fermer</button></div>
+  <div class="mtop"><button class="small" id="logDenseBtn" onclick="toggleLogDense()">Vue dense</button><span class="spacer"></span><button onclick="dLog.close()">Fermer</button></div>
 </dialog>
 
 <dialog id="dSetup">
@@ -1447,17 +1462,37 @@ function mdToHtml(md) {
     : "<pre><code>" + esc(codes[+i].c) + "</code></pre>");
 }
 
+let LOG_ENTRIES = [];
+let LOG_DENSE = (() => { try { return localStorage.getItem("gwsaLogDense") === "1"; } catch { return false; } })();
 async function openLog() {
   try {
-    const { entries } = await api("/api/log");
-    $("logTable").querySelector("tbody").innerHTML = entries.length ? entries.map((e) =>
-      "<tr><td class=mono>" + (e.ts || "").replace("T", " ").slice(0, 19) + "</td><td>" + esc(e.client || "") +
-      "</td><td class=mono>" + esc(e.alias || "") + "</td><td class=mono>" + esc((e.cmd || "").slice(0, 90)) +
-      "</td><td>" + (e.decision === "refus" ? '<span class="badge b-bad">refus</span>' : '<span class="badge b-ok">ok</span>') +
-      (e.reason ? '<div class="note">' + esc(e.reason) + "</div>" : "") + "</td></tr>").join("")
-      : '<tr><td colspan=5>Journal vide pour l\'instant.</td></tr>';
+    LOG_ENTRIES = (await api("/api/log")).entries || [];
+    renderLog();
     dLog.showModal();
   } catch (e) { toast("Erreur : " + e.message); }
+}
+function renderLog() {
+  const table = $("logTable");
+  table.classList.toggle("dense", LOG_DENSE);
+  const denseBtn = $("logDenseBtn");
+  if (denseBtn) denseBtn.classList.toggle("active", LOG_DENSE);
+  const tb = table.querySelector("tbody");
+  if (!LOG_ENTRIES.length) { tb.innerHTML = '<tr><td colspan=5>Journal vide pour l\'instant.</td></tr>'; return; }
+  tb.innerHTML = LOG_ENTRIES.map((e) => {
+    const ts = (e.ts || "").replace("T", " ");
+    const when = LOG_DENSE ? ts.slice(5, 16) : ts.slice(0, 19); // « MM-JJ HH:MM » vs complet
+    const decision = e.decision === "refus"
+      ? '<span class="badge b-bad">refus</span>'
+      : '<span class="badge b-ok">ok</span>';
+    return '<tr><td class="mono">' + esc(when) + "</td><td>" + esc(e.client || "") +
+      '</td><td class="mono">' + esc(e.alias || "") + '</td><td class="mono cmd">' + esc((e.cmd || "").slice(0, 200)) +
+      "</td><td>" + decision + (e.reason ? '<div class="note">' + esc(e.reason) + "</div>" : "") + "</td></tr>";
+  }).join("");
+}
+function toggleLogDense() {
+  LOG_DENSE = !LOG_DENSE;
+  renderLog();
+  try { localStorage.setItem("gwsaLogDense", LOG_DENSE ? "1" : "0"); } catch {}
 }
 let mmdSeq = 0;
 async function showDoc(which) {
