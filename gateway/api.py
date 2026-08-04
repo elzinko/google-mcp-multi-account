@@ -617,7 +617,9 @@ def drive_update(
 
 
 _PERMISSION_FIELDS = (
-    "id,type,role,emailAddress,displayName,deleted,permissionDetails"
+    # pendingOwner : distinguer une invitation de transfert (writer pendingOwner)
+    # d'un simple partage writer — indispensable à la vérif du transfert (revue Codex).
+    "id,type,role,emailAddress,displayName,deleted,pendingOwner,permissionDetails"
 )
 
 
@@ -659,11 +661,12 @@ def drive_permissions_create(
     transfer_ownership: bool = False,
     send_notification: bool = False,
 ) -> dict[str, Any]:
-    """Partage un fichier avec un utilisateur (reader/commenter/writer).
+    """Partage un fichier ou invite à en devenir propriétaire (policy share requise).
 
-    Nécessite `drive.share:true` dans la policy. Action visible — confirmer avec
-    l'humain avant d'appeler. Le transfert de propriété (`transfer_ownership`) est
-    déplacé dans une PR dédiée (non prête) et refusé ici.
+    `transfer_ownership=true` (comptes consumer @gmail.com) : invite `email` comme
+    writer « pendingOwner » + notification ; le destinataire ACCEPTE la propriété
+    depuis son Drive. Le compte courant reste propriétaire jusque-là. Action
+    visible — confirmer avec l'humain avant d'appeler.
     """
     validate_alias(alias)
     # Booléens STRICTS : « transfer_ownership » est destructif (don de propriété).
@@ -678,20 +681,21 @@ def drive_permissions_create(
     if "@" not in email:
         raise GatewayError("email invalide", code="error")
     role = (role or "reader").lower().strip()
-    # Transfert de propriété RETIRÉ de cette version : destructif, garde de sécurité
-    # à concevoir (zones / grant de session / Touch ID) et à valider sur de vrais
-    # comptes @gmail.com → déplacé dans une PR dédiée, non prête. Ici : partage
-    # lecture/écriture seulement.
-    if transfer_ownership:
-        raise GatewayError(
-            "transfert de propriété non disponible dans cette version "
-            "(fonction déplacée dans une PR dédiée, non prête)",
-            code="error",
-        )
-    allowed_roles = {"reader", "commenter", "writer"}
+    allowed_roles = {"reader", "commenter", "writer", "owner"}
     if role not in allowed_roles:
         raise GatewayError(
             f"role « {role} » invalide — valeurs : {', '.join(sorted(allowed_roles))}",
+            code="error",
+        )
+    if transfer_ownership:
+        if role != "owner":
+            raise GatewayError(
+                "transfer_ownership exige role=owner", code="error",
+            )
+    elif role == "owner":
+        raise GatewayError(
+            "role=owner sans transfer_ownership — utiliser transfer_ownership=true "
+            "pour un transfert de propriété explicite",
             code="error",
         )
     params: dict[str, Any] = {
@@ -704,6 +708,17 @@ def drive_permissions_create(
         "role": role,
         "emailAddress": email,
     }
+    if transfer_ownership:
+        # Comptes consumer (@gmail.com — les comptes de ce projet) : un transfert
+        # NE se fait PAS en créant directement une permission « owner » (Google le
+        # rejette). On invite le destinataire comme « writer » marqué pendingOwner,
+        # avec notification ; il ACCEPTE ensuite la propriété depuis son Drive
+        # (revue Codex). Le transfert direct (transferOwnership=true) n'est valable
+        # qu'en intra-organisation Workspace — hors périmètre ici. Le compte courant
+        # reste propriétaire jusqu'à l'acceptation.
+        body["role"] = "writer"
+        body["pendingOwner"] = True
+        params["sendNotificationEmail"] = True
     data = _run(
         alias,
         [
