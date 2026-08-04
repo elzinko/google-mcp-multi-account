@@ -312,6 +312,26 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
 .dlg-policy-body .addrow { margin:4px 0 0; }
 .dlg-policy-foot { flex-shrink:0; margin:0; padding:12px 20px 16px; border-top:1px solid var(--line);
   display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; background:var(--card); }
+
+/* ── Accessibilité (fiche 0068) : focus visible homogène + reduced-motion ── */
+/* Un seul anneau de focus, cohérent partout (clavier uniquement via :focus-visible),
+   à la couleur d'accent — lisible en clair comme en sombre. */
+:focus-visible { outline:2px solid var(--acc); outline-offset:2px; }
+/* Cibles compactes (cadenas, ±, croix de zone, « Sélectionner ») : anneau au plus près. */
+.lockbtn:focus-visible, .cd-act:focus-visible, .zdel:focus-visible, .row-sel:focus-visible { outline-offset:1px; }
+/* Rangées cliquables : si rendues focusables (tabindex), même anneau. */
+.pickrow:focus-visible, .zonerow:focus-visible, .sbcard:focus-visible, .prow.can:focus-visible,
+.crumb a:focus-visible, .ctx-link:focus-visible { outline:2px solid var(--acc); outline-offset:2px; }
+/* Respecte « animations réduites » : neutralise spinners, dépliage cadenas,
+   flash du décompte critique, entrées de modale — sans casser les états finaux. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+    scroll-behavior:auto !important;
+  }
+}
 </style>
 </head>
 <body>
