@@ -3242,6 +3242,17 @@ else
   fail "touchid : elicitation.py n'utilise pas le binaire nommé (dialogue swift-frontend)"
 fi
 
+# sync-iam (« Réparer l'accès ») doit AUSSI passer par un binaire nommé, pas
+# « swift nu » — sinon la boîte Touch ID affiche « swift-frontend » (retour user).
+if grep -q 'touchid_named_bin' scripts/provision-gcp.sh \
+  && grep -q 'SYS_SWIFTC=' scripts/provision-gcp.sh \
+  && grep -q 'PRODUCT_SLUG' scripts/provision-gcp.sh \
+  && grep -q 'bin/.build/touchid' scripts/provision-gcp.sh; then
+  pass "touchid : sync-iam (provision) passe par le binaire nommé (pas swift-frontend)"
+else
+  fail "touchid : provision-gcp.sh require_strong_auth encore en swift nu (swift-frontend)"
+fi
+
 # Sous strongauth, add sans email doit refuser avant Touch ID (fiche 0032 / review #50)
 printf '{"installed":{"client_id":"hermetic-test","client_secret":"not-a-real-secret"}}\n' \
   > "$GWSA_ROOT/client_secret.json"

@@ -26,6 +26,7 @@ set -euo pipefail
 GWSA_ROOT="${GWSA_ROOT:-$HOME/.config/gws-accounts}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SYS_SWIFT="/usr/bin/swift"
+SYS_SWIFTC="/usr/bin/swiftc"
 STATE_FILE="$GWSA_ROOT/provision.env"
 SECRET_DEST="$GWSA_ROOT/client_secret.json"
 APP_NAME="gws CLI perso"
@@ -74,10 +75,33 @@ done
 # ── helpers gcloud ───────────────────────────────────────────────
 have_gcloud() { command -v gcloud >/dev/null 2>&1; }
 
+# Compile touchid.swift en binaire NOMMÉ → la boîte Touch ID affiche
+# « google-multi-account » (PRODUCT_SLUG) au lieu de « swift-frontend », comme le
+# chemin d'élicitation (fiche 0044). Sous-dossier dédié : le nom de fichier est ce
+# que macOS montre, sans collision avec le binaire de signature (bin/.build/<slug>).
+# Imprime le chemin du binaire prêt, ou rien si swiftc/slug indisponible.
+touchid_named_bin() {
+  local slug src="$REPO_ROOT/scripts/touchid.swift" out
+  slug="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from gateway.config import PRODUCT_SLUG; print(PRODUCT_SLUG)' "$REPO_ROOT" 2>/dev/null)" || return 1
+  [[ -n "$slug" ]] || return 1
+  out="$REPO_ROOT/bin/.build/touchid/$slug"
+  if [[ -x "$out" && "$out" -nt "$src" ]]; then printf '%s' "$out"; return 0; fi
+  [[ -x "$SYS_SWIFTC" ]] || return 1
+  mkdir -p "$REPO_ROOT/bin/.build/touchid"
+  "$SYS_SWIFTC" -o "$out" "$src" 2>/dev/null && printf '%s' "$out"
+}
+
 require_strong_auth() { # require_strong_auth <raison> — Touch ID/mdp macOS si strongauth activé
   [[ -f "$GWSA_ROOT/.strong-auth" ]] || return 0
+  local bin
+  bin="$(touchid_named_bin || true)"
+  if [[ -n "$bin" && -x "$bin" ]]; then
+    "$bin" "$1" || die "authentification forte refusée — action annulée"
+    return 0
+  fi
+  # Repli si swiftc indisponible : interprète (dialogue « swift-frontend », dégradé).
   [[ -x "$SYS_SWIFT" ]] \
-    || die "authentification forte activée mais $SYS_SWIFT indisponible (xcode-select --install)"
+    || die "authentification forte activée mais ni swiftc ni $SYS_SWIFT (xcode-select --install)"
   "$SYS_SWIFT" "$REPO_ROOT/scripts/touchid.swift" "$1" \
     || die "authentification forte refusée — action annulée"
 }
