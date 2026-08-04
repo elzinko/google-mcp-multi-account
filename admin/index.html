@@ -17,6 +17,12 @@ body { margin:0; font:15px/1.55 -apple-system, "Segoe UI", sans-serif; backgroun
 header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:16px 22px; border-bottom:1px solid var(--line); }
 h1 { font-size:19px; font-weight:600; margin:0 auto 0 0; letter-spacing:-.01em; }
 .h1-sub { color:var(--mut); font-weight:400; }
+.hdr-sep { width:1px; align-self:stretch; margin:2px 0; background:var(--line); }
+.hbtn-adv { color:var(--mut); font-size:13px; }
+.hbtn-adv[aria-expanded="true"] { color:var(--acc); background:var(--accbg);
+  border-color:color-mix(in srgb,var(--acc) 40%,var(--line)); }
+#advActions { display:contents; }
+#advActions[hidden] { display:none; }
 main { max-width:880px; margin:0 auto; padding:18px 22px 60px; }
 button { font:inherit; border:1px solid var(--line); background:var(--card); color:var(--txt);
   border-radius:8px; padding:7px 13px; cursor:pointer; transition: transform .08s ease, filter .08s ease, box-shadow .08s ease; }
@@ -301,16 +307,16 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
   <button class="hbtn-icon" onclick="openLockAll()" title="Tout verrouiller — coupe l'accès de tous les comptes" aria-label="Tout verrouiller"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></button>
   <button onclick="openSessions()">💬 Sessions</button>
   <button onclick="openLog()">📓 Journal</button>
-  <button onclick="openDev()">🛠 Développement</button>
-  <button onclick="openSetup()">🩺 Setup</button>
   <button onclick="openDoc()">❓ Doc</button>
+  <span class="hdr-sep" aria-hidden="true"></span>
+  <button id="advToggle" class="hbtn-adv" onclick="toggleAdvanced()" aria-expanded="false" title="Outils avancés — développement & santé du setup">Avancé ▾</button>
+  <span id="advActions" hidden>
+    <button onclick="openDev()">🛠 Développement</button>
+    <button onclick="openSetup()">🩺 Setup</button>
+  </span>
 </header>
 <div id="ctxStrip" role="status"></div>
 <main>
-  <p class="note">La ligne d'un compte se lit en deux temps.
-  <b>Le cadenas</b> : l'accès est-il verrouillé ou déverrouillé ? C'est un bouton — clique dessus.
-  <b>Le décompte</b> : le temps restant, en vrai.
-  Un compte déconnecté est grisé : « Reconnecter » sur la ligne, ou « + Connecter un compte ».</p>
   <div id="cards"></div>
   <div class="add-account-row">
     <button type="button" id="btnAdd" class="btn-add" onclick="openAdd()">＋ Connecter un compte</button>
@@ -801,6 +807,18 @@ function syncChrome() {
   const detail = VIEW.mode === "detail";
   const addRow = document.querySelector(".add-account-row");
   if (addRow) addRow.hidden = detail;
+}
+// Mode « Avancé » (fiche 0062) : sépare l'usage quotidien (verrou, sessions,
+// journal, doc) des outils avancés (développement, santé du setup), masqués
+// par défaut. Le choix est mémorisé localement.
+function setAdvanced(show) {
+  $("advActions").hidden = !show;
+  $("advToggle").setAttribute("aria-expanded", show ? "true" : "false");
+}
+function toggleAdvanced() {
+  const show = $("advActions").hasAttribute("hidden");
+  setAdvanced(show);
+  try { localStorage.setItem("gwsaAdvanced", show ? "1" : "0"); } catch {}
 }
 function finishLockExpand() {
   const pending = document.querySelectorAll(".lockchip[data-pending-expand]");
@@ -1706,6 +1724,7 @@ $("afCrumb").addEventListener("click", (e) => {
 $("afQuery").addEventListener("keydown", (e) => { if (e.key === "Enter") afDoSearch(); });
 $("permZones").addEventListener("click", zonesClick);
 $("tmpZones").addEventListener("click", zonesClick);
+try { if (localStorage.getItem("gwsaAdvanced") === "1") setAdvanced(true); } catch {}
 refresh();
 loadMeta();
 setInterval(refresh, 8000);
