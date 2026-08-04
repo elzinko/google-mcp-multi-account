@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>gws multi-comptes — admin</title>
+<title>google-multi-account — admin</title>
 <style>
 :root { --bg:#f6f5f0; --card:#fff; --txt:#222; --mut:#71706b; --line:#dedcd3;
   --ok:#0f6e56; --okbg:#e1f5ee; --warn:#854f0b; --warnbg:#faeeda;
@@ -15,7 +15,8 @@
 * { box-sizing:border-box; }
 body { margin:0; font:15px/1.55 -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--txt); }
 header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:16px 22px; border-bottom:1px solid var(--line); }
-h1 { font-size:19px; font-weight:600; margin:0 auto 0 0; }
+h1 { font-size:19px; font-weight:600; margin:0 auto 0 0; letter-spacing:-.01em; }
+.h1-sub { color:var(--mut); font-weight:400; }
 main { max-width:880px; margin:0 auto; padding:18px 22px 60px; }
 button { font:inherit; border:1px solid var(--line); background:var(--card); color:var(--txt);
   border-radius:8px; padding:7px 13px; cursor:pointer; transition: transform .08s ease, filter .08s ease, box-shadow .08s ease; }
@@ -286,7 +287,7 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
 </head>
 <body>
 <header>
-  <h1>gws multi-comptes — admin</h1>
+  <h1>google-multi-account <span class="h1-sub">— admin</span></h1>
   <span id="verBadge" class="badge" title="Version du code servi par cette admin">…</span>
   <button onclick="lockAll()">🔒 Tout verrouiller</button>
   <button onclick="openSessions()">💬 Sessions</button>

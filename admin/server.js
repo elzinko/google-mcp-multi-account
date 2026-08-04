@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Interface d'admin gws multi-comptes — serveur local (127.0.0.1 uniquement).
+// Interface d'admin google-multi-account — serveur local (127.0.0.1 uniquement).
 // Zéro dépendance : Node stdlib. Toute action passe par bin/gwsa (source de vérité).
 // Sécurité : bind loopback, en-tête X-GWSA-Admin obligatoire sur /api (anti-CSRF,
 // un site tiers ne peut pas l'envoyer sans déclencher un préflight CORS refusé),
@@ -916,5 +916,5 @@ server.on("error", (err) => {
 server.requestTimeout = Math.max(server.requestTimeout || 0, GWSA_TIMEOUT_AUTH_MS + 30000);
 server.headersTimeout = Math.max(server.headersTimeout || 0, GWSA_TIMEOUT_AUTH_MS + 60000);
 server.listen(PORT, HOST, () => {
-  console.log(`Admin gws multi-comptes : http://${HOST}:${PORT} (local uniquement)`);
+  console.log(`Admin google-multi-account : http://${HOST}:${PORT} (local uniquement)`);
 });
