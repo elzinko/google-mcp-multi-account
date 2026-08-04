@@ -77,6 +77,13 @@ nav:
       - Critique honnête: critique.md
   - Sous le capot:
       - Architecture: architecture.md
+      - Décisions (ADR):
+          - ADR-0001 · Onboarding par élicitation: adr/ADR-0001-onboarding-par-elicitation.md
+          - ADR-0002 · Email métadonnée hors verrou: adr/ADR-0002-email-metadonnee-hors-verrou.md
+          - ADR-0003 · Contenu Drive via dépôt broker: adr/ADR-0003-contenu-drive-via-depot-broker.md
+          - ADR-0004 · Admin master-liste accordéon: adr/ADR-0004-admin-master-liste-accordeon.md
+          - ADR-0005 · Élicitation signée v2: adr/ADR-0005-elicitation-signee-v2.md
+          - ADR-0006 · Fichiers reçus, répertoire dédié: adr/ADR-0006-fichiers-recus-repertoire-dedie.md
   - Contribuer:
       - Validation des PR: PR_VALIDATION.md
       - Sécurité GitHub: github-security.md

@@ -17,10 +17,10 @@ Rien n’est hébergé dans le cloud applicatif. Sur la machine :
 | Couche | Artefact | Rôle |
 |--------|----------|------|
 | Clients LLM | Claude Desktop, Cursor, Claude Code | Appellent le MCP (données) ou le shell (admin) |
-| MCP | [`bin/google-mcp`](../bin/google-mcp) → [`gateway/`](../gateway/) | Seule porte d’entrée **recommandée** pour Gmail/Drive |
-| CLI admin | [`bin/gwsa`](../bin/gwsa) | Multi-profils, unlock/grant/policy, legacy shell |
-| Cockpit humain | [`admin/server.js`](../admin/server.js) `127.0.0.1:4877` | UI locale (jamais exposée hors loopback) |
-| Policy | [`scripts/policy-check.py`](../scripts/policy-check.py) | Default-deny avant tout appel `gws` |
+| MCP | [`bin/google-mcp`](https://github.com/elzinko/google-mcp-multi-account/blob/main/bin/google-mcp) → [`gateway/`](https://github.com/elzinko/google-mcp-multi-account/tree/main/gateway/) | Seule porte d’entrée **recommandée** pour Gmail/Drive |
+| CLI admin | [`bin/gwsa`](https://github.com/elzinko/google-mcp-multi-account/blob/main/bin/gwsa) | Multi-profils, unlock/grant/policy, legacy shell |
+| Cockpit humain | [`admin/server.js`](https://github.com/elzinko/google-mcp-multi-account/blob/main/admin/server.js) `127.0.0.1:4877` | UI locale (jamais exposée hors loopback) |
+| Policy | [`scripts/policy-check.py`](https://github.com/elzinko/google-mcp-multi-account/blob/main/scripts/policy-check.py) | Default-deny avant tout appel `gws` |
 | Exécution Google | `gws` + `~/.config/gws-accounts/<alias>/` | Tokens chiffrés + appels API |
 
 ```mermaid
@@ -71,7 +71,7 @@ flowchart TD
 ```
 
 **Broker Phase 2 A :** `gateway/executor.py` parle au daemon
-[`bin/google-broker`](../bin/google-broker) (auto-start). Seul le broker exécute
+[`bin/google-broker`](https://github.com/elzinko/google-mcp-multi-account/blob/main/bin/google-broker) (auto-start). Seul le broker exécute
 `gws` pour les accès aux données (la découverte lit encore `gws auth status` en
 direct). Les credentials restent sous `~/.config/gws-accounts/` (pas encore de
 vault — fiche 0003).
@@ -214,8 +214,8 @@ données uniquement via MCP.
 |-------|------|---------|
 | **1** | **Déployée** | MCP + gateway + default-deny + docs |
 | **2 A** | **Déployée (ce chantier)** | Broker loopback : `bin/google-broker` / auto-start ; `executor.py` = client RPC ; `gws` seulement dans le broker |
-| **2.1** | Fiche [0003](../features/0003-vault-credentials-hors-perimetre-agent.md) | Vault credentials hors périmètre agent |
-| **3** (idée) | Fiche [0001](../features/0001-elicitation-signee-strongauth-v2.md) | Élicitation signée Secure Enclave |
+| **2.1** | Fiche [0003](https://github.com/elzinko/google-mcp-multi-account/blob/main/features/0003-vault-credentials-hors-perimetre-agent.md) | Vault credentials hors périmètre agent |
+| **3** (idée) | Fiche [0001](https://github.com/elzinko/google-mcp-multi-account/blob/main/features/0001-elicitation-signee-strongauth-v2.md) | Élicitation signée Secure Enclave |
 
 ---
 

@@ -2,7 +2,7 @@
 
 Ce document est une **auto-évaluation honnête** du projet, pour un développeur qui
 l'évalue ou veut y contribuer. Il dit ce que le projet fait bien, ce qu'il fait
-mal, et ce qui pourrait le rendre inutile. Il complète [`SECURITY.md`](../SECURITY.md)
+mal, et ce qui pourrait le rendre inutile. Il complète [`SECURITY.md`](https://github.com/elzinko/google-mcp-multi-account/blob/main/SECURITY.md)
 et [`threat-model.md`](threat-model.md) (centrés sécurité) par une vue plus large :
 produit, ingénierie, stratégie.
 
@@ -24,7 +24,7 @@ qui dispose d'un shell.
   contournements trouvés en audit.
 - **La gouvernance par compte est rare.** Verrous « accès sur demande », grants
   Drive temporaires, élicitation humaine : on ne retrouve cette combinaison chez
-  aucun autre serveur MCP connu (voir [Face à la concurrence](#face-à-la-concurrence)).
+  aucun autre serveur MCP connu (voir [Face à la concurrence](#face-a-la-concurrence)).
 - **Il est petit et sans dépendance lourde.** ~3 400 lignes, stdlib pure (Python,
   bash, Node), rien à installer via npm ou PyPI.
 
@@ -150,4 +150,4 @@ Deux nuances honnêtes :
 ## Voir aussi
 
 - [`threat-model.md`](threat-model.md) — le modèle de menace détaillé (sécurité).
-- [`../SECURITY.md`](../SECURITY.md) — garanties, ce qui n'est pas garanti, signalement.
+- [`../SECURITY.md`](https://github.com/elzinko/google-mcp-multi-account/blob/main/SECURITY.md) — garanties, ce qui n'est pas garanti, signalement.

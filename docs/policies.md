@@ -1,7 +1,7 @@
 # Le modèle de policy — qui a le droit de faire quoi
 
 Chaque profil peut porter une policy (`~/.config/gws-accounts/<alias>/policy.json`,
-appliquée par [`scripts/policy-check.py`](../scripts/policy-check.py) avant
+appliquée par [`scripts/policy-check.py`](https://github.com/elzinko/google-mcp-multi-account/blob/main/scripts/policy-check.py) avant
 chaque commande, côté `gwsa` comme côté gateway MCP). Utilisation générale :
 [usage.md](usage.md).
 
@@ -49,5 +49,5 @@ l'élicitation, encore. *Limite assumée : c'est le wrapper qui contrôle, pas
 Google — le seul verrou 100 % côté Google serait le scope `drive.file`.*
 
 Durcissements de ce modèle déjà tranchés : voir la fiche backlog
-[0002](../features/done/0002-durcir-modele-policy-default-deny.md) (default-deny
+[0002](https://github.com/elzinko/google-mcp-multi-account/blob/main/features/done/0002-durcir-modele-policy-default-deny.md) (default-deny
 vérifié et testé) et [threat-model.md](threat-model.md).

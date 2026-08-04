@@ -1,8 +1,8 @@
 # Brancher le serveur MCP (Claude Desktop, Cursor, Claude Code)
 
-Le binaire [`bin/google-mcp`](../bin/google-mcp) expose un serveur MCP **stdio**
+Le binaire [`bin/google-mcp`](https://github.com/elzinko/google-mcp-multi-account/blob/main/bin/google-mcp) expose un serveur MCP **stdio**
 (JSON-RPC, une ligne = un message). Il ne parle à Google que via la
-[gateway](../gateway/) (policy + verrous + executor v1 → `gws`).
+[gateway](https://github.com/elzinko/google-mcp-multi-account/tree/main/gateway/) (policy + verrous + executor v1 → `gws`).
 
 Prérequis : `gws` installé, Python 3. (Pas besoin d'avoir déjà connecté un
 compte : le tool `setup_status` guide l'initialisation depuis le client LLM.)
@@ -127,18 +127,18 @@ Ensuite, mêmes règles que partout :
 
 **Policy admin ≠ surface MCP.** Cocher une case dans l'admin autorise les
 méthodes API correspondantes via `gwsa` ; le MCP en expose un sous-ensemble.
-Depuis les fiches [0043](../features/0043-lire-copier-televerser-drive-et-pj-gmail.md)
+Depuis les fiches [0043](https://github.com/elzinko/google-mcp-multi-account/blob/main/features/0043-lire-copier-televerser-drive-et-pj-gmail.md)
 et ce lot (update + partage), lecture de contenu, copie, téléversement,
 modification et partage y sont. Le **transfert de propriété** est hors périmètre
 (PR dédiée non prête). Calendar / Keep peuvent encore figurer dans la policy sans
 tool MCP (élargissement : fiche
-[0021](../features/0021-couverture-mcp-elargie.md)). Et par design, **aucun
+[0021](https://github.com/elzinko/google-mcp-multi-account/blob/main/features/0021-couverture-mcp-elargie.md)). Et par design, **aucun
 tool** n'envoie de mail, ne supprime, ni ne transfère de propriété.
 
 Chaque appel traverse la gateway (verrou + policy default-deny) puis le
 broker loopback, et tout est journalisé (`GWSA_CLIENT`). Un refus n'est
 jamais une impasse : il embarque l'élicitation à proposer — voir les
-[diagrammes de séquence](../diagrams/) (lecture, connexion de compte,
+[diagrammes de séquence](https://github.com/elzinko/google-mcp-multi-account/tree/main/diagrams/) (lecture, connexion de compte,
 réparation IAM).
 
 ## Smoke test manuel (sans client)
@@ -244,7 +244,7 @@ Pour une **branche / PR jetable** (sans toucher `current` ni l'entrée stable
 `gwsa sandbox wire` après coup). Unwire sélectif :
 `gwsa sandbox wire --remove desktop` (répertoire conservé) ;
 nucléaire : `gwsa sandbox remove <id>`. Détail : `gwsa sandbox --help` et fiche
-[0046](../features/0046-sandbox-deploy-cli.md).
+[0046](https://github.com/elzinko/google-mcp-multi-account/blob/main/features/0046-sandbox-deploy-cli.md).
 
 Trois règles, sinon le nom de l'entrée ment sur la version qui répond :
 

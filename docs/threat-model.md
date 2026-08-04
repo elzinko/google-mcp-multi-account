@@ -58,7 +58,7 @@ utilisables par `gws` hors gateway.
 
 Les credentials restent dans `~/.config/gws-accounts/`. Un agent avec shell libre
 peut toujours appeler `gws` directement. Mitigation : restreindre le shell ;
-évolution = vault ([features/0003](../features/0003-vault-credentials-hors-perimetre-agent.md)).
+évolution = vault ([features/0003](https://github.com/elzinko/google-mcp-multi-account/blob/main/features/0003-vault-credentials-hors-perimetre-agent.md)).
 
 ## Email = métadonnée d'identité (hors verrou)
 

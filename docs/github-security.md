@@ -27,6 +27,6 @@ et l’onglet [Security](https://github.com/elzinko/google-mcp-multi-account/sec
 
 ## Rappels produit (hors GitHub)
 
-Voir [`SECURITY.md`](../SECURITY.md) et [`threat-model.md`](threat-model.md) :
+Voir [`SECURITY.md`](https://github.com/elzinko/google-mcp-multi-account/blob/main/SECURITY.md) et [`threat-model.md`](threat-model.md) :
 policy default-deny, strongauth / Touch ID, élicitation, broker, journal — ce n’est
 pas remplacé par Dependabot / CodeQL.

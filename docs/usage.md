@@ -1,7 +1,7 @@
 # Utilisation au quotidien
 
 Détails d'usage de `gwsa`, du verrou « accès sur demande », de l'interface
-d'admin et de l'authentification forte. Vue d'ensemble : [README](../README.md).
+d'admin et de l'authentification forte. Vue d'ensemble : [README](https://github.com/elzinko/google-mcp-multi-account/blob/main/README.md).
 Modèle de policy (qui a le droit de quoi) : [policies.md](policies.md).
 
 ## En ligne de commande (`gwsa`)
@@ -32,11 +32,11 @@ gwsa zebra gmail …         # ✗ profil verrouillé 🔒 → le LLM doit deman
 gwsa unlock zebra 30       # déverrouillé 30 min, reverrouillage automatique
 ```
 
-[.claude/settings.json](../.claude/settings.json) ajoute une seconde barrière,
+[.claude/settings.json](https://github.com/elzinko/google-mcp-multi-account/blob/main/.claude/settings.json) ajoute une seconde barrière,
 native Claude Code : les commandes sur les profils sensibles (et `gwsa unlock`)
 déclenchent une demande de permission explicite.
 
-Séquence illustrée : [diagrams/lecture-donnees-elicitee](../diagrams/lecture-donnees-elicitee/).
+Séquence illustrée : [diagrams/lecture-donnees-elicitee](https://github.com/elzinko/google-mcp-multi-account/tree/main/diagrams/lecture-donnees-elicitee/).
 
 ## Interface d'admin web
 
@@ -80,7 +80,7 @@ gwsa strongauth off     # désactivation (elle-même protégée par Touch ID)
 
 Une fois activée, chaque déverrouillage de profil et chaque autorisation de
 zone Drive déclenche la boîte de dialogue biométrique système
-([scripts/touchid.swift](../scripts/touchid.swift), framework LocalAuthentication
+([scripts/touchid.swift](https://github.com/elzinko/google-mcp-multi-account/blob/main/scripts/touchid.swift), framework LocalAuthentication
 d'Apple, 100 % local). L'approbation d'élicitation ne peut alors plus venir
 que d'un humain physiquement présent devant le Mac — un LLM (ou un script)
 ne peut pas la simuler. Elle s'applique aussi à `gwsa add` (connexion d'un
@@ -89,5 +89,5 @@ nouveau compte).
 ## Depuis Claude Code
 
 Ouvrir une session dans ce repo : les skills `.claude/skills/gws-*` et les
-consignes [CLAUDE.md](../CLAUDE.md) sont chargés automatiquement. Demander en
+consignes [CLAUDE.md](https://github.com/elzinko/google-mcp-multi-account/blob/main/CLAUDE.md) sont chargés automatiquement. Demander en
 langage naturel, par ex. « liste mes 5 derniers mails du compte perso ».
