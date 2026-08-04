@@ -3496,6 +3496,25 @@ else
   fail "dev remove : aurait dû refuser une version stable — $rm_stable_out"
 fi
 
+# ── Métadonnées GitHub (fiche 0071) : script geste-humain, dry-run sans réseau ──
+if [[ -x scripts/set-github-metadata.sh ]]; then
+  pass "github-metadata : script présent et exécutable"
+else
+  fail "github-metadata : scripts/set-github-metadata.sh absent ou non exécutable"
+fi
+
+# --dry-run sort AVANT le contrôle « gh » : liste les métadonnées, n'émet aucun appel.
+ghmeta_out="$(GWSA_REPO=owner/repo ./scripts/set-github-metadata.sh --dry-run 2>&1)"; ghmeta_rc=$?
+if [[ "$ghmeta_rc" -eq 0 ]] \
+  && echo "$ghmeta_out" | grep -q 'owner/repo' \
+  && echo "$ghmeta_out" | grep -q 'dry-run' \
+  && echo "$ghmeta_out" | grep -qi 'multi-account' \
+  && echo "$ghmeta_out" | grep -q 'human-in-the-loop'; then
+  pass "github-metadata : --dry-run liste desc/homepage/topics, rien n'est envoyé"
+else
+  fail "github-metadata : --dry-run rc=$ghmeta_rc out=$(echo "$ghmeta_out" | tr '\n' ' ' | head -c 160)"
+fi
+
 # --- Bilan ------------------------------------------------------------------
 
 printf '\n\033[1mBilan : %d réussis, %d échoués\033[0m\n' "$PASS" "$FAIL"
