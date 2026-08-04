@@ -27,26 +27,20 @@
 
 ## 🚀 Quickstart
 
-macOS Apple Silicon. Three steps — full detail in [docs/setup-oauth.md](docs/setup-oauth.md) and [docs/mcp-setup.md](docs/mcp-setup.md).
+macOS Apple Silicon. **Install without cloning:**
 
 ```bash
-# 1 · Provision the Google Cloud project (once, ~10 min)
-git clone https://github.com/elzinko/google-mcp-multi-account.git
-cd google-mcp-multi-account
-brew install googleworkspace-cli                    # the gws CLI
-ln -sf "$PWD/bin/gwsa" "$(brew --prefix)/bin/gwsa"  # wrapper on PATH (bootstrap)
-./scripts/provision-gcp.sh                          # creates the project, guides the 2 manual steps
-
-# 2 · Install the server and wire your Claude clients (once)
-./scripts/update.sh                                 # installs outside the clone, wires Desktop + Code
+curl -fsSL https://raw.githubusercontent.com/elzinko/google-mcp-multi-account/main/install.sh | bash
 ```
 
-**3 ·** Restart Claude Desktop (Cmd-Q) and ask the LLM: *“give me a rundown of my Google setup”*. It reads the setup state and proposes the exact command for each missing step — you run them. Each connected account becomes a profile:
+This installs the latest release, puts `gwsa` on your PATH, wires your Claude clients, and prints the one-shot **Google setup** that remains (an OAuth project, ~10 min — see [docs/setup-oauth.md](docs/setup-oauth.md)). Then connect an account and restart Claude Desktop (Cmd-Q):
 
 ```bash
 gwsa add personal     # "personal" = your alias · browser → pick account → accept
 gwsa list             # profiles + state
 ```
+
+Ask the agent: *“give me a rundown of my Google setup”* — it reads the state and proposes the exact command for each missing step; you run them. Update later, still clone-free: **`gwsa update`**. Full detail: [docs/mcp-setup.md](docs/mcp-setup.md) · [docs/setup-oauth.md](docs/setup-oauth.md).
 
 ## 🧭 How it works
 
