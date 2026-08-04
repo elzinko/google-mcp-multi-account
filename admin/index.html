@@ -74,6 +74,9 @@ button.hbtn-icon svg { width:16px; height:16px; display:block; }
 .devmeta { font-size:12.5px; color:var(--mut); display:grid; gap:2px; }
 .devtabs { margin:10px 0 12px; }
 .devtabs button.active { background:var(--accbg); border-color:var(--acc); color:var(--acc); font-weight:600; }
+#docTabs button.active { background:var(--accbg); border-color:var(--acc); color:var(--acc); font-weight:600; }
+.docfoot-link { color:var(--acc); text-decoration:none; font-size:13px; align-self:center; }
+.docfoot-link:hover { text-decoration:underline; }
 .devpanel { min-height:400px; max-height:52vh; overflow-y:auto; }
 .dev-tab-panel { min-height:400px; }
 .dev-summary { font-size:14px; line-height:1.65; }
@@ -598,14 +601,19 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
 
 <dialog id="dDoc">
   <h2>Documentation</h2>
-  <div class="tabs">
-    <button class="small" onclick="showDoc('readme')">Installation & usage (README)</button>
-    <button class="small" onclick="showDoc('schemas')">Schémas (séquences)</button>
-    <button class="small" onclick="showDoc('mcp')">Serveur MCP & tools</button>
-    <button class="small" onclick="showDoc('oauth')">Setup OAuth (console Google)</button>
+  <div class="tabs" id="docTabs">
+    <button class="small" data-doc="guide" onclick="showDoc('guide')">Bien démarrer</button>
+    <button class="small" data-doc="readme" onclick="showDoc('readme')">Installation & usage</button>
+    <button class="small" data-doc="mcp" onclick="showDoc('mcp')">Outils de l'assistant</button>
+    <button class="small" data-doc="oauth" onclick="showDoc('oauth')">Connexion Google</button>
+    <button class="small" data-doc="schemas" onclick="showDoc('schemas')">Schémas (architecte)</button>
   </div>
   <div class="docbody" id="docBody"></div>
-  <div class="mtop"><button onclick="dDoc.close()">Fermer</button></div>
+  <div class="mtop">
+    <a class="docfoot-link" href="https://docs.elzinko.fr" target="_blank" rel="noopener">Doc complète en ligne ↗</a>
+    <span class="spacer"></span>
+    <button onclick="dDoc.close()">Fermer</button>
+  </div>
 </dialog>
 
 <div id="toast"></div>
@@ -1515,9 +1523,38 @@ function toggleLogDense() {
   try { localStorage.setItem("gwsaLogDense", LOG_DENSE ? "1" : "0"); } catch {}
 }
 let mmdSeq = 0;
+// Onglet « Bien démarrer » (fiche 0069) : orientation utilisateur, écrite ici
+// (pas un fichier repo). Le contenu dev/architecte reste dans les autres onglets
+// et sur la doc complète en ligne.
+const GUIDE_MD = `## Bienvenue 👋
+
+**google-multi-account** relie tes comptes Google à tes assistants (Claude, Cursor…) — **100 % en local**. La règle d'or : **c'est toi qui ouvres chaque porte**, l'assistant ne peut que **demander**.
+
+### Trois gestes, et c'est tout
+
+- **Connecter un compte** — bouton **« + Connecter un compte »**, choisis le bon compte Google, accepte. Il s'ajoute à la liste.
+- **Déverrouiller pour donner l'accès** — clique le **cadenas** d'un compte. L'accès s'ouvre pour la durée que tu choisis, puis se **reverrouille tout seul**.
+- **Accorder une zone Drive** — pour laisser écrire, ouvre le compte → **Configurer** → confie **un dossier** (permanent, ou quelques heures).
+
+### Ce que l'assistant ne peut jamais faire seul
+
+Se déverrouiller, s'accorder une zone, connecter un compte, envoyer un e-mail. Il **propose la commande exacte**, tu l'exécutes. Le **📓 Journal** garde la trace de chaque accès, autorisé ou refusé.
+
+### Pour aller plus loin
+
+- **Installation & usage**, **Connexion Google**, **Outils de l'assistant** : les onglets ci-dessus.
+- **Schémas (architecte)** : la mécanique interne, pour qui veut regarder sous le capot.
+- Doc complète, à jour : **[docs.elzinko.fr](https://docs.elzinko.fr)**.
+`;
+function setDocTab(which) {
+  document.querySelectorAll("#docTabs button").forEach((b) => b.classList.toggle("active", b.dataset.doc === which));
+}
 async function showDoc(which) {
+  setDocTab(which);
+  if (which === "guide") { $("docBody").innerHTML = mdToHtml(GUIDE_MD); $("docBody").scrollTop = 0; return; }
   if (!DOCS) DOCS = await api("/api/doc");
   $("docBody").innerHTML = mdToHtml(DOCS[which] || "*(vide)*");
+  $("docBody").scrollTop = 0;
   if (window.mermaid) {
     mermaid.initialize({ startOnLoad: false, theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default" });
     for (const node of document.querySelectorAll("#docBody .mermaid")) {
@@ -1527,7 +1564,7 @@ async function showDoc(which) {
     }
   }
 }
-async function openDoc() { await showDoc("readme"); dDoc.showModal(); }
+async function openDoc() { await showDoc("guide"); dDoc.showModal(); }
 
 function fmtPorts(m) {
   return "admin :" + (m.admin_port || "?") + " · broker :" + (m.broker_port || "?");
