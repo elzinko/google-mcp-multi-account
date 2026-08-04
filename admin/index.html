@@ -399,14 +399,27 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
     <button class="primary" onclick="doSessGrant()">Accorder</button></div>
 </dialog>
 
-<dialog id="dRevoke">
-  <h2>⛔ Révoquer <span id="revokeAlias" class="mono"></span></h2>
-  <p class="note">Les tokens sont supprimés de ce Mac : tous les LLM perdent immédiatement
-  l'accès à ce compte. (Révocable aussi côté Google : myaccount.google.com → Sécurité.)</p>
-  <label>Tape l'alias pour confirmer</label>
-  <input type="text" id="revokeConfirm" placeholder="alias">
-  <div class="mtop"><button onclick="dRevoke.close()">Annuler</button>
-  <button class="danger" onclick="doRevoke()">Révoquer définitivement</button></div>
+<dialog id="dDisconnect" class="dlg-confirm">
+  <div class="dlg-confirm-inner">
+    <div class="dlg-confirm-head">
+      <span class="dlg-confirm-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg></span>
+      <div class="dlg-confirm-titles">
+        <h2>Déconnecter ce compte ?</h2>
+        <p class="dlg-confirm-sub">Les assistants perdront l'accès à ce compte et tes réglages (zones, autorisations) seront oubliés. Rien n'est supprimé dans ton compte Google — pour le réutiliser, il faudra refaire une connexion complète.</p>
+      </div>
+    </div>
+    <div class="dlg-account-chip">
+      <span class="dlg-account-avatar" id="disconnectAvatar" aria-hidden="true"></span>
+      <span class="dlg-account-meta">
+        <span class="dlg-account-email" id="disconnectEmail"></span>
+        <span class="dlg-account-alias mono" id="disconnectAlias"></span>
+      </span>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" onclick="dDisconnect.close()">Annuler</button>
+      <button type="button" class="danger-solid" id="disconnectGo" onclick="doDisconnect()">Déconnecter</button>
+    </div>
+  </div>
 </dialog>
 
 <dialog id="dPolicy" class="dlg-policy">
@@ -540,7 +553,7 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
 <script>
 const $ = (id) => document.getElementById(id);
 const H = { "Content-Type": "application/json", "X-GWSA-Admin": "1" };
-let PROFILES = [], DOCS = null, polTarget = null, unlockTarget = null, revokeTarget = null, relockTarget = null;
+let PROFILES = [], DOCS = null, polTarget = null, unlockTarget = null, disconnectTarget = null, relockTarget = null;
 let SESSIONS = [], sessActionSid = null;
 const LOCK_LOADING = new Set();
 const UNLOCK_ANIM = new Set(); // dépliage gauche du timer après unlock
@@ -759,12 +772,11 @@ function capsHtml(key, rules, hasPolicy) {
   }).join("");
 }
 function render() { rerender(); finishLockExpand(); }
-function rerender() {
-  (VIEW.mode === "detail" && byAlias(VIEW.alias)) ? renderDetail(VIEW.alias) : renderList();
-  syncChrome();
-}
+function rerender() { (VIEW.mode === "detail" && byAlias(VIEW.alias)) ? renderDetail(VIEW.alias) : renderList(); }
 // Chrome hors #cards à accorder au mode de vue (fiche 0065 : masquer le CTA
 // « + Connecter un compte » en vue détail — un compte est déjà ouvert).
+// Appelé par renderList()/renderDetail() eux-mêmes : toute entrée en vue
+// (clic openDetail, retour, refresh) est couverte, sans dépendre de rerender().
 function syncChrome() {
   const detail = VIEW.mode === "detail";
   const addRow = document.querySelector(".add-account-row");
@@ -784,6 +796,7 @@ function finishLockExpand() {
 }
 function renderList() {
   VIEW = { mode: "list", alias: null };
+  syncChrome();
   const el = $("cards");
   if (!PROFILES.length) { el.innerHTML = '<div class="card">Aucun profil connecté.</div>'; return; }
   el.innerHTML = PROFILES.map((p) => {
@@ -804,6 +817,7 @@ function renderDetail(alias) {
   const p = byAlias(alias);
   if (!p || !p.connected) return renderList();
   VIEW = { mode: "detail", alias };
+  syncChrome();
   const rows = SVCDEF.filter((s) => ["drive","gmail","calendar","keep"].includes(s.key) || (p.policy && p.policy[s.key]))
     .map((s) => {
       const rules = p.policy && p.policy[s.key];
@@ -816,8 +830,8 @@ function renderDetail(alias) {
       lockHtml(p) + "</div></div>" +
     '<div class="dbody"><p class="plabel">Droits par application</p>' + rows +
     '<div class="danger"><div class="drx">' +
-      "<p>L'outil oublie ce compte : les assistants n'y auront plus accès et tes réglages (zones, autorisations) seront perdus. Rien n'est supprimé dans ton compte Google. Pour l'utiliser à nouveau, il faudra refaire une connexion complète.</p>" +
-      '<button class="danger" onclick="openRevoke(\'' + alias + '\')">Déconnecter ce compte</button></div></div></div></div>';
+      "<p>Retirer ce compte de l'outil — réversible (reconnexion complète). L'impact s'affiche avant confirmation.</p>" +
+      '<button class="danger small" onclick="openDisconnect(\'' + alias + '\')">Déconnecter…</button></div></div></div></div>';
 }
 function lockClick(alias) {
   const p = byAlias(alias);
@@ -1033,11 +1047,25 @@ async function doSessClose(sid) {
   } catch (e) { toast("Erreur : " + e.message); }
 }
 
-function openRevoke(alias) { revokeTarget = alias; $("revokeAlias").textContent = alias; $("revokeConfirm").value = ""; dRevoke.showModal(); }
-async function doRevoke() {
-  if ($("revokeConfirm").value.trim() !== revokeTarget) return toast("Alias saisi ≠ « " + revokeTarget + " » — révocation annulée");
-  await act(revokeTarget, "revoke");
-  dRevoke.close(); toast("⛔ " + revokeTarget + " déconnecté");
+function openDisconnect(alias) {
+  const p = byAlias(alias);
+  if (!p) return;
+  disconnectTarget = alias;
+  const email = p.email || alias;
+  $("disconnectEmail").textContent = email;
+  const aliasEl = $("disconnectAlias");
+  if (p.email && p.email !== alias) { aliasEl.textContent = alias; aliasEl.hidden = false; }
+  else { aliasEl.textContent = ""; aliasEl.hidden = true; }
+  $("disconnectAvatar").textContent = (email.replace(/@.*/, "")[0] || email[0] || "?").toUpperCase();
+  dDisconnect.showModal();
+}
+async function doDisconnect() {
+  if (!disconnectTarget) return;
+  const alias = disconnectTarget;
+  disconnectTarget = null;
+  dDisconnect.close();
+  await act(alias, "revoke");
+  toast("Compte déconnecté : " + alias);
 }
 function reconnect(alias) { $("addAlias").value = alias; $("addEmail").value = ""; $("addStatus").textContent = ""; dAdd.showModal(); }
 
