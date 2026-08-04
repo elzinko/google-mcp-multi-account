@@ -48,6 +48,13 @@ set -euo pipefail
 GWSA_ROOT="${GWSA_ROOT:-$HOME/.config/gws-accounts}"
 MASTER_SECRET="$GWSA_ROOT/client_secret.json"
 
+# Sécurité (info-disclosure) : les métadonnées de comptes (.email, usage.jsonl,
+# policy.json, .unlock-until, copie de client_secret.json…) ne doivent être lisibles
+# que par l'utilisateur. umask 077 → tout fichier/dossier créé ensuite est en 600/700 ;
+# on durcit aussi un GWSA_ROOT préexistant créé en world-readable.
+umask 077
+[[ -d "$GWSA_ROOT" ]] && chmod 700 "$GWSA_ROOT" 2>/dev/null || true
+
 usage() { awk 'NR==1{next} !/^#/{exit} {sub(/^# ?/,""); print}' "$0"; }
 
 resolve_repo_dir() { # suit le symlink éventuel (ex. /opt/homebrew/bin/gwsa) jusqu'au repo
@@ -238,6 +245,7 @@ cmd_add() { # cmd_add <alias> [email-attendu] [options gws auth login]
   local dir; dir="$(profile_dir "$alias")"
   mkdir -p "$dir"
   cp "$MASTER_SECRET" "$dir/client_secret.json"
+  chmod 600 "$dir/client_secret.json"  # forcer 0600, même si le master a hérité d'un 0644 (cf. Codex #83)
   echo "→ Connexion du profil « $alias »${expected:+ (compte attendu : $expected)} : choisir le bon compte Google dans le navigateur…"
   if [[ $# -eq 0 ]]; then
     GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws auth login --scopes "$DEFAULT_SCOPES"
