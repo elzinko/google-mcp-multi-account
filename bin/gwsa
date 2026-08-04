@@ -244,7 +244,8 @@ cmd_add() { # cmd_add <alias> [email-attendu] [options gws auth login]
   require_signed_elicitation "$(printf '{"action":"add_account","alias":"%s","target":"%s"}' "$alias" "${expected:-}")"
   local dir; dir="$(profile_dir "$alias")"
   mkdir -p "$dir"
-  cp -p "$MASTER_SECRET" "$dir/client_secret.json"  # -p : préserver le mode 600 du secret
+  cp "$MASTER_SECRET" "$dir/client_secret.json"
+  chmod 600 "$dir/client_secret.json"  # forcer 0600, même si le master a hérité d'un 0644 (cf. Codex #83)
   echo "→ Connexion du profil « $alias »${expected:+ (compte attendu : $expected)} : choisir le bon compte Google dans le navigateur…"
   if [[ $# -eq 0 ]]; then
     GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws auth login --scopes "$DEFAULT_SCOPES"
