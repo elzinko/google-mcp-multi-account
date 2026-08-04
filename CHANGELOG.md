@@ -1,5 +1,38 @@
 # Journal des versions
 
+## v0.4.0 — 2026-08-04
+
+### Fonctionnalités
+
+- feat(drive): grant par nom (vault) + drive_update + partage lecture/écriture (#77)
+- feat(docs): site de doc en ligne MkDocs Material (#79)
+- feat(install): installer & mettre à jour sans clone — curl + tarball GitHub (#78)
+- feat: rebrand to google-multi-account + English-first landing & README (#58)
+- feat(elicitation): nommer le compte (email) au moment d'autoriser — fiche 0047 (#75)
+- feat(0043): lire, copier et téléverser Drive + pièces jointes Gmail via MCP (#73)
+
+### Corrections
+
+- fix(elicitation): dialogue Touch ID strongauth nomme le produit (#74)
+- fix(docs): clarifier policy admin ≠ surface MCP (fiche 0041) (#52)
+
+### Documentation
+
+- docs(readme): quickstart mène avec l'install curl (sans clone)
+- docs(features): ship 0059 (#77) — grant par nom via vault
+- docs(features): ship 0020 (#78) + 0072 (#79)
+- docs(features): add 0059 vault folder resolve bug + manual test
+- docs(features): add v0.4.0 Admin UX epic 0060 and children 0061–0071
+- docs(features): ship 0047 #75
+- docs(features): ship 0044 #74
+
+### Autres
+
+- chore(backlog): ship 0043
+- chore(backlog): résout collisions d'id 0040/0041 (→0045/0046)
+- chore(deps): bump actions/checkout from 4 to 7 (#55)
+- chore(security): enable Dependabot config and document GitHub security (#53)
+
 ## v0.3.0 — 2026-07-29
 
 ### Fonctionnalités
