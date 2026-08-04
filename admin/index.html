@@ -78,9 +78,10 @@ button.hbtn-icon svg { width:16px; height:16px; display:block; }
 .devmeta { font-size:12.5px; color:var(--mut); display:grid; gap:2px; }
 .devtabs { margin:10px 0 12px; }
 .devtabs button.active { background:var(--accbg); border-color:var(--acc); color:var(--acc); font-weight:600; }
-#docTabs button.active { background:var(--accbg); border-color:var(--acc); color:var(--acc); font-weight:600; }
-.docfoot-link { color:var(--acc); text-decoration:none; font-size:13px; align-self:center; }
-.docfoot-link:hover { text-decoration:underline; }
+.btn-doclink { display:inline-flex; align-items:center; gap:6px; color:var(--acc); text-decoration:none;
+  font-size:13.5px; font-weight:600; border:1px solid color-mix(in srgb,var(--acc) 35%,var(--line));
+  background:var(--accbg); border-radius:9px; padding:7px 13px; }
+.btn-doclink:hover { border-color:var(--acc); filter:brightness(.98); }
 .devpanel { min-height:400px; max-height:52vh; overflow-y:auto; }
 .dev-tab-panel { min-height:400px; }
 .dev-summary { font-size:14px; line-height:1.65; }
@@ -615,16 +616,9 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
 
 <dialog id="dDoc">
   <h2>Documentation</h2>
-  <div class="tabs" id="docTabs">
-    <button class="small" data-doc="guide" onclick="showDoc('guide')">Bien démarrer</button>
-    <button class="small" data-doc="readme" onclick="showDoc('readme')">Installation & usage</button>
-    <button class="small" data-doc="mcp" onclick="showDoc('mcp')">Outils de l'assistant</button>
-    <button class="small" data-doc="oauth" onclick="showDoc('oauth')">Connexion Google</button>
-    <button class="small" data-doc="schemas" onclick="showDoc('schemas')">Schémas (architecte)</button>
-  </div>
   <div class="docbody" id="docBody"></div>
   <div class="mtop">
-    <a class="docfoot-link" href="https://docs.elzinko.fr" target="_blank" rel="noopener">Doc complète en ligne ↗</a>
+    <a class="btn-doclink" href="https://docs.elzinko.fr" target="_blank" rel="noopener">📚 Documentation complète en ligne ↗</a>
     <span class="spacer"></span>
     <button onclick="dDoc.close()">Fermer</button>
   </div>
@@ -1639,25 +1633,13 @@ Se déverrouiller, s'accorder une zone, connecter un compte, envoyer un e-mail. 
 - **Schémas (architecte)** : la mécanique interne, pour qui veut regarder sous le capot.
 - Doc complète, à jour : **[docs.elzinko.fr](https://docs.elzinko.fr)**.
 `;
-function setDocTab(which) {
-  document.querySelectorAll("#docTabs button").forEach((b) => b.classList.toggle("active", b.dataset.doc === which));
-}
-async function showDoc(which) {
-  setDocTab(which);
-  if (which === "guide") { $("docBody").innerHTML = mdToHtml(GUIDE_MD); $("docBody").scrollTop = 0; return; }
-  if (!DOCS) DOCS = await api("/api/doc");
-  $("docBody").innerHTML = mdToHtml(DOCS[which] || "*(vide)*");
+// Doc in-app allégée (revue P5) : un seul « Bien démarrer » embarqué ; le contenu
+// détaillé (installation, MCP, OAuth, schémas) vit en ligne sur docs.elzinko.fr.
+function openDoc() {
+  $("docBody").innerHTML = mdToHtml(GUIDE_MD);
   $("docBody").scrollTop = 0;
-  if (window.mermaid) {
-    mermaid.initialize({ startOnLoad: false, theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default" });
-    for (const node of document.querySelectorAll("#docBody .mermaid")) {
-      const src = node.textContent;
-      try { const { svg } = await mermaid.render("mmd" + (++mmdSeq), src); node.innerHTML = svg; }
-      catch (e) { node.innerHTML = '<span class="note">diagramme non rendu : ' + esc(String(e.message || e).slice(0, 200)) + "</span>"; }
-    }
-  }
+  dDoc.showModal();
 }
-async function openDoc() { await showDoc("guide"); dDoc.showModal(); }
 
 function fmtPorts(m) {
   return "admin :" + (m.admin_port || "?") + " · broker :" + (m.broker_port || "?");
