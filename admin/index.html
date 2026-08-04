@@ -217,8 +217,12 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
 /* page de détail */
 .detail { background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
 .dhead { padding:14px 16px; border-bottom:1px solid var(--line); }
-.back { display:inline-flex; align-items:center; gap:6px; border:0; background:transparent; color:var(--acc);
-  cursor:pointer; font-size:13.5px; padding:0; margin-bottom:11px; }
+.back { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line); background:var(--card);
+  color:var(--acc); cursor:pointer; font-size:13px; font-weight:600; padding:5px 12px 5px 8px; border-radius:9px;
+  margin-bottom:14px; transition:border-color .12s, background .12s, transform .08s; }
+.back svg { width:15px; height:15px; margin-top:.5px; }
+.back:hover { border-color:color-mix(in srgb,var(--acc) 45%,var(--line)); background:var(--accbg); }
+.back:active { transform:scale(.97); }
 .drow { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .dmail { font-weight:700; font-size:17px; margin-right:auto; }
 .dbody { padding:15px 16px; }
@@ -664,6 +668,7 @@ function summary(p) {
 //   On réutilise les dialogues existants (policy, zones, révocation).
 const LOCK_ICON = '<svg class="lock-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path class="lock-shackle" d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
 const CD_ICON = '<svg class="cd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+const BACK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>';
 const SVCDEF = [
   { key: "drive", name: "Drive", keys: DRIVE_KEYS },
   { key: "gmail", name: "Gmail", keys: GMAIL_KEYS },
@@ -806,7 +811,7 @@ function renderDetail(alias) {
         '<span class="actions"><button class="small" onclick="openPolicy(\'' + alias + '\')">Configurer…</button></span></div>';
     }).join("");
   $("cards").innerHTML = '<div class="detail"><div class="dhead">' +
-    '<button class="back" onclick="renderList()">‹ Comptes</button>' +
+    '<button class="back" onclick="renderList()" aria-label="Retour à la liste des comptes">' + BACK_ICON + "Comptes</button>" +
     '<div class="drow"><span class="dmail">' + esc(p.email || alias) + "</span>" +
       lockHtml(p) + "</div></div>" +
     '<div class="dbody"><p class="plabel">Droits par application</p>' + rows +
