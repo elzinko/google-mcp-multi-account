@@ -33,7 +33,7 @@ aux standards d'un produit connu (Docker, Stripe…).
 - **MkDocs Material** pour la doc (réutilise `docs/*.md`, recherche + nav + dark
   mode + versions, rendu moderne, mono-toolchain Python cohérent avec le projet).
 - **Garder la landing** `site/index.html` (hero SVG, toggle FR/EN) comme accueil.
-- Hébergement : **Vercel**, sous **`docs.elzinko.fr`** (infra existante de l'auteur).
+- Hébergement : **Vercel**, sous **`google-multi-account-docs.vercel.app`** (infra existante de l'auteur).
 
 ## Proposition
 
@@ -42,12 +42,12 @@ aux standards d'un produit connu (Docker, Stripe…).
 - Réutiliser `docs/*.md` (adapter le strict nécessaire, sortir le jargon
   contributeur vers une section « Contributing »/référence).
 - Assembler **landing (`/`) + docs (`/…`)** en une sortie statique.
-- Déploiement Vercel (build reproductible) + domaine `docs.elzinko.fr`.
+- Déploiement Vercel (build reproductible) + domaine `google-multi-account-docs.vercel.app`.
 - EN-first (cohérent avec le rebrand) ; i18n FR/EN en phase 2 si besoin.
 
 ## Critères d'acceptation
 
-- [ ] Site accessible en ligne sur `docs.elzinko.fr` (connexion Vercel + DNS — geste humain, voir ci-dessous).
+- [ ] Site accessible en ligne sur `google-multi-account-docs.vercel.app` (connexion Vercel + DNS — geste humain, voir ci-dessous).
 - [x] Recherche, navigation latérale et dark/light fonctionnels (Material — build vérifié localement).
 - [x] Les pages viennent de `docs/*.md` (pas de simples liens vers GitHub).
 - [x] La landing existante (`site/`) est conservée (intacte, non touchée).
@@ -63,11 +63,11 @@ aux standards d'un produit connu (Docker, Stripe…).
 ### Reste à faire (gestes humains / suite)
 
 - **Déploiement Vercel** (dashboard, non scriptable par le LLM) : importer le repo,
-  laisser `vercel.json` piloter le build, puis ajouter le domaine `docs.elzinko.fr`.
+  laisser `vercel.json` piloter le build, puis ajouter le domaine `google-multi-account-docs.vercel.app`.
 - **Liens vers les sources** (`../scripts/`, `../features/`, `../SECURITY.md`…) :
   19 warnings de build — liens hors `docs/`. À convertir en URLs GitHub (idéalement
   avec la passe EN [[0019]] pour ne pas éditer les docs deux fois).
-- **Landing → docs** : repointer le lien « Docs » de `site/` vers `docs.elzinko.fr`
+- **Landing → docs** : repointer le lien « Docs » de `site/` vers `google-multi-account-docs.vercel.app`
   une fois le domaine en ligne.
 
 ## Notes

@@ -1,6 +1,6 @@
 site_name: google-multi-account
 site_description: Google Workspace multi-comptes pour agents LLM — 100 % local.
-site_url: https://docs.elzinko.fr/
+site_url: https://google-multi-account-docs.vercel.app/
 repo_url: https://github.com/elzinko/google-mcp-multi-account
 repo_name: elzinko/google-mcp-multi-account
 edit_uri: edit/main/docs/

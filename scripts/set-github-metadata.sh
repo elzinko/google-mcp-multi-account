@@ -15,13 +15,13 @@
 #   ./scripts/set-github-metadata.sh --dry-run   # affiche ce qui serait posé, sans « gh »
 #   ./scripts/set-github-metadata.sh             # applique (nécessite « gh » authentifié)
 #
-# La homepage pointe la doc en ligne (fiche 0072) : à poser une fois le site
-# publié sur https://docs.elzinko.fr (sinon, mets l'URL du dépôt en attendant).
+# La homepage pointe la doc en ligne (fiche 0072), hébergée sur Vercel :
+# https://google-multi-account-docs.vercel.app (override via GWSA_HOMEPAGE).
 set -euo pipefail
 
 REPO="${GWSA_REPO:-elzinko/google-mcp-multi-account}"
 DESC="Multi-account Google Workspace (Gmail, Drive) for LLM agents — 100% local, default-deny policy, human-in-the-loop access. A macOS MCP server."
-HOMEPAGE="${GWSA_HOMEPAGE:-https://docs.elzinko.fr}"
+HOMEPAGE="${GWSA_HOMEPAGE:-https://google-multi-account-docs.vercel.app}"
 # Positionnement : protocole, clients, services, multi-compte, sécurité/local, plateforme.
 TOPICS=(
   mcp model-context-protocol claude claude-desktop cursor
