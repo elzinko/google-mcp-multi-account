@@ -9,7 +9,7 @@
 
 [![CI](https://github.com/elzinko/google-mcp-multi-account/actions/workflows/ci.yml/badge.svg)](https://github.com/elzinko/google-mcp-multi-account/actions/workflows/ci.yml) &nbsp;[![Release](https://img.shields.io/github/v/release/elzinko/google-mcp-multi-account?color=0f6e56)](https://github.com/elzinko/google-mcp-multi-account/releases) &nbsp;[![License](https://img.shields.io/github/license/elzinko/google-mcp-multi-account?color=1f6feb)](LICENSE) &nbsp;[![Platform](https://img.shields.io/badge/platform-macOS-1a1a1a?logo=apple&logoColor=white)](#-contributing)
 
-**[Quickstart](#-quickstart)** · **[How it works](#-how-it-works)** · **[Permissions](#-permissions)** · **[Security](#-security)** · **[Docs](docs/)**
+**[Quickstart](#-quickstart)** · **[Permissions](#-permissions)** · **[Security](#-security)** · **[Docs](docs/)**
 
 </div>
 
@@ -49,30 +49,6 @@ gwsa list             # profiles + state
 ```
 
 Ask the agent: *“give me a rundown of my Google setup”* — it reads the state and proposes the exact command for each missing step; you run them. Update later, still clone-free: **`gwsa update`**. Full detail: [docs/mcp-setup.md](docs/mcp-setup.md) · [docs/setup-oauth.md](docs/setup-oauth.md).
-
-## 🧭 How it works
-
-The LLM **can never widen its own access**. Every door opens by a human gesture the agent can *request* but not perform.
-
-<div align="center">
-<img src="site/assets/hero-product.svg" alt="The local admin window and an elicited access request" width="540">
-<br>
-<sub><i>The local admin and an elicited access request — the agent proposes the exact command, you run it.</i></sub>
-</div>
-
-```mermaid
-flowchart LR
-    USER["🧑 Human — unlock / grant / policy"]
-    LLM["LLM clients — Desktop / Code / Cursor"]
-    MCP["bin/google-mcp — MCP stdio"]
-    GW["gateway/ — policy + locks"]
-    GWSA["bin/gwsa — profiles · locks · grants"]
-    GOOGLE["Google APIs"]
-    USER --> GWSA
-    LLM --> MCP --> GW --> GWSA --> GOOGLE
-```
-
-Why a wrapper, the local broker, who talks to whom: [docs/architecture.md](docs/architecture.md). Step-by-step walkthroughs: [diagrams/](diagrams/).
 
 ## 🔑 Permissions
 
@@ -127,6 +103,7 @@ Product / MCP server `google-multi-account` (source of truth: `gateway/config.py
 
 | Topic | Where |
 |---|---|
+| How it works — wrapper, local broker, security controls | [docs/architecture.md](docs/architecture.md) |
 | Connect a client (Desktop, Code, Cursor); tools exposed | [docs/mcp-setup.md](docs/mcp-setup.md) |
 | OAuth / GCP setup, IAM roles | [docs/setup-oauth.md](docs/setup-oauth.md) |
 | CLI & web admin (`gwsa`, locks, Touch ID) | [docs/usage.md](docs/usage.md) |

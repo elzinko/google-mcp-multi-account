@@ -14,8 +14,8 @@ Prompt de lancement : voir [PROMPT.md](PROMPT.md).
 
 | Alias | Rôle dans le test | Email (vérifier via `gwsa list`) |
 |---|---|---|
-| `perso` | Compte **source** A | thomas.couderc@gmail.com |
-| `mw` | Compte **destination** B | matiereweb@gmail.com |
+| `perso` | Compte **source** A | perso@example.com |
+| `mw` | Compte **destination** B | mw@example.com |
 
 Inverser A/B en fin de test (phase optionnelle) pour couvrir les deux sens.
 

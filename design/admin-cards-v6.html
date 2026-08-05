@@ -159,7 +159,7 @@
     <div class="p open can exp" id="p-perso">
       <div class="head" onclick="toggle('p-perso')">
         <div class="idcol">
-          <div class="idline"><button class="copy mail" onclick="copyIt(event,'thomas.couderc@gmail.com')">thomas.couderc@gmail.com <span class="ci">✓</span></button></div>
+          <div class="idline"><button class="copy mail" onclick="copyIt(event,'perso@example.com')">perso@example.com <span class="ci">✓</span></button></div>
           <div class="statusline">
             <span class="badge b-warn">🔓 Ouvert · <span class="count">3</span> min</span>
             <span class="actinline" onclick="event.stopPropagation()">
@@ -222,7 +222,7 @@
     <div class="p off" id="p-mw">
       <div class="head">
         <div class="idcol">
-          <div class="idline"><button class="copy mail" onclick="copyIt(event,'matiereweb@gmail.com')">matiereweb@gmail.com <span class="ci">✓</span></button></div>
+          <div class="idline"><button class="copy mail" onclick="copyIt(event,'mw@example.com')">mw@example.com <span class="ci">✓</span></button></div>
           <div class="statusline">
             <span class="badge b-off" tabindex="0" title="Le jeton OAuth de ce compte a expiré (app en mode test, 7 jours). Reconnecte-le pour retrouver l'accès — les zones et la policy sont conservées.">⚠ Jeton expiré</span>
             <span class="zsum dim">· accès et zones indisponibles</span>
@@ -304,7 +304,7 @@
     projets:{name:'Projets',kids:['p2026','archives']},livrables:{name:'Livrables',kids:['clientA']},
     perso:{name:'Perso',kids:[]},p2026:{name:'2026',kids:[]},archives:{name:'Archives',kids:[]},clientA:{name:'Client-A',kids:[]}};
   var ACCTS={
-    perso:{email:'thomas.couderc@gmail.com',zones:[{n:'Livrables/Client-A',k:'perm'},{n:'Projets/2026',k:'temp',e:'1 h 58'}]},
+    perso:{email:'perso@example.com',zones:[{n:'Livrables/Client-A',k:'perm'},{n:'Projets/2026',k:'temp',e:'1 h 58'}]},
     zebra:{email:'troiszebres@gmail.com',zones:[]}
   };
   var dlg=document.getElementById('zoneDlg'), curAcct=null, crumbs=['root'], sel=null, nfCount=0;

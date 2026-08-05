@@ -1,4 +1,4 @@
-<title>Cartes profil de l'admin — v3</title>
+<title>Cartes profil de l'admin — v2</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root{
@@ -29,11 +29,12 @@
     font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; -webkit-font-smoothing:antialiased}
   .wrap{max-width:760px; margin:0 auto; padding:38px 20px 72px}
 
+  /* -- cadre documentaire (léger, ne déteint pas sur le produit) -- */
   .doc h1{font-size:26px; margin:0 0 8px; letter-spacing:-.01em}
   .doc .lede{color:var(--mut); margin:0 0 18px; font-size:15px}
   .doc .lede code{font-family:ui-monospace,monospace; font-size:.88em; background:var(--paper); padding:1px 5px; border-radius:5px}
   .verdict{background:var(--card); border:1px solid var(--line); border-left:3px solid var(--acc);
-    border-radius:10px; padding:13px 16px; margin:0; font-size:13.5px}
+    border-radius:10px; padding:13px 16px; margin:0 0 8px; font-size:13.5px}
   .verdict b{color:var(--acc)}
   .verdict ul{margin:8px 0 0; padding-left:18px} .verdict li{margin:3px 0; color:var(--mut)}
   .verdict li b{color:var(--txt)}
@@ -43,9 +44,10 @@
   /* ============ LE PRODUIT ============ */
   .plist{display:flex; flex-direction:column; gap:12px}
   .p{background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden}
-  .p.open{border-left:3px solid var(--warn)}
-  .p.off{border-left:3px solid var(--bad)}
+  .p.open{border-left:3px solid var(--warn)}       /* repère de scan : compte OUVERT */
+  .p.off{border-left:3px solid var(--bad)}          /* déconnecté */
 
+  /* -- ligne d'aperçu (toujours visible) -- */
   .head{display:flex; align-items:flex-start; gap:12px; padding:13px 15px; cursor:pointer}
   .head:hover{background:color-mix(in srgb, var(--paper) 55%, transparent)}
   .idcol{flex:1; min-width:0; display:flex; flex-direction:column; gap:5px}
@@ -56,6 +58,9 @@
   .copy:hover{color:var(--acc)}
   .copy .ci{opacity:0; font-size:11.5px; color:var(--ok); font-weight:600; transition:opacity .15s}
   .copy.done .ci{opacity:1}
+  .aliaskey{font-family:ui-monospace,monospace; font-size:11.5px; color:var(--mut);
+    background:var(--paper); border:1px solid var(--line); border-radius:5px; padding:1px 7px}
+  .aliaskey b{color:var(--txt)}
 
   .statusline{display:flex; align-items:center; gap:9px; flex-wrap:wrap}
   .badge{font-size:12.5px; padding:2px 9px; border-radius:99px; white-space:nowrap;
@@ -66,6 +71,7 @@
   .count{font-variant-numeric:tabular-nums}
   .zsum{font-size:13px; color:var(--mut)} .zsum b{color:var(--txt); font-weight:600}
 
+  /* actions posées sur la ligne d'accès */
   .actinline{display:flex; gap:7px; align-items:center; flex-wrap:wrap}
   button{font:inherit; font-size:13px; border:1px solid var(--line); background:var(--card);
     color:var(--txt); border-radius:8px; padding:5px 11px; cursor:pointer}
@@ -74,14 +80,15 @@
   button.primary{background:var(--acc); border-color:var(--acc); color:#fff}
   button.ghost{color:var(--mut)}
   button.tiny{font-size:12px; padding:3px 9px}
-  /* v3 : les boutons destructeurs ont un encadré de base (affordance) */
-  button.dline{color:var(--bad); border-color:color-mix(in srgb,var(--bad) 38%,var(--line)); background:var(--card)}
-  button.dline:hover{border-color:var(--bad); background:var(--badbg)}
+  button.dghost{color:var(--bad); border-color:transparent; background:transparent}
+  button.dghost:hover{border-color:var(--bad); background:var(--badbg)}
 
+  /* coin haut-droit : cycle de vie du COMPTE (séparé de l'accès) */
   .acct{display:flex; align-items:center; gap:7px; flex-shrink:0}
   .chev{color:var(--mut); transition:transform .18s; font-size:13px; margin-top:2px}
   .p.exp .chev{transform:rotate(180deg)}
 
+  /* -- panneau déplié -- */
   .panel{display:none; border-top:1px solid var(--line); padding:14px 15px; background:color-mix(in srgb,var(--paper) 40%,transparent)}
   .p.exp .panel{display:block}
   .psec{margin:0 0 16px} .psec:last-child{margin:0}
@@ -127,14 +134,16 @@
 
 <div class="wrap">
   <div class="doc">
-    <h1>Cartes profil — v3</h1>
-    <p class="lede">Trois changements depuis la v2 : les alias (<code>gwsa perso</code>…) disparaissent de l'aperçu — l'email suffit ; « accès sur demande » est reformulé en clair ; les boutons destructeurs ont un encadré. Clique une carte pour la déplier, un email pour le copier.</p>
+    <h1>Cartes profil — v2</h1>
+    <p class="lede">Refonte après une revue <b>adverse</b> et une revue <b>architecte</b>. Le produit reste dans la palette de <code>admin/index.html</code>. Clique une carte pour la déplier ; clique un email pour le copier.</p>
     <div class="verdict">
-      <b>Ce qui change dans la v3</b>
+      <b>Ce que les deux revues ont tranché</b>
       <ul>
-        <li><b>Plus d'alias dans l'aperçu.</b> Le titre, c'est l'email. L'alias reste la clé technique côté serveur (visible via <code>gwsa list</code> / journaux) mais n'encombre plus la carte.</li>
-        <li><b>« Verrouillé » expliqué.</b> Fini « accès sur demande » : la carte dit « un LLM doit te demander l'accès ».</li>
-        <li><b>Boutons destructeurs encadrés.</b> « Retirer », « Révoquer » ont un contour dès le repos — ça se lit comme un bouton, plus comme du texte.</li>
+        <li><b>Connexion en arrière-plan.</b> On suppose connecté ; « Reconnecter » n'apparaît que si le jeton a expiré. Fini l'axe « ✓ connecté » répété 5 fois.</li>
+        <li><b>L'action collée à son sujet.</b> Déverrouiller sur la ligne d'accès ; chaque zone porte ses propres boutons ; Révoquer au coin du compte.</li>
+        <li><b>Fenêtre effective = min(accès, zone).</b> Ce qui compte, c'est la première échéance — affichée en clair.</li>
+        <li><b>Alias gardé</b> (c'est la clé <code>gwsa &lt;alias&gt;</code>), mais l'email passe en titre.</li>
+        <li><b>Master-liste + accordéon</b>, sans routeur — <a href="#" onclick="return false" style="color:var(--acc)">ADR-0004</a>.</li>
       </ul>
     </div>
   </div>
@@ -147,7 +156,8 @@
       <div class="head" onclick="toggle('p-perso')">
         <div class="idcol">
           <div class="idline">
-            <button class="copy mail" onclick="copyIt(event,'thomas.couderc@gmail.com')">thomas.couderc@gmail.com <span class="ci">copié&nbsp;✓</span></button>
+            <button class="copy mail" onclick="copyIt(event,'perso@example.com')">perso@example.com <span class="ci">copié&nbsp;✓</span></button>
+            <span class="aliaskey">gwsa&nbsp;<b>perso</b></span>
           </div>
           <div class="statusline">
             <span class="badge b-warn">🔓 Ouvert · <span class="count">3</span> min</span>
@@ -159,7 +169,7 @@
           </div>
         </div>
         <div class="acct" onclick="event.stopPropagation()">
-          <button class="tiny dline" onclick="flash(event,'Compte révoqué (démo)')">Révoquer</button>
+          <button class="tiny dghost" onclick="flash(event,'Compte révoqué (démo)')">Révoquer</button>
           <span class="chev">▾</span>
         </div>
       </div>
@@ -175,7 +185,7 @@
             </span>
             <span class="zspacer"></span>
             <button class="copy tiny ghost" onclick="copyIt(event,'1a2b3c…')">Copier l'ID <span class="ci">copié&nbsp;✓</span></button>
-            <button class="tiny dline" onclick="flash(event,'Zone retirée de la config')">Retirer</button>
+            <button class="tiny dghost" onclick="flash(event,'Zone retirée de la config')">Retirer</button>
           </div>
           <div class="zrow">
             <span class="zi">📁</span>
@@ -185,7 +195,7 @@
             </span>
             <span class="zspacer"></span>
             <button class="tiny" onclick="flash(event,'Zone prolongée')">Prolonger…</button>
-            <button class="tiny dline" onclick="flash(event,'Zone retirée')">Retirer</button>
+            <button class="tiny dghost" onclick="flash(event,'Zone retirée')">Retirer</button>
           </div>
 
           <div class="addzone">
@@ -227,17 +237,18 @@
         <div class="idcol">
           <div class="idline">
             <button class="copy mail" onclick="copyIt(event,'troiszebres@gmail.com')">troiszebres@gmail.com <span class="ci">copié&nbsp;✓</span></button>
+            <span class="aliaskey">gwsa&nbsp;<b>zebra</b></span>
           </div>
           <div class="statusline">
             <span class="badge b-bad">🔒 Verrouillé</span>
             <span class="actinline" onclick="event.stopPropagation()">
               <button class="tiny primary" onclick="flash(event,'Touch ID → déverrouillé')">Déverrouiller…</button>
             </span>
-            <span class="zsum">· un LLM doit te demander l'accès</span>
+            <span class="zsum">· accès sur demande</span>
           </div>
         </div>
         <div class="acct" onclick="event.stopPropagation()">
-          <button class="tiny dline" onclick="flash(event,'Compte révoqué (démo)')">Révoquer</button>
+          <button class="tiny dghost" onclick="flash(event,'Compte révoqué (démo)')">Révoquer</button>
           <span class="chev">▾</span>
         </div>
       </div>
@@ -268,7 +279,8 @@
       <div class="head" onclick="toggle('p-mw')">
         <div class="idcol">
           <div class="idline">
-            <button class="copy mail" onclick="copyIt(event,'matiereweb@gmail.com')">matiereweb@gmail.com <span class="ci">copié&nbsp;✓</span></button>
+            <button class="copy mail" onclick="copyIt(event,'mw@example.com')">mw@example.com <span class="ci">copié&nbsp;✓</span></button>
+            <span class="aliaskey">gwsa&nbsp;<b>mw</b></span>
           </div>
           <div class="statusline">
             <span class="badge b-off">⚠ Jeton expiré</span>
@@ -277,7 +289,7 @@
         </div>
         <div class="acct" onclick="event.stopPropagation()">
           <button class="tiny primary" onclick="flash(event,'gwsa add mw → navigateur')">Reconnecter…</button>
-          <button class="tiny dline" onclick="flash(event,'Compte révoqué (démo)')">Révoquer</button>
+          <button class="tiny dghost" onclick="flash(event,'Compte révoqué (démo)')">Révoquer</button>
           <span class="chev">▾</span>
         </div>
       </div>
@@ -289,7 +301,7 @@
   </div>
 
   <footer>
-    Maquette statique — palette et composants de <code>admin/index.html</code>. Thème clair/sombre : sélecteur du lecteur. Fiches : <b>0036</b> clarté · <b>0037</b> suppression en zone · <b>0038</b> créer un dossier · <code>ADR-0004</code> (proposé).
+    Maquette statique — palette et composants de <code>admin/index.html</code>. Thème clair/sombre : sélecteur du lecteur. Revue adverse + architecte (<code>ADR-0004</code>, proposé). Fiches : <b>0036</b> clarté · <b>0037</b> suppression en zone · <b>0038</b> créer un dossier.
   </footer>
 </div>
 
@@ -303,7 +315,7 @@
   function toggle(id){
     var el=document.getElementById(id);
     var wasOpen=el.classList.contains('exp');
-    document.querySelectorAll('.p.exp').forEach(function(p){p.classList.remove('exp')});
+    document.querySelectorAll('.p.exp').forEach(function(p){p.classList.remove('exp')}); // un seul ouvert
     if(!wasOpen){el.classList.add('exp');}
   }
   function copyIt(e,val){
