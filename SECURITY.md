@@ -44,10 +44,8 @@ L'honnêteté fait partie du modèle :
 
 ## Signaler une vulnérabilité
 
-- De préférence : un **[Security Advisory GitHub](https://github.com/elzinko/google-mcp-multi-account/security/advisories/new)**
-  (rapport privé — nécessite que le *Private vulnerability reporting* du repo
-  soit actif ; si le lien renvoie un 404, utiliser le mail).
-- Sinon : un mail à **thomas.couderc@gmail.com** avec `[SECURITY]` en objet.
+- **[Ouvrir un Security Advisory GitHub](https://github.com/elzinko/google-mcp-multi-account/security/advisories/new)** — rapport **privé**, canal recommandé. Nécessite que le *Private vulnerability reporting* du dépôt soit activé (**Settings → Code security → Private vulnerability reporting → Enable**).
+- Si le lien renvoie un 404 (reporting privé pas encore activé), ouvre une **issue publique minimale** — juste « faille de sécurité, merci d'ouvrir un canal privé », **sans aucun détail exploitable** — et on bascule en privé.
 
 Merci de ne pas ouvrir d'issue publique pour une faille exploitable. Projet
 personnel maintenu sur temps libre : réponse sous quelques jours, sans SLA.
