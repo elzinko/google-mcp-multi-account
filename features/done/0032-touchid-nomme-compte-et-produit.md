@@ -35,7 +35,7 @@ Deux manques au moment du consentement :
 
 ## Proposition
 
-- Ajouter l'email au texte : `déverrouiller « perso » (thomas.couderc@gmail.com)`.
+- Ajouter l'email au texte : `déverrouiller « perso » (perso@example.com)`.
   La donnée existe déjà via `_profile_email` / `.email`.
 - Étudier ce qui peut porter une identité produit dans le dialogue système
   (nom du binaire signé, `localizedReason` enrichi). La provenance dure relève

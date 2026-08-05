@@ -3242,6 +3242,17 @@ else
   fail "touchid : elicitation.py n'utilise pas le binaire nommé (dialogue swift-frontend)"
 fi
 
+# sync-iam (« Réparer l'accès ») doit AUSSI passer par un binaire nommé, pas
+# « swift nu » — sinon la boîte Touch ID affiche « swift-frontend » (retour user).
+if grep -q 'touchid_named_bin' scripts/provision-gcp.sh \
+  && grep -q 'SYS_SWIFTC=' scripts/provision-gcp.sh \
+  && grep -q 'PRODUCT_SLUG' scripts/provision-gcp.sh \
+  && grep -q 'bin/.build/touchid' scripts/provision-gcp.sh; then
+  pass "touchid : sync-iam (provision) passe par le binaire nommé (pas swift-frontend)"
+else
+  fail "touchid : provision-gcp.sh require_strong_auth encore en swift nu (swift-frontend)"
+fi
+
 # Sous strongauth, add sans email doit refuser avant Touch ID (fiche 0032 / review #50)
 printf '{"installed":{"client_id":"hermetic-test","client_secret":"not-a-real-secret"}}\n' \
   > "$GWSA_ROOT/client_secret.json"
@@ -3494,6 +3505,25 @@ if echo "$rm_stable_out" | grep -q "n'est pas une version dev"; then
   pass "dev remove : refuse une version stable (dev-* uniquement)"
 else
   fail "dev remove : aurait dû refuser une version stable — $rm_stable_out"
+fi
+
+# ── Métadonnées GitHub (fiche 0071) : script geste-humain, dry-run sans réseau ──
+if [[ -x scripts/set-github-metadata.sh ]]; then
+  pass "github-metadata : script présent et exécutable"
+else
+  fail "github-metadata : scripts/set-github-metadata.sh absent ou non exécutable"
+fi
+
+# --dry-run sort AVANT le contrôle « gh » : liste les métadonnées, n'émet aucun appel.
+ghmeta_out="$(GWSA_REPO=owner/repo ./scripts/set-github-metadata.sh --dry-run 2>&1)"; ghmeta_rc=$?
+if [[ "$ghmeta_rc" -eq 0 ]] \
+  && echo "$ghmeta_out" | grep -q 'owner/repo' \
+  && echo "$ghmeta_out" | grep -q 'dry-run' \
+  && echo "$ghmeta_out" | grep -qi 'multi-account' \
+  && echo "$ghmeta_out" | grep -q 'human-in-the-loop'; then
+  pass "github-metadata : --dry-run liste desc/homepage/topics, rien n'est envoyé"
+else
+  fail "github-metadata : --dry-run rc=$ghmeta_rc out=$(echo "$ghmeta_out" | tr '\n' ' ' | head -c 160)"
 fi
 
 # --- Bilan ------------------------------------------------------------------

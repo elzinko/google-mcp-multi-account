@@ -7,9 +7,9 @@
 
 <br>
 
-[![CI](https://github.com/elzinko/google-mcp-multi-account/actions/workflows/ci.yml/badge.svg)](https://github.com/elzinko/google-mcp-multi-account/actions/workflows/ci.yml) &nbsp;[![Release](https://img.shields.io/github/v/release/elzinko/google-mcp-multi-account?color=0f6e56)](https://github.com/elzinko/google-mcp-multi-account/releases) &nbsp;[![License](https://img.shields.io/github/license/elzinko/google-mcp-multi-account?color=1f6feb)](LICENSE) &nbsp;[![Platform](https://img.shields.io/badge/platform-macOS-1a1a1a?logo=apple&logoColor=white)](#-development)
+[![CI](https://github.com/elzinko/google-mcp-multi-account/actions/workflows/ci.yml/badge.svg)](https://github.com/elzinko/google-mcp-multi-account/actions/workflows/ci.yml) &nbsp;[![Release](https://img.shields.io/github/v/release/elzinko/google-mcp-multi-account?color=0f6e56)](https://github.com/elzinko/google-mcp-multi-account/releases) &nbsp;[![License](https://img.shields.io/github/license/elzinko/google-mcp-multi-account?color=1f6feb)](LICENSE) &nbsp;[![Platform](https://img.shields.io/badge/platform-macOS-1a1a1a?logo=apple&logoColor=white)](#-contributing)
 
-**[Quickstart](#-quickstart)** · **[How it works](#-how-it-works)** · **[Security](#-security)** · **[Docs](docs/)**
+**[Quickstart](#-quickstart)** · **[Permissions](#-permissions)** · **[Security](#-security)** · **[Docs](docs/)**
 
 </div>
 
@@ -24,6 +24,14 @@
 - **Default-deny by design** — any undeclared service is refused; Gmail tools stop at the draft (no sending); Drive writes stay inside granted folders.
 - **100 % local** — encrypted tokens (AES-256-GCM, master key in the macOS Keychain), per-client audit log. The only cloud step is a one-shot OAuth credential.
 - **Scope today** — **Gmail + Drive** through MCP; **Calendar next**. Docs, Sheets and Tasks are reachable through the `gwsa` CLI.
+
+## 👤 Who it's for
+
+| You are… | You get… |
+|---|---|
+| **Juggling personal + work Gmail/Drive** | one agent that targets each account by alias — `perso`, `work`, a client — never “your Google” as a whole |
+| **Letting an agent touch Drive, cautiously** | reads by default, *drafts* mail (never sends), writes only in folders you hand over — revocable and time-boxed |
+| **Privacy-first** | tokens encrypted on your Mac (Keychain), a per-client audit log, no third-party server — the only cloud step is your own OAuth credential |
 
 ## 🚀 Quickstart
 
@@ -42,42 +50,37 @@ gwsa list             # profiles + state
 
 Ask the agent: *“give me a rundown of my Google setup”* — it reads the state and proposes the exact command for each missing step; you run them. Update later, still clone-free: **`gwsa update`**. Full detail: [docs/mcp-setup.md](docs/mcp-setup.md) · [docs/setup-oauth.md](docs/setup-oauth.md).
 
-## 🧭 How it works
+## 🔑 Permissions
 
-The LLM **can never widen its own access**. Every door opens by a human gesture the agent can *request* but not perform.
+**Default-deny**: anything not granted is refused. The agent can *request* a door; only you open it — this is the *elicitation* model.
 
-<div align="center">
-<img src="site/assets/hero-product.svg" alt="The local admin window and an elicited access request" width="540">
-<br>
-<sub><i>The local admin and an elicited access request — the agent proposes the exact command, you run it.</i></sub>
-</div>
+| Door | Who opens it | How |
+|---|---|---|
+| **Unlock an account** (temporary access) | you | the lock in the admin, or `gwsa unlock <alias> <min>` |
+| **Grant a Drive zone** (a folder to write in) | you | admin → *Configurer*, or `gwsa grant <alias> <folder> <hours>` |
+| **Connect a new account** | you | `gwsa add <alias>` (browser OAuth) |
+| **Fix project access** (IAM) | you | admin → *Réparer l’accès*, or the `gcloud` line the agent prints |
+| **Send mail** | nobody, by design | Gmail tools stop at the draft |
 
-```mermaid
-flowchart LR
-    USER["🧑 Human — unlock / grant / policy"]
-    LLM["LLM clients — Desktop / Code / Cursor"]
-    MCP["bin/google-mcp — MCP stdio"]
-    GW["gateway/ — policy + locks"]
-    GWSA["bin/gwsa — profiles · locks · grants"]
-    GOOGLE["Google APIs"]
-    USER --> GWSA
-    LLM --> MCP --> GW --> GWSA --> GOOGLE
-```
-
-Why a wrapper, the local broker, who talks to whom: [docs/architecture.md](docs/architecture.md). Step-by-step walkthroughs: [diagrams/](diagrams/).
+Every request lands in the **audit log** (`GWSA_CLIENT` = which client asked), allowed or refused. Model in depth: [docs/policies.md](docs/policies.md) · [docs/usage.md](docs/usage.md).
 
 ## 🔒 Security
 
 Stance: **don’t trust the LLM by default** — it can *ask*, only a human opens. Per-profile locks (optional Touch ID), zoned Drive writes, no mail sending, encrypted tokens. Guarantees phase by phase, what is *not* yet covered, and how to report a flaw: [SECURITY.md](SECURITY.md) · [docs/threat-model.md](docs/threat-model.md). Honest self-critique (strengths, limits, competition): [docs/critique.md](docs/critique.md).
 
-## 🛠 Development
+## 🤝 Contributing
+
+From a clone (contributors — end users install with the `curl` line above, no clone):
 
 ```bash
+git clone https://github.com/elzinko/google-mcp-multi-account.git
+cd google-mcp-multi-account
 ./scripts/test.sh     # hermetic suite (policy, wrapper, gateway, broker) — no real account, no network
 ```
 
+- **Backlog** — one card per feature/bug in [features/](features/); **one PR per card**, [conventional commits](https://www.conventionalcommits.org/), merge on green.
 - **Commands** — `gwsa help` is the index of everything. LLM-guided manual tests: [tests/manuels/](tests/manuels/).
-- **Releases** — the git **tag** is the source of truth; `gwsa release` derives semver from [conventional commits](https://www.conventionalcommits.org/). History: [CHANGELOG.md](CHANGELOG.md).
+- **Releases** — the git **tag** is the source of truth; `./scripts/release.sh` derives semver from the commits, tags, and publishes. History: [CHANGELOG.md](CHANGELOG.md).
 
 ### Project structure
 
@@ -100,6 +103,7 @@ Product / MCP server `google-multi-account` (source of truth: `gateway/config.py
 
 | Topic | Where |
 |---|---|
+| How it works — wrapper, local broker, security controls | [docs/architecture.md](docs/architecture.md) |
 | Connect a client (Desktop, Code, Cursor); tools exposed | [docs/mcp-setup.md](docs/mcp-setup.md) |
 | OAuth / GCP setup, IAM roles | [docs/setup-oauth.md](docs/setup-oauth.md) |
 | CLI & web admin (`gwsa`, locks, Touch ID) | [docs/usage.md](docs/usage.md) |

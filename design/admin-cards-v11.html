@@ -1,5 +1,5 @@
 <meta charset="utf-8">
-<title>Cartes profil de l'admin — v8</title>
+<title>Cartes profil de l'admin — v11</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root{--bg:#f6f5f0;--card:#fff;--txt:#222;--mut:#71706b;--line:#dedcd3;
@@ -37,17 +37,37 @@
   .b-off{background:var(--badbg);color:var(--bad);cursor:help}.count{font-variant-numeric:tabular-nums}
 
   .plist{display:flex;flex-direction:column;gap:10px}
-  .row{display:grid;grid-template-columns:1fr 150px 176px 30px;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:13px 15px}
-  .row.open{border-left:3px solid var(--warn)}.row.off{border-left:3px solid var(--bad)}
+  .row{display:grid;grid-template-columns:1fr 46px 172px 104px 30px;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:13px 15px}
+  .row.open{border-left:3px solid var(--warn)}
+  .row.off{background:color-mix(in srgb,var(--paper) 50%,transparent)}
+  .row.off .rmail{opacity:.5}
   .row.can{cursor:pointer}.row.can:hover{background:color-mix(in srgb,var(--paper) 55%,transparent);border-color:var(--mut)}
   .rmail{font-weight:700;font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .rstate{display:inline-flex;align-items:center;gap:8px}
   .ractions{display:inline-flex;gap:7px;justify-content:flex-end}
   .rchev{color:var(--mut);display:inline-flex;justify-content:center}.row.off .rchev{visibility:hidden}
+
+  /* interrupteur de connexion (présent sur chaque ligne) */
+  .rtgl{display:inline-flex;justify-content:center}
+  .tgl{width:38px;height:22px;border-radius:99px;border:1px solid var(--line);background:var(--paper);position:relative;cursor:pointer;padding:0;flex-shrink:0}
+  .tgl .knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:99px;background:var(--card);border:1px solid var(--line);transition:left .15s}
+  .tgl[aria-checked="true"]{background:var(--okbg);border-color:color-mix(in srgb,var(--ok) 45%,transparent)}
+  .tgl[aria-checked="true"] .knob{left:18px;background:var(--ok);border-color:var(--ok)}
+  .tgl:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+  /* cadenas = LE bouton d'accès (ouvert/fermé) + décompte */
+  .lockbtn{width:30px;height:30px;border-radius:9px;border:1px solid;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;flex-shrink:0;background:var(--card)}
+  .lockbtn.closed{color:var(--bad);background:var(--badbg);border-color:color-mix(in srgb,var(--bad) 38%,transparent)}
+  .lockbtn.closed:hover{border-color:var(--bad)}
+  .lockbtn.open{color:var(--warn);background:var(--warnbg);border-color:color-mix(in srgb,var(--warn) 50%,transparent)}
+  .lockbtn.open:hover{border-color:var(--warn)}
+  .cd{color:var(--warn);font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;cursor:default}
+  .offword{color:var(--mut);font-size:13px}
 
   .detail{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
   .dhead{padding:14px 16px;border-bottom:1px solid var(--line)}
   .back{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:var(--acc);cursor:pointer;font-size:13.5px;padding:0;margin-bottom:11px}
-  .drow{display:grid;grid-template-columns:1fr 150px 176px;align-items:center;gap:12px}
+  .drow{display:grid;grid-template-columns:1fr 46px 172px auto;align-items:center;gap:12px}
   .dmail{font-weight:700;font-size:17px}.dbody{padding:15px 16px}
   .plabel{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--mut);margin:0 0 10px}
   .srow{display:grid;grid-template-columns:120px 1fr auto;align-items:center;gap:14px;padding:10px 0;border-top:1px solid var(--line)}.srow:first-of-type{border-top:0}
@@ -77,7 +97,10 @@
   .izbtn{width:28px;height:28px;padding:0;display:inline-flex;align-items:center;justify-content:center;color:var(--mut);flex-shrink:0}
   .izbtn:hover{color:var(--acc);border-color:var(--acc)}
   .izbtn.del:hover{color:var(--bad);border-color:var(--bad);background:var(--badbg)}
-  .addzone{align-self:flex-start;display:inline-flex;align-items:center;gap:7px}
+  /* bloc d'ajout : ressemble à une zone, mais en pointillés, bouton à droite */
+  .addrow{display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px dashed color-mix(in srgb,var(--mut) 42%,var(--line));border-radius:9px}
+  .addrow .addhint{color:var(--mut);font-size:13px;display:inline-flex;align-items:center;gap:8px}
+  .addrow button{margin-left:auto}
   .emptyzone{font-size:13px;color:var(--mut);margin:0}
 
   .browser{border:1px solid var(--line);border-radius:10px;overflow:hidden}
@@ -110,14 +133,16 @@
 
 <div class="wrap">
   <div class="doc">
-    <h1>Cartes profil — v8</h1>
-    <p class="lede">Zones resserrées : le <b>nom du dossier</b> prend la place (chemin en infobulle), le statut devient une pastille <b>P</b>/<b>T</b>, « ouvrir » et « retirer » passent en icônes. L'ajout d'une zone se fait via un bouton <b>« Ajouter »</b> qui ouvre le navigateur Drive dans la même fenêtre — autant de fois qu'on veut.</p>
+    <h1>Cartes profil — v11</h1>
+    <p class="lede">La ligne d'un compte se lit en trois temps. <b>L'interrupteur</b> : le compte est-il connecté à Google ? <b>Le cadenas</b> : l'accès est-il verrouillé ou déverrouillé ? C'est un bouton — clique dessus. <b>Le décompte</b> : le temps restant, en vrai. Un compte déconnecté est grisé : un seul geste possible, l'interrupteur.</p>
     <div class="verdict">
-      <b>Changements v8</b>
+      <b>Changements v11</b>
       <ul>
-        <li><b>Ajouter plusieurs zones.</b> La fenêtre a deux temps : la liste, et l'ajout (navigateur Drive) via « ＋ Ajouter une zone ». On revient à la liste après chaque ajout.</li>
-        <li><b>Zone resserrée.</b> Nom seul (chemin en infobulle), statut = pastille <b>P</b>/<b>T</b> colorée (infobulle), « ouvrir » = icône ↗, « retirer » = croix ✕.</li>
-        <li><b>Droits :</b> « envoi » en rouge, plus barré.</li>
+        <li><b>L'interrupteur de connexion</b>, présent sur chaque ligne. Éteint = compte grisé, rien d'autre à voir. L'allumer = refaire la connexion (navigateur).</li>
+        <li><b>Le cadenas est LE bouton d'accès.</b> Fermé (rouge) → clic = Touch ID, déverrouillé 30 min. Ouvert (orange) → clic = demande « reverrouiller ? ». Vraie icône ouverte quand c'est ouvert.</li>
+        <li><b>Compte à rebours réel.</b> « encore 2:58 » qui décompte ; à zéro, l'accès se reverrouille tout seul, sous tes yeux.</li>
+        <li><b>« Prolonger… » gardé.</b> Et dans la page du compte : boutons explicites (Déverrouiller / Reverrouiller / Prolonger).</li>
+        <li><b>Connecté ≠ déconnecté, au premier regard.</b> Seules les lignes connectées s'ouvrent (chevron) ; les autres sont grises et muettes.</li>
       </ul>
     </div>
   </div>
@@ -137,7 +162,8 @@
   <div id="zmListMode">
     <p class="fieldlabel">Zones actuelles</p>
     <div class="zlist2" id="zmZones"></div>
-    <button class="addzone" onclick="showAdd()">＋ Ajouter une zone</button>
+    <div class="addrow"><span class="addhint">📁 Nouvelle zone d'écriture</span>
+      <button class="tiny" onclick="showAdd()">＋ Ajouter une zone</button></div>
     <div class="dlgftr"><button onclick="closeZones()">Fermer</button></div>
   </div>
 
@@ -176,42 +202,85 @@
     {name:'Keep',caps:[{t:'lecture',c:'y'},{t:'création',c:'y'}]}
   ];
   var ACCTS={
-    perso:{email:'thomas.couderc@gmail.com',state:'open',mins:3,zones:[{n:'Livrables/Client-A',k:'perm'},{n:'Projets/2026',k:'temp',e:'1 h 58'}]},
-    zebra:{email:'troiszebres@gmail.com',state:'locked',zones:[]},
-    mw:{email:'matiereweb@gmail.com',state:'expired',zones:[]}
+    perso:{email:'perso@example.com',connected:true,until:Date.now()+3*60*1000,zones:[{n:'Livrables/Client-A',k:'perm'},{n:'Projets/2026',k:'temp',e:'1 h 58'}]},
+    zebra:{email:'client@example.com',connected:true,until:0,zones:[]},
+    mw:{email:'mw@example.com',connected:false,until:0,zones:[]}
   };
   function base(p){var i=p.lastIndexOf('/');return i<0?p:p.slice(i+1);}
 
-  function stateInfo(a){
-    if(a.state==='open')return{badge:'<span class="badge b-warn">🔓 Ouvert · <span class="count">'+a.mins+'</span> min</span>',
-      actions:'<button class="tiny icon" title="Reverrouiller maintenant" aria-label="Reverrouiller" onclick="stop(event);toast(\'Reverrouillé\')">🔒</button>'
-             +'<button class="tiny" onclick="stop(event);toast(\'Accès prolongé de 30 min\')">Prolonger…</button>',can:true};
-    if(a.state==='locked')return{badge:'<span class="badge b-bad">🔒 Verrouillé</span>',
-      actions:'<button class="tiny primary" onclick="stop(event);toast(\'Touch ID → déverrouillé\')">Déverrouiller…</button>',can:true};
-    return{badge:'<span class="badge b-off" tabindex="0" title="Le jeton OAuth a expiré (app en mode test, 7 jours). « Déverrouiller » ne suffirait pas : il faut RECONNECTER le compte (navigateur). Zones et policy conservées.">⚠ Jeton expiré</span>',
-      actions:'<button class="tiny primary" onclick="stop(event);toast(\'gwsa add mw → navigateur\')">Reconnecter…</button>',can:false};
-  }
-  function renderList(){var v=document.getElementById('listView');v.innerHTML='<div class="plist">'+Object.keys(ACCTS).map(function(id){
-    var a=ACCTS[id],s=stateInfo(a),cls=a.state==='open'?'open':(a.state==='expired'?'off':'');
-    return '<div class="row '+cls+(s.can?' can':'')+'"'+(s.can?' onclick="openDetail(\''+id+'\')"':'')+'>'
-      +'<button class="copy rmail" onclick="copyIt(event,\''+a.email+'\')">'+a.email+' <span class="ci">✓</span></button>'
-      +'<span class="rstate">'+s.badge+'</span><span class="ractions" onclick="stop(event)">'+s.actions+'</span>'
-      +'<span class="rchev">'+(s.can?CHEV:'')+'</span></div>';}).join('')+'</div>';}
+  /* Modèle v11 — deux commandes, deux gestes :
+     - L'INTERRUPTEUR (connexion à Google) : éteint = compte grisé, rien d'autre.
+       L'allumer = refaire la connexion (navigateur).
+     - LE CADENAS (accès) : c'est LE bouton. Fermé → clic = Touch ID, 30 min.
+       Ouvert → clic = « reverrouiller ? ». Décompte réel ; à zéro, ça se referme.
+     Interdits à l'écran : « jeton », « OAuth », « token ». */
+  var LOCK_C='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+  var LOCK_O='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.8-1.3"/></svg>';
+  var view={mode:'list',acct:null};
+  function isOpen(a){return a.connected&&a.until>Date.now();}
+  function fmtLeft(a){var s=Math.max(0,Math.round((a.until-Date.now())/1000));var m=Math.floor(s/60);
+    if(m>=60)return 'encore '+Math.floor(m/60)+' h '+String(m%60).padStart(2,'0');
+    return 'encore '+m+':'+String(s%60).padStart(2,'0');}
+  function tglHtml(id,a){
+    return '<button class="tgl" role="switch" aria-checked="'+a.connected+'" title="'
+      +(a.connected?'Connecté à Google. Pour retirer ce compte de l\'outil : page du compte, zone de danger.'
+                   :'Déconnecté de Google. Clique pour refaire la connexion (navigateur, deux clics — réglages conservés).')
+      +'" onclick="stop(event);toggleConn(\''+id+'\')"><span class="knob"></span></button>';}
+  function lockHtml(id,a){
+    if(!a.connected)return '<span class="offword">Déconnecté</span>';
+    if(isOpen(a))return '<button class="lockbtn open" title="Accès déverrouillé — clique pour reverrouiller maintenant. Sinon ça se referme tout seul à la fin du décompte." aria-label="Reverrouiller" onclick="stop(event);lockClick(\''+id+'\')">'+LOCK_O+'</button>'
+      +'<span class="cd" data-acct="'+id+'" title="Temps restant avant reverrouillage automatique">'+fmtLeft(a)+'</span>';
+    return '<button class="lockbtn closed" title="Accès verrouillé — les assistants ne peuvent ni lire ni écrire. Clique pour déverrouiller (Touch ID, 30 min)." aria-label="Déverrouiller (30 min)" onclick="stop(event);lockClick(\''+id+'\')">'+LOCK_C+'</button>';}
+  function toggleConn(id){var a=ACCTS[id];
+    if(!a.connected){a.connected=true;a.until=0;toast('Connexion refaite (navigateur, démo) — compte connecté, accès verrouillé');}
+    else{toast('Pour retirer ce compte de l\'outil : page du compte, zone de danger.');}
+    rerender();}
+  function lockClick(id){var a=ACCTS[id];
+    if(isOpen(a)){if(confirm('Reverrouiller l\'accès maintenant ?')){a.until=0;toast('Accès reverrouillé');rerender();}}
+    else{a.until=Date.now()+30*60*1000;toast('Touch ID → accès déverrouillé 30 min');rerender();}}
+  function prolong(id){var a=ACCTS[id];a.until=(isOpen(a)?a.until:Date.now())+30*60*1000;toast('Accès prolongé de 30 min');rerender();}
+  function relock(id){var a=ACCTS[id];a.until=0;toast('Accès reverrouillé');rerender();} /* bouton explicite : pas de confirm, il dit déjà ce qu'il fait */
+  function rerender(){if(view.mode==='detail'&&view.acct){openDetail(view.acct,true);}else{renderList();}}
 
-  function openDetail(id){var a=ACCTS[id],s=stateInfo(a);
+  function renderList(){view={mode:'list',acct:null};
+    var v=document.getElementById('listView');v.hidden=false;document.getElementById('detailView').hidden=true;
+    v.innerHTML='<div class="plist">'+Object.keys(ACCTS).map(function(id){
+      var a=ACCTS[id],cls=!a.connected?'off':(isOpen(a)?'open can':'can');
+      return '<div class="row '+cls+'"'+(a.connected?' onclick="openDetail(\''+id+'\')"':'')+'>'
+        +'<button class="copy rmail" onclick="copyIt(event,\''+a.email+'\')">'+a.email+' <span class="ci">✓</span></button>'
+        +'<span class="rtgl" onclick="stop(event)">'+tglHtml(id,a)+'</span>'
+        +'<span class="rstate" onclick="stop(event)">'+lockHtml(id,a)+'</span>'
+        +'<span class="ractions" onclick="stop(event)">'+(isOpen(a)?'<button class="tiny" onclick="prolong(\''+id+'\')">Prolonger…</button>':'')+'</span>'
+        +'<span class="rchev">'+(a.connected?CHEV:'')+'</span></div>';}).join('')+'</div>';}
+
+  function openDetail(id,keep){var a=ACCTS[id];view={mode:'detail',acct:id};
+    var actions=isOpen(a)
+      ?'<button class="tiny" onclick="prolong(\''+id+'\')">Prolonger…</button><button class="tiny" onclick="relock(\''+id+'\')">Reverrouiller maintenant</button>'
+      :'<button class="tiny primary" onclick="lockClick(\''+id+'\')">Déverrouiller (30 min)…</button>';
     var caps=function(app){return app.caps.map(function(c){return '<span class="cap '+c.c+'">'+c.t+(c.d?' <span class="d">'+c.d+'</span>':'')+'</span>';}).join('');};
     var apps=APPS.map(function(app){var cfg=app.zones?'<button class="tiny" onclick="openZones(event,\''+id+'\')">Configurer…</button>':'<button class="tiny" onclick="toast(\'Ouvre la policy '+app.name+'\')">Configurer…</button>';
       return '<div class="srow"><span class="sname">'+app.name+'</span><span class="caps">'+caps(app)+'</span>'+cfg+'</div>';}).join('');
     document.getElementById('detailView').innerHTML='<div class="detail"><div class="dhead">'
-      +'<button class="back" onclick="closeDetail()">‹ Comptes</button>'
+      +'<button class="back" onclick="renderList()">‹ Comptes</button>'
       +'<div class="drow"><button class="copy dmail" onclick="copyIt(event,\''+a.email+'\')">'+a.email+' <span class="ci">✓</span></button>'
-      +'<span class="rstate">'+s.badge+'</span><span class="ractions">'+s.actions+'</span></div></div>'
+      +'<span class="rtgl">'+tglHtml(id,a)+'</span>'
+      +'<span class="rstate">'+lockHtml(id,a)+'</span>'
+      +'<span class="ractions">'+actions+'</span></div></div>'
       +'<div class="dbody"><p class="plabel">Droits par application</p>'+apps
       +'<div class="danger"><p class="dl">Zone de danger</p><div class="drowx">'
-        +'<p>Déconnecter ce compte et oublier ses jetons. La policy et les zones sont perdues. Réversible seulement par une reconnexion complète.</p>'
-        +'<button class="dline" onclick="toast(\'Compte révoqué (démo)\')">Révoquer ce compte</button></div></div></div></div>';
-    document.getElementById('listView').hidden=true;document.getElementById('detailView').hidden=false;window.scrollTo(0,0);}
-  function closeDetail(){document.getElementById('detailView').hidden=true;document.getElementById('listView').hidden=false;}
+        +'<p>L\'outil oublie ce compte : les assistants n\'y auront plus accès et tes réglages (zones, autorisations) seront perdus. Rien n\'est supprimé dans ton compte Google. Pour l\'utiliser à nouveau, il faudra refaire une connexion complète.</p>'
+        +'<button class="dline" onclick="toast(\'Compte retiré de l\\\'outil (démo)\')">Retirer ce compte de l\'outil</button></div></div></div></div>';
+    document.getElementById('listView').hidden=true;document.getElementById('detailView').hidden=false;
+    if(!keep)window.scrollTo(0,0);}
+
+  /* le décompte vit : mise à jour chaque seconde ; à zéro, reverrouillage auto */
+  setInterval(function(){
+    var expired=false;
+    Object.keys(ACCTS).forEach(function(id){var a=ACCTS[id];
+      if(a.connected&&a.until&&a.until<=Date.now()){a.until=0;expired=true;}});
+    if(expired){toast('Décompte terminé — accès reverrouillé automatiquement');rerender();return;}
+    document.querySelectorAll('.cd').forEach(function(el){var a=ACCTS[el.getAttribute('data-acct')];if(a)el.textContent=fmtLeft(a);});
+  },1000);
 
   function toast(m){var t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(function(){t.classList.remove('show')},1700);}
   function stop(e){e.stopPropagation();}
@@ -259,7 +328,7 @@
   function clearSel(){sel=null;document.getElementById('zmSel').hidden=true;document.getElementById('zmPick').style.display='';document.getElementById('zmGrant').disabled=true;}
   function pick(b){b.parentNode.querySelectorAll('.chipbtn').forEach(function(c){c.setAttribute('aria-pressed','false')});b.setAttribute('aria-pressed','true');}
   function grantZone(){if(!sel)return;var d='';dlg.querySelectorAll('.chipbtn').forEach(function(c){if(c.getAttribute('aria-pressed')==='true')d=c.textContent;});
-    ACCTS[curAcct].zones.push({n:sel,k:'temp',e:d.replace(' ','')+' 00'});toast('Zone « '+base(sel)+' » accordée pour '+d);showList();}
+    ACCTS[curAcct].zones.push({n:sel,k:'temp',e:d+' 00'});toast('Zone « '+base(sel)+' » accordée pour '+d);showList();}
   dlg.addEventListener('click',function(e){if(e.target===dlg)closeZones();});
 
   renderList();

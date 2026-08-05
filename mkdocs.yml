@@ -1,6 +1,6 @@
 site_name: google-multi-account
 site_description: Google Workspace multi-comptes pour agents LLM — 100 % local.
-site_url: https://docs.elzinko.fr/
+site_url: https://google-multi-account-docs.vercel.app/
 repo_url: https://github.com/elzinko/google-mcp-multi-account
 repo_name: elzinko/google-mcp-multi-account
 edit_uri: edit/main/docs/
@@ -66,6 +66,10 @@ plugins:
 
 nav:
   - Accueil: index.md
+  - Articles:
+      - La genèse — des corvées en travers des comptes: articles/1-la-genese.md
+      - L'élicitation — un agent qui demande, un humain qui authentifie: articles/2-elicitation-authentification-forte.md
+      - Un agent qui circule entre vos comptes: articles/3-agent-en-travers-des-comptes.md
   - Démarrer:
       - Installer & mettre à jour: mcp-setup.md
       - OAuth / Google Cloud: setup-oauth.md
