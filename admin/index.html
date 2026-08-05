@@ -155,7 +155,6 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
 .docbody table { border-collapse:collapse; margin:8px 0; font-size:13px; }
 .docbody th, .docbody td { border:1px solid var(--line); padding:4px 8px; text-align:left; vertical-align:top; }
 .docbody th { background:var(--bg); }
-.docbody .mermaid { display:flex; justify-content:center; background:transparent; margin:10px 0; overflow-x:auto; }
 .pickrow { display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:7px; margin:1px 0; font-size:13.5px; cursor:pointer; user-select:none; }
 .pickrow:hover:not(.selected) { background:color-mix(in srgb, var(--txt) 8%, var(--card)); }
 .pickrow.selected { background:var(--accbg); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--acc) 45%, transparent); }
@@ -642,11 +641,10 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
 
 <div id="toast"></div>
 
-<script src="/vendor/mermaid.min.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const H = { "Content-Type": "application/json", "X-GWSA-Admin": "1" };
-let PROFILES = [], DOCS = null, polTarget = null, unlockTarget = null, disconnectTarget = null, relockTarget = null;
+let PROFILES = [], polTarget = null, unlockTarget = null, disconnectTarget = null, relockTarget = null;
 let SESSIONS = [], sessActionSid = null;
 const LOCK_LOADING = new Set();
 const UNLOCK_ANIM = new Set(); // dépliage gauche du timer après unlock
@@ -1543,7 +1541,7 @@ async function savePolicy() {
 
 function mdToHtml(md) {
   const codes = [];
-  md = md.replace(/```([\w-]*)\n([\s\S]*?)```/g, (_, lang, c) => { codes.push({ lang, c }); return "\x00" + (codes.length - 1) + "\x00"; });
+  md = md.replace(/```(?:[\w-]*)\n([\s\S]*?)```/g, (_, c) => { codes.push(c); return "\x00" + (codes.length - 1) + "\x00"; });
   md = esc(md);
   // Tableaux markdown : bloc de lignes « | … | » ; \| échappé préservé, ligne |---| ignorée.
   md = md.replace(/(?:^\|.+\|[ \t]*(?:\n|$))+/gm, (block) => {
@@ -1572,9 +1570,7 @@ function mdToHtml(md) {
          .replace(/`([^`\n]+)`/g, "<code>$1</code>")
          .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
   md = md.split(/\n{2,}/).map((b) => /^\s*<(h\d|ul|pre|blockquote|hr|table)/.test(b.trim()) ? b : "<p>" + b.replace(/\n/g, "<br>") + "</p>").join("\n");
-  return md.replace(/\x00(\d+)\x00/g, (_, i) => codes[+i].lang === "mermaid"
-    ? '<div class="mermaid">' + esc(codes[+i].c) + "</div>"
-    : "<pre><code>" + esc(codes[+i].c) + "</code></pre>");
+  return md.replace(/\x00(\d+)\x00/g, (_, i) => "<pre><code>" + esc(codes[+i]) + "</code></pre>");
 }
 
 let LOG_ENTRIES = [];
@@ -1609,7 +1605,6 @@ function toggleLogDense() {
   renderLog();
   try { localStorage.setItem("gwsaLogDense", LOG_DENSE ? "1" : "0"); } catch {}
 }
-let mmdSeq = 0;
 // Onglet « Bien démarrer » (fiche 0069) : orientation utilisateur, écrite ici
 // (pas un fichier repo). Le contenu dev/architecte reste dans les autres onglets
 // et sur la doc complète en ligne.
