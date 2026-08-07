@@ -76,6 +76,20 @@ flowchart TD
 direct). Les credentials restent sous `~/.config/gws-accounts/` (pas encore de
 vault — fiche 0003).
 
+### 1.1 Deux noms : le dépôt vs le connecteur { #noms-depot-connecteur }
+
+Deux identifiants proches — à ne pas confondre :
+
+| Nom | Ce qu'il désigne | Où on le voit |
+|-----|------------------|---------------|
+| **`google-mcp-multi-account`** | le **dépôt / projet** (et le nom que le serveur annonce, `mcp_server.py:SERVER_NAME`) | URL GitHub, dossier cloné, binaire `bin/google-mcp`, install `~/.local/share/google-mcp/` |
+| **`google-multi-account`** | le **connecteur installé** — la clé sous `mcpServers` dans la config client | Claude Desktop → Connecteurs, `claude mcp get`, entrée protégée par l'admin |
+
+Ce n'est pas un écart mais la **convention MCP** : le dépôt porte `mcp` (découvrable,
+auto-descriptif), le connecteur est court (il vit déjà sous `mcpServers` — répéter
+« mcp » serait redondant). Même schéma ailleurs : `github/github-mcp-server` →
+connecteur `github` ; le paquet `mcp-server-git` → connecteur `git`.
+
 ---
 
 ## 2. Composants précis
