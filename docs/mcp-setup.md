@@ -9,6 +9,12 @@ compte : le tool `setup_status` guide l'initialisation depuis le client LLM.)
 
 Remplace `/ABS/PATH/google-mcp-multi-account` par le chemin absolu du clone.
 
+!!! note "Pourquoi deux noms ?"
+    Le **dépôt** s'appelle `google-mcp-multi-account`, mais le **connecteur** que tu
+    déclares sous `mcpServers` s'appelle `google-multi-account` (sans `mcp`). C'est la
+    convention MCP — comme `github-mcp-server` → `github`. Détail :
+    [architecture.md](architecture.md#noms-depot-connecteur).
+
 ## Installer sans cloner (curl)
 
 Pour **utiliser** le serveur (pas le développer), pas besoin de cloner le dépôt :
