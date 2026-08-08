@@ -6,8 +6,9 @@ mal, et ce qui pourrait le rendre inutile. Il complète [`SECURITY.md`](https://
 et [`threat-model.md`](threat-model.md) (centrés sécurité) par une vue plus large :
 produit, ingénierie, stratégie.
 
-*Écrit le 2026-07-24. Le projet bouge vite : certaines limites ci-dessous sont déjà
-en cours de correction sur `main`.*
+*Écrit le 2026-07-24, revu le 2026-08-08. Le projet bouge vite : certaines limites
+ci-dessous sont déjà corrigées — le décompte des outils MCP et l'état de
+l'installation (releases, `curl` sans clone) ont été rafraîchis.*
 
 ## En une phrase
 
@@ -73,9 +74,10 @@ reste à faire.
 
 ### 4. La couverture MCP est étroite
 
-9 outils MCP, dont 3 utilitaires. On a Gmail (lire + brouillon) et Drive (lire +
-créer). Calendar, Docs, Sheets, Tasks : **aucun** outil MCP — accessibles seulement
-via le shell `gwsa`, donc **pas depuis Claude Desktop**. En face,
+17 outils MCP, dont 3 utilitaires. On a Gmail (lire, brouillon, pièces jointes) et
+Drive (lire, créer, modifier, copier, téléverser, partager). Mais Calendar, Docs,
+Sheets, Tasks : **aucun** outil MCP — accessibles seulement via le shell `gwsa`,
+donc **pas depuis Claude Desktop**. En face,
 [taylorwilsdon/google_workspace_mcp](https://github.com/taylorwilsdon/google_workspace_mcp)
 expose une centaine d'outils sur 12 services. C'est le point le plus faible face à
 la concurrence.
@@ -96,10 +98,12 @@ seul un développeur déjà à l'aise avec Google Cloud franchira ce setup.
 
 ### 6. Le projet est fait pour une personne
 
-Documentation en français, installation par `git clone` (pas de paquet installable
-en un clic), pas de release. Un format standard existe pourtant pour distribuer un
-serveur MCP en un clic : les [Desktop Extensions
-`.mcpb`](https://www.anthropic.com/engineering/desktop-extensions).
+Documentation en **français** (choix assumé) et un chemin de production **macOS
+seulement**. L'installation, en revanche, n'est plus un frein : `curl | bash` sans
+clone, versions taguées et **releases GitHub**, mise à jour par `gwsa update`. Reste
+qu'aucun format « un clic » type [Desktop Extensions
+`.mcpb`](https://www.anthropic.com/engineering/desktop-extensions) n'est encore
+produit, et que l'audience visée demeure étroite.
 
 ## Face à la concurrence
 
