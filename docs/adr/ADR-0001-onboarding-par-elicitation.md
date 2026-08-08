@@ -4,6 +4,8 @@
 **Date :** 2026-07-22
 **Décideurs :** Thomas (PO)
 
+> **TL;DR** — Pour alléger la configuration, le serveur local qui relie l'assistant IA aux comptes Google va guider l'utilisateur en diagnostiquant ce qui manque et en affichant les commandes exactes à coller, mais il se limitera à lire et à proposer : c'est toujours l'humain qui exécute les actions sensibles (connecter un compte, ouvrir des droits), pour que l'IA ne puisse jamais élargir seule les accès.
+
 ## Contexte
 
 Le README donne l'impression d'une configuration lourde : provisioning GCP,
