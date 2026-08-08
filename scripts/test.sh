@@ -2595,17 +2595,24 @@ print('parent', get_session(pid), 'child', get_session(cid))
 # passer la CI au vert tout en livrant un défaut permissif à chaque nouveau compte.
 pol_inv="$("$PY" -c "
 from gateway.default_policy import DEFAULT_POLICY as P
-bad = []
-if P['gmail']['send'] is not False: bad.append('gmail.send')
-if P['gmail']['delete'] is not False: bad.append('gmail.delete')
-if P['drive']['delete'] is not False: bad.append('drive.delete')
-if P['drive']['share'] is not False: bad.append('drive.share')
-if P['drive']['zonesOnly'] is not True: bad.append('drive.zonesOnly')
-if P['drive']['writeFolders'] != []: bad.append('drive.writeFolders')
+# Exhaustif : TOUT flag qui envoie / partage / supprime / écrit doit être False,
+# sur tous les services — sinon une dérive (ex. calendar.delete=True) passerait.
+must_be_false = [
+    ('gmail','send'), ('gmail','delete'), ('gmail','update'), ('gmail','settings'),
+    ('drive','delete'), ('drive','share'),
+    ('calendar','create'), ('calendar','update'), ('calendar','delete'), ('calendar','share'),
+    ('keep','update'), ('keep','delete'),
+    ('docs','create'), ('docs','update'),
+    ('sheets','create'), ('sheets','update'),
+    ('tasks','create'), ('tasks','update'), ('tasks','delete'),
+]
+bad = [f'{s}.{k}' for s, k in must_be_false if P.get(s, {}).get(k) is not False]
+if P['drive'].get('zonesOnly') is not True: bad.append('drive.zonesOnly')
+if P['drive'].get('writeFolders') != []: bad.append('drive.writeFolders')
 print('OK' if not bad else 'BAD:' + ','.join(bad))
 ")"
 [[ "$pol_inv" == "OK" ]] \
-  && pass "DEFAULT_POLICY : invariants de sûreté (send/delete/share=false · zonesOnly=true · writeFolders vide)" \
+  && pass "DEFAULT_POLICY : invariants de sûreté (tous services : envoi/partage/suppression/écriture=false · zones fermées)" \
   || fail "DEFAULT_POLICY invariants ($pol_inv)"
 
 PROJ_ROOT="$TMP/gwsa-proj-inside"
