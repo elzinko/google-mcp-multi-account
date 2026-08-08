@@ -11,6 +11,11 @@ pr:
 created: 2026-07-26
 ---
 
+> **Frontière (non-doublon avec [[0042]]).** 0026 = surface **agent** : version
+> annoncée via les tools (`setup_status`) + détection de dérive config ↔
+> `current`. La visibilité **humaine** (Connecteurs / admin), le parcours de
+> mise à jour post-merge et la cohabitation stable/dogfood vivent dans [[0042]].
+
 ## Contexte / Problème
 
 Rien ne dit, depuis une conversation, quelle version du MCP répond. Il faut

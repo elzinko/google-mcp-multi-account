@@ -39,7 +39,7 @@
 | 0032 | La notification Touch ID doit nommer le compte et le produit, pas l'alias seul | feature | P2 |  |  | ✅ shipped | #48 |
 | 0036 | Refonte des cartes profil de l'admin — liste, page de compte, zones (spec maquette v11) | feature | P2 |  |  | ✅ shipped | #44 |
 | 0040 | Le déploiement branche Claude Desktop mais pas Claude Code (CLI) — généraliser | feature | P2 |  |  | ✅ shipped | #43 |
-| 0041 | Clarifier l'écart policy admin ↔ surface MCP (Drive copie, contenu, modification) | bug | P2 |  |  | 🟠 in-progress | #52 |
+| 0041 | Clarifier l'écart policy admin ↔ surface MCP (Drive copie, contenu, modification) | bug | P2 |  |  | ✅ shipped | #52 |
 | 0044 | Sous strongauth, le dialogue Touch ID nomme « swift-frontend » au lieu du produit | bug | P2 |  |  | ✅ shipped | #74 |
 | 0045 | Droits par session et par projet git — état des lieux, écarts, pistes | feature | P2 |  |  | 🟠 in-progress |  |
 | 0046 | CLI locale pour déployer des sandboxes temporaires (branche / worktree) | feature | P2 |  |  | 🟠 in-progress |  |
@@ -47,7 +47,7 @@
 | 0068 | Accessibilité — focus-visible + reduced-motion (cadenas/modales/boutons) | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
 | 0069 | Docs in-app — rework orientation utilisateur | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
 | 0070 | README — quickstart + usage par persona + permissions + contribution | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
-| 0071 | GitHub metadata — description, homepage, topics + badges | chore | P2 | v0.4.0 | 0060 | 🔴 todo |  |
+| 0071 | GitHub metadata — description, homepage, topics + badges | chore | P2 | v0.4.0 | 0060 | ✅ shipped |  |
 | 0001 | Élicitation signée — faire monter `gwsa strongauth` de la présence à la signature | feature | P3 |  |  | 🟠 in-progress |  |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)
@@ -73,4 +73,4 @@
 | 0028 | Ménage des versions déployées (+ CHANGELOG et releases GitHub) | chore | P3 |  |  | 💡 idea |  |
 | 0034 | Mettre à jour le protocole du test manuel drive-2-comptes (limites périmées + nouvelles phases) | chore | P3 |  |  | 💡 idea |  |
 
-> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0020, 0022, 0023, 0024, 0025, 0027, 0029, 0030, 0031, 0032, 0036, 0037, 0040, 0043, 0044, 0047, 0059, 0072.
+> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0020, 0022, 0023, 0024, 0025, 0027, 0029, 0030, 0031, 0032, 0036, 0037, 0040, 0041, 0043, 0044, 0047, 0059, 0071, 0072.

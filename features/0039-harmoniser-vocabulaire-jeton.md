@@ -50,7 +50,15 @@ suivent pas :
 
 ## Critères d'acceptation
 
-- [ ] À groomer.
+> **Réconciliation (2026-08-08).** Partiel depuis #48 (cartes admin nettoyées).
+> Reste le balayage des surfaces **hors admin** où « token/jeton » resurgit.
+
+- [ ] `CLAUDE.md` : remplacer « token expiré » (l. ~57) par « connexion à Google
+      expirée — à refaire ».
+- [ ] Modale de déconnexion admin (`admin/index.html`) : retirer « tokens ».
+- [ ] `SECURITY.md` : « jeton » → glossaire (verrou / connexion), sans 3ᵉ mot.
+- [ ] Docs (`docs/usage.md`, protocole tests manuels) + sorties `gwsa` lues par
+      l'humain : idem.
 
 ## Notes
 
