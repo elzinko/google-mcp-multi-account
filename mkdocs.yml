@@ -87,6 +87,7 @@ nav:
   - Sous le capot:
       - Architecture: architecture.md
       - Décisions (ADR):
+          - Comment lire ces décisions: adr/index.md
           - ADR-0001 · Onboarding par élicitation: adr/ADR-0001-onboarding-par-elicitation.md
           - ADR-0002 · Email métadonnée hors verrou: adr/ADR-0002-email-metadonnee-hors-verrou.md
           - ADR-0003 · Contenu Drive via dépôt broker: adr/ADR-0003-contenu-drive-via-depot-broker.md
