@@ -2556,6 +2556,22 @@ if [[ "$admin_ready" -eq 1 ]]; then
   [[ "$code_csrf" == "403" ]] \
     && pass "admin /api/sessions : refuse sans X-GWSA-Admin" \
     || fail "admin CSRF sessions (code=$code_csrf)"
+
+  # anti DNS-rebinding : un Host non-loopback est refusé, même AVEC l'en-tête admin
+  code_host="$(curl -s -o /dev/null -w '%{http_code}' \
+    -H 'X-GWSA-Admin: 1' -H "Host: evil.example:$ADMIN_PORT" \
+    "http://127.0.0.1:$ADMIN_PORT/api/sessions")"
+  [[ "$code_host" == "403" ]] \
+    && pass "admin : refuse un Host non-loopback (anti DNS-rebinding)" \
+    || fail "admin Host guard (code=$code_host)"
+
+  # anti-CSRF : une Origin étrangère est refusée (Host loopback par défaut)
+  code_origin="$(curl -s -o /dev/null -w '%{http_code}' \
+    -H 'X-GWSA-Admin: 1' -H 'Origin: http://evil.example' \
+    "http://127.0.0.1:$ADMIN_PORT/api/sessions")"
+  [[ "$code_origin" == "403" ]] \
+    && pass "admin : refuse une Origin étrangère" \
+    || fail "admin Origin guard (code=$code_origin)"
 else
   fail "admin server sessions : démarrage timeout port $ADMIN_PORT"
 fi
@@ -2573,6 +2589,24 @@ print('parent', get_session(pid), 'child', get_session(cid))
 [[ "$out_close" == *"parent None"* && "$out_close" == *"child None"* ]] \
   && pass "close_session : purge parent + descendants" \
   || fail "close_session : purge incomplète ($out_close)"
+
+# ── DEFAULT_POLICY : invariants de sûreté du default-deny livré par `gwsa add` ──
+# Garde le point d'entrée : basculer send/share/delete ou ouvrir les zones ferait
+# passer la CI au vert tout en livrant un défaut permissif à chaque nouveau compte.
+pol_inv="$("$PY" -c "
+from gateway.default_policy import DEFAULT_POLICY as P
+bad = []
+if P['gmail']['send'] is not False: bad.append('gmail.send')
+if P['gmail']['delete'] is not False: bad.append('gmail.delete')
+if P['drive']['delete'] is not False: bad.append('drive.delete')
+if P['drive']['share'] is not False: bad.append('drive.share')
+if P['drive']['zonesOnly'] is not True: bad.append('drive.zonesOnly')
+if P['drive']['writeFolders'] != []: bad.append('drive.writeFolders')
+print('OK' if not bad else 'BAD:' + ','.join(bad))
+")"
+[[ "$pol_inv" == "OK" ]] \
+  && pass "DEFAULT_POLICY : invariants de sûreté (send/delete/share=false · zonesOnly=true · writeFolders vide)" \
+  || fail "DEFAULT_POLICY invariants ($pol_inv)"
 
 PROJ_ROOT="$TMP/gwsa-proj-inside"
 rm -rf "$PROJ_ROOT"
