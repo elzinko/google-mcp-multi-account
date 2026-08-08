@@ -43,7 +43,16 @@ Le test manuel drive-2-comptes a été rejoué en réel le 2026-07-27 (comptes
 
 ## Critères d'acceptation
 
-- [ ] À groomer.
+> **Réconciliation (2026-08-08).** En grande partie absorbé : `PROTOCOLE.md` a été
+> réécrit par #47 (corbeille = suppression, fiche 0037) et #77 — la section
+> « Limites v1 » périmée a disparu, sémantique corbeille + refus hors-zone
+> documentés. Reste l'angle **sécurité** non écrit.
+
+- [x] Section « Limites v1 » retirée / à jour (upload de contenu livré) — #47/#77.
+- [ ] Consigner « **zone = territoire, pas propriété du créateur** » (accorder une
+      zone = écriture + corbeille sur tout son contenu) dans `PROTOCOLE.md`
+      (et peut-être `SECURITY.md`).
+- [ ] Phase explicite « propagation de l'autorisation aux **sous-dossiers** ».
 
 ## Notes
 

@@ -58,17 +58,22 @@ défaut** sur le chemin public.
 
 ## Critères d'acceptation
 
-- [ ] `site/index.html` et `site/docs.html` (et copy associée) s’affichent en
-      **anglais** par défaut (ou i18n avec EN default) — plus de landing FR
-      seule pour un visiteur international.
-- [ ] README anglais à la racine, à jour, cohérent avec le parcours publish /
-      setup MCP ; version FR en regard **ou** lien explicite si conservée.
-- [ ] Docs d’accueil clés (`mcp-setup`, `setup-oauth`, `usage` — ou équivalents
-      publics) disponibles en anglais.
-- [ ] Politique de langue des messages CLI décidée et documentée (même si
-      l’application complète est reportée).
-- [ ] Nom produit affiché sur les surfaces publiques cohérent (décision
-      consignée) — **sans** renommer le dépôt GitHub dans cette fiche.
+> **Réconciliation (2026-08-08).** L'essentiel est livré par le rebrand
+> [#58](https://github.com/elzinko/google-mcp-multi-account/pull/58) : landing EN
+> + bascule FR/EN, README EN, cohérence du nom produit. **Retournement** sur les
+> docs : le site de doc [[0072]] ([#79](https://github.com/elzinko/google-mcp-multi-account/pull/79))
+> a été fait **délibérément en français** → le critère « docs d'accueil EN » est
+> **abandonné**. Seul reste réel : trancher la **langue des messages CLI**.
+
+- [x] `site/index.html` et `site/docs.html` s’affichent en **anglais** par défaut
+      — livré #58 (landing EN + bascule FR/EN persistée).
+- [x] README anglais à la racine, à jour, cohérent avec le parcours publish /
+      setup MCP — livré #58.
+- [x] ~~Docs d’accueil clés en anglais~~ — **abandonné** : le site de doc
+      ([[0072]] / #79) est délibérément **FR** (docs.elzinko.fr).
+- [ ] Politique de langue des messages CLI décidée et documentée ← **seul reste**.
+- [x] Nom produit affiché sur les surfaces publiques cohérent — livré #58
+      (+ note nommage dépôt vs connecteur, commit dc5a341).
 
 ## Hors scope
 

@@ -37,6 +37,13 @@ Après le broker Phase 2 A (daemon + RPC) :
 
 ## Critères d'acceptation
 
+> **Réconciliation (2026-08-08).** Relocalisation **partielle** atterrie via #49 :
+> `gateway/vault.py` déplace les creds vers `.vault/<alias>/`. Mais c'est un dossier
+> `0700` **au même UID** — un agent avec shell peut encore le lire ;
+> `docs/threat-model.md` + `SECURITY.md` listent d'ailleurs le vault comme
+> « prévu ». Aucun critère ci-dessous n'est rempli : l'isolement **dur**
+> (user/keychain séparé) reste à construire. Fiche valide, `idea` P3.
+
 - [ ] Un process « agent » (même UID sandboxé ou sans droit de lecture vault) ne
       peut pas obtenir un access token Google ni invoquer `gws` utilement
 - [ ] Le broker continue de servir MCP / gwsa pour les opérations autorisées

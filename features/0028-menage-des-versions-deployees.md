@@ -29,7 +29,13 @@ version sans lire le journal git.
 
 ## Critères d'acceptation
 
-- [ ] À groomer.
+> **Réconciliation (2026-08-08).** 2/3 déjà faits : `CHANGELOG.md` existe et les
+> **releases GitHub** sont publiées (v0.3.0, v0.4.0). Reste **un seul** item.
+
+- [x] `CHANGELOG.md` (une section par tag).
+- [x] Releases GitHub (`gh release`) — v0.3.0, v0.4.0 publiées.
+- [ ] `deploy-local.sh --prune [n]` : garder les `n` dernières versions +
+      `current`, jamais celle en service (aucun `--prune` aujourd'hui).
 
 ## Notes
 

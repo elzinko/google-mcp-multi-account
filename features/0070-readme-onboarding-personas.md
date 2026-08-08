@@ -23,7 +23,15 @@ Restructurer : quickstart 3–5 min, usage par persona, permissions IAM /
 
 ## Critères d'acceptation
 
-- [ ] Voir issue GitHub (source de vérité des critères)
+> **Réconciliation (2026-08-08).** Le rebrand #58 a déjà refait le README :
+> quickstart, permissions / human-in-the-loop, badges + posture sécurité. Restent
+> deux manques ciblés.
+
+- [x] Quickstart + permissions/élicitation + badges/sécurité — livré #58.
+- [ ] **Usage par persona** (≈3 : utilisateur quotidien, admin/PO, contributeur).
+- [ ] Section **Contribution** explicite (setup dev, tests, conventions de
+      commit) — au-delà du bloc « Development » actuel.
+- Source des critères : [issue #70](https://github.com/elzinko/google-mcp-multi-account/issues/70).
 
 ## Notes
 
