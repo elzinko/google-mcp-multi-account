@@ -1,6 +1,8 @@
 site_name: google-multi-account
 site_description: Google Workspace multi-comptes pour agents LLM — 100 % local.
-site_url: https://docs.elzinko.fr/
+# URL de publication réelle (GitHub Pages). Repasser sur https://docs.elzinko.fr/
+# une fois le domaine custom branché (Pages → Custom domain + CNAME DNS).
+site_url: https://elzinko.github.io/google-mcp-multi-account/
 repo_url: https://github.com/elzinko/google-mcp-multi-account
 repo_name: elzinko/google-mcp-multi-account
 edit_uri: edit/main/docs/
@@ -50,7 +52,11 @@ markdown_extensions:
   - toc:
       permalink: true
   - pymdownx.details
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.inlinehilite
   - pymdownx.highlight:
       anchor_linenums: true

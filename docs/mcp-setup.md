@@ -4,8 +4,9 @@ Le binaire [`bin/google-mcp`](https://github.com/elzinko/google-mcp-multi-accoun
 (JSON-RPC, une ligne = un message). Il ne parle à Google que via la
 [gateway](https://github.com/elzinko/google-mcp-multi-account/tree/main/gateway/) (policy + verrous + executor v1 → `gws`).
 
-Prérequis : `gws` installé, Python 3. (Pas besoin d'avoir déjà connecté un
-compte : le tool `setup_status` guide l'initialisation depuis le client LLM.)
+Prérequis : la CLI [`gws`](https://github.com/googleworkspace/cli) installée
+(`brew install googleworkspace-cli`) et Python 3. (Pas besoin d'avoir déjà connecté
+un compte : le tool `setup_status` guide l'initialisation depuis le client LLM.)
 
 Remplace `/ABS/PATH/google-mcp-multi-account` par le chemin absolu du clone.
 
@@ -64,10 +65,11 @@ Idempotent (relançable sans risque). Puis **redémarrer Claude Desktop**.
 }
 ```
 
-Tools attendus (après redémarrage) : `profiles_list`, `setup_status`,
-`gmail_list`, `gmail_get`, `gmail_draft_create`, `gmail_attachment_get`,
-`drive_list`, `drive_get`, `drive_read`, `drive_create`, `drive_copy`,
-`drive_upload`, `access_request`.
+Tools attendus (après redémarrage), **17 au total** : `profiles_list`,
+`setup_status`, `gmail_list`, `gmail_get`, `gmail_draft_create`,
+`gmail_attachment_get`, `drive_list`, `drive_get`, `drive_read`, `drive_create`,
+`drive_update`, `drive_copy`, `drive_upload`, `drive_permissions_list`,
+`drive_permissions_create`, `drive_permissions_delete`, `access_request`.
 
 ## Cursor
 

@@ -27,16 +27,28 @@
 
 ## 🚀 Quickstart
 
-macOS Apple Silicon. **Install without cloning:**
+macOS Apple Silicon.
+
+**Prerequisite** — the upstream [`gws` CLI](https://github.com/googleworkspace/cli) (the Google Workspace CLI this project wraps) and Python 3:
+
+```bash
+brew install googleworkspace-cli
+```
+
+**1. Install** — no clone needed:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/elzinko/google-mcp-multi-account/main/install.sh | bash
 ```
 
-This installs the latest release, puts `gwsa` on your PATH, wires your Claude clients, and prints the one-shot **Google setup** that remains (an OAuth project, ~10 min — see [docs/setup-oauth.md](docs/setup-oauth.md)). Then connect an account and restart Claude Desktop (Cmd-Q):
+This puts the latest release on your machine, `gwsa` on your PATH, and wires your Claude clients.
+
+**2. Google setup** (~10 min, once) — an OAuth project in Google Cloud: [docs/setup-oauth.md](docs/setup-oauth.md). No account connects and no Google data flows until it's done — `setup_status` still runs to guide you.
+
+**3. Connect an account**, then restart Claude Desktop (Cmd-Q):
 
 ```bash
-gwsa add personal     # "personal" = your alias · browser → pick account → accept
+gwsa add perso your.email@gmail.com    # "perso" = short name · the email pins the account
 gwsa list             # profiles + state
 ```
 
@@ -54,14 +66,16 @@ The LLM **can never widen its own access**. Every door opens by a human gesture 
 
 ```mermaid
 flowchart LR
-    USER["🧑 Human — unlock / grant / policy"]
+    USER["🧑 Human"]
     LLM["LLM clients — Desktop / Code / Cursor"]
     MCP["bin/google-mcp — MCP stdio"]
-    GW["gateway/ — policy + locks"]
-    GWSA["bin/gwsa — profiles · locks · grants"]
+    GW["gateway/ — enforces policy + locks"]
+    STATE["locks · grants · policy"]
+    GWSA["bin/gwsa"]
     GOOGLE["Google APIs"]
-    USER --> GWSA
-    LLM --> MCP --> GW --> GWSA --> GOOGLE
+    LLM --> MCP --> GW --> GOOGLE
+    GW -.->|reads| STATE
+    USER -->|unlock / grant / policy| GWSA -->|writes| STATE
 ```
 
 Why a wrapper, the local broker, who talks to whom: [docs/architecture.md](docs/architecture.md). Step-by-step walkthroughs: [diagrams/](diagrams/).
@@ -93,7 +107,7 @@ features/  # backlog — one card per feature/bug
 <details>
 <summary><b>Naming</b> — product vs repo vs CLI</summary>
 
-Product / MCP server `google-multi-account` (source of truth: `gateway/config.py` `PRODUCT_SLUG`) · git repo `google-mcp-multi-account` · CLI `gwsa` · MCP binary `google-mcp`.
+Product / MCP server `google-multi-account` (source of truth: `gateway/config.py` `PRODUCT_SLUG`) · git repo `google-mcp-multi-account` · CLI `gwsa` (this project's wrapper — what you run) · MCP binary `google-mcp` · upstream dependency `gws` = the [Google Workspace CLI](https://github.com/googleworkspace/cli) that `gwsa` wraps (install it first).
 </details>
 
 ## 📚 Further reading

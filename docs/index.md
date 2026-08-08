@@ -9,7 +9,7 @@ Drive, chaque nouveau compte reste un **geste humain**.
 
 <div class="grid cards" markdown>
 
-- :material-rocket-launch: **[Démarrer en 3 minutes](#installer-en-3-minutes)**
+- :material-rocket-launch: **[Démarrer](#installer)**
   Installer sans cloner, connecter un compte, poser la question au LLM.
 
 - :material-shield-lock: **[Sécurité d'abord](threat-model.md)**
@@ -37,21 +37,30 @@ Drive, chaque nouveau compte reste un **geste humain**.
   macOS), journal d'audit par client. Seule étape cloud : un credential OAuth,
   une fois.
 
-## Installer en 3 minutes
+## Installer
 
-Pour **utiliser** le serveur, pas besoin de cloner le dépôt :
+**Prérequis** — la CLI amont [`gws`](https://github.com/googleworkspace/cli) (le
+Google Workspace CLI que ce projet enrobe) et Python 3 :
+
+```bash
+brew install googleworkspace-cli
+```
+
+Puis, pour **utiliser** le serveur (pas besoin de cloner le dépôt) :
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/elzinko/google-mcp-multi-account/main/install.sh | bash
 ```
 
 Ça télécharge la dernière version, la met sur ton poste, branche tes clients, et
-affiche à la fin le **setup Google** restant (voir [OAuth / Google Cloud](setup-oauth.md)).
+affiche à la fin le **setup Google** restant (un projet OAuth, ~10 min — voir
+[OAuth / Google Cloud](setup-oauth.md)). Aucun compte ne se connecte tant qu'il
+n'est pas fait — mais `setup_status` tourne déjà pour te guider.
 
-Connecter un compte, puis redémarrer Claude Desktop :
+Une fois le setup Google fait, connecter un compte puis redémarrer Claude Desktop :
 
 ```bash
-gwsa add perso        # navigateur → choisir le compte → accepter
+gwsa add perso votre.email@gmail.com   # « perso » = nom court · l'email épingle le compte
 gwsa list             # profils + état
 ```
 
