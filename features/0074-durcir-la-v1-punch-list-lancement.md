@@ -34,11 +34,24 @@ de tests + hygiène), tous bon marché. Cette fiche les regroupe pour tirer la v
       ou affiché dans le pavé final — *reste à faire (touche l'installeur, hors PR doc)*.
 - [x] **`critique.md` rafraîchi** : 17 tools (plus « 9 »), services Drive réels,
       « git clone / pas de release » recadré (curl + releases + `gwsa update`).
+- [ ] **Publier le site de doc** : `docs.elzinko.fr` ne résout pas (DNS introuvable) —
+      architecture, ADR et le reste sont **inaccessibles au public**. `vercel.json` est
+      prêt (build mkdocs) mais **rien ne déploie**. Connecter Vercel **ou** poser un
+      déploiement GitHub Pages. *Un produit dont on ne peut pas lire la doc ne se lance pas.*
 
 ### 🟠 À faire
-- [x] **Diagramme mermaid du README corrigé** : `MCP→gateway→Google`, `gwsa` = porte
-      humaine/admin (ne route plus le MCP par `gwsa`).
+- [x] **Diagramme mermaid du README corrigé** (revue Codex) : `MCP→gateway→Google` ;
+      `gwsa` et la gateway se **rejoignent sur l'état** (verrous/grants/policy), l'un
+      n'appelle pas l'autre.
+- [x] **Diagrammes mermaid rendus sur le site** (mkdocs `custom_fences`) — étaient en
+      **texte brut** (architecture + ADR-0004).
+- [x] **Exemples `gwsa add <alias> <email>`** plus parlants : l'email épingle le compte
+      (obligatoire sous Touch ID) ; **pas de « clé »**, c'est l'OAuth navigateur —
+      README + docs/index + setup-oauth.
 - [x] **Décompte de tools aligné dans `mcp-setup.md`** (17).
+- [ ] **Rampe ADR / lisibilité zéro-contexte** : intro « c'est quoi un ADR ici » +
+      **glossaire** (élicitation, broker, zone, verrou, IAM, strongauth) + **TL;DR d'une
+      ligne** en tête de chaque ADR — un nouveau venu doit comprendre sans contexte.
 - [x] **Polish Quickstart** : étapes numérotées, `gws` vs `gwsa` défini (bloc Naming),
       timing corrigé (~10 min OAuth, plus de « 3 minutes »), alias `perso` unifié
       README ↔ docs.
