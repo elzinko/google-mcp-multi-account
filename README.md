@@ -43,12 +43,12 @@ curl -fsSL https://raw.githubusercontent.com/elzinko/google-mcp-multi-account/ma
 
 This puts the latest release on your machine, `gwsa` on your PATH, and wires your Claude clients.
 
-**2. Google setup** (~10 min, once) — an OAuth project in Google Cloud: [docs/setup-oauth.md](docs/setup-oauth.md). **Nothing runs without it.**
+**2. Google setup** (~10 min, once) — an OAuth project in Google Cloud: [docs/setup-oauth.md](docs/setup-oauth.md). No account connects and no Google data flows until it's done — `setup_status` still runs to guide you.
 
 **3. Connect an account**, then restart Claude Desktop (Cmd-Q):
 
 ```bash
-gwsa add perso        # "perso" = your alias · browser → pick account → accept
+gwsa add perso your.email@gmail.com    # "perso" = short name · the email pins the account
 gwsa list             # profiles + state
 ```
 
@@ -66,14 +66,16 @@ The LLM **can never widen its own access**. Every door opens by a human gesture 
 
 ```mermaid
 flowchart LR
-    USER["🧑 Human — unlock / grant / policy"]
+    USER["🧑 Human"]
     LLM["LLM clients — Desktop / Code / Cursor"]
     MCP["bin/google-mcp — MCP stdio"]
-    GW["gateway/ — policy · locks · broker → gws"]
-    GWSA["bin/gwsa — human/admin door"]
+    GW["gateway/ — enforces policy + locks"]
+    STATE["locks · grants · policy"]
+    GWSA["bin/gwsa"]
     GOOGLE["Google APIs"]
     LLM --> MCP --> GW --> GOOGLE
-    USER --> GWSA --> GW
+    GW -.->|reads| STATE
+    USER -->|unlock / grant / policy| GWSA -->|writes| STATE
 ```
 
 Why a wrapper, the local broker, who talks to whom: [docs/architecture.md](docs/architecture.md). Step-by-step walkthroughs: [diagrams/](diagrams/).

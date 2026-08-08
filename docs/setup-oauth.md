@@ -80,8 +80,8 @@ compte comme « test user » **et** les tokens expirent tous les 7 jours.
 De retour dans le terminal :
 
 ```bash
-gwsa add perso     # navigateur → choisir le compte n°1 → accepter les accès
-gwsa add assoc     # navigateur → choisir le compte n°2 → accepter les accès
+gwsa add perso perso.email@gmail.com     # compte n°1 : l'email épingle, le navigateur confirme
+gwsa add assoc assoc.email@gmail.com     # compte n°2
 gwsa list
 ```
 

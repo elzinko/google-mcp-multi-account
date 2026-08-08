@@ -54,12 +54,13 @@ curl -fsSL https://raw.githubusercontent.com/elzinko/google-mcp-multi-account/ma
 
 Ça télécharge la dernière version, la met sur ton poste, branche tes clients, et
 affiche à la fin le **setup Google** restant (un projet OAuth, ~10 min — voir
-[OAuth / Google Cloud](setup-oauth.md)). **Rien ne fonctionne sans lui.**
+[OAuth / Google Cloud](setup-oauth.md)). Aucun compte ne se connecte tant qu'il
+n'est pas fait — mais `setup_status` tourne déjà pour te guider.
 
 Une fois le setup Google fait, connecter un compte puis redémarrer Claude Desktop :
 
 ```bash
-gwsa add perso        # navigateur → choisir le compte → accepter
+gwsa add perso votre.email@gmail.com   # « perso » = nom court · l'email épingle le compte
 gwsa list             # profils + état
 ```
 
