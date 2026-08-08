@@ -39,15 +39,15 @@
 | 0032 | La notification Touch ID doit nommer le compte et le produit, pas l'alias seul | feature | P2 |  |  | ✅ shipped | #48 |
 | 0036 | Refonte des cartes profil de l'admin — liste, page de compte, zones (spec maquette v11) | feature | P2 |  |  | ✅ shipped | #44 |
 | 0040 | Le déploiement branche Claude Desktop mais pas Claude Code (CLI) — généraliser | feature | P2 |  |  | ✅ shipped | #43 |
-| 0041 | Clarifier l'écart policy admin ↔ surface MCP (Drive copie, contenu, modification) | bug | P2 |  |  | 🟠 in-progress | #52 |
+| 0041 | Clarifier l'écart policy admin ↔ surface MCP (Drive copie, contenu, modification) | bug | P2 |  |  | ✅ shipped | #52 |
 | 0044 | Sous strongauth, le dialogue Touch ID nomme « swift-frontend » au lieu du produit | bug | P2 |  |  | ✅ shipped | #74 |
 | 0045 | Droits par session et par projet git — état des lieux, écarts, pistes | feature | P2 |  |  | 🟠 in-progress |  |
 | 0046 | CLI locale pour déployer des sandboxes temporaires (branche / worktree) | feature | P2 |  |  | 🟠 in-progress |  |
 | 0047 | Au moment d'autoriser un accès, nommer le compte (email) — pas seulement l'alias | feature | P2 |  |  | ✅ shipped | #75 |
 | 0068 | Accessibilité — focus-visible + reduced-motion (cadenas/modales/boutons) | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
-| 0069 | Docs in-app — rework orientation utilisateur | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
+| 0069 | Docs in-app — rework orientation utilisateur | feature | P2 | v0.4.0 | 0060 | ✅ shipped |  |
 | 0070 | README — quickstart + usage par persona + permissions + contribution | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
-| 0071 | GitHub metadata — description, homepage, topics + badges | chore | P2 | v0.4.0 | 0060 | 🔴 todo |  |
+| 0071 | GitHub metadata — description, homepage, topics + badges | chore | P2 | v0.4.0 | 0060 | ✅ shipped |  |
 | 0001 | Élicitation signée — faire monter `gwsa strongauth` de la présence à la signature | feature | P3 |  |  | 🟠 in-progress |  |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)

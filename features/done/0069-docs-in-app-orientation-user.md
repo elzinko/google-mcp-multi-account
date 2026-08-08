@@ -5,11 +5,18 @@ type: feature
 priority: P2
 version: v0.4.0
 epic: 0060
-status: todo
+status: shipped
 ready:
 pr:
 created: 2026-07-29
 ---
+
+> **Clôturée par obsolescence (2026-08-08).** Réconciliation : l'objet de la fiche
+> n'existe plus. [#85](https://github.com/elzinko/google-mcp-multi-account/pull/85)
+> a **retiré la doc in-app** (mermaid, `/api/doc`) qu'il s'agissait de retravailler ;
+> [#79](https://github.com/elzinko/google-mcp-multi-account/pull/79) (fiche [[0072]])
+> fournit désormais l'orientation utilisateur via le **site de doc en ligne**.
+> Rien à construire ici. Classée `shipped` (résolue), hors PR dédiée.
 
 ## Contexte / Problème
 
