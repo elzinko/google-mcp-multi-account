@@ -126,7 +126,10 @@ bascule `current`, nom MCP fixe.
 - [ ] Signal fiable « quelle version répond » (tool et/ou admin stable)
 - [ ] Parcours « nouvelle version dispo → `gwsa update` → vérif » testable
 - [ ] Doc dogfood : 2 connecteurs côte à côte + comment choisir / nettoyer
-- [ ] Lien / non-doublon clarifié avec [[0026]]
+- [x] Lien / non-doublon clarifié avec [[0026]] — **frontière** posée des deux
+      côtés : 0026 = surface *agent* (annonce version via tools + dérive
+      config↔`current`) ; 0042 = surface *humaine* (Connecteurs/admin, parcours
+      de mise à jour, cohabitation stable/dogfood).
 
 ## Pour toi, en pratique (aujourd'hui)
 
