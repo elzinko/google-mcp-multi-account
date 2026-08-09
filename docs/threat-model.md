@@ -27,8 +27,6 @@ phase par phase.
 
 ## Surfaces de confiance
 
-## Surfaces de confiance
-
 | Composant | Rôle | Confiance |
 |-----------|------|-----------|
 | Humain | unlock, grant, policy, OAuth | Racine de confiance |
