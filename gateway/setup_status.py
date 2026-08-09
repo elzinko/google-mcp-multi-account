@@ -109,12 +109,12 @@ def setup_status() -> dict[str, Any]:
     if any(a["iam"] == "missing" for a in accounts):
         next_actions.append("./scripts/provision-gcp.sh sync-iam   # accorder le rôle IAM manquant")
     if any(a["connected"] and not a["email"] for a in accounts):
-        next_actions.append("gwsa list   # renseigner l'email des profils existants (métadonnée .email, une fois)")
+        next_actions.append("gma list   # renseigner l'email des profils existants (métadonnée .email, une fois)")
     for a in accounts:
         if a["locked"]:
-            next_actions.append(f"gwsa unlock {a['alias']} 30   # profil verrouillé (accès sur demande)")
+            next_actions.append(f"gma unlock {a['alias']} 30   # profil verrouillé (accès sur demande)")
     if not accounts:
-        next_actions.append("gwsa add <alias> <email>   # connecter un premier compte")
+        next_actions.append("gma add <alias> <email>   # connecter un premier compte")
 
     return {
         "ok": True,

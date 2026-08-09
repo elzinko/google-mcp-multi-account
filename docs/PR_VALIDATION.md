@@ -17,15 +17,15 @@ méthode), `⏳ reste` (avec le plan), ou `N.A.` (avec la raison) :
 |---|---|
 | **CI** | le pipeline du repo (lien du run) |
 | **Tests unitaires / hermétiques** | `./scripts/test.sh` — nouveaux cas listés |
-| **Admin / UI locale** | `gwsa admin` + parcours réel + **commandes pour rejouer** |
-| **CLI (`gwsa`)** | commandes littérales + sortie / code de sortie attendus |
+| **Admin / UI locale** | `gma admin` + parcours réel + **commandes pour rejouer** |
+| **CLI (`gma`)** | commandes littérales + sortie / code de sortie attendus |
 | **Before / after (UI)** | captures avant/après · ou **N.A.** si aucun changement UI |
 | **Preview de déploiement** | **N.A.** (pas de preview distante — outil local) |
 
 ## 2. Le bloc « Méthode de test locale » — copy-pastable
 
 Des **commandes littérales**, dans l'ordre, depuis un worktree / clone frais :
-worktree path, `gwsa admin stop` si besoin, démarrage admin, `gwsa dev …` le
+worktree path, `gma admin stop` si besoin, démarrage admin, `gma dev …` le
 cas échéant, URL à ouvrir, gestes UI. Le testeur ne doit **rien déduire**.
 
 ### Raccourci worktree / branche en cours
@@ -35,7 +35,7 @@ déployé, et affiche un résumé (id, URL, marqueur `afSearchHits`, process) :
 
 ```bash
 cd <worktree-ou-clone>
-./bin/gwsa dev test
+./bin/gma dev test
 ```
 
 Options utiles :

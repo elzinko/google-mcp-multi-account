@@ -235,6 +235,21 @@ link_cli() {
   else
     warn "impossible de réécrire « $link » — à refaire à la main : ln -sfn \"$expected\" \"$link\""
   fi
+
+  # Alias « gma » (nom aligné sur le connecteur google-multi-account) — le poser
+  # ou le rafraîchir à côté de gwsa, sinon les commandes « gma … » documentées
+  # manqueraient au PATH après un simple « gwsa update » (revue Codex #92).
+  gma_link="$(dirname "$link")/gma"
+  gma_expected="$DEPLOY_ROOT/current/bin/gma"
+  if [[ -x "$gma_expected" ]]; then
+    if [[ -e "$gma_link" && ! -L "$gma_link" ]]; then
+      warn "« $gma_link » n'est pas un lien symbolique — laissé tel quel"
+    elif ln -sfn "$gma_expected" "$gma_link" 2>/dev/null; then
+      ok "gma du PATH → $gma_expected"
+    else
+      warn "impossible de poser « $gma_link » — à faire à la main : ln -sfn \"$gma_expected\" \"$gma_link\""
+    fi
+  fi
 }
 link_cli
 

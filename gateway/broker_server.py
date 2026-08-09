@@ -174,14 +174,14 @@ def _require_access(alias: str, session_id: str) -> Path:
     d = profile_dir(alias)
     if not d.is_dir():
         raise GatewayError(
-            f"profil inconnu « {alias} » — le créer avec : gwsa add {alias}",
+            f"profil inconnu « {alias} » — le créer avec : gma add {alias}",
             code="not_found",
         )
     if session_id:
         if is_locked(d) and not is_session_unlocked(session_id, alias):
             raise GatewayError(
                 f"profil « {alias} » verrouillé pour cette session — "
-                f"demander : gwsa session unlock {session_id} {alias} [minutes]",
+                f"demander : gma session unlock {session_id} {alias} [minutes]",
                 code="locked",
             )
         return d

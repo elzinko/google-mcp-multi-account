@@ -109,6 +109,11 @@ fi
 mkdir -p "$(dirname "$link")"
 ln -sfn "$CURRENT_LINK/bin/gwsa" "$link"
 ok "gwsa → $link"
+# Alias « gma » (nom aligné sur le connecteur google-multi-account). « gwsa »
+# reste disponible comme alias déprécié.
+gma_link="$(dirname "$link")/gma"
+ln -sfn "$CURRENT_LINK/bin/gma" "$gma_link"
+ok "gma → $gma_link"
 case ":$PATH:" in
   *":$(dirname "$link"):"*) ;;
   *) warn "« $(dirname "$link") » n'est pas dans ton PATH — ajoute-le pour utiliser « gwsa »";;

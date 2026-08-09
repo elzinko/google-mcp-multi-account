@@ -18,7 +18,7 @@ Rien n’est hébergé dans le cloud applicatif. Sur la machine :
 |--------|----------|------|
 | Clients LLM | Claude Desktop, Cursor, Claude Code | Appellent le MCP (données) ou le shell (admin) |
 | MCP | [`bin/google-mcp`](https://github.com/elzinko/google-mcp-multi-account/blob/main/bin/google-mcp) → [`gateway/`](https://github.com/elzinko/google-mcp-multi-account/tree/main/gateway/) | Seule porte d’entrée **recommandée** pour Gmail/Drive |
-| CLI admin | [`bin/gwsa`](https://github.com/elzinko/google-mcp-multi-account/blob/main/bin/gwsa) | Multi-profils, unlock/grant/policy, legacy shell |
+| CLI admin | [`bin/gma`](https://github.com/elzinko/google-mcp-multi-account/blob/main/bin/gma) | Multi-profils, unlock/grant/policy, legacy shell |
 | Cockpit humain | [`admin/server.js`](https://github.com/elzinko/google-mcp-multi-account/blob/main/admin/server.js) `127.0.0.1:4877` | UI locale (jamais exposée hors loopback) |
 | Policy | [`scripts/policy-check.py`](https://github.com/elzinko/google-mcp-multi-account/blob/main/scripts/policy-check.py) | Default-deny avant tout appel `gws` |
 | Exécution Google | `gws` + `~/.config/gws-accounts/<alias>/` | Tokens chiffrés + appels API |
@@ -102,7 +102,7 @@ connecteur `github` ; le paquet `mcp-server-git` → connecteur `git`.
 | `profiles.py` | Alias, lock, listage profils |
 | `executor.py` | **Phase 2 A** : client RPC vers le broker (plus d’appel `gws` ici) |
 | `broker_server.py` | Daemon `127.0.0.1:4878` — lock + policy (`policy-check.py`) + journal + `gws` (exécuté depuis le répertoire de dépôt, ADR-0003) |
-| `default_policy.py` | JSON « prudent » écrit à `gwsa add` |
+| `default_policy.py` | JSON « prudent » écrit à `gma add` |
 | `mcp_server.py` | Adaptateur MCP stdio (JSON-RPC newline-delimited, **stdlib only**) |
 | `errors.py` | `GatewayError` (`locked`, `policy`, `alias`, …) |
 
@@ -115,7 +115,7 @@ Flux d’un tool MCP (ex. `gmail_list`) :
 5. `executor.run_gws(...)`  
 
 `access_request` **ne déverrouille pas** et **n’accorde pas** de zone : il renvoie
-la commande exacte à faire exécuter par l’humain (`gwsa unlock` / `gwsa grant`).
+la commande exacte à faire exécuter par l’humain (`gma unlock` / `gma grant`).
 
 ### 2.2 Tools MCP exposés (v1)
 
@@ -135,7 +135,7 @@ la commande exacte à faire exécuter par l’humain (`gwsa unlock` / `gwsa gran
 
 Pas de `gwsa_run` générique : surface volontairement réduite.
 
-### 2.3 Wrapper `gwsa`
+### 2.3 Wrapper `gma`
 
 - Isole chaque compte : `~/.config/gws-accounts/<alias>/`
 - `add` : OAuth + **écrit la policy prudente** si absente
@@ -163,7 +163,7 @@ essentiellement lecture.
 
 - Bind **uniquement** `127.0.0.1:4877`
 - Header `X-GWSA-Admin` + contrôle Origin (anti-CSRF)
-- Actions via `execFile(gwsa)` — pas de shell
+- Actions via `execFile(gma)` — pas de shell
 - Pas d’authentification applicative (confiance = machine locale)
 
 ### 2.6 Stockage secrets
@@ -182,7 +182,7 @@ essentiellement lecture.
 
 | Contrôle | Où | Contre quoi | Contournable si… |
 |----------|-----|-------------|------------------|
-| Policy default-deny | `policy-check.py` | Envoi, services non listés, écritures hors catégories | Agent appelle `gws` hors `gwsa`/gateway |
+| Policy default-deny | `policy-check.py` | Envoi, services non listés, écritures hors catégories | Agent appelle `gws` hors `gma`/gateway |
 | Zones Drive + grants | policy + `session-grants.json` | Écriture hors dossiers autorisés | Idem bypass `gws` nu |
 | Verrou profil | `.locked` / `.unlock-until` | Accès sans élicitation | Édition fichiers ou `gws` nu |
 | Tools MCP sans send | `mcp_server.py` | Envoi mail via MCP | Shell / autre client |
@@ -208,7 +208,7 @@ LLM  →  MCP tools  →  gateway.api  →  policy + lock  →  executor v1 (gws
 ### Chemin admin humain
 
 ```text
-Humain  →  admin UI ou gwsa unlock|grant|policy  →  (strongauth?)  →  fichiers profil
+Humain  →  admin UI ou gma unlock|grant|policy  →  (strongauth?)  →  fichiers profil
 ```
 
 ### Chemin à éviter / à bloquer côté permissions agent
@@ -238,7 +238,7 @@ données uniquement via MCP.
 ```text
 bin/google-mcp          # entrée MCP stdio
 bin/google-broker       # daemon Phase 2 A (gws)
-bin/gwsa                 # CLI multi-comptes
+bin/gma                 # CLI multi-comptes
 gateway/                 # API + MCP + executor RPC + broker_server
 scripts/policy-check.py  # enforcement policy
 scripts/log-usage.py     # journal ok
@@ -255,6 +255,6 @@ docs/mcp-setup.md        # config Desktop / Cursor / Code
 ./scripts/test.sh                    # policy + gateway + smoke MCP
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
   | ./bin/google-mcp                 # liste des tools
-gwsa list                            # profils
-gwsa policy <alias> show             # policy active
+gma list                            # profils
+gma policy <alias> show             # policy active
 ```

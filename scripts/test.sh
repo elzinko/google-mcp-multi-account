@@ -403,7 +403,7 @@ pl = profiles_list()
 assert pl["ok"] and any(p["alias"] == alias for p in pl["profiles"]), pl
 
 r = access_request(alias, "unlock", minutes=30)
-assert r.get("elicitation") and "gwsa unlock" in r["suggested_command"], r
+assert r.get("elicitation") and "gma unlock" in r["suggested_command"], r
 assert not (d / ".unlock-until").exists(), "access_request ne doit pas déverrouiller"
 
 log = root / "usage.jsonl"
@@ -438,13 +438,13 @@ entries = [json.loads(x) for x in log.read_text().splitlines()]
 assert len(entries) == 4 and all(e["reason"] == "locked" for e in entries), entries
 
 r2 = access_request(alias, "grant", folder="LLM", hours=4)
-assert "gwsa grant" in r2["suggested_command"] and "LLM" in r2["suggested_command"], r2
+assert "gma grant" in r2["suggested_command"] and "LLM" in r2["suggested_command"], r2
 
 # add_account : élicitation pour un compte qui n'existe pas encore — aucune
 # création de profil, email obligatoire, prérequis IAM rappelés.
 r3 = access_request("nouveaucompte", "add_account", email="exemple@gmail.com")
 assert r3.get("elicitation") and r3["kind"] == "add_account", r3
-assert r3["suggested_command"] == "gwsa add nouveaucompte exemple@gmail.com", r3
+assert r3["suggested_command"] == "gma add nouveaucompte exemple@gmail.com", r3
 assert "sync-iam" in r3["message"], r3
 assert not (root / "nouveaucompte").exists(), "add_account ne doit rien créer"
 try:
@@ -1217,7 +1217,7 @@ assert r["ok"] and "accounts" in r and "next_actions" in r, r
 assert r["project_id"] is None and r["iam_checked"] is False, r
 assert all(a["iam"] == "unknown" for a in r["accounts"]), r
 # Profil verrouillé → commande unlock proposée ; rien n'est exécuté.
-assert any("gwsa unlock acct1" in a for a in r["next_actions"]), r["next_actions"]
+assert any("gma unlock acct1" in a for a in r["next_actions"]), r["next_actions"]
 assert (d / ".locked").exists() and not (d / ".unlock-until").exists(), "setup_status ne doit rien muter"
 print("ok")
 PY
@@ -1251,7 +1251,7 @@ accs = {a["alias"]: a for a in r["accounts"]}
 assert accs["acct1"]["email"] == "alice@gmail.com", accs  # cohérent avec profiles_list
 assert accs["acct2"]["email"] == "", accs
 # Profil sans .email → suggérer le geste humain qui la renseigne.
-assert any(a.startswith("gwsa list") for a in r["next_actions"]), r["next_actions"]
+assert any(a.startswith("gma list") for a in r["next_actions"]), r["next_actions"]
 
 # Contenu non-email → ignoré (pas de confiance aveugle dans le fichier).
 (d2 / ".email").write_text("pas-un-email\n")

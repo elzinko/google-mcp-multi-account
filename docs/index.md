@@ -16,7 +16,7 @@ Drive, chaque nouveau compte reste un **geste humain**.
   Default-deny, verrous par profil, écritures Drive zonées, zéro envoi de mail.
 
 - :material-tools: **[CLI & admin](usage.md)**
-  `gwsa` : profils, verrous, zones Drive, Touch ID, interface web locale.
+  `gma` : profils, verrous, zones Drive, Touch ID, interface web locale.
 
 - :material-sitemap: **[Sous le capot](architecture.md)**
   MCP, gateway, broker loopback, wrapper — qui parle à qui.
@@ -60,14 +60,14 @@ n'est pas fait — mais `setup_status` tourne déjà pour te guider.
 Une fois le setup Google fait, connecter un compte puis redémarrer Claude Desktop :
 
 ```bash
-gwsa add perso votre.email@gmail.com   # « perso » = nom court · l'email épingle le compte
-gwsa list             # profils + état
+gma add perso votre.email@gmail.com   # « perso » = nom court · l'email épingle le compte
+gma list             # profils + état
 ```
 
 Mettre à jour plus tard, **toujours sans clone** :
 
 ```bash
-gwsa update
+gma update
 ```
 
 !!! tip "Cloner, c'est pour contribuer"
@@ -80,7 +80,7 @@ gwsa update
 |---|---|
 | Brancher un client, connaître les tools exposés | [Installer & mettre à jour](mcp-setup.md) |
 | Faire le setup OAuth / Google Cloud, les rôles IAM | [OAuth / Google Cloud](setup-oauth.md) |
-| Piloter `gwsa` (profils, verrous, zones, admin) | [CLI & admin](usage.md) |
+| Piloter `gma` (profils, verrous, zones, admin) | [CLI & admin](usage.md) |
 | Comprendre le modèle de policy (default-deny, zones) | [Modèle de policy](policies.md) |
 | Voir les garanties de sécurité, phase par phase | [Modèle de menace](threat-model.md) |
 | Un regard honnête (forces, limites, concurrence) | [Critique](critique.md) |
