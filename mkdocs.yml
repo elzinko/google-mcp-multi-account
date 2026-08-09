@@ -76,6 +76,7 @@ plugins:
 nav:
   - Accueil: index.md
   - Démarrer:
+      - Prise en main: demarrer.md
       - Installer & mettre à jour: mcp-setup.md
       - OAuth / Google Cloud: setup-oauth.md
   - Utiliser:
