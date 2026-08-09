@@ -764,13 +764,17 @@ cmd_wire() { # gma wire <desktop|code|all> [--print] — brancher ce serveur MCP
       echo "  Branche ce serveur MCP dans Claude Desktop / Claude Code (chemin résolu tout"
       echo "  seul, entrée fusionnée sans écraser tes autres serveurs MCP). « --print » = dry-run."
       echo "  Cursor : config manuelle pour l'instant — voir docs/mcp-setup.md (§ Cursor)."
-      echo "  Retirer une entrée : interface admin ($SELF admin) → Clients MCP → Retirer." ;;
+      echo "  Retirer : Claude Code → « claude mcp remove google-multi-account » ;"
+      echo "           Desktop / Cursor → retirer l'entrée « google-multi-account » du JSON"
+      echo "           de config du client (l'admin protège l'entrée stable, exprès)." ;;
     desktop) [[ -x "$desk" ]] || die "script Desktop introuvable ($desk)"; "$desk" "$@" ;;
     code)    [[ -x "$code" ]] || die "script Claude Code introuvable ($code)"; "$code" "$@" ;;
     cursor)  die "Cursor : config manuelle pour l'instant — voir docs/mcp-setup.md (§ Cursor)." ;;
     all)
-      [[ -x "$desk" ]] && { "$desk" "$@" || echo "$SELF : Desktop — échec (voir ci-dessus)" >&2; }
-      [[ -x "$code" ]] && { "$code" "$@" || echo "$SELF : Claude Code — échec (le CLI « claude » est-il installé ?)" >&2; } ;;
+      local rc=0
+      [[ -x "$desk" ]] && { "$desk" "$@" || { rc=1; echo "$SELF : Desktop — échec (voir ci-dessus)" >&2; }; }
+      [[ -x "$code" ]] && { "$code" "$@" || { rc=1; echo "$SELF : Claude Code — échec (le CLI « claude » est-il installé ?)" >&2; }; }
+      return $rc ;;
     *) die "usage : $SELF wire <desktop|code|all> [--print]" ;;
   esac
 }

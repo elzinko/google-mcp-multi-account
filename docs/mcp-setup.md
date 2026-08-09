@@ -50,7 +50,10 @@ gma wire all          # les deux — ajoute « --print » pour un dry-run
 
 `gma wire` résout le chemin absolu, fusionne l'entrée `google-multi-account` **sans
 écraser** tes autres serveurs MCP, et fait un backup. Puis **redémarrer le client**.
-Retirer une entrée : interface admin (`gma admin`) → **Clients MCP → Retirer**.
+Retirer une entrée : Claude Code → `claude mcp remove google-multi-account` ;
+Desktop / Cursor → retirer l'entrée `google-multi-account` du JSON de config du
+client (l'admin protège volontairement l'entrée stable, pas de suppression par
+mégarde).
 
 > Cursor n'a pas encore de commande dédiée — voir [Cursor](#cursor) ci-dessous
 > (config manuelle courte).
