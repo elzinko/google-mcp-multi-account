@@ -15,19 +15,19 @@ par défaut** : lecture/écriture limitées par policy, verrous, zones Drive, et
 |-----------|------|-----------|
 | Humain | unlock, grant, policy, OAuth | Racine de confiance |
 | Admin `127.0.0.1:4877` | Cockpit | Processus local ; pas d’auth app |
-| `bin/gwsa` + `scripts/policy-check.py` | Garde-fous CLI | Appliqués si on passe par eux |
+| `bin/gma` + `scripts/policy-check.py` | Garde-fous CLI | Appliqués si on passe par eux |
 | `gateway/` + `bin/google-mcp` | Porte d’entrée MCP | Même policy/lock ; tools curatés (pas de send) |
 | `gws` + `~/.config/gws-accounts/` | Tokens + appels Google | **Capacité réelle** d’accès aux données |
 
 ## Phase 1 (actuelle) — ce qui est garanti
 
-- Profil créé via `gwsa add` → **policy prudente** (Drive zones vides, Gmail sans envoi, services non listés refusés).
+- Profil créé via `gma add` → **policy prudente** (Drive zones vides, Gmail sans envoi, services non listés refusés).
 - Service absent de `policy.json` → **default-deny** (sauf `auth` / `schema`).
-- Profil verrouillé → refus via `gwsa` **et** via MCP.
+- Profil verrouillé → refus via `gma` **et** via MCP.
 - Tools MCP : Gmail lecture + brouillons + pièce jointe (→ `.downloads`), Drive lecture (métadonnées + contenu) + create/copy/upload + **update** (remplacement de contenu, fichiers non-natifs seulement) **sous zones** ; **partage** lecture/écriture (`drive_permissions_create/list/delete`) — jamais de partage **public** (`type` fixé à `user`) ; **pas** d’envoi Gmail, de suppression définitive, ni de **transfert de propriété** (retiré — PR dédiée non prête).
 - ⚠ **Partage** (`drive_permissions_*`) n’est gardé que par la policy `drive.share:true` (flag **persistant**), **pas** par les zones ni par un grant de session : une fois `share` activé, l’agent peut partager tout fichier possédé vers tout email (jamais public — `type=user`). **Durcissement à trancher** (revue sécurité F2) : grant de session pour partager.
 - `access_request` propose unlock/grant **sans les exécuter**.
-- Touch ID (`gwsa strongauth`) : présence physique pour unlock/grant (chemins absolus `/usr/bin/swift` + `/usr/bin/swiftc` + scripts repo — jamais via le PATH).
+- Touch ID (`gma strongauth`) : présence physique pour unlock/grant (chemins absolus `/usr/bin/swift` + `/usr/bin/swiftc` + scripts repo — jamais via le PATH).
 
 ## Phase 1 — ce qui n’est **pas** garanti
 
@@ -46,7 +46,7 @@ utilisables par `gws` hors gateway.
 - Chemin supporté pour les données Google = **MCP uniquement** (`bin/google-mcp`).
 - Restreindre / refuser dans les permissions bash : `gws`, `GOOGLE_WORKSPACE_CLI_CONFIG_DIR=…`,
   lecture/écriture de `~/.config/gws-accounts/`.
-- Ne pas mettre `gws` dans le PATH de l’agent si possible ; l’humain garde `gwsa` pour l’admin.
+- Ne pas mettre `gws` dans le PATH de l’agent si possible ; l’humain garde `gma` pour l’admin.
 
 ## Phase 2 A (actuelle) — broker loopback
 
@@ -65,7 +65,7 @@ peut toujours appeler `gws` directement. Mitigation : restreindre le shell ;
 L'email d'un profil reste lisible même verrouillé — c'est la **seule**
 métadonnée exposée (diagnostic IAM de `setup_status`, SECURITY.md). Depuis
 [ADR-0002](adr/ADR-0002-email-metadonnee-hors-verrou.md), il vient d'un
-fichier `.email` écrit au geste humain `gwsa add` (backfill : `gwsa list`,
+fichier `.email` écrit au geste humain `gma add` (backfill : `gma list`,
 admin) — **jamais** d'une exécution `gws`. Invariant testé : verrou ⇒ zéro
 exécution gws ; aucun `GOOGLE_WORKSPACE_CLI_CONFIG_DIR` dans `gateway/`
 hors `broker_server.py`.
@@ -118,5 +118,5 @@ par le checker tant que tu n’en poses pas une. Pour basculer : préréglage
 
 `~/.config/gws-accounts/usage.jsonl` — appels autorisés (`decision:ok`), refus
 de policy et refus de verrou (`decision:refus`, `reason:locked`), sur les trois
-chemins (`gwsa`, broker, fail-fast gateway). Champ `client` via `GWSA_CLIENT`
+chemins (`gma`, broker, fail-fast gateway). Champ `client` via `GWSA_CLIENT`
 (`mcp`, `claude-code`, `cli`, …). Spoofable : utile pour le debug, pas une identité forte.

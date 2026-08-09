@@ -23,7 +23,7 @@
 - **The human holds every door** — unlock, Drive grant, new account, IAM fix: the agent *proposes the exact command* (elicitation), you run it.
 - **Default-deny by design** — any undeclared service is refused; Gmail tools stop at the draft (no sending); Drive writes stay inside granted folders.
 - **100 % local** — encrypted tokens (AES-256-GCM, master key in the macOS Keychain), per-client audit log. The only cloud step is a one-shot OAuth credential.
-- **Scope today** — **Gmail + Drive** through MCP; **Calendar next**. Docs, Sheets and Tasks are reachable through the `gwsa` CLI.
+- **Scope today** — **Gmail + Drive** through MCP; **Calendar next**. Docs, Sheets and Tasks are reachable through the `gma` CLI.
 
 ## 🚀 Quickstart
 
@@ -41,18 +41,18 @@ brew install googleworkspace-cli
 curl -fsSL https://raw.githubusercontent.com/elzinko/google-mcp-multi-account/main/install.sh | bash
 ```
 
-This puts the latest release on your machine, `gwsa` on your PATH, and wires your Claude clients.
+This puts the latest release on your machine, `gma` on your PATH, and wires your Claude clients.
 
 **2. Google setup** (~10 min, once) — an OAuth project in Google Cloud: [docs/setup-oauth.md](docs/setup-oauth.md). No account connects and no Google data flows until it's done — `setup_status` still runs to guide you.
 
 **3. Connect an account**, then restart Claude Desktop (Cmd-Q):
 
 ```bash
-gwsa add perso your.email@gmail.com    # "perso" = short name · the email pins the account
-gwsa list             # profiles + state
+gma add perso your.email@gmail.com    # "perso" = short name · the email pins the account
+gma list             # profiles + state
 ```
 
-Ask the agent: *“give me a rundown of my Google setup”* — it reads the state and proposes the exact command for each missing step; you run them. Update later, still clone-free: **`gwsa update`**. Full detail: [docs/mcp-setup.md](docs/mcp-setup.md) · [docs/setup-oauth.md](docs/setup-oauth.md).
+Ask the agent: *“give me a rundown of my Google setup”* — it reads the state and proposes the exact command for each missing step; you run them. Update later, still clone-free: **`gma update`**. Full detail: [docs/mcp-setup.md](docs/mcp-setup.md) · [docs/setup-oauth.md](docs/setup-oauth.md).
 
 ## 🧭 How it works
 
@@ -71,7 +71,7 @@ flowchart LR
     MCP["bin/google-mcp — MCP stdio"]
     GW["gateway/ — enforces policy + locks"]
     STATE["locks · grants · policy"]
-    GWSA["bin/gwsa"]
+    GWSA["bin/gma"]
     GOOGLE["Google APIs"]
     LLM --> MCP --> GW --> GOOGLE
     GW -.->|reads| STATE
@@ -90,13 +90,13 @@ Stance: **don’t trust the LLM by default** — it can *ask*, only a human open
 ./scripts/test.sh     # hermetic suite (policy, wrapper, gateway, broker) — no real account, no network
 ```
 
-- **Commands** — `gwsa help` is the index of everything. LLM-guided manual tests: [tests/manuels/](tests/manuels/).
-- **Releases** — the git **tag** is the source of truth; `gwsa release` derives semver from [conventional commits](https://www.conventionalcommits.org/). History: [CHANGELOG.md](CHANGELOG.md).
+- **Commands** — `gma help` is the index of everything. LLM-guided manual tests: [tests/manuels/](tests/manuels/).
+- **Releases** — the git **tag** is the source of truth; `gma release` derives semver from [conventional commits](https://www.conventionalcommits.org/). History: [CHANGELOG.md](CHANGELOG.md).
 
 ### Project structure
 
 ```
-bin/       # google-mcp (MCP server) · gwsa (CLI wrapper) · google-broker
+bin/       # google-mcp (MCP server) · gma (CLI wrapper) · google-broker
 gateway/   # policy, locks, MCP server, signed elicitation
 scripts/   # provision-gcp · update · release · test
 docs/      # setup, usage, policies, architecture, security, critique
@@ -107,7 +107,7 @@ features/  # backlog — one card per feature/bug
 <details>
 <summary><b>Naming</b> — product vs repo vs CLI</summary>
 
-Product / MCP server `google-multi-account` (source of truth: `gateway/config.py` `PRODUCT_SLUG`) · git repo `google-mcp-multi-account` · CLI `gwsa` (this project's wrapper — what you run) · MCP binary `google-mcp` · upstream dependency `gws` = the [Google Workspace CLI](https://github.com/googleworkspace/cli) that `gwsa` wraps (install it first).
+Product / MCP server `google-multi-account` (source of truth: `gateway/config.py` `PRODUCT_SLUG`) · git repo `google-mcp-multi-account` · CLI `gma` (this project's wrapper — what you run; formerly `gwsa`, still a deprecated alias) · MCP binary `google-mcp` · upstream dependency `gws` = the [Google Workspace CLI](https://github.com/googleworkspace/cli) that `gma` wraps (install it first).
 </details>
 
 ## 📚 Further reading
@@ -116,7 +116,7 @@ Product / MCP server `google-multi-account` (source of truth: `gateway/config.py
 |---|---|
 | Connect a client (Desktop, Code, Cursor); tools exposed | [docs/mcp-setup.md](docs/mcp-setup.md) |
 | OAuth / GCP setup, IAM roles | [docs/setup-oauth.md](docs/setup-oauth.md) |
-| CLI & web admin (`gwsa`, locks, Touch ID) | [docs/usage.md](docs/usage.md) |
+| CLI & web admin (`gma`, locks, Touch ID) | [docs/usage.md](docs/usage.md) |
 | Policy model (default-deny, Drive zones, grants) | [docs/policies.md](docs/policies.md) |
 
 ## License
