@@ -2831,11 +2831,25 @@ bash -euo pipefail -c '
   c "$3" >/dev/null   # .email absent
 ' _ "$pec_fn" "$pec_dir/corrupt" "$pec_dir/missing" || sete_rc=$?
 if [[ "$r_valid" == "alice@gmail.com" && -z "$r_missing" && -z "$r_corrupt" ]] \
-  && [[ "$n_cached" == 4 && "$sete_rc" == 0 ]] \
+  && [[ "$n_cached" == 5 && "$sete_rc" == 0 ]] \
   && ! sed -n '/^profile_email_cached()/,/^}/p' bin/gwsa | sed 's/#.*//' | grep -q 'gws'; then
   pass "elicitation : email lu cache-only aux points d'autorisation, zéro exec gws (fiche 0047)"
 else
   fail "elicitation : cache-only (valid=$r_valid missing=[$r_missing] corrupt=[$r_corrupt] sites=$n_cached set-e_rc=$sete_rc)"
+fi
+
+# ── Résolution email → alias sur les commandes humaines (lock/unlock/grant/policy) ──
+er_root="$TMP/email-resolve"; mkdir -p "$er_root/perso"; printf 'thomas@gmail.com\n' > "$er_root/perso/.email"
+GWSA_ROOT="$er_root" "$GWSA" lock thomas@gmail.com >/dev/null 2>&1   # email → profil « perso »
+er_by_email=$([ -f "$er_root/perso/.locked" ] && echo ok || echo no)
+rm -f "$er_root/perso/.locked"
+GWSA_ROOT="$er_root" "$GWSA" lock perso >/dev/null 2>&1              # l'alias reste accepté
+er_by_alias=$([ -f "$er_root/perso/.locked" ] && echo ok || echo no)
+er_unknown="$(GWSA_ROOT="$er_root" "$GWSA" lock inconnu@example.com 2>&1)"; er_rc=$?
+if [[ "$er_by_email" == ok && "$er_by_alias" == ok && "$er_rc" != 0 && "$er_unknown" == *"aucun compte connecté"* ]]; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m commandes : email résolu vers son profil (alias toujours OK ; email inconnu refusé clairement)\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m résolution email (email=%s alias=%s rc=%s msg=%s)\n' "$er_by_email" "$er_by_alias" "$er_rc" "$er_unknown"
 fi
 
 sid_e="$("$PY" -c 'from gateway.sessions import create_session; print(create_session(client="t").session_id)')"
