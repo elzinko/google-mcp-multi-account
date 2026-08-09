@@ -38,6 +38,28 @@ gma update            # dernière version publiée · --to v0.1.0 pour un retour
 `gma update` lit la dernière version sur GitHub et bascule `current` dessus. Le
 clone git n'est nécessaire que pour **contribuer** (fiche 0020).
 
+## Brancher un client — une commande
+
+Le plus simple, depuis n'importe où (`gma` est sur le PATH) :
+
+```bash
+gma wire desktop      # Claude Desktop
+gma wire code         # Claude Code (le CLI « claude »)
+gma wire all          # les deux — ajoute « --print » pour un dry-run
+```
+
+`gma wire` résout le chemin absolu, fusionne l'entrée `google-multi-account` **sans
+écraser** tes autres serveurs MCP, et fait un backup. Puis **redémarrer le client**.
+Retirer une entrée : Claude Code → `claude mcp remove google-multi-account` ;
+Desktop / Cursor → retirer l'entrée `google-multi-account` du JSON de config du
+client (l'admin protège volontairement l'entrée stable, pas de suppression par
+mégarde).
+
+> Cursor n'a pas encore de commande dédiée — voir [Cursor](#cursor) ci-dessous
+> (config manuelle courte).
+
+Les sections suivantes détaillent chaque client (config manuelle, options, non-standard).
+
 ## Claude Desktop
 
 **Automatique (recommandé)** — le script résout le chemin absolu tout seul,

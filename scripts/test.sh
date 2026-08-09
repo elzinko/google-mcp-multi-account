@@ -2852,6 +2852,16 @@ else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m résolution email (email=%s alias=%s rc=%s msg=%s)\n' "$er_by_email" "$er_by_alias" "$er_rc" "$er_unknown"
 fi
 
+# ── gma wire : brancher un client en une commande (dry-run, sans écrire) ──
+w_cfg="$TMP/wire-desktop.json"
+w_out="$(GWSA_ROOT="$TMP/wire-root" "$GWSA" wire desktop --print --config "$w_cfg" 2>&1)"
+w_cursor="$(GWSA_ROOT="$TMP/wire-root" "$GWSA" wire cursor 2>&1)"; w_cur_rc=$?
+if [[ "$w_out" == *"Dry-run"* && ! -f "$w_cfg" && "$w_cur_rc" != 0 && "$w_cursor" == *"Cursor"* ]]; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m gma wire desktop --print : dry-run sans écriture ; wire cursor renvoie vers la doc\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m gma wire (out=%s cursor_rc=%s)\n' "$w_out" "$w_cur_rc"
+fi
+
 sid_e="$("$PY" -c 'from gateway.sessions import create_session; print(create_session(client="t").session_id)')"
 GWSA_ROOT="$ELIC_ROOT" GWSA_SESSION_ID="$sid_e" GWSA_ELICITATION_MOCK=1 \
   "$GWSA" session unlock "$sid_e" alpha 15 >/dev/null 2>&1 \
