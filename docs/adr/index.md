@@ -16,7 +16,7 @@ défini dans le **glossaire** ci-dessous — à garder ouvert à côté pendant 
 
 - **access_request** — le tool MCP d'élicitation : il **renvoie une commande à faire exécuter par l'humain**, il n'exécute jamais rien.
 - **admin** — l'interface web **locale** (`gma admin`, `127.0.0.1:4877`) où l'humain gère les comptes ; jamais exposée hors loopback.
-- **alias** — le nom court d'un profil (ex. `perso`). Optionnel : on peut aussi désigner un compte par son **email**.
+- **alias** — le nom court d'un profil (ex. `perso`). Optionnel : dans les commandes `gma`, on peut aussi désigner un compte par son **email** (les tools MCP, eux, utilisent l'alias).
 - **broker** — le daemon local (`bin/google-broker`, `127.0.0.1:4878`) — le **seul** à exécuter `gws` pour **accéder aux données** ; il re-vérifie verrou et policy à chaque appel (la découverte, elle, lit encore `gws auth status` en direct).
 - **client_secret.json** — le secret de l'app OAuth (« Desktop app »), stocké **hors dépôt**. Les surfaces MCP n'en vérifient que la **présence** ; il n'est jamais affiché ni committé.
 - **connecteur** — l'entrée `google-multi-account` sous `mcpServers` dans la config du client — à ne pas confondre avec le **dépôt** `google-mcp-multi-account`.
