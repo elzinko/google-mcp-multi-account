@@ -11,6 +11,20 @@ pr:
 created: 2026-08-08
 ---
 
+> **✅ Livré dans la release [v1.0.0](https://github.com/elzinko/google-mcp-multi-account/releases/tag/v1.0.0) (2026-08-09).**
+> L'essentiel de la punch-list est passé : `gws` rendu visible + `critique.md` à jour
+> + Quickstart poli + rendu mermaid du site + décompte tools aligné ; **site de doc
+> déployé** (GitHub Pages) ; **tests sécurité** (anti-DNS-rebinding + Origin +
+> invariants `DEFAULT_POLICY`) ; **refonte doc pro** (page Prise en main,
+> architecture/threat-model/policies réécrites orientées lecteur, page Contribuer).
+> Dans le même élan (hors punch-list initiale) : **rename `gwsa → gma`**, **email au
+> lieu d'alias**, **`gma wire <client>`**.
+>
+> **Reste (post-v1, non bloquant) :** rampe ADR (glossaire à reprendre proprement —
+> PR #90 fermée) ; préflight `gws` bloquant dans `install.sh` ; collision d'id 0073 ;
+> `gma wire cursor` ; durcissements latents (hash manifeste, borne pièce jointe,
+> course R-M-W session). Fiche gardée `in-progress` tant que ce reliquat traîne.
+
 ## Contexte / Problème
 
 Audit critique **multi-agent** du 2026-08-08 (6 axes : hygiène PR/branches/backlog,
