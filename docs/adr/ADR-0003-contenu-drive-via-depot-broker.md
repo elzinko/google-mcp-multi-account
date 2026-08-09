@@ -4,6 +4,8 @@
 **Date :** 2026-07-26
 **Décideurs :** Thomas (PO)
 
+> **TL;DR** — Pour qu'un agent puisse déposer un document déjà rédigé (converti en Google Doc) dans le Drive du bon compte, et non plus un fichier vide, le texte est écrit dans un fichier temporaire d'un dossier dédié et verrouillé (`.uploads`) depuis lequel l'outil en ligne de commande s'exécute, puis effacé aussitôt — ce détour est imposé parce que cet outil n'accepte qu'un chemin de fichier (pas de contenu en mémoire) et refuse tout chemin situé hors de son dossier de travail.
+
 ## Contexte
 
 `drive_create` ne savait poser que des métadonnées (`name`, `mimeType`,

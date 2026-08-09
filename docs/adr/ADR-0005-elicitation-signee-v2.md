@@ -3,6 +3,8 @@
 **Date** : 2026-07-28  
 **Statut** : accepté (implémentation locale gwsa ; second consommateur whatsapp-group-mcp#0007 non requis pour le chemin macOS)
 
+> **TL;DR** — **Quand le mode strongauth est activé** (`gma strongauth on`), chaque action sensible (débloquer un accès, ouvrir un dossier partagé, approuver un projet) doit être validée par une empreinte Touch ID qui **signe cryptographiquement** la description de cette action précise — au lieu de l'ancien contrôle qui vérifiait seulement qu'un humain était présent — pour qu'une approbation ne puisse ni être rejouée ni servir à autoriser une autre action.
+
 ## Contexte
 
 `gwsa strongauth` v1 = presence check (`touchid.swift`). La fiche 0001 exige un

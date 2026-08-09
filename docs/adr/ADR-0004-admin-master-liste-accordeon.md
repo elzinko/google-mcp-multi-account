@@ -22,6 +22,8 @@ Statut : **accepté** — implémenté (fiche 0036, maquette v11) · révisé 20
 >   toujours que sur un flag serveur (`delete`), pas sur le front.
 Fiches liées : 0036 (clarté des cartes), 0037 (sémantique de la suppression en zone)
 
+> **TL;DR** — La page web d'administration (qui gère les comptes Google connectés) abandonne les cartes dépliables « accordéon » au profit d'une liste cliquable qui bascule vers une page de détail par compte — sans adresse URL ni routeur, juste un changement d'état à l'écran — afin de rester une page unique sans dépendance ; et les droits/avertissements affichés pour chaque compte sont fournis en données par le serveur plutôt qu'écrits en dur dans la page.
+
 ## Contexte
 
 L'admin web local est **une seule page** HTML/CSS/JS vanilla (aucun framework,
