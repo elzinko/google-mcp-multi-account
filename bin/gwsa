@@ -95,7 +95,7 @@ check_alias() {
   [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] \
     || die "alias invalide « $1 » (lettres, chiffres, - et _ uniquement)"
   case "$1" in
-    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth|elicitation|admin|broker|dev|update|release|session|vault|project|sandbox|couloir) die "« $1 » est un mot réservé" ;;
+    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth|elicitation|admin|broker|dev|update|release|session|vault|project|sandbox|couloir|wire) die "« $1 » est un mot réservé" ;;
   esac
 }
 
@@ -751,6 +751,27 @@ for p in sorted(root.glob('*/')):
 "
       ;;
     *) die "usage : $SELF vault migrate|status" ;;
+  esac
+}
+
+cmd_wire() { # gma wire <desktop|code|all> [--print] — brancher ce serveur MCP dans un client LLM
+  local target="${1:-all}"; [[ $# -gt 0 ]] && shift
+  local desk="$REPO_DIR/scripts/install-claude-desktop.sh"
+  local code="$REPO_DIR/scripts/install-claude-code.sh"
+  case "$target" in
+    -h|--help|help)
+      echo "usage : $SELF wire <desktop|code|all> [--print]"
+      echo "  Branche ce serveur MCP dans Claude Desktop / Claude Code (chemin résolu tout"
+      echo "  seul, entrée fusionnée sans écraser tes autres serveurs MCP). « --print » = dry-run."
+      echo "  Cursor : config manuelle pour l'instant — voir docs/mcp-setup.md (§ Cursor)."
+      echo "  Retirer une entrée : interface admin ($SELF admin) → Clients MCP → Retirer." ;;
+    desktop) [[ -x "$desk" ]] || die "script Desktop introuvable ($desk)"; "$desk" "$@" ;;
+    code)    [[ -x "$code" ]] || die "script Claude Code introuvable ($code)"; "$code" "$@" ;;
+    cursor)  die "Cursor : config manuelle pour l'instant — voir docs/mcp-setup.md (§ Cursor)." ;;
+    all)
+      [[ -x "$desk" ]] && { "$desk" "$@" || echo "$SELF : Desktop — échec (voir ci-dessus)" >&2; }
+      [[ -x "$code" ]] && { "$code" "$@" || echo "$SELF : Claude Code — échec (le CLI « claude » est-il installé ?)" >&2; } ;;
+    *) die "usage : $SELF wire <desktop|code|all> [--print]" ;;
   esac
 }
 
@@ -1639,6 +1660,7 @@ main() {
     update)  shift; cmd_update "$@" ;;
     release) shift; cmd_release "$@" ;;
     sandbox) shift; cmd_sandbox "$@" ;;
+    wire) shift; cmd_wire "$@" ;;
     couloir) shift; cmd_couloir "$@" ;;
     remove) shift; [[ $# -eq 1 ]] || die "usage : $SELF remove <alias>"; cmd_remove "$@" ;;
     *)
