@@ -13,7 +13,7 @@
 #                                                   (email obligatoire si strongauth on)
 #   gwsa list                                         Lister les profils et leur état
 #   gwsa lock <alias>                                 Verrouiller un profil (accès sur demande)
-#   gwsa unlock <alias> [minutes]                     Déverrouiller temporairement (défaut 60 min)
+#   $SELF unlock <alias> [minutes]                     Déverrouiller temporairement (défaut 60 min)
 #   gwsa policy <alias> [show|mode <m>|allow <dossier>|revoke <id>|clear]
 #                                                     Zones d'écriture Drive PERMANENTES
 #   gwsa grant <alias> <dossier> [heures]             Autorisation Drive TEMPORAIRE (défaut 8 h)
@@ -23,15 +23,15 @@
 #   gwsa elicitation enroll|status                    Enrôler clé biométrique / état (fiche 0001)
 #   gwsa admin [stop]                                 Démarrer/arrêter l'interface web (127.0.0.1:4877)
 #   gwsa broker [status|stop]                         État/arrêt du broker de ce GWSA_ROOT
-#   gwsa dev deploy [--isolated]                      Déployer le clone courant en version dev temporaire
-#   gwsa dev test [--no-deploy] [--isolated] [--open] Déployer + redémarrer l'admin + résumé de validation
-#   gwsa dev list                                     Versions déployées + configs client (Cursor, Desktop…)
-#   gwsa dev status [id]                              État broker/admin par version dev
-#   gwsa dev use <id> --cursor|--claude-desktop [--apply]  Snippet (ou écriture) config MCP
-#   gwsa dev remove <id>                              Supprimer une version dev temporaire
+#   $SELF dev deploy [--isolated]                      Déployer le clone courant en version dev temporaire
+#   $SELF dev test [--no-deploy] [--isolated] [--open] Déployer + redémarrer l'admin + résumé de validation
+#   $SELF dev list                                     Versions déployées + configs client (Cursor, Desktop…)
+#   $SELF dev status [id]                              État broker/admin par version dev
+#   $SELF dev use <id> --cursor|--claude-desktop [--apply]  Snippet (ou écriture) config MCP
+#   $SELF dev remove <id>                              Supprimer une version dev temporaire
 #   gwsa update [--check|--to <version>]              Installer la dernière version publiée
 #   gwsa release [patch|minor|major|--print]          Publier une version (semver + CHANGELOG + tag)
-#   gwsa sandbox deploy [--wire …]|wire [--remove …]|list|status|remove  Sandboxes jetables (0041 ; détail : gwsa sandbox --help)
+#   gwsa sandbox deploy [--wire …]|wire [--remove …]|list|status|remove  Sandboxes jetables (0041 ; détail : $SELF sandbox --help)
 #   gwsa project show|init|sign                         Manifeste projet .gwsa/ (fiche 0040 phase B)
 #   gwsa couloir …                                      Alias déprécié → sandbox
 #   gwsa remove <alias>                               Déconnecter et supprimer un profil
@@ -55,11 +55,17 @@ MASTER_SECRET="$GWSA_ROOT/client_secret.json"
 umask 077
 [[ -d "$GWSA_ROOT" ]] && chmod 700 "$GWSA_ROOT" 2>/dev/null || true
 
-usage() { awk 'NR==1{next} !/^#/{exit} {sub(/^# ?/,""); print}' "$0"; }
+usage() { awk 'NR==1{next} !/^#/{exit} {sub(/^# ?/,""); print}' "$0" | sed "s/gwsa/$SELF/g"; }
 
-resolve_repo_dir() { # suit le symlink éventuel (ex. /opt/homebrew/bin/gwsa) jusqu'au repo
-  local src="$0"
-  while [[ -L "$src" ]]; do src="$(readlink "$src")"; done
+resolve_repo_dir() { # suit le symlink éventuel (brew /opt/homebrew/bin/gwsa, ou bin/gma → gwsa) jusqu'au repo
+  local src="$0" target
+  while [[ -L "$src" ]]; do
+    target="$(readlink "$src")"
+    case "$target" in
+      /*) src="$target" ;;                  # cible absolue (ex. lien brew d'install.sh)
+      *)  src="$(dirname "$src")/$target" ;; # cible relative → résolue depuis le dossier du lien
+    esac
+  done
   ( cd "$(dirname "$src")/.." && pwd )
 }
 REPO_DIR="$(resolve_repo_dir)"
@@ -80,9 +86,10 @@ SYS_SWIFT="/usr/bin/swift"
 # que require_signed_elicitation ferait ensuite confiance — cf. docs/threat-model.md).
 SYS_SWIFTC="/usr/bin/swiftc"
 SIGN_BIN=""  # chemin du binaire de signature — rempli par ensure_sign_bin (nom = gateway/config.py:PRODUCT_SLUG)
-[[ -x "$SYS_PYTHON" ]] || { echo "gwsa : interpréteur système introuvable ($SYS_PYTHON) — installer les outils en ligne de commande : xcode-select --install" >&2; exit 3; }
+SELF="$(basename "$0")"  # nom sous lequel on est invoqué : « gma » ou l'alias déprécié « $SELF »
+[[ -x "$SYS_PYTHON" ]] || { echo "$SELF : interpréteur système introuvable ($SYS_PYTHON) — installer les outils en ligne de commande : xcode-select --install" >&2; exit 3; }
 
-die() { echo "gwsa : $*" >&2; exit 3; }
+die() { echo "$SELF : $*" >&2; exit 3; }
 
 check_alias() {
   [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] \
@@ -239,7 +246,7 @@ cmd_add() { # cmd_add <alias> [email-attendu] [options gws auth login]
   # La barrière biométrique passe par l'élicitation signée (fiche 0001), pas
   # require_strong_auth nu — sinon double prompt et pas de payload signé.
   if [[ -z "$expected" && -f "$GWSA_ROOT/.strong-auth" ]]; then
-    die "usage : gwsa add <alias> <email> — email requis quand strongauth est actif (Touch ID nomme le compte)"
+    die "usage : $SELF add <alias> <email> — email requis quand strongauth est actif (Touch ID nomme le compte)"
   fi
   require_signed_elicitation "$(printf '{"action":"add_account","alias":"%s","target":"%s"}' "$alias" "${expected:-}")"
   local dir; dir="$(profile_dir "$alias")"
@@ -255,8 +262,8 @@ cmd_add() { # cmd_add <alias> [email-attendu] [options gws auth login]
   rm -f "$dir/.email"   # l'alias a pu changer de compte : forcer une lecture fraîche
   local email; email="$(profile_email "$dir")"
   if [[ -n "$expected" && -n "$email" && "$email" != "$expected" ]]; then
-    echo "gwsa : ✗ MAUVAIS COMPTE pour « $alias » : connecté avec $email au lieu de $expected." >&2
-    echo "       Refaire : gwsa add $alias $expected — et choisir $expected dans le navigateur." >&2
+    echo "$SELF : ✗ MAUVAIS COMPTE pour « $alias » : connecté avec $email au lieu de $expected." >&2
+    echo "       Refaire : $SELF add $alias $expected — et choisir $expected dans le navigateur." >&2
     exit 4
   fi
   # Policy prudente par défaut (default-deny) — zones Drive vides, Gmail sans envoi.
@@ -279,7 +286,7 @@ PYEOF
     rem="$(printf '%s' "$probe" | "$SYS_PYTHON" "$REPO_DIR/scripts/iam-check.py" detect "$email" 2>/dev/null || true)"
     [[ -n "$rem" ]] && { echo; echo "$rem" >&2; }
   fi
-  echo "✓ Profil « $alias » connecté${email:+ — $email}. Test : gwsa $alias auth status"
+  echo "✓ Profil « $alias » connecté${email:+ — $email}. Test : $SELF $alias auth status"
   REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
 import os, sys
 sys.path.insert(0, os.environ['REPO_DIR'])
@@ -299,7 +306,7 @@ cmd_list() {
         email="$(profile_email "$dir")"
         state="connecté${email:+ — $email}"
       else
-        state="non connecté (relancer : gwsa add $alias)"
+        state="non connecté (relancer : $SELF add $alias)"
       fi
       if [[ -f "$dir/.locked" ]]; then
         if is_locked "$dir"; then
@@ -312,7 +319,7 @@ cmd_list() {
       printf '  %-16s %s\n' "$alias" "$state"
     done
   fi
-  [[ $found -eq 1 ]] || echo "Aucun profil. Commencer par : gwsa add <alias>"
+  [[ $found -eq 1 ]] || echo "Aucun profil. Commencer par : $SELF add <alias>"
 }
 
 cmd_lock() {
@@ -320,12 +327,12 @@ cmd_lock() {
   local dir; dir="$(profile_dir "$alias")"
   [[ -d "$dir" ]] || die "profil inconnu « $alias »"
   touch "$dir/.locked"; rm -f "$dir/.unlock-until"
-  echo "🔒 Profil « $alias » verrouillé — accès sur demande uniquement (gwsa unlock $alias [minutes])"
+  echo "🔒 Profil « $alias » verrouillé — accès sur demande uniquement ($SELF unlock $alias [minutes])"
 }
 
-unlock_deprecation_warn() { # stderr — gwsa unlock global (poste entier) déprécié (fiche 0040)
-  echo "⚠ gwsa unlock déverrouille le profil pour TOUTES les sessions sur ce poste (legacy)." >&2
-  echo "  Préférer : gwsa session unlock <session_id> <alias> [minutes]" >&2
+unlock_deprecation_warn() { # stderr — $SELF unlock global (poste entier) déprécié (fiche 0040)
+  echo "⚠ $SELF unlock déverrouille le profil pour TOUTES les sessions sur ce poste (legacy)." >&2
+  echo "  Préférer : $SELF session unlock <session_id> <alias> [minutes]" >&2
   echo "  ou access_request kind=session_unlock via MCP (session active)." >&2
 }
 
@@ -396,7 +403,7 @@ json.dump(d, open(path, "w"), indent=2)
 PYEOF
       echo "✓ mode Drive de « $alias » : $m" ;;
     allow)
-      local target="${2:-}"; [[ -n "$target" ]] || die "usage : gwsa policy $alias allow <nomDeDossier|folderId>"
+      local target="${2:-}"; [[ -n "$target" ]] || die "usage : $SELF policy $alias allow <nomDeDossier|folderId>"
       local resolved fid fname
       resolved="$(resolve_folder "$dir" "$target")"
       fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
@@ -421,7 +428,7 @@ json.dump(d, open(path, "w"), indent=2)
 PYEOF
       echo "✓ « $alias » : écriture autorisée en permanence sous « $fname » ($fid) et ses sous-dossiers" ;;
     revoke)
-      local rid="${2:-}"; [[ -n "$rid" ]] || die "usage : gwsa policy $alias revoke <folderId>"
+      local rid="${2:-}"; [[ -n "$rid" ]] || die "usage : $SELF policy $alias revoke <folderId>"
       [[ -f "$P" ]] || die "aucune policy pour « $alias »"
       "$SYS_PYTHON" - "$P" "$rid" <<'PYEOF'
 import json, sys
@@ -454,21 +461,21 @@ PYEOF
 }
 
 grant_deprecation_warn() { # stderr — gwsa grant global (poste entier) déprécié (fiche 0040)
-  echo "⚠ gwsa grant accorde une zone à TOUTES les sessions sur ce poste (legacy)." >&2
-  echo "  Préférer : gwsa session grant <session_id> <alias> <dossier> [heures]" >&2
+  echo "⚠ $SELF grant accorde une zone à TOUTES les sessions sur ce poste (legacy)." >&2
+  echo "  Préférer : $SELF session grant <session_id> <alias> <dossier> [heures]" >&2
   echo "  ou access_request kind=session_grant via MCP (session active)." >&2
 }
 
-cmd_grant() { # gwsa grant <alias> <dossierIdOuNom> [heures] | gwsa grant <alias> revoke <folderId>
+cmd_grant() { # gwsa grant <alias> <dossierIdOuNom> [heures] | $SELF grant <alias> revoke <folderId>
   local alias="$1"; shift
   check_alias "$alias"
   local dir; dir="$(profile_dir "$alias")"
   [[ -d "$dir" ]] || die "profil inconnu « $alias »"
   local email; email="$(profile_email_cached "$dir")"   # compte nommé, sans exec gws (fiche 0047)
   local G="$dir/session-grants.json"
-  [[ $# -ge 1 ]] || die "usage : gwsa grant $alias <dossier> [heures] | gwsa grant $alias revoke <folderId>"
+  [[ $# -ge 1 ]] || die "usage : $SELF grant $alias <dossier> [heures] | $SELF grant $alias revoke <folderId>"
   if [[ "$1" == "revoke" ]]; then
-    local rid="${2:-}"; [[ -n "$rid" ]] || die "usage : gwsa grant $alias revoke <folderId>"
+    local rid="${2:-}"; [[ -n "$rid" ]] || die "usage : $SELF grant $alias revoke <folderId>"
     [[ -f "$G" ]] || { echo "Aucune autorisation temporaire pour « $alias »."; return 0; }
     "$SYS_PYTHON" - "$G" "$rid" <<'PYEOF'
 import json, sys
@@ -557,7 +564,7 @@ print(json.dumps({'sessions': list_sessions()}, indent=2, ensure_ascii=False))
       ;;
     unlock)
       local sid="${1:-}" alias="${2:-}" mins="${3:-60}"
-      [[ -n "$sid" && -n "$alias" ]] || die "usage : gwsa session unlock <session_id> <alias> [minutes]"
+      [[ -n "$sid" && -n "$alias" ]] || die "usage : $SELF session unlock <session_id> <alias> [minutes]"
       check_alias "$alias"
       local dir; dir="$(profile_dir "$alias")"
       [[ -d "$dir" ]] || die "profil inconnu « $alias »"
@@ -574,7 +581,7 @@ session_unlock(sys.argv[1], sys.argv[2], int(sys.argv[3]))
     grant)
       local sid="${1:-}" alias="${2:-}" target="${3:-}" hours="${4:-8}"
       [[ -n "$sid" && -n "$alias" && -n "$target" ]] \
-        || die "usage : gwsa session grant <session_id> <alias> <dossier> [heures]"
+        || die "usage : $SELF session grant <session_id> <alias> <dossier> [heures]"
       check_alias "$alias"
       local dir; dir="$(profile_dir "$alias")"
       [[ -d "$dir" ]] || die "profil inconnu « $alias »"
@@ -598,7 +605,7 @@ session_grant_drive(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.
       echo "🕐 session $sid : zone « $fname » pour $hours h."
       ;;
     revoke-descendants)
-      local sid="${1:-}"; [[ -n "$sid" ]] || die "usage : gwsa session revoke-descendants <session_id>"
+      local sid="${1:-}"; [[ -n "$sid" ]] || die "usage : $SELF session revoke-descendants <session_id>"
       require_signed_elicitation "$(printf '{"action":"revoke_descendants","session_id":"%s"}' "$sid")"
       n="$(REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
 import os, sys
@@ -609,7 +616,7 @@ print(revoke_descendants(sys.argv[1]))
       echo "✓ $n sous-session(s) purgée(s) pour $sid."
       ;;
     show)
-      local sid="${1:-}"; [[ -n "$sid" ]] || die "usage : gwsa session show <session_id>"
+      local sid="${1:-}"; [[ -n "$sid" ]] || die "usage : $SELF session show <session_id>"
       REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
 import json, os, sys
 sys.path.insert(0, os.environ['REPO_DIR'])
@@ -619,7 +626,7 @@ print(json.dumps(s.to_json() if s else {}, indent=2, ensure_ascii=False))
 " "$sid"
       ;;
     close)
-      local sid="${1:-}"; [[ -n "$sid" ]] || die "usage : gwsa session close <session_id>"
+      local sid="${1:-}"; [[ -n "$sid" ]] || die "usage : $SELF session close <session_id>"
       REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
 import os, sys
 sys.path.insert(0, os.environ['REPO_DIR'])
@@ -628,7 +635,7 @@ close_session(sys.argv[1])
 " "$sid"
       echo "✓ session $sid purgée (et descendants)."
       ;;
-    *) die "usage : gwsa session list|unlock|grant|revoke-descendants|show|close …" ;;
+    *) die "usage : $SELF session list|unlock|grant|revoke-descendants|show|close …" ;;
   esac
 }
 
@@ -647,7 +654,7 @@ cmd_elicitation() { # gwsa elicitation enroll|status — clé biométrique (fich
       REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" \
         "$SYS_PYTHON" "$REPO_DIR/scripts/elicitation-cli.py" status
       ;;
-    *) die "usage : gwsa elicitation enroll [--mock] | status" ;;
+    *) die "usage : $SELF elicitation enroll [--mock] | status" ;;
   esac
 }
 
@@ -690,7 +697,7 @@ from gateway.project import sign_manifest
 print(json.dumps(sign_manifest(), indent=2, ensure_ascii=False))
 "
       ;;
-    *) die "usage : gwsa project show|init|sign" ;;
+    *) die "usage : $SELF project show|init|sign" ;;
   esac
 }
 
@@ -724,7 +731,7 @@ for p in sorted(root.glob('*/')):
         print(p.name, 'vault' if is_migrated(p.name) else 'legacy')
 "
       ;;
-    *) die "usage : gwsa vault migrate|status" ;;
+    *) die "usage : $SELF vault migrate|status" ;;
   esac
 }
 
@@ -735,7 +742,7 @@ cmd_sandbox() { # gwsa sandbox deploy|list|status|remove|wire — sandboxes temp
 }
 
 cmd_couloir() { # alias déprécié → sandbox
-  echo "⚠ « gwsa couloir » est déprécié — utilise « gwsa sandbox »." >&2
+  echo "⚠ « $SELF couloir » est déprécié — utilise « $SELF sandbox »." >&2
   cmd_sandbox "$@"
 }
 
@@ -832,7 +839,7 @@ cmd_admin() { # gwsa admin [stop] — interface web locale, port GWSA_ADMIN_PORT
         fi
       fi
       [[ -z "${GWSA_ADMIN_NO_OPEN:-}" ]] && open "http://127.0.0.1:$port" 2>/dev/null || true ;;
-    *) die "usage : gwsa admin [stop]" ;;
+    *) die "usage : $SELF admin [stop]" ;;
   esac
 }
 
@@ -885,11 +892,11 @@ cmd_broker() { # gwsa broker [status|stop] — piloter le broker de CE couloir
         echo "broker déjà arrêté."
       fi
       rm -f "$pidf" ;;
-    *) die "usage : gwsa broker [status|stop]" ;;
+    *) die "usage : $SELF broker [status|stop]" ;;
   esac
 }
 
-# ── gwsa dev — couloirs de développement temporaires ─────────────────────────
+# ── $SELF dev — couloirs de développement temporaires ─────────────────────────
 DEV_DEPLOY_ROOT="${GWSA_DEPLOY_ROOT:-$HOME/.local/share/google-mcp}"
 DEV_PROD_ROOT="${HOME}/.config/gws-accounts"
 DEV_ISOLATED_ROOT="${HOME}/.config/gws-accounts-dev"
@@ -1038,8 +1045,8 @@ cmd_dev_deploy() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --isolated) isolated=1 ;;
-      -h|--help) echo "usage : gwsa dev deploy [--isolated]"; return 0 ;;
-      *) die "usage : gwsa dev deploy [--isolated]" ;;
+      -h|--help) echo "usage : $SELF dev deploy [--isolated]"; return 0 ;;
+      *) die "usage : $SELF dev deploy [--isolated]" ;;
     esac
     shift
   done
@@ -1092,7 +1099,7 @@ PYEOF
 
   if [[ -n "$isolated" ]]; then
     # Couloir isolé : comptes séparés de la prod, mais même app OAuth.
-    # Sans client_secret.json, « gwsa add » refuse immédiatement.
+    # Sans client_secret.json, « $SELF add » refuse immédiatement.
     mkdir -p "$gwsa_root"
     if [[ ! -f "$gwsa_root/client_secret.json" ]]; then
       if [[ -f "$DEV_PROD_ROOT/client_secret.json" ]]; then
@@ -1101,7 +1108,7 @@ PYEOF
         echo "  → OAuth (client_secret.json) copié depuis $DEV_PROD_ROOT (pas les tokens)"
       else
         echo "  ⚠ client_secret.json absent de $DEV_PROD_ROOT"
-        echo "    Avant « gwsa add » : placer client_secret.json dans $gwsa_root"
+        echo "    Avant « $SELF add » : placer client_secret.json dans $gwsa_root"
         echo "    (suivre docs/setup-oauth.md, ou copier depuis un root déjà provisionné)."
       fi
     fi
@@ -1113,19 +1120,19 @@ PYEOF
   echo "Prochaines étapes :"
   echo
   echo "  1. Brancher un client MCP sur cette version :"
-  echo "       gwsa dev use $id --cursor --apply"
+  echo "       $SELF dev use $id --cursor --apply"
   echo "     ou Claude Desktop (propage GWSA_ROOT du couloir) :"
-  echo "       gwsa dev use $id --claude-desktop --apply"
+  echo "       $SELF dev use $id --claude-desktop --apply"
   echo
   echo "  2. Redémarrer le client (Cursor : recharger MCP ; Desktop : Cmd-Q)."
   echo
   echo "  3. Vérifier :"
-  echo "       gwsa dev status $id"
+  echo "       $SELF dev status $id"
   echo
   echo "  4. gwsa / broker de CETTE version (depuis n'importe où) :"
   echo "       GWSA_ROOT=$gwsa_root GWSA_BROKER_PORT=$port $target/bin/gwsa broker status"
   echo
-  echo "Note : l'admin web (gwsa admin) partage le port ${GWSA_ADMIN_PORT:-4877} — une seule"
+  echo "Note : l'admin web ($SELF admin) partage le port ${GWSA_ADMIN_PORT:-4877} — une seule"
   echo "instance à la fois. Les versions dev réutilisent les comptes prod sauf --isolated."
   if [[ -n "$isolated" ]]; then
     echo "  → couloir isolé ($gwsa_root) : connecter un compte de test avec"
@@ -1134,7 +1141,7 @@ PYEOF
 }
 
 cmd_dev_list() {
-  [[ $# -eq 0 ]] || die "« gwsa dev list » ne prend aucun argument (reçu : $*)"
+  [[ $# -eq 0 ]] || die "« $SELF dev list » ne prend aucun argument (reçu : $*)"
   local cur="" d v kind port groot
   echo "Versions (~/.local/share/google-mcp/)"
   if [[ ! -d "$DEV_DEPLOY_ROOT" ]]; then
@@ -1218,13 +1225,13 @@ PYEOF
 
 cmd_dev_status() {
   local filter="${1:-}"
-  [[ $# -le 1 ]] || die "usage : gwsa dev status [id]"
+  [[ $# -le 1 ]] || die "usage : $SELF dev status [id]"
   local d v port groot pid admin_port="${GWSA_ADMIN_PORT:-4877}"
   echo "Admin (partagé, port $admin_port)"
   dev_admin_status
   echo
   if [[ -n "$filter" ]]; then
-    [[ -d "$(dev_version_dir "$filter")" ]] || die "version « $filter » introuvable (gwsa dev list)"
+    [[ -d "$(dev_version_dir "$filter")" ]] || die "version « $filter » introuvable ($SELF dev list)"
     echo "Version $filter"
     d="$(dev_version_dir "$filter")"
     port="$(dev_read_meta "$d" broker_port 2>/dev/null || echo 4878)"
@@ -1256,7 +1263,7 @@ cmd_dev_status() {
       printf '  %-28s broker arrêté (port %s)\n' "$v" "$port"
     fi
   done
-  [[ $any -eq 1 ]] || echo "  (aucune version dev — gwsa dev deploy)"
+  [[ $any -eq 1 ]] || echo "  (aucune version dev — $SELF dev deploy)"
 }
 
 cmd_dev_use() {
@@ -1267,19 +1274,19 @@ cmd_dev_use() {
       --claude-desktop) client="claude-desktop" ;;
       --apply) apply=1 ;;
       -h|--help)
-        echo "usage : gwsa dev use <id> --cursor [--apply]"
-        echo "        gwsa dev use <id> --claude-desktop [--apply]"
+        echo "usage : $SELF dev use <id> --cursor [--apply]"
+        echo "        $SELF dev use <id> --claude-desktop [--apply]"
         return 0 ;;
       *)
-        [[ -z "$id" ]] && id="$1" || die "usage : gwsa dev use <id> --cursor [--apply]"
+        [[ -z "$id" ]] && id="$1" || die "usage : $SELF dev use <id> --cursor [--apply]"
         ;;
     esac
     shift
   done
-  [[ -n "$id" && -n "$client" ]] || die "usage : gwsa dev use <id> --cursor [--apply]"
+  [[ -n "$id" && -n "$client" ]] || die "usage : $SELF dev use <id> --cursor [--apply]"
   local target mcp port groot server_name cfg
   target="$(dev_version_dir "$id")"
-  [[ -d "$target" ]] || die "version « $id » introuvable — gwsa dev list"
+  [[ -d "$target" ]] || die "version « $id » introuvable — $SELF dev list"
   mcp="$target/bin/google-mcp"
   [[ -x "$mcp" ]] || die "binaire MCP absent : $mcp"
   port="$(dev_read_meta "$target" broker_port 2>/dev/null || echo 4880)"
@@ -1370,19 +1377,19 @@ cmd_dev_test() {
       --isolated) isolated=1 ;;
       --open) open_browser=1 ;;
       -h|--help)
-        cat <<'EOF'
-usage : gwsa dev test [--no-deploy] [--isolated] [--open]
+        cat <<EOF
+usage : $SELF dev test [--no-deploy] [--isolated] [--open]
 
 Déploie le clone courant (sauf --no-deploy), redémarre l'admin sur le port
 partagé, et affiche un résumé de validation locale.
 
-  --no-deploy   ne pas relancer « gwsa dev deploy » (réutilise le déploiement existant)
+  --no-deploy   ne pas relancer « $SELF dev deploy » (réutilise le déploiement existant)
   --isolated    couloir sans comptes prod (transmis à deploy)
   --open        ouvrir http://127.0.0.1:4877 dans le navigateur (macOS)
 EOF
         return 0
         ;;
-      *) die "usage : gwsa dev test [--no-deploy] [--isolated] [--open]" ;;
+      *) die "usage : $SELF dev test [--no-deploy] [--isolated] [--open]" ;;
     esac
     shift
   done
@@ -1416,7 +1423,7 @@ EOF
   fi
 
   target="$(dev_version_dir "$id")"
-  [[ -d "$target" ]] || die "version « $id » introuvable — retire --no-deploy ou lance « gwsa dev deploy »"
+  [[ -d "$target" ]] || die "version « $id » introuvable — retire --no-deploy ou lance « $SELF dev deploy »"
   gwsa_bin="$target/bin/gwsa"
   [[ -x "$gwsa_bin" ]] || die "gwsa absent dans le déploiement : $gwsa_bin"
   port="$(dev_read_meta "$target" broker_port 2>/dev/null || echo 4878)"
@@ -1498,7 +1505,7 @@ EOF
 
 cmd_dev_remove() {
   local id="${1:-}"
-  [[ $# -eq 1 ]] || die "usage : gwsa dev remove <id>"
+  [[ $# -eq 1 ]] || die "usage : $SELF dev remove <id>"
   dev_is_dev_id "$id" || die "« $id » n'est pas une version dev (refus de supprimer une stable)"
   local target groot port
   target="$(dev_version_dir "$id")"
@@ -1512,11 +1519,11 @@ cmd_dev_remove() {
   fi
   rm -rf "$target"
   echo "✓ version dev « $id » supprimée ($target)"
-  echo "  Pense à retirer l'entrée MCP du client si tu l'avais branchée (gwsa dev list)."
+  echo "  Pense à retirer l'entrée MCP du client si tu l'avais branchée ($SELF dev list)."
 }
 
 cmd_dev() {
-  [[ $# -ge 1 ]] || die "usage : gwsa dev <deploy|test|list|status|use|remove> …"
+  [[ $# -ge 1 ]] || die "usage : $SELF dev <deploy|test|list|status|use|remove> …"
   case "$1" in
     deploy) shift; cmd_dev_deploy "$@" ;;
     test)   shift; cmd_dev_test "$@" ;;
@@ -1525,7 +1532,7 @@ cmd_dev() {
     use)    shift; cmd_dev_use "$@" ;;
     remove) shift; cmd_dev_remove "$@" ;;
     -h|--help)
-      echo "gwsa dev — couloirs de développement temporaires"
+      echo "$SELF dev — couloirs de développement temporaires"
       echo "  deploy [--isolated]     déployer le clone courant"
       echo "  test [--no-deploy] [--isolated] [--open]"
       echo "                          déployer + redémarrer l'admin + résumé"
@@ -1587,40 +1594,40 @@ main() {
   [[ $# -ge 1 ]] || { usage; exit 3; }
   case "$1" in
     -h|--help|help) usage ;;
-    add)    shift; [[ $# -ge 1 ]] || die "usage : gwsa add <alias> [email-attendu] [options gws auth login]"; cmd_add "$@" ;;
-    list)   shift; [[ $# -eq 0 ]] || die "« gwsa list » ne prend aucun argument (reçu : $*)"; cmd_list ;;
-    lock)   shift; [[ $# -eq 1 ]] || die "usage : gwsa lock <alias>"; cmd_lock "$@" ;;
-    unlock) shift; [[ $# -ge 1 && $# -le 2 ]] || die "usage : gwsa unlock <alias> [minutes|off]"; cmd_unlock "$@" ;;
-    policy) shift; [[ $# -ge 1 ]] || die "usage : gwsa policy <alias> [show|mode|allow|revoke|clear]"; cmd_policy "$@" ;;
-    grant)  shift; [[ $# -ge 1 ]] || die "usage : gwsa grant <alias> <dossier> [heures]"; cmd_grant "$@" ;;
-    grants) shift; [[ $# -ge 1 && $# -le 2 ]] || die "usage : gwsa grants <alias> [clear]"; cmd_grants "$@" ;;
+    add)    shift; [[ $# -ge 1 ]] || die "usage : $SELF add <alias> [email-attendu] [options gws auth login]"; cmd_add "$@" ;;
+    list)   shift; [[ $# -eq 0 ]] || die "« $SELF list » ne prend aucun argument (reçu : $*)"; cmd_list ;;
+    lock)   shift; [[ $# -eq 1 ]] || die "usage : $SELF lock <alias>"; cmd_lock "$@" ;;
+    unlock) shift; [[ $# -ge 1 && $# -le 2 ]] || die "usage : $SELF unlock <alias> [minutes|off]"; cmd_unlock "$@" ;;
+    policy) shift; [[ $# -ge 1 ]] || die "usage : $SELF policy <alias> [show|mode|allow|revoke|clear]"; cmd_policy "$@" ;;
+    grant)  shift; [[ $# -ge 1 ]] || die "usage : $SELF grant <alias> <dossier> [heures]"; cmd_grant "$@" ;;
+    grants) shift; [[ $# -ge 1 && $# -le 2 ]] || die "usage : $SELF grants <alias> [clear]"; cmd_grants "$@" ;;
     session) shift; cmd_session "$@" ;;
     elicitation) shift; cmd_elicitation "$@" ;;
     project) shift; cmd_project "$@" ;;
     vault) shift; cmd_vault "$@" ;;
     strongauth)
       shift
-      [[ $# -le 1 ]] || die "usage : gwsa strongauth on|off|status"
+      [[ $# -le 1 ]] || die "usage : $SELF strongauth on|off|status"
       case "${1:-status}" in
-        on)  touch "$GWSA_ROOT/.strong-auth"; echo "🔐 Authentification forte ACTIVÉE : unlock/grant exigent une élicitation signée (gwsa elicitation enroll si besoin)." ;;
+        on)  touch "$GWSA_ROOT/.strong-auth"; echo "🔐 Authentification forte ACTIVÉE : unlock/grant exigent une élicitation signée ($SELF elicitation enroll si besoin)." ;;
         off) require_signed_elicitation '{"action":"strongauth_off"}'; rm -f "$GWSA_ROOT/.strong-auth"; echo "Authentification forte désactivée." ;;
         status) [[ -f "$GWSA_ROOT/.strong-auth" ]] && echo "🔐 activée" || echo "désactivée" ;;
-        *) die "usage : gwsa strongauth on|off|status" ;;
+        *) die "usage : $SELF strongauth on|off|status" ;;
       esac ;;
-    admin)  shift; [[ $# -le 1 ]] || die "usage : gwsa admin [stop]"; cmd_admin "$@" ;;
-    broker) shift; [[ $# -le 1 ]] || die "usage : gwsa broker [status|stop]"; cmd_broker "$@" ;;
+    admin)  shift; [[ $# -le 1 ]] || die "usage : $SELF admin [stop]"; cmd_admin "$@" ;;
+    broker) shift; [[ $# -le 1 ]] || die "usage : $SELF broker [status|stop]"; cmd_broker "$@" ;;
     dev)    shift; cmd_dev "$@" ;;
     update)  shift; cmd_update "$@" ;;
     release) shift; cmd_release "$@" ;;
     sandbox) shift; cmd_sandbox "$@" ;;
     couloir) shift; cmd_couloir "$@" ;;
-    remove) shift; [[ $# -eq 1 ]] || die "usage : gwsa remove <alias>"; cmd_remove "$@" ;;
+    remove) shift; [[ $# -eq 1 ]] || die "usage : $SELF remove <alias>"; cmd_remove "$@" ;;
     *)
       local alias="$1"; shift
       check_alias "$alias"
-      [[ $# -ge 1 ]] || die "usage : gwsa $alias <commande gws…> (ex. : gwsa $alias auth status)"
+      [[ $# -ge 1 ]] || die "usage : $SELF $alias <commande gws…> (ex. : $SELF $alias auth status)"
       local dir; dir="$(profile_dir "$alias")"
-      [[ -d "$dir" ]] || die "profil inconnu « $alias » — le créer avec : gwsa add $alias"
+      [[ -d "$dir" ]] || die "profil inconnu « $alias » — le créer avec : $SELF add $alias"
       if is_locked "$dir"; then
         # Session unlock (GWSA_SESSION_ID) : même sémantique que le broker —
         # un unlock de session autorise le chemin CLI direct pendant la fenêtre.
@@ -1643,9 +1650,9 @@ sys.exit(0 if is_session_unlocked(sys.argv[1], sys.argv[2]) else 1)
               "$SYS_PYTHON" "$USAGE_LOGGER" "$GWSA_ROOT" "$alias" "$@" >/dev/null 2>&1 || true
           fi
           if [[ -n "${GWSA_SESSION_ID:-}" ]]; then
-            die "profil « $alias » verrouillé 🔒 pour cette session — l'utilisateur doit exécuter « gwsa session unlock ${GWSA_SESSION_ID} $alias [minutes] »"
+            die "profil « $alias » verrouillé 🔒 pour cette session — l'utilisateur doit exécuter « $SELF session unlock ${GWSA_SESSION_ID} $alias [minutes] »"
           fi
-          die "profil « $alias » verrouillé 🔒 — accès sur demande : l'utilisateur doit d'abord exécuter « gwsa unlock $alias [minutes] » (legacy poste entier) ou « gwsa session unlock <session_id> $alias »"
+          die "profil « $alias » verrouillé 🔒 — accès sur demande : l'utilisateur doit d'abord exécuter « $SELF unlock $alias [minutes] » (legacy poste entier) ou « $SELF session unlock <session_id> $alias »"
         fi
       fi
       if [[ -f "$dir/policy.json" ]]; then
