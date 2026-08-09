@@ -1,5 +1,27 @@
 # Journal des versions
 
+## v1.0.0 — 2026-08-09
+
+### Fonctionnalités
+
+- feat(cli): gma wire <client> — brancher un client MCP en une commande
+- feat(cli): désigner un compte par son email (alias = raccourci optionnel)
+- feat(cli): renommer gwsa → gma (alias déprécié conservé)
+
+### Documentation
+
+- docs: refonte pro — threat-model + policies contextualisés + page Contribuer
+- docs: refonte modèle — Prise en main (tuto) + architecture réécrite
+- docs: pré-v1 — gws, critique.md, Quickstart, mermaid, gwsa, déploiement Pages (0074)
+- docs(site): expliquer les deux noms (dépôt vs connecteur MCP)
+- docs(site): accentuer les titres de catégories du menu
+- docs(site): liens source en URLs GitHub absolues + ADRs dans la nav
+
+### Autres
+
+- test(security): garde admin (DNS-rebinding + Origin) + invariants DEFAULT_POLICY
+- chore(features): passe reconcile+review — ship 3, dédoublonner, rescope 6 (#88)
+
 ## v0.4.0 — 2026-08-04
 
 ### Fonctionnalités
