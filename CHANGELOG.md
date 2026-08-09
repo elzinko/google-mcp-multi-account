@@ -1,5 +1,16 @@
 # Journal des versions
 
+## v1.0.1 — 2026-08-09
+
+### Corrections
+
+- fix(install): préflight gws + récap gma/email + github.io only
+
+### Documentation
+
+- docs(adr): rampe nouveau venu — glossaire curé + TL;DR (compréhensible)
+- docs(features): 0074 — note de clôture v1.0.0
+
 ## v1.0.0 — 2026-08-09
 
 ### Fonctionnalités
