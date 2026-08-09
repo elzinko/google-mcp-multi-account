@@ -99,6 +99,25 @@ check_alias() {
   esac
 }
 
+# resolve_alias <alias-ou-email> → imprime l'alias du profil. Si l'argument
+# ressemble à un email, on cherche le profil dont la métadonnée .email correspond
+# (lecture seule, sans exec gws) — un email est plus parlant qu'un alias dans la
+# doc et les commandes. Sinon, on rend l'argument tel quel (c'est un alias).
+resolve_alias() {
+  case "$1" in
+    *@*)
+      local _d _e
+      for _d in "$GWSA_ROOT"/*/; do
+        [[ -d "$_d" ]] || continue
+        _e="$(profile_email_cached "${_d%/}" 2>/dev/null)"
+        [[ "$_e" == "$1" ]] && { basename "${_d%/}"; return 0; }
+      done
+      die "aucun compte connecté pour « $1 » — voir « $SELF list » ; le connecter : $SELF add <alias> $1"
+      ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
 resolve_folder() { # resolve_folder <dir> <idOuNom> → "id<TAB>nom" (die si introuvable/ambigu)
   local dir="$1" target="$2"
   # NOTE: les tokens OAuth résident dans le vault (`GWSA_ROOT/.vault/<alias>/`).
@@ -323,7 +342,7 @@ cmd_list() {
 }
 
 cmd_lock() {
-  local alias="$1"; check_alias "$alias"
+  local alias; alias="$(resolve_alias "$1")" || exit; check_alias "$alias"
   local dir; dir="$(profile_dir "$alias")"
   [[ -d "$dir" ]] || die "profil inconnu « $alias »"
   touch "$dir/.locked"; rm -f "$dir/.unlock-until"
@@ -337,7 +356,7 @@ unlock_deprecation_warn() { # stderr — $SELF unlock global (poste entier) dép
 }
 
 cmd_unlock() {
-  local alias="$1"; shift || true
+  local alias; alias="$(resolve_alias "$1")" || exit; shift || true
   check_alias "$alias"
   local mins="${1:-60}"
   # Valider la durée AVANT tout court-circuit : une saisie invalide doit être
@@ -383,7 +402,7 @@ session_unlock(sys.argv[1], sys.argv[2], int(sys.argv[3]))
 }
 
 cmd_policy() { # gwsa policy <alias> [show|mode <m>|allow <idOuNom>|revoke <id>|clear]
-  local alias="$1"; shift
+  local alias; alias="$(resolve_alias "$1")" || exit; shift
   check_alias "$alias"
   local dir; dir="$(profile_dir "$alias")"
   [[ -d "$dir" ]] || die "profil inconnu « $alias »"
@@ -467,7 +486,7 @@ grant_deprecation_warn() { # stderr — gwsa grant global (poste entier) dépré
 }
 
 cmd_grant() { # gwsa grant <alias> <dossierIdOuNom> [heures] | $SELF grant <alias> revoke <folderId>
-  local alias="$1"; shift
+  local alias; alias="$(resolve_alias "$1")" || exit; shift
   check_alias "$alias"
   local dir; dir="$(profile_dir "$alias")"
   [[ -d "$dir" ]] || die "profil inconnu « $alias »"
@@ -528,7 +547,7 @@ PYEOF
 }
 
 cmd_grants() { # gwsa grants <alias> [clear]
-  local alias="$1"; shift || true
+  local alias; alias="$(resolve_alias "$1")" || exit; shift || true
   check_alias "$alias"
   local dir; dir="$(profile_dir "$alias")"
   [[ -d "$dir" ]] || die "profil inconnu « $alias »"
@@ -1568,7 +1587,7 @@ cmd_release() { # gwsa release [patch|minor|major|--print] — publier une versi
 }
 
 cmd_remove() {
-  local alias="$1"
+  local alias; alias="$(resolve_alias "$1")" || exit
   check_alias "$alias"
   local dir; dir="$(profile_dir "$alias")"
   [[ -d "$dir" ]] || die "profil inconnu « $alias »"
@@ -1623,7 +1642,7 @@ main() {
     couloir) shift; cmd_couloir "$@" ;;
     remove) shift; [[ $# -eq 1 ]] || die "usage : $SELF remove <alias>"; cmd_remove "$@" ;;
     *)
-      local alias="$1"; shift
+      local alias; alias="$(resolve_alias "$1")" || exit; shift
       check_alias "$alias"
       [[ $# -ge 1 ]] || die "usage : $SELF $alias <commande gws…> (ex. : $SELF $alias auth status)"
       local dir; dir="$(profile_dir "$alias")"

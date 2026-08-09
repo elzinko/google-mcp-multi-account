@@ -6,15 +6,20 @@ Modèle de policy (qui a le droit de quoi) : [policies.md](policies.md).
 
 ## En ligne de commande (`gma`)
 
-Le wrapper isole chaque compte via `GOOGLE_WORKSPACE_CLI_CONFIG_DIR`. On
-appelle `gma <alias> <commande gws…>` (jamais `gws` nu) :
+Le wrapper isole chaque compte via `GOOGLE_WORKSPACE_CLI_CONFIG_DIR`. On désigne
+un compte par son **adresse email** (le plus clair) et on appelle
+`gma <email> <commande gws…>` (jamais `gws` nu) :
 
 ```bash
-gma perso gmail users messages list --params '{"userId":"me","maxResults":5}'
-gma assoc drive files list --params '{"pageSize":10}'
-gma perso calendar +agenda --today    # agenda du jour
-gma perso auth status                 # état du token
+gma vous@gmail.com gmail users messages list --params '{"userId":"me","maxResults":5}'
+gma vous@gmail.com drive files list --params '{"pageSize":10}'
+gma vous@gmail.com calendar +agenda --today    # agenda du jour
+gma vous@gmail.com auth status                 # état du token
 ```
+
+> **Alias = raccourci optionnel.** Si l'email est long à taper, nomme le compte
+> à la connexion (`gma add perso vous@gmail.com`) puis utilise l'alias court
+> (`gma perso …`) partout où un email est accepté.
 
 Pour les données (Gmail/Drive), préférer les **tools MCP** (voir
 [mcp-setup.md](mcp-setup.md)). Le shell `gma` reste pour l'admin humain et
@@ -27,9 +32,9 @@ refuse toute commande tant que tu ne l'as pas déverrouillé explicitement —
 le LLM qui se heurte au verrou doit te le demander.
 
 ```bash
-gma lock zebra            # accès sur demande uniquement
-gma zebra gmail …         # ✗ profil verrouillé 🔒 → le LLM doit demander
-gma unlock zebra 30       # déverrouillé 30 min, reverrouillage automatique
+gma lock vous@gmail.com        # accès sur demande uniquement
+gma vous@gmail.com gmail …     # ✗ profil verrouillé 🔒 → le LLM doit demander
+gma unlock vous@gmail.com 30   # déverrouillé 30 min, reverrouillage automatique
 ```
 
 [.claude/settings.json](https://github.com/elzinko/google-mcp-multi-account/blob/main/.claude/settings.json) ajoute une seconde barrière,
