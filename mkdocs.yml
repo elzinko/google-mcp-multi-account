@@ -1,7 +1,6 @@
 site_name: google-multi-account
 site_description: Google Workspace multi-comptes pour agents LLM — 100 % local.
-# URL de publication réelle (GitHub Pages). Repasser sur https://docs.elzinko.fr/
-# une fois le domaine custom branché (Pages → Custom domain + CNAME DNS).
+# URL de publication réelle — GitHub Pages (pas de domaine custom).
 site_url: https://elzinko.github.io/google-mcp-multi-account/
 repo_url: https://github.com/elzinko/google-mcp-multi-account
 repo_name: elzinko/google-mcp-multi-account
