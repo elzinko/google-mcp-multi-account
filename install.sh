@@ -4,7 +4,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/elzinko/google-mcp-multi-account/main/install.sh | bash
 #
 # Ce que ça fait : télécharge la dernière version publiée depuis GitHub, la fige
-# dans ~/.local/share/google-mcp/<tag>/, pose « current » dessus, met « gwsa »
+# dans ~/.local/share/google-mcp/<tag>/, pose « current » dessus, met « gma » (+ alias « gwsa »)
 # sur le PATH, branche Claude Desktop + Code, puis AFFICHE les étapes OAuth/GCP
 # restantes — jamais exécutées à ta place (doctrine CLAUDE.md).
 #
@@ -40,8 +40,9 @@ step "Prérequis"
 for tool in curl tar python3; do
   command -v "$tool" >/dev/null 2>&1 || die "« $tool » est requis"
 done
+GWS_MISSING=""
 command -v gws >/dev/null 2>&1 \
-  || warn "la CLI « gws » manque — installe-la : brew install googleworkspace-cli"
+  || { GWS_MISSING=1; warn "la CLI « gws » manque — installe-la : brew install googleworkspace-cli (rappelé à la fin)"; }
 
 # ── dernière version publiée ─────────────────────────────────────
 step "Dernière version publiée"
@@ -81,11 +82,11 @@ else
   curl -fsSL "$url" | tar -xz -C "$tmp" --strip-components=1 \
     || { rm -rf "$tmp"; die "téléchargement/extraction de $LATEST en échec ($url)"; }
   # Garde-fou (revue Codex P1) : ne pas installer une version antérieure à
-  # l'update sans clone — son « gwsa update » exigerait un clone et mourrait.
+  # l'update sans clone — son « gma update » exigerait un clone et mourrait.
   [[ -f "$tmp/scripts/lib-github-release.sh" ]] \
     || { rm -rf "$tmp"; die "$LATEST est antérieure à l'update sans clone — attends la prochaine release, ou installe depuis un clone"; }
   printf '%s\n' "$LATEST" > "$tmp/VERSION"
-  # Marqueur d'origine : « gwsa update » saura re-tirer depuis GitHub (pas de clone).
+  # Marqueur d'origine : « gma update » saura re-tirer depuis GitHub (pas de clone).
   printf '%s\n' "github:$REPO" > "$tmp/.origin"
   mv "$tmp" "$TARGET"
   ok "copie figée : $TARGET"
@@ -101,7 +102,7 @@ if [[ -x "$CURRENT_LINK/bin/gwsa" ]]; then
 fi
 
 # ── gwsa sur le PATH ─────────────────────────────────────────────
-step "gwsa sur le PATH"
+step "Commandes sur le PATH — gma (+ alias gwsa)"
 link="${GWSA_CLI_LINK:-}"
 if [[ -z "$link" ]]; then
   if command -v brew >/dev/null 2>&1; then link="$(brew --prefix)/bin/gwsa"; else link="$HOME/.local/bin/gwsa"; fi
@@ -116,7 +117,7 @@ ln -sfn "$CURRENT_LINK/bin/gma" "$gma_link"
 ok "gma → $gma_link"
 case ":$PATH:" in
   *":$(dirname "$link"):"*) ;;
-  *) warn "« $(dirname "$link") » n'est pas dans ton PATH — ajoute-le pour utiliser « gwsa »";;
+  *) warn "« $(dirname "$link") » n'est pas dans ton PATH — ajoute-le pour utiliser « gma »";;
 esac
 
 # ── brancher les clients LLM ─────────────────────────────────────
@@ -139,16 +140,23 @@ fi
 
 # ── ce qui reste à l'humain : le setup Google ────────────────────
 step "Il reste le setup Google — à toi (une fois)"
+if [[ -n "$GWS_MISSING" ]]; then
+  cat <<EOF
+${R}0) D'ABORD installer la CLI Google « gws » — sinon l'étape 2 échouera :${N}
+     brew install googleworkspace-cli
+
+EOF
+fi
 cat <<EOF
 1) Projet Google Cloud + OAuth (≈10 min) :
      $CURRENT_LINK/scripts/provision-gcp.sh
    Détail : https://github.com/$REPO/blob/main/docs/setup-oauth.md
-2) Connecter un compte :
-     gwsa add perso
+2) Connecter un compte (l'email désigne le compte) :
+     gma add perso votre.email@gmail.com
 3) Redémarrer Claude Desktop (Cmd-Q), puis demander à l'agent :
      « fais le point sur mon setup Google »
    Il lit l'état et propose la commande de chaque étape manquante — tu l'exécutes.
 
-Mettre à jour plus tard, sans clone : « gwsa update ».
+Mettre à jour plus tard, sans clone : « gma update ».
 Le serveur doit annoncer « $LATEST ».
 EOF

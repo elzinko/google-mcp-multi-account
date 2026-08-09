@@ -3,8 +3,7 @@ name: Deploy docs (GitHub Pages)
 # Build the MkDocs site and publish it to GitHub Pages.
 # One-time setup (repo owner): Settings → Pages → Build and deployment →
 # Source = "GitHub Actions". After that, every push to main that touches the
-# docs redeploys automatically. Custom domain (docs.elzinko.fr) can be added
-# later in the same Pages settings + a DNS CNAME.
+# docs redeploys automatically. The site is served on GitHub Pages (no custom domain).
 
 on:
   push:
