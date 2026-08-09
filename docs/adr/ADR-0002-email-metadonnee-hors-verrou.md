@@ -4,6 +4,8 @@
 **Date :** 2026-07-24
 **Décideurs :** Thomas (PO)
 
+> **TL;DR** — L'adresse email de chaque compte Google connecté est désormais mémorisée dans un petit fichier texte écrit au moment de la connexion, au lieu d'être récupérée en relançant l'outil Google à chaque lecture — ainsi un compte « verrouillé » (dont l'accès aux données est bloqué tant qu'un humain ne l'a pas rouvert) peut quand même afficher son email pour le diagnostic d'installation, sans jamais faire tourner l'outil Google sur ses identifiants pendant le verrouillage.
+
 ## Contexte
 
 Le verrou d'un profil (`.locked`) signifie « accès aux données sur demande » :

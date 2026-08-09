@@ -4,6 +4,8 @@
 **Date :** 2026-07-29
 **Décideurs :** Thomas (PO)
 
+> **TL;DR** — Les fichiers reçus (les pièces jointes d'e-mails qu'on télécharge sur le disque) atterrissent toujours dans un unique dossier de téléchargement dédié et verrouillé, et le programme n'accepte jamais que l'assistant IA choisisse où écrire ni écrase un fichier existant — parce qu'une pièce jointe est un contenu tiers potentiellement piégé, et que laisser une IA manipulée (via un mail malveillant) choisir le chemin permettrait d'écraser des fichiers sensibles du système ou d'exfiltrer un secret local.
+
 ## Contexte
 
 La fiche 0043 fait entrer des fichiers **descendants** dans le système :
