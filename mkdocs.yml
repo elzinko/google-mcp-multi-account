@@ -95,6 +95,7 @@ nav:
           - ADR-0005 · Élicitation signée v2: adr/ADR-0005-elicitation-signee-v2.md
           - ADR-0006 · Fichiers reçus, répertoire dédié: adr/ADR-0006-fichiers-recus-repertoire-dedie.md
   - Contribuer:
+      - Comment contribuer: contribuer.md
       - Validation des PR: PR_VALIDATION.md
       - Sécurité GitHub: github-security.md
 

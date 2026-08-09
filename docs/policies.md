@@ -1,9 +1,17 @@
 # Le modèle de policy — qui a le droit de faire quoi
 
-Chaque profil peut porter une policy (`~/.config/gws-accounts/<alias>/policy.json`,
-appliquée par [`scripts/policy-check.py`](https://github.com/elzinko/google-mcp-multi-account/blob/main/scripts/policy-check.py) avant
-chaque commande, côté `gma` comme côté gateway MCP). Utilisation générale :
-[usage.md](usage.md).
+Une **policy**, c'est la liste de ce qu'un compte connecté a le droit de faire :
+lire ses mails ? préparer des brouillons ? écrire dans Drive, et où exactement ?
+La règle de base est délibérément prudente — **ce qui n'est pas explicitement
+autorisé est refusé** — et c'est *vous* qui élargissez, jamais l'assistant.
+
+Concrètement, chaque compte porte un petit fichier
+`~/.config/gws-accounts/<alias>/policy.json`, vérifié par
+[`policy-check.py`](https://github.com/elzinko/google-mcp-multi-account/blob/main/scripts/policy-check.py)
+**avant chaque commande** — aussi bien quand vous tapez `gma …` que quand
+l'assistant passe par le MCP. `gma add` en écrit une prudente d'office : un compte
+tout neuf est donc déjà bridé. Pour l'usage courant, voir
+[Utiliser au quotidien](usage.md).
 
 ## Default-deny, par service
 

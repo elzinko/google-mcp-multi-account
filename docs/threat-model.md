@@ -1,13 +1,29 @@
-# Modèle de menace — google-mcp-multi-account
+# Sécurité — le modèle de menace
 
-Document frère : architecture détaillée → [architecture.md](architecture.md).
+Cette page dit **honnêtement** ce que le projet protège, et ce qu'il ne protège
+*pas*. Pas de promesse marketing : un outil qui touche à vos mails mérite d'être
+clair là-dessus. Le détail des composants est dans [l'architecture](architecture.md).
 
-## Objectif
+## En clair, d'abord
 
-Permettre à un ou plusieurs clients LLM (Claude Desktop, Cursor, Claude Code, …)
-d’accéder à **plusieurs comptes Google** en local, **sans faire confiance au LLM
-par défaut** : lecture/écriture limitées par policy, verrous, zones Drive, et
-élicitation humaine pour élargir l’accès.
+Le but : laisser un assistant IA accéder à **plusieurs comptes Google**, en local,
+**sans lui faire confiance par défaut**. Ce que ça garantit — et ce que ça ne
+garantit pas :
+
+- ✅ **Protégé.** Un assistant *coopératif* (qui passe par l'outil) ne peut pas
+  envoyer un mail, écrire hors des dossiers que vous avez ouverts, toucher un compte
+  verrouillé, ni s'accorder un accès tout seul. Un compte neuf est en lecture +
+  brouillons, **zéro envoi**.
+- ⚠️ **Pas protégé.** Un assistant qui a un **shell libre** sur votre machine peut
+  contourner tout ça en appelant l'outil Google directement (détaillé plus bas, dans
+  « ce qui n'est *pas* garanti »). L'élicitation discipline le *comportement* ; elle
+  ne retire pas la *capacité* tant que les identifiants sont lisibles sur le disque.
+  La parade : restreindre le shell de l'agent (voir la mitigation) ; le vault qui
+  ferme cette brèche est prévu (Phase 2.1).
+
+**En résumé : très solide pour un agent coopératif, mais pas une prison contre un
+agent adverse ayant accès au disque.** Le reste de la page détaille chaque garantie,
+phase par phase.
 
 ## Surfaces de confiance
 
