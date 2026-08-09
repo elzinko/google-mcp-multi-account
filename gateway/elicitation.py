@@ -125,24 +125,24 @@ def prompt_from_payload(payload: dict[str, Any]) -> str:
     who = f"« {alias} » ({email})" if email else f"« {alias} »"
     acct = f"{alias} · {email}" if email else alias
     if action == "session_unlock":
-        return f"gwsa : déverrouiller {who} pour la session {sid} ({minutes} min)"
+        return f"gma : déverrouiller {who} pour la session {sid} ({minutes} min)"
     if action == "unlock":
         if target == "off":
-            return f"gwsa : retirer le verrou permanent sur {who}"
-        return f"gwsa : déverrouiller {who} ({minutes or target} min, poste entier)"
+            return f"gma : retirer le verrou permanent sur {who}"
+        return f"gma : déverrouiller {who} ({minutes or target} min, poste entier)"
     if action == "session_grant":
-        return f"gwsa : zone session {sid} — « {target} » ({acct}, {hours} h)"
+        return f"gma : zone session {sid} — « {target} » ({acct}, {hours} h)"
     if action == "grant":
-        return f"gwsa : autoriser l'écriture Drive « {target} » ({acct}, {hours} h)"
+        return f"gma : autoriser l'écriture Drive « {target} » ({acct}, {hours} h)"
     if action == "project_sign":
-        return f"gwsa : signer le manifeste projet (.gwsa/)"
+        return f"gma : signer le manifeste projet (.gwsa/)"
     if action == "add_account":
-        return f"gwsa : connecter le compte Google « {alias} » ({target})"
+        return f"gma : connecter le compte Google « {alias} » ({target})"
     if action == "revoke_descendants":
-        return f"gwsa : révoquer les sous-sessions de {sid or target}"
+        return f"gma : révoquer les sous-sessions de {sid or target}"
     if action == "strongauth_off":
-        return "gwsa : désactiver l'authentification forte"
-    return f"gwsa : {action} — {alias} {target}".strip()
+        return "gma : désactiver l'authentification forte"
+    return f"gma : {action} — {alias} {target}".strip()
 
 
 def build_payload(

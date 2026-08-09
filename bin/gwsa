@@ -13,7 +13,7 @@
 #                                                   (email obligatoire si strongauth on)
 #   gwsa list                                         Lister les profils et leur état
 #   gwsa lock <alias>                                 Verrouiller un profil (accès sur demande)
-#   $SELF unlock <alias> [minutes]                     Déverrouiller temporairement (défaut 60 min)
+#   gwsa unlock <alias> [minutes]                     Déverrouiller temporairement (défaut 60 min)
 #   gwsa policy <alias> [show|mode <m>|allow <dossier>|revoke <id>|clear]
 #                                                     Zones d'écriture Drive PERMANENTES
 #   gwsa grant <alias> <dossier> [heures]             Autorisation Drive TEMPORAIRE (défaut 8 h)
@@ -23,15 +23,15 @@
 #   gwsa elicitation enroll|status                    Enrôler clé biométrique / état (fiche 0001)
 #   gwsa admin [stop]                                 Démarrer/arrêter l'interface web (127.0.0.1:4877)
 #   gwsa broker [status|stop]                         État/arrêt du broker de ce GWSA_ROOT
-#   $SELF dev deploy [--isolated]                      Déployer le clone courant en version dev temporaire
-#   $SELF dev test [--no-deploy] [--isolated] [--open] Déployer + redémarrer l'admin + résumé de validation
-#   $SELF dev list                                     Versions déployées + configs client (Cursor, Desktop…)
-#   $SELF dev status [id]                              État broker/admin par version dev
-#   $SELF dev use <id> --cursor|--claude-desktop [--apply]  Snippet (ou écriture) config MCP
-#   $SELF dev remove <id>                              Supprimer une version dev temporaire
+#   gwsa dev deploy [--isolated]                      Déployer le clone courant en version dev temporaire
+#   gwsa dev test [--no-deploy] [--isolated] [--open] Déployer + redémarrer l'admin + résumé de validation
+#   gwsa dev list                                     Versions déployées + configs client (Cursor, Desktop…)
+#   gwsa dev status [id]                              État broker/admin par version dev
+#   gwsa dev use <id> --cursor|--claude-desktop [--apply]  Snippet (ou écriture) config MCP
+#   gwsa dev remove <id>                              Supprimer une version dev temporaire
 #   gwsa update [--check|--to <version>]              Installer la dernière version publiée
 #   gwsa release [patch|minor|major|--print]          Publier une version (semver + CHANGELOG + tag)
-#   gwsa sandbox deploy [--wire …]|wire [--remove …]|list|status|remove  Sandboxes jetables (0041 ; détail : $SELF sandbox --help)
+#   gwsa sandbox deploy [--wire …]|wire [--remove …]|list|status|remove  Sandboxes jetables (0041 ; détail : gwsa sandbox --help)
 #   gwsa project show|init|sign                         Manifeste projet .gwsa/ (fiche 0040 phase B)
 #   gwsa couloir …                                      Alias déprécié → sandbox
 #   gwsa remove <alias>                               Déconnecter et supprimer un profil
@@ -55,7 +55,7 @@ MASTER_SECRET="$GWSA_ROOT/client_secret.json"
 umask 077
 [[ -d "$GWSA_ROOT" ]] && chmod 700 "$GWSA_ROOT" 2>/dev/null || true
 
-usage() { awk 'NR==1{next} !/^#/{exit} {sub(/^# ?/,""); print}' "$0" | sed "s/gwsa/$SELF/g"; }
+usage() { awk 'NR==1{next} !/^#/{exit} {sub(/^# ?/,""); print}' "$0" | sed "s/gwsa /$SELF /g"; }  # « gwsa » commande → $SELF ; épargne « .gwsa/ » (manifeste)
 
 resolve_repo_dir() { # suit le symlink éventuel (brew /opt/homebrew/bin/gwsa, ou bin/gma → gwsa) jusqu'au repo
   local src="$0" target
@@ -86,7 +86,7 @@ SYS_SWIFT="/usr/bin/swift"
 # que require_signed_elicitation ferait ensuite confiance — cf. docs/threat-model.md).
 SYS_SWIFTC="/usr/bin/swiftc"
 SIGN_BIN=""  # chemin du binaire de signature — rempli par ensure_sign_bin (nom = gateway/config.py:PRODUCT_SLUG)
-SELF="$(basename "$0")"  # nom sous lequel on est invoqué : « gma » ou l'alias déprécié « $SELF »
+SELF="$(basename "$0")"  # nom sous lequel on est invoqué : « gma » ou l'alias déprécié « gwsa »
 [[ -x "$SYS_PYTHON" ]] || { echo "$SELF : interpréteur système introuvable ($SYS_PYTHON) — installer les outils en ligne de commande : xcode-select --install" >&2; exit 3; }
 
 die() { echo "$SELF : $*" >&2; exit 3; }
