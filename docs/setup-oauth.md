@@ -1,5 +1,10 @@
 # Setup OAuth — console Google Cloud (one-shot, ~10 min)
 
+!!! info "Préalable à l'utilisation"
+    Cette étape Google Cloud est un **prérequis** : sans le `client_secret.json`
+    produit ici, aucun compte ne peut être connecté. À faire une fois — avant, ou
+    juste après, l'[installation du connecteur](mcp-setup.md).
+
 > **Raccourci** : `./scripts/provision-gcp.sh` automatise les étapes 1, 2 et 3
 > (avec vérification du compte connecté) et te guide pour les étapes 4 et 5,
 > seuls gestes que Google impose de faire dans la console. Ce guide manuel
