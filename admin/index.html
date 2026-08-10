@@ -434,7 +434,7 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
   <p class="note">Docs, Sheets, Tasks : libres tant qu'ils ne sont pas dans la policy.
   Un service configuré est <b>fail closed</b> : tout ce qui n'est pas coché est refusé.</p>
   <p class="note"><b>Policy ≠ tools MCP.</b> Les cases ci-dessus autorisent des
-  appels <code>gwsa</code> / API. Le serveur MCP n'expose qu'un sous-ensemble :
+  appels <code>gma</code> / API. Le serveur MCP n'expose qu'un sous-ensemble :
   Drive = liste / métadonnées / lecture du contenu (<code>drive_read</code>, texte)
   / création, copie et téléversement zonés — pas de modification d'un fichier
   existant. Agenda et Keep peuvent être dans la policy sans tool MCP correspondant.</p>
@@ -568,7 +568,7 @@ async function api(path, opts) {
   } catch (e) {
     const msg = (e && e.message) || String(e);
     if (/failed to fetch|networkerror|load failed/i.test(msg)) {
-      throw new Error("connexion perdue avec l'admin (processus arrêté pendant Touch ID, ou admin down) — relance « gwsa admin » puis réessaie");
+      throw new Error("connexion perdue avec l'admin (processus arrêté pendant Touch ID, ou admin down) — relance « gma admin » puis réessaie");
     }
     throw e;
   }
@@ -1473,7 +1473,7 @@ function renderDevInstance(d) {
 function renderDevSandboxes(d) {
   const sandboxes = d.sandboxes || [];
   if (!sandboxes.length) {
-    return '<p class="note">Aucune sandbox — <span class="mono">./bin/gwsa sandbox deploy --dev</span></p>';
+    return '<p class="note">Aucune sandbox — <span class="mono">./bin/gma sandbox deploy --dev</span></p>';
   }
   return '<div class="sblist">' + sandboxes.map((s) => {
     const open = DEV_EXPANDED_SB.has(s.id);
