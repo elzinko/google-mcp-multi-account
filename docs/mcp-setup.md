@@ -1,4 +1,4 @@
-# Brancher le serveur MCP (Claude Desktop, Cursor, Claude Code)
+# Installer & mettre à jour le serveur MCP
 
 Le binaire [`bin/google-mcp`](https://github.com/elzinko/google-mcp-multi-account/blob/main/bin/google-mcp) expose un serveur MCP **stdio**
 (JSON-RPC, une ligne = un message). Il ne parle à Google que via la
@@ -7,14 +7,6 @@ Le binaire [`bin/google-mcp`](https://github.com/elzinko/google-mcp-multi-accoun
 Prérequis : la CLI [`gws`](https://github.com/googleworkspace/cli) installée
 (`brew install googleworkspace-cli`) et Python 3. (Pas besoin d'avoir déjà connecté
 un compte : le tool `setup_status` guide l'initialisation depuis le client LLM.)
-
-Remplace `/ABS/PATH/google-mcp-multi-account` par le chemin absolu du clone.
-
-!!! note "Pourquoi deux noms ?"
-    Le **dépôt** s'appelle `google-mcp-multi-account`, mais le **connecteur** que tu
-    déclares sous `mcpServers` s'appelle `google-multi-account` (sans `mcp`). C'est la
-    convention MCP — comme `github-mcp-server` → `github`. Détail :
-    [architecture.md](architecture.md#noms-depot-connecteur).
 
 ## Installer sans cloner (curl)
 
@@ -26,8 +18,8 @@ curl -fsSL https://raw.githubusercontent.com/elzinko/google-mcp-multi-account/ma
 
 Ça télécharge la dernière version publiée, la fige dans
 `~/.local/share/google-mcp/`, met `gma` sur le PATH et branche les clients.
-Reste le setup Google (OAuth/GCP), affiché à la fin — voir
-[setup-oauth.md](setup-oauth.md).
+Reste le setup Google (OAuth/GCP), un **préalable** affiché à la fin — voir
+[Prérequis — OAuth / Google Cloud](setup-oauth.md).
 
 Mettre à jour plus tard, **toujours sans clone** :
 
@@ -38,108 +30,18 @@ gma update            # dernière version publiée · --to v0.1.0 pour un retour
 `gma update` lit la dernière version sur GitHub et bascule `current` dessus. Le
 clone git n'est nécessaire que pour **contribuer** (fiche 0020).
 
-## Brancher un client — une commande
+## Brancher un client LLM
 
-Le plus simple, depuis n'importe où (`gma` est sur le PATH) :
+Une fois installé, relie ton assistant en une commande :
 
 ```bash
 gma wire desktop      # Claude Desktop
 gma wire code         # Claude Code (le CLI « claude »)
-gma wire all          # les deux — ajoute « --print » pour un dry-run
+gma wire all          # les deux — « --print » pour un dry-run
 ```
 
-`gma wire` résout le chemin absolu, fusionne l'entrée `google-multi-account` **sans
-écraser** tes autres serveurs MCP, et fait un backup. Puis **redémarrer le client**.
-Retirer une entrée : Claude Code → `claude mcp remove google-multi-account` ;
-Desktop / Cursor → retirer l'entrée `google-multi-account` du JSON de config du
-client (l'admin protège volontairement l'entrée stable, pas de suppression par
-mégarde).
-
-> Cursor n'a pas encore de commande dédiée — voir [Cursor](#cursor) ci-dessous
-> (config manuelle courte).
-
-Les sections suivantes détaillent chaque client (config manuelle, options, non-standard).
-
-## Claude Desktop
-
-**Automatique (recommandé)** — le script résout le chemin absolu tout seul,
-fusionne l'entrée sans écraser tes autres serveurs MCP, fait un backup :
-
-```bash
-./scripts/install-claude-desktop.sh          # branche (ou met à jour)
-./scripts/install-claude-desktop.sh --print  # dry-run : montre sans écrire
-```
-
-Idempotent (relançable sans risque). Puis **redémarrer Claude Desktop**.
-
-**À la main** — éditer `~/Library/Application Support/Claude/claude_desktop_config.json` :
-
-```json
-{
-  "mcpServers": {
-    "google-multi-account": {
-      "command": "/ABS/PATH/google-mcp-multi-account/bin/google-mcp",
-      "env": {
-        "GWSA_CLIENT": "claude-desktop"
-      }
-    }
-  }
-}
-```
-
-Tools attendus (après redémarrage), **17 au total** : `profiles_list`,
-`setup_status`, `gmail_list`, `gmail_get`, `gmail_draft_create`,
-`gmail_attachment_get`, `drive_list`, `drive_get`, `drive_read`, `drive_create`,
-`drive_update`, `drive_copy`, `drive_upload`, `drive_permissions_list`,
-`drive_permissions_create`, `drive_permissions_delete`, `access_request`.
-
-## Cursor
-
-Dans les settings MCP (UI ou `~/.cursor/mcp.json`) :
-
-```json
-{
-  "mcpServers": {
-    "google-multi-account": {
-      "command": "/ABS/PATH/google-mcp-multi-account/bin/google-mcp",
-      "env": {
-        "GWSA_CLIENT": "cursor"
-      }
-    }
-  }
-}
-```
-
-## Claude Code
-
-**Claude Code a sa propre config MCP** (`~/.claude.json`), séparée de Claude
-Desktop : brancher Desktop ne le rend **pas** visible dans le CLI `claude`. Il
-faut l'enregistrer à part.
-
-Le plus simple — le script dédié, idempotent, qui délègue au CLI officiel :
-
-```bash
-./scripts/install-claude-code.sh          # branche au scope user (visible partout)
-./scripts/install-claude-code.sh --print  # dry-run : montre la commande
-```
-
-`./scripts/update.sh` l'appelle **automatiquement** quand le CLI `claude` est
-présent — tu n'as donc en général rien à faire de plus. Sous le capot, c'est :
-
-```bash
-claude mcp add google-multi-account --scope user --env GWSA_CLIENT=claude-code --env GWSA_BROKER_PORT=4878 -- ~/.local/share/google-mcp/current/bin/google-mcp
-```
-
-`--scope user` le rend visible depuis n'importe quel dossier ; `GWSA_CLIENT=claude-code`
-distingue ce client dans le journal ; le port 4878 partage le broker (et donc les
-comptes) avec Desktop. Vérifier : `claude mcp get google-multi-account`, ou `/mcp`
-dans un nouveau `claude`.
-
-Ensuite, mêmes règles que partout :
-- Accès **données** (Gmail/Drive) : préférer les tools MCP.
-- Restreindre le shell : ne pas autoriser `gws` nu ni l’édition de
-  `~/.config/gws-accounts/` — voir [threat-model.md](threat-model.md).
-- Unlock / grant restent **humains** (`gma` ou admin `http://127.0.0.1:4877`).
+Détail par client (Claude Desktop, Claude Code, **Cursor**), config manuelle et
+retrait d'une entrée → **[Configurer un client LLM](configurer-client.md)**.
 
 ## Les tools exposés, par groupe
 

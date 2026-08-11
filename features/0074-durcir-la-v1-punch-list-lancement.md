@@ -20,10 +20,12 @@ created: 2026-08-08
 > Dans le même élan (hors punch-list initiale) : **rename `gwsa → gma`**, **email au
 > lieu d'alias**, **`gma wire <client>`**.
 >
-> **Reste (post-v1, non bloquant) :** rampe ADR (glossaire à reprendre proprement —
-> PR #90 fermée) ; préflight `gws` bloquant dans `install.sh` ; collision d'id 0073 ;
-> `gma wire cursor` ; durcissements latents (hash manifeste, borne pièce jointe,
-> course R-M-W session). Fiche gardée `in-progress` tant que ce reliquat traîne.
+> **Livré depuis (v1.0.1, 2026-08-10) :** rampe ADR + glossaire curé ; site public
+> **github.io** ; collision d'id 0073 **résolue** (#82 garde `0073`, #86 renumérotée
+> `0075`) ; unification doc install/OAuth + reliquats `gwsa`→`gma` (PR en cours).
+> **Reste (post-v1, non bloquant) :** préflight `gws` **bloquant** (`die`) dans
+> `install.sh` ; `gma wire cursor` ; durcissements latents (hash manifeste, borne
+> pièce jointe, course R-M-W session). Fiche gardée `in-progress` tant que le reliquat traîne.
 
 ## Contexte / Problème
 

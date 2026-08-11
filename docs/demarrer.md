@@ -78,7 +78,7 @@ gma wire code         # Claude Code (le CLI « claude »)
 gma wire all          # les deux
 ```
 
-Puis **redémarrez le client**. (Pour Cursor, voir la [config manuelle](mcp-setup.md#cursor).)
+Puis **redémarrez le client**. (Pour Cursor et le détail par client, voir [Configurer un client LLM](configurer-client.md).)
 
 ## Étape 5 — Premier échange
 
@@ -105,4 +105,4 @@ C'est tout le principe : **l'assistant propose, vous disposez.**
 - **[Utiliser au quotidien](usage.md)** — la CLI `gma`, l'interface admin, Touch ID.
 - **[Modèle de policy](policies.md)** — ce que chaque compte a le droit de faire (par défaut : lecture, brouillons, zéro envoi).
 - **[Sécurité](threat-model.md)** — ce que le projet garantit, et ce qu'il ne garantit *pas*.
-- Un souci pendant l'install ? La page **[Installer & mettre à jour](mcp-setup.md)** couvre les cas particuliers (config manuelle, plusieurs versions, dépannage).
+- Un souci pendant l'install ? **[Configurer un client LLM](configurer-client.md)** (config manuelle par client) et **[Installer & mettre à jour](mcp-setup.md)** (plusieurs versions, dépannage).

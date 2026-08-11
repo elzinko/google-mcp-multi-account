@@ -76,10 +76,12 @@ nav:
   - Accueil: index.md
   - Démarrer:
       - Prise en main: demarrer.md
+      - Prérequis — OAuth / Google Cloud: setup-oauth.md
       - Installer & mettre à jour: mcp-setup.md
-      - OAuth / Google Cloud: setup-oauth.md
+  - Configurer:
+      - Brancher un client LLM: configurer-client.md
   - Utiliser:
-      - CLI & admin (gwsa): usage.md
+      - CLI & admin (gma): usage.md
       - Modèle de policy: policies.md
   - Sécurité:
       - Modèle de menace: threat-model.md

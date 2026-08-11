@@ -10,7 +10,7 @@
 | CI | |
 | Tests hermétiques (`./scripts/test.sh`) | ✅ / ⏳ / N.A. |
 | Admin / UI locale | ✅ / ⏳ / N.A. |
-| CLI (`gwsa`) | ✅ / ⏳ / N.A. |
+| CLI (`gma`) | ✅ / ⏳ / N.A. |
 | Before / after (UI) | ✅ liens / N.A. |
 | Preview distante | **N.A.** (outil local) |
 
@@ -18,7 +18,7 @@
 ```bash
 cd <worktree-ou-clone>
 ./scripts/test.sh
-# commandes exactes pour rejouer la feature (gwsa admin, gwsa dev, …)
+# commandes exactes pour rejouer la feature (gma admin, gma dev, …)
 ```
 
 ### Reste à valider (signaux observables)
