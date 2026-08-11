@@ -2615,6 +2615,24 @@ print('OK' if not bad else 'BAD:' + ','.join(bad))
   && pass "DEFAULT_POLICY : invariants de sûreté (tous services : envoi/partage/suppression/écriture=false · zones fermées)" \
   || fail "DEFAULT_POLICY invariants ($pol_inv)"
 
+# ── gmail_attachment_get : borne défensive sur la taille des pièces jointes (0074) ──
+# Une PJ énorme ne doit pas saturer le disque : la borne lève AVANT toute écriture.
+att_inv="$("$PY" -c "
+import base64
+import gateway.api as api
+api.validate_alias = lambda a: None            # isoler la borne (pas de profil réel)
+api._run = lambda *a, **k: {'data': base64.urlsafe_b64encode(b'x' * 200).decode()}
+api._ATTACHMENT_MAX_BYTES = 100                 # borne basse pour le test
+try:
+    api.gmail_attachment_get('alpha', 'm1', 'a1')
+    print('no-raise')
+except api.GatewayError as e:
+    print('OK' if 'volumineuse' in str(e) else 'wrong-msg')
+")"
+[[ "$att_inv" == "OK" ]] \
+  && pass "gmail_attachment_get : borne la taille des pièces jointes (refus au-delà, avant écriture)" \
+  || fail "borne pièce jointe ($att_inv)"
+
 PROJ_ROOT="$TMP/gwsa-proj-inside"
 rm -rf "$PROJ_ROOT"
 git_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
