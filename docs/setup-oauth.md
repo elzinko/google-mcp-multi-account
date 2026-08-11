@@ -5,10 +5,13 @@
     produit ici, aucun compte ne peut être connecté. À faire une fois — avant, ou
     juste après, l'[installation du connecteur](mcp-setup.md).
 
-> **Raccourci** : `./scripts/provision-gcp.sh` automatise les étapes 1, 2 et 3
-> (avec vérification du compte connecté) et te guide pour les étapes 4 et 5,
-> seuls gestes que Google impose de faire dans la console. Ce guide manuel
-> reste la référence si tu préfères tout faire toi-même.
+> **Raccourci** (une fois le connecteur installé) : le script `provision-gcp.sh`
+> automatise les étapes 1, 2 et 3 (avec vérification du compte connecté) et te
+> guide pour les étapes 4 et 5, seuls gestes que Google impose dans la console.
+> Install `curl` → `~/.local/share/google-mcp/current/scripts/provision-gcp.sh` ;
+> depuis un clone → `./scripts/provision-gcp.sh`. Si tu fais l'OAuth **avant**
+> d'installer, suis le guide manuel ci-dessous — il reste la référence si tu
+> préfères tout faire toi-même.
 
 Objectif : obtenir un `client_secret.json` qui permettra à `gws` de connecter
 **tous** tes comptes @gmail.com. À faire **une seule fois**, avec **un seul**
