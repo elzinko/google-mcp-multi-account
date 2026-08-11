@@ -35,13 +35,15 @@ gma wire all          # les deux — « --print » pour un dry-run
     {
       "mcpServers": {
         "google-multi-account": {
-          "command": "/ABS/PATH/google-mcp-multi-account/bin/google-mcp",
+          "command": "~/.local/share/google-mcp/current/bin/google-mcp",
           "env": { "GWSA_CLIENT": "claude-desktop" }
         }
       }
     }
     ```
 
+    Chemin = l'install `curl` ci-dessus. Si l'app n'expande pas `~`, mets l'absolu
+    (`/Users/<toi>/.local/share/…`) ; depuis un **clone**, vise `…/google-mcp-multi-account/bin/google-mcp`.
     Puis **redémarrer Claude Desktop**.
 
 === "Claude Code"
@@ -67,19 +69,24 @@ gma wire all          # les deux — « --print » pour un dry-run
 
 === "Cursor"
 
-    Pas encore de `gma wire cursor` (suivi : fiche 0074). Config manuelle courte —
-    dans les settings MCP (UI ou `~/.cursor/mcp.json`) :
+    Pas encore de `gma wire cursor` (suivi : fiche 0074) — la config manuelle est
+    donc le **seul** moyen. Dans les settings MCP (UI ou `~/.cursor/mcp.json`), le
+    `command` pointe le binaire **installé** par `curl` :
 
     ```json
     {
       "mcpServers": {
         "google-multi-account": {
-          "command": "/ABS/PATH/google-mcp-multi-account/bin/google-mcp",
+          "command": "~/.local/share/google-mcp/current/bin/google-mcp",
           "env": { "GWSA_CLIENT": "cursor" }
         }
       }
     }
     ```
+
+    Cursor n'expande pas toujours `~` : si le serveur ne démarre pas, mets le chemin
+    **absolu** (`/Users/<toi>/.local/share/google-mcp/current/bin/google-mcp`).
+    Depuis un **clone** (contributeurs), vise plutôt `…/google-mcp-multi-account/bin/google-mcp`.
 
 ## Retirer une entrée
 

@@ -1,6 +1,16 @@
 {
   "permissions": {
     "ask": [
+      "Bash(gma zz:*)",
+      "Bash(./bin/gma zz:*)",
+      "Bash(gma mw:*)",
+      "Bash(./bin/gma mw:*)",
+      "Bash(gma zebra:*)",
+      "Bash(./bin/gma zebra:*)",
+      "Bash(gma unlock:*)",
+      "Bash(./bin/gma unlock:*)",
+      "Bash(gma grant:*)",
+      "Bash(./bin/gma grant:*)",
       "Bash(gwsa zz:*)",
       "Bash(./bin/gwsa zz:*)",
       "Bash(gwsa mw:*)",
