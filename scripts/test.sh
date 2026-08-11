@@ -2279,7 +2279,7 @@ ghenv GWSA_DEPLOY_ROOT="$LEG4" "$REL/scripts/deploy-local.sh" --github v0.7.0 >/
 # « git rev-parse » remontait jusqu'à ce .git → mode clone → « aucune version ».
 GA="$TMP/git-ancestor"; mkdir -p "$GA"; git -C "$GA" init -q >/dev/null 2>&1
 GADEP="$GA/.local/share/google-mcp"
-ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/gwsa" GWSA_SKIP_WIRE=1 bash install.sh >/dev/null 2>&1
+ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/gwsa" GWSA_SKIP_WIRE=1 GWSA_ALLOW_NO_GWS=1 bash install.sh >/dev/null 2>&1
 out_u="$(ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/gwsa" \
          "$GADEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
 [[ "$rc" -eq 0 && "$out_u" == *"GitHub"* && "$out_u" != *"aucune version"* ]] \
@@ -2314,7 +2314,7 @@ git -C "$BRK" add -A >/dev/null 2>&1; git -C "$BRK" commit -qm x >/dev/null 2>&1
 git -C "$BRK" archive --format=tar.gz --prefix="pkg-3.0.0/" v3.0.0 > "$GHTB/v3.0.0.tar.gz"
 printf '[{"name":"v3.0.0"},{"name":"v2.0.0"},{"name":"v1.0.0"},{"name":"v0.1.0"}]\n' > "$GHTAGS"
 rm -f "$TMP/broker-stop.log"
-ghenv GWSA_DEPLOY_ROOT="$TMP/brokerdep" GWSA_CLI_LINK="$TMP/brokerdep/gwsa" GWSA_SKIP_WIRE=1 \
+ghenv GWSA_DEPLOY_ROOT="$TMP/brokerdep" GWSA_CLI_LINK="$TMP/brokerdep/gwsa" GWSA_SKIP_WIRE=1 GWSA_ALLOW_NO_GWS=1 \
   bash install.sh >/dev/null 2>&1
 [[ -f "$TMP/broker-stop.log" ]] \
   && pass "install.sh : recycle le broker après bascule current (broker stop appelé)" \
