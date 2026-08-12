@@ -31,6 +31,15 @@ from .sessions import is_session_unlocked
 from .setup_status import setup_status  # noqa: F401 — re-export pour le dispatch MCP
 from .usage import log_usage
 
+# Borne défensive sur les pièces jointes Gmail : une PJ énorme (ou un
+# identifiant malveillant) ne doit pas pouvoir saturer le disque local.
+# 25 Mo = limite d'envoi Gmail ; surchargeable via GWSA_ATTACHMENT_MAX_MB.
+try:
+    _ATTACHMENT_MAX_MB = int(os.environ.get("GWSA_ATTACHMENT_MAX_MB", "25"))
+except ValueError:
+    _ATTACHMENT_MAX_MB = 25
+_ATTACHMENT_MAX_BYTES = max(1, _ATTACHMENT_MAX_MB) * 1024 * 1024
+
 # Champs Drive demandés partout : `owners`/`ownedByMe` répondent à « ce
 # livrable appartient-il bien au bon compte ? » — la question que le
 # multi-comptes pose à chaque dépôt (fiche 0024).
@@ -767,6 +776,12 @@ def gmail_attachment_get(
     # b64 == "" est une pièce jointe légitimement vide (0 octet) : on écrit un
     # fichier vide plutôt que d'accuser à tort les identifiants.
     raw = base64.urlsafe_b64decode(b64 + "=" * (-len(b64) % 4))
+    if len(raw) > _ATTACHMENT_MAX_BYTES:
+        raise GatewayError(
+            f"pièce jointe trop volumineuse : {len(raw)} octets > "
+            f"{_ATTACHMENT_MAX_BYTES} (borne GWSA_ATTACHMENT_MAX_MB)",
+            code="error",
+        )
     base = Path(_safe_filename(filename))
     dest_dir = download_dir()
     for i in range(1000):
