@@ -2175,7 +2175,7 @@ grep -q "^github:" "$GHDEP/v0.1.0/.origin" 2>/dev/null && [[ ! -e "$GHDEP/v0.1.0
   || fail "--github : marqueurs d'origine incohérents"
 
 # install.sh : premier install SANS aucun clone (résout le dernier tag via GitHub)
-ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" GWSA_SKIP_WIRE=1 \
+ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" GWSA_SKIP_WIRE=1 GWSA_ALLOW_NO_GWS=1 \
   bash install.sh >/dev/null 2>&1; rc=$?
 [[ "$rc" -eq 0 && "$(basename "$(readlink "$GHDEP/current")")" == "v1.0.0" ]] \
   && pass "install.sh : sans clone, installe la dernière version (v1.0.0) et bascule current" \
@@ -2250,7 +2250,7 @@ ghenv GWSA_DEPLOY_ROOT="$LEG2" "$REL/scripts/deploy-local.sh" --github v0.5.0 >/
 
 # idem côté install.sh : un dossier legacy du dernier tag déjà présent → refus
 LEG3="$TMP/legacydep3"; mkdir -p "$LEG3/v2.0.0/scripts"
-ghenv GWSA_DEPLOY_ROOT="$LEG3" GWSA_CLI_LINK="$LEG3/gwsa" GWSA_SKIP_WIRE=1 \
+ghenv GWSA_DEPLOY_ROOT="$LEG3" GWSA_CLI_LINK="$LEG3/gwsa" GWSA_SKIP_WIRE=1 GWSA_ALLOW_NO_GWS=1 \
   bash install.sh >/dev/null 2>&1; rc=$?
 [[ "$rc" -ne 0 && ! -e "$LEG3/current" ]] \
   && pass "install.sh : cible legacy pré-existante refusée (current pas basculé)" \
@@ -2279,7 +2279,7 @@ ghenv GWSA_DEPLOY_ROOT="$LEG4" "$REL/scripts/deploy-local.sh" --github v0.7.0 >/
 # « git rev-parse » remontait jusqu'à ce .git → mode clone → « aucune version ».
 GA="$TMP/git-ancestor"; mkdir -p "$GA"; git -C "$GA" init -q >/dev/null 2>&1
 GADEP="$GA/.local/share/google-mcp"
-ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/gwsa" GWSA_SKIP_WIRE=1 bash install.sh >/dev/null 2>&1
+ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/gwsa" GWSA_SKIP_WIRE=1 GWSA_ALLOW_NO_GWS=1 bash install.sh >/dev/null 2>&1
 out_u="$(ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/gwsa" \
          "$GADEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
 [[ "$rc" -eq 0 && "$out_u" == *"GitHub"* && "$out_u" != *"aucune version"* ]] \
@@ -2314,7 +2314,7 @@ git -C "$BRK" add -A >/dev/null 2>&1; git -C "$BRK" commit -qm x >/dev/null 2>&1
 git -C "$BRK" archive --format=tar.gz --prefix="pkg-3.0.0/" v3.0.0 > "$GHTB/v3.0.0.tar.gz"
 printf '[{"name":"v3.0.0"},{"name":"v2.0.0"},{"name":"v1.0.0"},{"name":"v0.1.0"}]\n' > "$GHTAGS"
 rm -f "$TMP/broker-stop.log"
-ghenv GWSA_DEPLOY_ROOT="$TMP/brokerdep" GWSA_CLI_LINK="$TMP/brokerdep/gwsa" GWSA_SKIP_WIRE=1 \
+ghenv GWSA_DEPLOY_ROOT="$TMP/brokerdep" GWSA_CLI_LINK="$TMP/brokerdep/gwsa" GWSA_SKIP_WIRE=1 GWSA_ALLOW_NO_GWS=1 \
   bash install.sh >/dev/null 2>&1
 [[ -f "$TMP/broker-stop.log" ]] \
   && pass "install.sh : recycle le broker après bascule current (broker stop appelé)" \

@@ -16,6 +16,7 @@
 #   GWSA_DEPLOY_ROOT   où figer les versions (défaut ~/.local/share/google-mcp)
 #   GWSA_CLI_LINK      lien « gwsa » sur le PATH (défaut : brew, sinon ~/.local/bin)
 #   GWSA_SKIP_WIRE=1   installe le serveur sans brancher Desktop/Code
+#   GWSA_ALLOW_NO_GWS=1  ne bloque pas si « gws » manque (CI / l'installer après)
 set -euo pipefail
 
 REPO="${GWSA_REPO:-elzinko/google-mcp-multi-account}"
@@ -32,7 +33,7 @@ ok()   { echo "${G}✓${N} $*"; }
 warn() { echo "${Y}⚠${N} $*"; }
 die()  { echo "${R}✗ $*${N}" >&2; exit 1; }
 
-[[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
+[[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
 
 # ── prérequis ────────────────────────────────────────────────────
 step "Prérequis"
@@ -41,8 +42,24 @@ for tool in curl tar python3; do
   command -v "$tool" >/dev/null 2>&1 || die "« $tool » est requis"
 done
 GWS_MISSING=""
-command -v gws >/dev/null 2>&1 \
-  || { GWS_MISSING=1; warn "la CLI « gws » manque — installe-la : brew install googleworkspace-cli (rappelé à la fin)"; }
+if ! command -v gws >/dev/null 2>&1; then
+  if [[ -n "${GWSA_ALLOW_NO_GWS:-}" ]]; then
+    GWS_MISSING=1
+    warn "la CLI « gws » manque — tu l'installeras après (GWSA_ALLOW_NO_GWS) ; rappel à la fin"
+  else
+    echo >&2
+    echo "${R}✗ La CLI Google « gws » est requise et n'est pas installée.${N}" >&2
+    echo >&2
+    echo "  Installe-la — une seule commande — puis relance l'install :" >&2
+    echo >&2
+    echo "      ${B}brew install googleworkspace-cli${N}" >&2
+    echo "      ${B}curl -fsSL https://raw.githubusercontent.com/$REPO/main/install.sh | bash${N}" >&2
+    echo >&2
+    echo "  Pourquoi : « gws » connecte tes comptes Google ; sans elle, la connexion échoue." >&2
+    echo "  Poser quand même le binaire sans « gws » (avancé/CI) : relance avec ${B}GWSA_ALLOW_NO_GWS=1${N}" >&2
+    exit 1
+  fi
+fi
 
 # ── dernière version publiée ─────────────────────────────────────
 step "Dernière version publiée"
