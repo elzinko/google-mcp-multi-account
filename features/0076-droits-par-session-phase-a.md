@@ -33,7 +33,8 @@ Décision d'architecture : [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md
 2. **Jeton de session porté dans chaque appel** (paramètre sur les tools ; autorisation
    broker par jeton) → deux conversations d'une **même connexion** Desktop sont isolées.
 3. **Config fine par session** : (compte, **service × opération × ressource**),
-   expirante ; droits effectifs = policy ∩ manifeste ∩ session.
+   expirante ; **chaque octroi de capacité est signé** (création *et* élargissement),
+   indépendamment de `.strong-auth` ; droits effectifs = policy ∩ manifeste ∩ session.
 4. **`gma session list`** + vue de la config par session.
 5. **Corriger** : cycle de vie **découplé de la connexion** (TTL réel + `gma session close`/révocation ; une déconnexion de connexion *partagée* ne purge pas les jetons des autres conversations) ; `last_seen` mis à jour à chaque
    appel.
@@ -46,6 +47,7 @@ hôte Android pour desktop éteint (0078).
 - [ ] Deux sessions sur **la même connexion MCP** ont des droits distincts (jeton porté),
       vérifié par un test hermétique.
 - [ ] **Création de session = geste signé exigé** (enrôlement requis) ; sans enrôlement → **refus** (`gma elicitation enroll`), indépendamment du flag `.strong-auth`.
+- [ ] **Toute mutation de capacité** (unlock, grant fin) exige une **signature liant le scope exact** (compte / service / op / ressource) — **testée** —, indépendamment de `.strong-auth` ; **pas d'élargissement non signé** jusqu'aux plafonds compte / projet.
 - [ ] Une nouvelle session **sans geste** = **zéro droit** (default-deny).
 - [ ] La config d'une session s'exprime au grain **service × opération × ressource**
       (ex. `perso gmail:read`, `perso drive:write:<zone>`).
@@ -64,4 +66,4 @@ hôte Android pour desktop éteint (0078).
   **conditionné au vault** [0003](0003-vault-credentials-hors-perimetre-agent.md).
 - Décisions de cadrage (14/08) : identité = geste de consentement ; granularité la plus
   fine ; mobile = hôte **et** dispositif de consentement selon la topologie.
-- Retours **Codex** ([PR #108](https://github.com/elzinko/google-mcp-multi-account/pull/108)) intégrés : cycle de vie découplé de la connexion MCP (①) ; **création de session sous élicitation signée exigée** (②).
+- Retours **Codex** ([PR #108](https://github.com/elzinko/google-mcp-multi-account/pull/108)) intégrés : cycle de vie découplé de la connexion MCP (①) ; **création de session sous élicitation signée exigée** (②) ; **chaque octroi de capacité signé, pas seulement la création** (③).
