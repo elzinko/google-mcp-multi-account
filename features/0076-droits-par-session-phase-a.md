@@ -48,7 +48,8 @@ hôte Android pour desktop éteint (0078).
       vérifié par un test hermétique.
 - [ ] **Création de session = geste signé exigé** (enrôlement requis) ; sans enrôlement → **refus** (`gma elicitation enroll`), indépendamment du flag `.strong-auth`.
 - [ ] **Toute mutation de capacité** (unlock, grant fin) exige une **signature liant le scope exact** (compte / service / op / ressource) — **testée** —, indépendamment de `.strong-auth` ; **pas d'élargissement non signé** jusqu'aux plafonds compte / projet.
-- [ ] Une nouvelle session **sans geste** = **zéro droit** (default-deny).
+- [ ] Une nouvelle session **racine sans geste** = **zéro droit** (default-deny) ; une **sous-session déléguée** (`parent_session_id`) hérite d'un **sous-ensemble** du parent, sans geste propre.
+- [ ] **Sous-agents** : héritage ⊆ parent, **pas d'`access_request`/élargissement** depuis un enfant, **révocation en cascade** depuis la racine (aligne fiche [0045](0045-capacites-projet-signees.md) §683-685) — inheritance/revocation **testés**.
 - [ ] La config d'une session s'exprime au grain **service × opération × ressource**
       (ex. `perso gmail:read`, `perso drive:write:<zone>`).
 - [ ] `gma session list` liste les sessions actives et **affiche la config de chacune**.
@@ -66,4 +67,4 @@ hôte Android pour desktop éteint (0078).
   **conditionné au vault** [0003](0003-vault-credentials-hors-perimetre-agent.md).
 - Décisions de cadrage (14/08) : identité = geste de consentement ; granularité la plus
   fine ; mobile = hôte **et** dispositif de consentement selon la topologie.
-- Retours **Codex** ([PR #108](https://github.com/elzinko/google-mcp-multi-account/pull/108)) intégrés : cycle de vie découplé de la connexion MCP (①) ; **création de session sous élicitation signée exigée** (②) ; **chaque octroi de capacité signé, pas seulement la création** (③).
+- Retours **Codex** ([PR #108](https://github.com/elzinko/google-mcp-multi-account/pull/108)) intégrés : cycle de vie découplé de la connexion MCP (①) ; **création de session sous élicitation signée exigée** (②) ; **chaque octroi de capacité signé, pas seulement la création** (③) ; **héritage sous-agents ⊆ parent préservé** (④) ; ADR ajouté à la nav MkDocs (⑤).

@@ -23,7 +23,7 @@ Forces en présence :
 
 ## Décision
 
-1. **Identité par consentement, pas par connexion.** Une session naît d'un **geste humain** (« ouvrir l'accès pour ce chat ») qui émet un **jeton de session signé** (réutilise ADR-0005). **La création de session emprunte toujours le chemin d'élicitation signée, indépendamment du flag `.strong-auth` global** — pas de session sans geste signé (enrôlement requis). **Chaque capacité (unlock, grant fin) — à la création comme à l'élargissement — est portée par un consentement signé liant le scope exact (compte / service / opération / ressource) ; aucun élargissement non signé.** Le jeton n'est plus dérivé de l'`initialize`.
+1. **Identité par consentement, pas par connexion.** Une session naît d'un **geste humain** (« ouvrir l'accès pour ce chat ») qui émet un **jeton de session signé** (réutilise ADR-0005). **La création de session emprunte toujours le chemin d'élicitation signée, indépendamment du flag `.strong-auth` global** — pas de session sans geste signé (enrôlement requis). **Chaque capacité (unlock, grant fin) — à la création comme à l'élargissement — est portée par un consentement signé liant le scope exact (compte / service / opération / ressource) ; aucun élargissement non signé.** Les **sous-sessions déléguées** (`parent_session_id`) héritent d'un sous-ensemble **déjà signé** du parent — sans nouvelle signature — et **ne peuvent pas élargir** (pas d'`access_request` enfant ; révocation en cascade), conformément à la fiche 0045. Le jeton n'est plus dérivé de l'`initialize`.
 2. **Jeton porté dans chaque appel.** Les tools MCP acceptent un paramètre de session ; le broker autorise d'après le **jeton présenté**, jamais d'après un global de process. *C'est ce qui isole deux conversations sur une connexion Desktop partagée.* On abandonne `set_session_id` global.
 3. **Configuration de droits au grain fin.** Le registre de session devient un **document de capacités** : par (compte, **service × opération × ressource**), avec expiry. Droits effectifs = **policy compte ∩ manifeste projet ∩ capacités session** (intersection, *fail-closed*).
 4. **Consentement multi-hôte, routable.** Le broker + credentials vivent sur l'**hôte allumé** (desktop par défaut, Android sinon). La validation biométrique se fait **où est l'humain** : Touch ID desktop **ou** biométrie Android — y compris **à distance** (le broker desktop demande une approbation signée au téléphone **appairé**). Clés en **Secure Enclave / Android Keystore**, dispositifs appairés.
@@ -66,7 +66,7 @@ Forces en présence :
 
 ## Action items
 
-1. [ ] **Phase A** — paramètre `session` sur les tools + autorisation broker par jeton ; registre de capacités (service × op × ressource) **signées à chaque octroi** ; `gma session list` + vue config ; fix purge + `last_seen` ; tests hermétiques verts.
+1. [ ] **Phase A** — paramètre `session` sur les tools + autorisation broker par jeton ; registre de capacités (service × op × ressource) **signées à chaque octroi** ; `gma session list` + vue config ; fix purge + `last_seen` ; **héritage sous-agent ⊆ parent + révocation cascade (0045) testés** ; tests hermétiques verts.
 2. [ ] Test **live Desktop** (2 conversations → nombre de `session_id`) pour documenter, même si la décision 2 le rend non-bloquant.
 3. [ ] **Phase B** (0077) — appairage desktop↔Android + approbation signée distante (étend ADR-0005).
 4. [ ] **Phase C** (0078) — broker + credentials Android (APK), **conditionné au vault** (0003).
