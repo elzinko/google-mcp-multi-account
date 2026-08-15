@@ -28,14 +28,14 @@ Décision d'architecture : [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md
 
 ## Proposition (Phase A — desktop seul)
 
-1. **Identité par geste de consentement** (local desktop, signé via ADR-0005) au lieu
+1. **Identité par geste de consentement** (local desktop, signé via ADR-0005 — **exigé pour toute session**, indépendamment du flag `.strong-auth` global ; enrôlement requis) au lieu
    de l'`initialize`.
 2. **Jeton de session porté dans chaque appel** (paramètre sur les tools ; autorisation
    broker par jeton) → deux conversations d'une **même connexion** Desktop sont isolées.
 3. **Config fine par session** : (compte, **service × opération × ressource**),
    expirante ; droits effectifs = policy ∩ manifeste ∩ session.
 4. **`gma session list`** + vue de la config par session.
-5. **Corriger** : purge en fin de session + TTL réel ; `last_seen` mis à jour à chaque
+5. **Corriger** : cycle de vie **découplé de la connexion** (TTL réel + `gma session close`/révocation ; une déconnexion de connexion *partagée* ne purge pas les jetons des autres conversations) ; `last_seen` mis à jour à chaque
    appel.
 
 Hors périmètre (phases suivantes) : consentement distant desktop↔Android (0077),
@@ -45,11 +45,12 @@ hôte Android pour desktop éteint (0078).
 
 - [ ] Deux sessions sur **la même connexion MCP** ont des droits distincts (jeton porté),
       vérifié par un test hermétique.
+- [ ] **Création de session = geste signé exigé** (enrôlement requis) ; sans enrôlement → **refus** (`gma elicitation enroll`), indépendamment du flag `.strong-auth`.
 - [ ] Une nouvelle session **sans geste** = **zéro droit** (default-deny).
 - [ ] La config d'une session s'exprime au grain **service × opération × ressource**
       (ex. `perso gmail:read`, `perso drive:write:<zone>`).
 - [ ] `gma session list` liste les sessions actives et **affiche la config de chacune**.
-- [ ] Fin de session (déconnexion MCP) → registre **purgé** ; TTL d'inactivité effectif ;
+- [ ] Cycle de vie **découplé de la connexion** : fin par **TTL** ou **`gma session close`/révocation** → registre purgé ; sur une connexion *partagée*, la déconnexion **ne supprime pas** les jetons des autres conversations ;
       `last_seen_at` avance à chaque appel.
 - [ ] Jeton absent / invalide / expiré → **refus** journalisé.
 - [ ] `./scripts/test.sh` vert (tests hermétiques, sans comptes réels).
@@ -63,3 +64,4 @@ hôte Android pour desktop éteint (0078).
   **conditionné au vault** [0003](0003-vault-credentials-hors-perimetre-agent.md).
 - Décisions de cadrage (14/08) : identité = geste de consentement ; granularité la plus
   fine ; mobile = hôte **et** dispositif de consentement selon la topologie.
+- Retours **Codex** ([PR #108](https://github.com/elzinko/google-mcp-multi-account/pull/108)) intégrés : cycle de vie découplé de la connexion MCP (①) ; **création de session sous élicitation signée exigée** (②).

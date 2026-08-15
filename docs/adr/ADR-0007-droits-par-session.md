@@ -4,7 +4,7 @@
 **Statut** : proposé (Phase A visée par la fiche 0076 ; Phases B/C esquissées → fiches 0077/0078 à venir)  
 **Décideurs** : Thomas (mainteneur)
 
-> **TL;DR** — Chaque conversation obtient un périmètre Google **qui lui est propre** : décidé par un **geste de consentement humain signé** (pas déduit de la connexion MCP), **transporté dans chaque appel** (pas dans un état global du serveur), **configurable au grain le plus fin** (service × opération × ressource), et **validable depuis l'appareil où se trouve l'humain** (Touch ID desktop ou biométrie Android, y compris à distance). Résultat : deux sessions du même compte peuvent avoir des droits différents, et aucune n'hérite passivement d'une autre. *L'outil vérifie, l'humain autorise, le LLM propose.*
+> **TL;DR** — Chaque conversation obtient un périmètre Google **qui lui est propre** : décidé par un **geste de consentement humain signé** (élicitation ADR-0005 **exigée** ; pas déduit de la connexion MCP), **transporté dans chaque appel** (pas dans un état global du serveur), **configurable au grain le plus fin** (service × opération × ressource), et **validable depuis l'appareil où se trouve l'humain** (Touch ID desktop ou biométrie Android, y compris à distance). Résultat : deux sessions du même compte peuvent avoir des droits différents, et aucune n'hérite passivement d'une autre. *L'outil vérifie, l'humain autorise, le LLM propose.*
 
 ## Contexte
 
@@ -23,11 +23,11 @@ Forces en présence :
 
 ## Décision
 
-1. **Identité par consentement, pas par connexion.** Une session naît d'un **geste humain** (« ouvrir l'accès pour ce chat ») qui émet un **jeton de session signé** (réutilise ADR-0005). Le jeton n'est plus dérivé de l'`initialize`.
+1. **Identité par consentement, pas par connexion.** Une session naît d'un **geste humain** (« ouvrir l'accès pour ce chat ») qui émet un **jeton de session signé** (réutilise ADR-0005). **La création de session emprunte toujours le chemin d'élicitation signée, indépendamment du flag `.strong-auth` global** — pas de session sans geste signé (enrôlement requis). Le jeton n'est plus dérivé de l'`initialize`.
 2. **Jeton porté dans chaque appel.** Les tools MCP acceptent un paramètre de session ; le broker autorise d'après le **jeton présenté**, jamais d'après un global de process. *C'est ce qui isole deux conversations sur une connexion Desktop partagée.* On abandonne `set_session_id` global.
 3. **Configuration de droits au grain fin.** Le registre de session devient un **document de capacités** : par (compte, **service × opération × ressource**), avec expiry. Droits effectifs = **policy compte ∩ manifeste projet ∩ capacités session** (intersection, *fail-closed*).
 4. **Consentement multi-hôte, routable.** Le broker + credentials vivent sur l'**hôte allumé** (desktop par défaut, Android sinon). La validation biométrique se fait **où est l'humain** : Touch ID desktop **ou** biométrie Android — y compris **à distance** (le broker desktop demande une approbation signée au téléphone **appairé**). Clés en **Secure Enclave / Android Keystore**, dispositifs appairés.
-5. **Observabilité.** `gma session list` + **vue de la config par session** ; journal enrichi (`session_id`, service / opération / ressource). Et on **corrige les deux bugs** : purge en fin de session + TTL réel, `last_seen` mis à jour à chaque appel.
+5. **Cycle de vie & observabilité.** Le cycle de vie d'une session est **découplé de la connexion MCP** : expiration **TTL** + **révocation explicite** (`gma session close` / `revoke`). Sur une connexion *partagée* (Desktop), la fin de connexion ne purge un jeton que si **plus aucune conversation ne le détient** — jamais ceux des autres. `gma session list` + **vue de la config par session** ; journal enrichi (`session_id`, service / opération / ressource) ; `last_seen` avance à chaque appel.
 6. **Phasage.** **A — desktop** (fiche 0076, cette PR) : geste local + jeton porté + config fine + `session list` + fix bugs. **B — consentement distant** (0077) : appairage desktop↔Android + approbation signée poussée. **C — hôte Android** (0078) : broker + credentials sur l'APK, **conditionné au vault** (0003).
 
 ## Options considérées
@@ -50,14 +50,15 @@ Forces en présence :
 
 **Plus facile** : deux sessions du même compte avec des droits distincts ; nouvelle conversation = zéro droit ; révocation par session ; audit par session ; extension mobile cadrée.
 
-**Plus dur** : le geste de consentement ajoute une friction (assumée) ; le jeton porté impose un **paramètre de session sur les tools** et que le modèle le présente (à instruire côté skill / prompt) ; le consentement distant est un **protocole d'appairage** coûteux (phase B) ; l'hôte Android **double la surface credentials** (phase C) — à ne faire **qu'avec** le vault (0003).
+**Plus dur** : le geste de consentement ajoute une friction (assumée ; **enrôlement Touch ID requis pour ouvrir toute session**) ; le jeton porté impose un **paramètre de session sur les tools** et que le modèle le présente (à instruire côté skill / prompt) ; le consentement distant est un **protocole d'appairage** coûteux (phase B) ; l'hôte Android **double la surface credentials** (phase C) — à ne faire **qu'avec** le vault (0003).
 
 **À revisiter** : le jeton est une **capacité au porteur** → le borner (expiry court, scope minimal, non affiché entre conversations) ; tout reste **coopératif** tant que le vault n'est pas là (contournements `gws` nu / édition FS, S-01…S-03 de 0045) ; si un client finit par exposer un vrai id de conversation, on pourra l'utiliser comme **raccourci** du geste.
 
 ## Repli (fail-closed) & limites
 
 - Jeton absent / invalide / expiré → **refus** (jamais d'accès par défaut).
-- `strongauth on` sans enrôlement, biométrie indisponible → refus (comme ADR-0005).
+- **Création de session sans enrôlement** de la clé d'élicitation, ou **biométrie indisponible** → **refus** (`gma elicitation enroll`) — *pas de session sans geste signé*, indépendamment du flag `.strong-auth`.
+- **Fin de connexion MCP** : ne purge **pas** les jetons encore détenus par d'autres conversations de la même connexion (cf. Décision 5).
 - Service / opération / ressource non déclarés dans la config de session → **refus** (default-deny, intersection).
 - Consentement distant (phase B) : refus si non appairé, signature non vérifiée, ou requête non liée à l'action exacte (nonce + expiry + device pinning).
 - Limite de menace **inchangée** : sans vault (0003), un agent avec shell peut contourner (édition `.sessions/`, `gws` nu). La couche session **durcit le modèle coopératif**, elle ne le rend pas cryptographiquement étanche.
