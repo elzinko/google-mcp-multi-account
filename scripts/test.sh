@@ -3063,6 +3063,57 @@ print(r.returncode)
   && pass "capacités session : ressource Gmail absente = lecture bornée par la policy" \
   || fail "capacités session : lecture Gmail sans ressource ($out_cap_c)"
 
+# ── (h) fail-closed sur policy Drive PERMISSIVE — non-zonesOnly (revue sécu P0) ──
+# La garantie de session ne doit PAS tomber quand la policy Drive du compte est
+# ouverte : une session limitée (gmail:read) ne peut pas écrire dans Drive.
+CAP_OPEN="$TMP/gwsa-caps-open"
+mkdir -p "$CAP_OPEN/alpha"
+echo '{"gmail":{"read":true},"drive":{"read":true,"create":true,"update":true,"zonesOnly":false}}' \
+  > "$CAP_OPEN/alpha/policy.json"
+out_cap_h="$(GWSA_ROOT="$CAP_OPEN" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys, os
+env = dict(os.environ, GWSA_SESSION_CAPS=json.dumps([{'service':'gmail','operation':'read'}]))
+env_legacy = dict(os.environ); env_legacy.pop('GWSA_SESSION_CAPS', None)
+def rc(args, e):
+    return subprocess.run([sys.executable,'scripts/policy-check.py','$CAP_OPEN/alpha']+args, env=e).returncode
+print('create', rc(['drive','files','create','--json','{\"parents\":[\"F123\"]}'], env))
+print('update', rc(['drive','files','update','--params','{\"fileId\":\"F1\"}','--json','{}'], env))
+print('legacy', rc(['drive','files','create','--json','{\"parents\":[\"F123\"]}'], env_legacy))
+")"
+[[ "$out_cap_h" == *"create 4"* && "$out_cap_h" == *"update 4"* && "$out_cap_h" == *"legacy 0"* ]] \
+  && pass "capacités session : Drive non-zonesOnly reste fail-closed (session gmail:read refusée en écriture)" \
+  || fail "capacités session : FAIL-OPEN sur Drive non-zonesOnly ($out_cap_h)"
+
+# ── (i) fail-closed sur policy Drive « mode:open » (revue sécu P0) ──
+CAP_MOPEN="$TMP/gwsa-caps-mopen"
+mkdir -p "$CAP_MOPEN/alpha"
+echo '{"gmail":{"read":true},"drive":{"mode":"open"}}' > "$CAP_MOPEN/alpha/policy.json"
+out_cap_i="$(GWSA_ROOT="$CAP_MOPEN" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys, os
+env = dict(os.environ, GWSA_SESSION_CAPS=json.dumps([{'service':'gmail','operation':'read'}]))
+env_legacy = dict(os.environ); env_legacy.pop('GWSA_SESSION_CAPS', None)
+def rc(e):
+    return subprocess.run([sys.executable,'scripts/policy-check.py','$CAP_MOPEN/alpha','drive','files','create','--json','{\"parents\":[\"X\"]}'], env=e).returncode
+print('sess', rc(env)); print('legacy', rc(env_legacy))
+")"
+[[ "$out_cap_i" == *"sess 4"* && "$out_cap_i" == *"legacy 0"* ]] \
+  && pass "capacités session : Drive mode:open reste fail-closed pour une session limitée" \
+  || fail "capacités session : FAIL-OPEN sur Drive mode:open ($out_cap_i)"
+
+# ── (j) zone de session + capacité fine cohabitent (revue P1 — composition) ──
+out_cap_j="$(GWSA_ROOT="$CAP_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys, os
+env = dict(os.environ, GWSA_USE_SESSION_GRANTS='1', GWSA_SESSION_DRIVE_ZONES='zoneA',
+           GWSA_SESSION_CAPS=json.dumps([{'service':'gmail','operation':'read'}]))
+def rc(zone):
+    return subprocess.run([sys.executable,'scripts/policy-check.py','$CAP_ROOT/alpha',
+                           'drive','files','create','--json', json.dumps({'parents':[zone]})], env=env).returncode
+print('zoneA', rc('zoneA')); print('zoneB', rc('zoneB'))
+")"
+[[ "$out_cap_j" == *"zoneA 0"* && "$out_cap_j" == *"zoneB 4"* ]] \
+  && pass "capacités session : zone de session utilisable malgré une capacité fine (composition)" \
+  || fail "capacités session : zone de session cassée par une capacité fine ($out_cap_j)"
+
 # ── (d) octroi de capacité sans élicitation signée → refus ──
 CAP_UNSIGNED="$TMP/gwsa-caps-unsigned"
 mkdir -p "$CAP_UNSIGNED/alpha"
