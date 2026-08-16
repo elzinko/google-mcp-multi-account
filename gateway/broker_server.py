@@ -26,7 +26,7 @@ from typing import Any
 from .config import SYS_PYTHON, POLICY_CHECKER, gwsa_root, profile_dir, upload_spool
 from .errors import GatewayError
 from .profiles import is_locked, require_unlocked
-from .sessions import active_drive_zones, is_session_unlocked, purge_expired
+from .sessions import active_capabilities, active_drive_zones, is_session_unlocked, purge_expired
 from .usage import log_usage
 from .vault import gws_config_dir, migrate_all
 
@@ -139,6 +139,7 @@ def check_policy(
     git_root: str = "",
     session_drive_zones: set[str] | None = None,
     use_session_grants: bool = False,
+    session_caps: list[Any] | None = None,
 ) -> None:
     if not (profile_path / "policy.json").is_file():
         return
@@ -159,6 +160,18 @@ def check_policy(
     if use_session_grants and session_drive_zones is not None:
         env["GWSA_SESSION_DRIVE_ZONES"] = ",".join(sorted(session_drive_zones))
         env["GWSA_USE_SESSION_GRANTS"] = "1"
+    if session_caps:
+        # Opt-in (ADR-0007 §3) : n'active le grain fin service×opération×
+        # ressource QUE si cette session porte au moins une capacité — une
+        # session sans capacité fine reste régie par unlocks/drive_zones
+        # (compat totale avec le comportement existant).
+        env["GWSA_SESSION_CAPS"] = json.dumps(
+            [
+                {"service": c.service, "operation": c.operation, "resource": c.resource}
+                for c in session_caps
+            ],
+            ensure_ascii=False,
+        )
     r = subprocess.run(
         [python, str(POLICY_CHECKER), str(profile_path), *gws_args],
         capture_output=True,
@@ -216,9 +229,11 @@ def handle_exec(
         raise
 
     session_zones: set[str] | None = None
+    session_caps = None
     use_session = bool(session_id)
     if use_session:
         session_zones = active_drive_zones(session_id, alias)
+        session_caps = active_capabilities(session_id, alias)
         # Plafond manifeste appliqué dans policy-check via GWSA_GIT_ROOT (intersection)
 
     check_policy(
@@ -227,6 +242,7 @@ def handle_exec(
         git_root=git_root,
         session_drive_zones=session_zones,
         use_session_grants=use_session,
+        session_caps=session_caps,
     )
     result = run_gws_local(alias, args, raw_output=raw_output)
     log_usage(alias, args, client, session_id=session_id, git_root=git_root)

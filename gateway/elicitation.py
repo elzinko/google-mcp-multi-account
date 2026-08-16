@@ -132,6 +132,8 @@ def prompt_from_payload(payload: dict[str, Any]) -> str:
         return f"gma : déverrouiller {who} ({minutes or target} min, poste entier)"
     if action == "session_grant":
         return f"gma : zone session {sid} — « {target} » ({acct}, {hours} h)"
+    if action == "session_grant_capability":
+        return f"gma : capacité session {sid} — « {target} » ({acct}, {hours} h)"
     if action == "grant":
         return f"gma : autoriser l'écriture Drive « {target} » ({acct}, {hours} h)"
     if action == "project_sign":
