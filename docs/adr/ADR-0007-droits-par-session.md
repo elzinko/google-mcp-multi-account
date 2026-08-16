@@ -1,7 +1,7 @@
 # ADR-0007 — Droits par session : identité par consentement, jeton porté, consentement multi-hôte (fiche 0076)
 
 **Date** : 2026-08-15  
-**Statut** : proposé (Phase A visée par la fiche 0076 ; Phases B/C esquissées → fiches 0077/0078 à venir)  
+**Statut** : proposé (Phase A visée par la fiche 0076 ; Phases B/C = axe *accès mobile souverain*, ADR-0008 / PR #109)  
 **Décideurs** : Thomas (mainteneur)
 
 > **TL;DR** — Chaque conversation obtient un périmètre Google **qui lui est propre** : décidé par un **geste de consentement humain signé** (élicitation ADR-0005 **exigée** ; pas déduit de la connexion MCP), **transporté dans chaque appel** (pas dans un état global du serveur), **configurable au grain le plus fin** (service × opération × ressource), et **validable depuis l'appareil où se trouve l'humain** (Touch ID desktop ou biométrie Android, y compris à distance). Résultat : deux sessions du même compte peuvent avoir des droits différents, et aucune n'hérite passivement d'une autre. *L'outil vérifie, l'humain autorise, le LLM propose.*
