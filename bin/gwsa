@@ -208,6 +208,28 @@ require_signed_elicitation_always() { # JSON payload — signature TOUJOURS exig
     || die "élicitation signée refusée — action annulée"
 }
 
+require_remote_approval() { # JSON payload — approbation par passkey téléphone (fiche 0078, ADR-0009)
+  # Frère de require_signed_elicitation_always — sélectionné par l'appelant via
+  # --remote, JAMAIS par défaut (Touch ID reste le chemin devant le Mac,
+  # inchangé). Réutilise le même socle ADR-0005 (payload, nonce, reçu) mais
+  # signe avec la passkey du téléphone au lieu du Secure Enclave du Mac. Sans
+  # enrôlement (remote-approval-cli.py enroll) ou sans réponse du téléphone →
+  # refus (fail-closed).
+  local payload="${1:-}" response="${2:-}"
+  [[ -n "$payload" ]] || die "approbation distante : payload manquant (bug interne gwsa)"
+  # Bash 3.2 (macOS) : expanser un tableau VIDE sous `set -u` lève « unbound
+  # variable » — pas de tableau ici, on bifurque plutôt sur deux invocations.
+  if [[ -n "$response" ]]; then
+    REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" \
+      "$SYS_PYTHON" "$REPO_DIR/scripts/remote-approval-cli.py" gate --json "$payload" --response "$response" \
+      || die "approbation distante refusée — action annulée"
+  else
+    REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" \
+      "$SYS_PYTHON" "$REPO_DIR/scripts/remote-approval-cli.py" gate --json "$payload" \
+      || die "approbation distante refusée — action annulée"
+  fi
+}
+
 # Point d'entrée élicitation signée (fiche 0001) — voir require_signed_elicitation().
 
 profile_dir() { printf '%s/%s' "$GWSA_ROOT" "$1"; }
@@ -606,13 +628,29 @@ print(s.session_id)
 " "$open_client"
       ;;
     unlock)
-      local sid="${1:-}" alias="${2:-}" mins="${3:-60}"
-      [[ -n "$sid" && -n "$alias" ]] || die "usage : $SELF session unlock <session_id> <alias> [minutes]"
+      # --remote (fiche 0078) : approbation par passkey téléphone au lieu du
+      # Touch ID Mac — sélectionné explicitement par l'appelant, jamais par
+      # défaut (peut apparaître n'importe où dans les arguments positionnels).
+      local args=("$@") remote=0 pos=()
+      # Bash 3.2 (macOS) : expanser un tableau VIDE sous `set -u` lève « unbound
+      # variable » — garder derrière un test de taille avant "${args[@]}".
+      if [[ ${#args[@]} -gt 0 ]]; then
+        for a in "${args[@]}"; do
+          if [[ "$a" == "--remote" ]]; then remote=1; else pos+=("$a"); fi
+        done
+      fi
+      local sid="${pos[0]:-}" alias="${pos[1]:-}" mins="${pos[2]:-60}"
+      [[ -n "$sid" && -n "$alias" ]] || die "usage : $SELF session unlock <session_id> <alias> [minutes] [--remote]"
       check_alias "$alias"
       local dir; dir="$(profile_dir "$alias")"
       [[ -d "$dir" ]] || die "profil inconnu « $alias »"
       local email; email="$(profile_email_cached "$dir")"   # compte nommé, sans exec gws (fiche 0047)
-      require_signed_elicitation_always "$(printf '{"action":"session_unlock","alias":"%s","email":"%s","session_id":"%s","minutes":%s}' "$alias" "$email" "$sid" "$mins")"
+      local payload; payload="$(printf '{"action":"session_unlock","alias":"%s","email":"%s","session_id":"%s","minutes":%s}' "$alias" "$email" "$sid" "$mins")"
+      if [[ "$remote" == "1" ]]; then
+        require_remote_approval "$payload" "${GWSA_REMOTE_RESPONSE:-}"
+      else
+        require_signed_elicitation_always "$payload"
+      fi
       REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
 import os, sys
 sys.path.insert(0, os.environ['REPO_DIR'])
@@ -622,9 +660,18 @@ session_unlock(sys.argv[1], sys.argv[2], int(sys.argv[3]))
       echo "🔓 session $sid : « $alias » déverrouillé pour $mins min (cette conversation seulement)."
       ;;
     grant)
-      local sid="${1:-}" alias="${2:-}" target="${3:-}" hours="${4:-8}"
+      # --remote (fiche 0078) : idem « session unlock » — voir plus haut.
+      local args=("$@") remote=0 pos=()
+      # Bash 3.2 (macOS) : expanser un tableau VIDE sous `set -u` lève « unbound
+      # variable » — garder derrière un test de taille avant "${args[@]}".
+      if [[ ${#args[@]} -gt 0 ]]; then
+        for a in "${args[@]}"; do
+          if [[ "$a" == "--remote" ]]; then remote=1; else pos+=("$a"); fi
+        done
+      fi
+      local sid="${pos[0]:-}" alias="${pos[1]:-}" target="${pos[2]:-}" hours="${pos[3]:-8}"
       [[ -n "$sid" && -n "$alias" && -n "$target" ]] \
-        || die "usage : $SELF session grant <session_id> <alias> <dossier> [heures]"
+        || die "usage : $SELF session grant <session_id> <alias> <dossier> [heures] [--remote]"
       check_alias "$alias"
       local dir; dir="$(profile_dir "$alias")"
       [[ -d "$dir" ]] || die "profil inconnu « $alias »"
@@ -635,7 +682,12 @@ session_unlock(sys.argv[1], sys.argv[2], int(sys.argv[3]))
       # Barrière AVANT le lookup Drive authentifié (revue sécurité) : signer la
       # cible BRUTE, résoudre le nom seulement après Touch ID / déverrouillage
       # (idem cmd_grant — la route explicite « session grant » avait été oubliée).
-      require_signed_elicitation_always "$("$SYS_PYTHON" -c 'import json,sys; print(json.dumps({"action":"session_grant","alias":sys.argv[1],"email":sys.argv[2],"session_id":sys.argv[3],"target":sys.argv[4],"hours":int(sys.argv[5])}))' "$alias" "$email" "$sid" "$target" "$hours")"
+      local payload; payload="$("$SYS_PYTHON" -c 'import json,sys; print(json.dumps({"action":"session_grant","alias":sys.argv[1],"email":sys.argv[2],"session_id":sys.argv[3],"target":sys.argv[4],"hours":int(sys.argv[5])}))' "$alias" "$email" "$sid" "$target" "$hours")"
+      if [[ "$remote" == "1" ]]; then
+        require_remote_approval "$payload" "${GWSA_REMOTE_RESPONSE:-}"
+      else
+        require_signed_elicitation_always "$payload"
+      fi
       resolved="$(resolve_folder "$dir" "$target")"
       fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
       [[ -n "$fid" ]] || die "dossier introuvable"

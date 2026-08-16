@@ -956,7 +956,10 @@ def access_request(
                     f"Le profil {who} est verrouillé pour cette session. "
                     f"L'utilisateur doit exécuter :\n"
                     f"  gma session unlock {sid} {alias} {mins}\n"
-                    f"(déverrouillage limité à cette conversation — {mins} min)."
+                    f"(déverrouillage limité à cette conversation — {mins} min). "
+                    f"À distance (loin du Mac), la même commande + « --remote » "
+                    f"bascule l'approbation sur la passkey du téléphone (fiche 0078) "
+                    f"— nécessite un enrôlement préalable côté humain."
                 ),
                 "suggested_command": f"gma session unlock {sid} {alias} {mins}",
             }
@@ -1084,7 +1087,8 @@ def access_request(
                     f'  gma session grant {sid} {alias} "{folder}" {h}\n'
                     f"(zone valable pour cette conversation seulement — {h} h). "
                     f"Si le dépôt a un .gwsa/ signé, préférer kind=project_grant "
-                    f"(vérifie le plafond manifeste)."
+                    f"(vérifie le plafond manifeste). À distance, ajouter « --remote » "
+                    f"pour approuver depuis la passkey du téléphone (fiche 0078)."
                 ),
                 "suggested_command": f'gma session grant {sid} {alias} "{folder}" {h}',
             }
