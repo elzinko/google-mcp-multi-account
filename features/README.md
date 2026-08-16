@@ -49,6 +49,7 @@
 | 0069 | Docs in-app — rework orientation utilisateur | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
 | 0070 | README — quickstart + usage par persona + permissions + contribution | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
 | 0071 | GitHub metadata — description, homepage, topics + badges | chore | P2 | v0.4.0 | 0060 | ✅ shipped |  |
+| 0078 | Approbation par passkey depuis le téléphone (archi actuelle, Mac holder) | feature | P2 |  | 0077 | 🔴 todo |  |
 | 0001 | Élicitation signée — faire monter `gwsa strongauth` de la présence à la signature | feature | P3 |  |  | 🟠 in-progress |  |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)
@@ -57,6 +58,7 @@
 |---|-------|------|------|---------|------|--------|----|
 | 0060 | Admin UX/UI refresh + docs/README + GitHub metadata | epic | P1 | v0.4.0 |  | 🔴 todo |  |
 | 0017 | Généraliser le projet à d'autres utilisateurs que l'auteur | epic | P2 |  |  | 💡 idea |  |
+| 0077 | Accès mobile souverain — approbation passkey + holder natif | epic | P2 |  |  | 🔴 todo |  |
 
 ## 💡 Idées (non groomées)
 

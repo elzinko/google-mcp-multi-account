@@ -1,8 +1,9 @@
-# ADR-0007 : Accès mobile — approbation par passkey, détention par un « holder » natif souverain
+# ADR-0008 : Accès mobile — approbation par passkey, détention par un « holder » natif souverain
 
-**Statut :** Proposé
-**Date :** 2026-08-14
+**Statut :** Accepté
+**Date :** 2026-08-14 (accepté le 2026-08-15)
 **Décideurs :** Thomas (PO)
+**Note :** renuméroté depuis ADR-0007 le 2026-08-15 — le n° 0007 était pris par l'ADR « droits par session » (PR #108), sujet distinct.
 
 > **TL;DR** — Pour accéder à ses comptes Google depuis un téléphone — **y compris quand le Mac est éteint** — sans jamais confier ses jetons d'accès à un service tiers, on sépare trois rôles : **qui demande** une action (l'assistant IA, où qu'il tourne), **qui l'approuve** (toujours le téléphone, par une empreinte qui **signe** l'action précise via une *passkey* — le standard supporté sur macOS/Windows/Linux/Android/iOS), et **qui détient** réellement les accès (un composant « holder » natif qui **scelle les jetons dans le coffre matériel** de l'appareil — Secure Enclave, StrongBox — clé non exportable). Faute d'un serveur allumé en permanence, c'est le **téléphone lui-même** qui devient ce holder, **à la demande** (rien ne tourne en fond). Le projet est repensé dès maintenant comme un **logiciel libre**, ce qui interdit tout point de contrôle centralisé : le seul relais éventuel est **aveugle** (il ne voit que des signatures, jamais un jeton) et **auto-hébergeable**.
 
@@ -43,6 +44,12 @@ Adopter un modèle à **trois rôles découplés**, et refonder la brique de dé
 6. **Techno retenue : Tauri 2 (cœur Rust, UI web embarquée)** pour le holder/approbateur natif — couvre les 5 OS, petit binaire auditable, accès natif aux coffres matériels, surface d'attaque réduite. *Flutter* est l'alternative documentée (cf. Options).
 
 7. **Logiciel libre, donc zéro point de contrôle centralisé.** Le seul relais éventuel (pour joindre un holder derrière un NAT depuis un agent cloud) est **aveugle** — il ne transporte que des messages **signés et opaques**, jamais un jeton Google — et **auto-hébergeable**. Chaque utilisateur fournit **son propre client OAuth** (déjà le cas via le provisioning GCP). Aucun secret partagé n'entre dans le dépôt.
+
+8. **Décisions complémentaires (actées le 2026-08-15 avec le PO).**
+   - **Enrôlement OAuth par appareil** : chaque appareil (Mac, téléphone) détient ses propres jetons dans son coffre — **pas** de synchronisation de secrets entre appareils.
+   - **Migration progressive, pas de big-bang** : le holder **Python-macOS** existant est **conservé** et continue de servir ; le holder natif est ajouté **à côté**. L'unification éventuelle du desktop sur Tauri 2 est **différée** (non décidée).
+   - **Licence : Apache-2.0** (clause brevets + adoption large).
+   - **Point de départ = phase 1** : poser l'approbation par passkey sur l'architecture *actuelle* (Mac holder allumé) avant toute refonte native.
 
 ## Options considérées
 
@@ -144,17 +151,18 @@ L'ADR-0005 supposait un agent **local semi-honnête** (contournable via `gws` nu
 - **Deux implémentations du holder** cohabiteront pendant la transition (Python-macOS existant + natif) → risque de divergence de règles de sécurité, à cadrer.
 - **Multi-appareils OAuth** : un même compte Google détenu par le Mac *et* le téléphone impose de choisir entre **enrôlement par appareil** (chaque appareil a ses propres jetons dans son coffre — recommandé) et **synchronisation chiffrée** entre appareils (plus pratique, surface plus grande).
 
+**Tranché le 2026-08-15 (cf. Décision §8)** : enrôlement *par appareil* ; les deux holders cohabitent (migration progressive) ; licence Apache-2.0.
+
 **À revisiter plus tard (ADR/fiches enfants)**
-- Protocole d'**enrôlement des jetons par appareil** vs sync scellée.
-- **Design du relais aveugle** (protocole, découverte, hébergement) — et le cas « Mac allumé » sans relais (LAN direct / tunnel type WireGuard).
-- Faut-il **unifier le desktop** sur Tauri 2 à terme (retirer le Python), ou maintenir les deux holders ?
-- **Licence** (proposition : Apache-2.0 — clause brevets + adoption large) et **modèle de menace public** publié.
-- **CI multi-OS** (builds desktop + mobile) — cf. contrainte de coût GHA du projet.
+- **Design du relais aveugle** (protocole, découverte, hébergement) — et le cas « Mac allumé » sans relais (LAN direct / tunnel type WireGuard). → ADR enfant.
+- **Enrôlement multi-appareils** : le *protocole concret* (le principe « par appareil » est acté §8). → ADR enfant.
+- **Unification desktop** sur Tauri 2 à terme (retirer le Python) : ouverte — décision différée.
+- **Modèle de menace public** publié + **CI multi-OS** (builds desktop + mobile ; cf. coût GHA).
 
 ## Suites (action items)
 
-1. [ ] Valider cet ADR (direction + invariants) avec le PO.
-2. [ ] Ouvrir une **fiche backlog** « épic : accès mobile souverain » découpée en incréments livrables.
+1. [x] Valider cet ADR (direction + invariants) avec le PO — **Accepté le 2026-08-15** (cf. §8).
+2. [x] Ouvrir la **fiche backlog** — épic **0077** + phase 1 **0078**.
 3. [ ] **Phase 1, à faible risque** : poser l'approbation par **passkey** sur l'architecture *actuelle* (Mac = holder allumé, téléphone = approbateur) — bénéfice immédiat, sans refonte.
 4. [ ] **Prototype** holder natif Tauri 2 : sceller un jeton dans le coffre matériel + un appel Google, sur un OS mobile.
 5. [ ] ADR enfant sur l'**enrôlement multi-appareils** et un autre sur le **relais aveugle**.
