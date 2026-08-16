@@ -2,7 +2,7 @@
 id: 0078
 title: Approbation par passkey depuis le téléphone (archi actuelle, Mac holder)
 type: feature
-priority: P2
+priority: P1
 version:
 epic: 0077
 status: todo
@@ -48,4 +48,4 @@ Périmètre **phase 1** (délibérément étroit) :
 - Découle de [ADR-0008](../docs/adr/ADR-0008-acces-mobile-passkey-holder-natif.md), Suites § phase 1.
 - Réutilise l'élicitation signée [[0001]] / ADR-0005 (payload + nonce + reçu) — ne pas réinventer.
 - Le relais aveugle et le holder natif mobile sont des **incréments ultérieurs** de l'épic [[0077]].
-- Priorité **proposée P2** — à confirmer par le PO.
+- Priorité **P1** (confirmée par le PO, 2026-08-15).

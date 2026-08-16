@@ -2,7 +2,7 @@
 id: 0077
 title: Accès mobile souverain — approbation passkey + holder natif
 type: epic
-priority: P2
+priority: P1
 version:
 epic:
 status: todo
@@ -54,7 +54,6 @@ Incréments prévus (créés au fil de l'eau) :
 - Décisions PO complémentaires (ADR-0008 §8) : enrôlement **par appareil** ; **garder le
   Python-macOS** existant + holder natif à côté (pas de big-bang) ; licence **Apache-2.0** ;
   démarrer par la **phase 1**.
-- Priorité **proposée P2** — à confirmer par le PO (l'accès actuel fonctionne ; l'accès
-  mobile est stratégique mais non bloquant).
+- Priorité **P1** (confirmée par le PO, 2026-08-15) — direction stratégique du projet.
 - Recoupe partiellement [[0018]] (cross-platform hors macOS) et [[0045]] (droits par
   session) — à articuler, pas à dupliquer.
