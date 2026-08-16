@@ -48,7 +48,7 @@ hôte Android pour desktop éteint (0078).
       vérifié par un test hermétique.
 - [ ] **Création de session = geste signé exigé** (enrôlement requis) ; sans enrôlement → **refus** (`gma elicitation enroll`), indépendamment du flag `.strong-auth`.
 - [ ] **Toute mutation de capacité** (unlock, grant fin) exige une **signature liant le scope exact** (compte / service / op / ressource) — **testée** —, indépendamment de `.strong-auth` ; **pas d'élargissement non signé** jusqu'aux plafonds compte / projet.
-- [ ] Une nouvelle session **racine sans geste** = **zéro droit** (default-deny) ; une **sous-session déléguée** (`parent_session_id`) hérite d'un **sous-ensemble** du parent, sans geste propre.
+- [ ] Une **session racine** ne peut **pas exister sans geste signé** (refus — cf. critère de création) ; une session fraîchement créée = **zéro capacité** tant qu'aucun octroi signé ; une **sous-session déléguée** (`parent_session_id`) hérite d'un **sous-ensemble** du parent, sans geste propre.
 - [ ] **Sous-agents** : héritage ⊆ parent, **pas d'`access_request`/élargissement** depuis un enfant, **révocation en cascade** depuis la racine (aligne fiche [0045](0045-capacites-projet-signees.md) §683-685) — inheritance/revocation **testés**.
 - [ ] La config d'une session s'exprime au grain **service × opération × ressource**
       (ex. `perso gmail:read`, `perso drive:write:<zone>`).
@@ -56,6 +56,7 @@ hôte Android pour desktop éteint (0078).
 - [ ] Cycle de vie **découplé de la connexion** : fin par **TTL** ou **`gma session close`/révocation** → registre purgé ; sur une connexion *partagée*, la déconnexion **ne supprime pas** les jetons des autres conversations ;
       `last_seen_at` avance à chaque appel.
 - [ ] Jeton absent / invalide / expiré → **refus** journalisé.
+- [ ] **Appels réussis journalisés** avec `session_id` + service / opération / ressource (pas seulement les refus) — **testé** (M-08 / ADR-0007).
 - [ ] `./scripts/test.sh` vert (tests hermétiques, sans comptes réels).
 
 ## Notes
@@ -67,4 +68,4 @@ hôte Android pour desktop éteint (0078).
   **conditionné au vault** [0003](0003-vault-credentials-hors-perimetre-agent.md).
 - Décisions de cadrage (14/08) : identité = geste de consentement ; granularité la plus
   fine ; mobile = hôte **et** dispositif de consentement selon la topologie.
-- Retours **Codex** ([PR #108](https://github.com/elzinko/google-mcp-multi-account/pull/108)) intégrés : cycle de vie découplé de la connexion MCP (①) ; **création de session sous élicitation signée exigée** (②) ; **chaque octroi de capacité signé, pas seulement la création** (③) ; **héritage sous-agents ⊆ parent préservé** (④) ; ADR ajouté à la nav MkDocs (⑤).
+- Retours **Codex** ([PR #108](https://github.com/elzinko/google-mcp-multi-account/pull/108)) intégrés : cycle de vie découplé de la connexion MCP (①) ; **création de session sous élicitation signée exigée** (②) ; **chaque octroi de capacité signé, pas seulement la création** (③) ; **héritage sous-agents ⊆ parent préservé** (④) ; ADR ajouté à la nav MkDocs (⑤) ; critères 0045 périmés marqués remplacés (⑥) ; racine non signée refusée (⑦) ; audit des appels réussis couvert (⑧).

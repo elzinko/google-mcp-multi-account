@@ -673,6 +673,8 @@ Phasage suggéré :
 
 ### Phase A — Droits par session
 
+> ⚠️ **Certains critères ci-dessous sont remplacés par [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md) / fiche [0076](0076-droits-par-session-phase-a.md).** L'identité ne vient plus de la connexion MCP (« 1 `session_id` par process/conversation », l. 676 & 680) mais d'un **geste de consentement signé, jeton porté dans l'appel** ; et le cycle de vie est **découplé de la connexion** (plus de « purge à la déconnexion », l. 681) — TTL + révocation explicite.
+
 - [ ] Chaque process MCP reçoit un `session_id` stable transmis au broker.
 - [ ] `gwsa grant` n'écrit plus dans `session-grants.json` global par défaut ;
       écrit dans le registre **session** (réf. C-02).
