@@ -386,6 +386,7 @@ import os
 from pathlib import Path
 from gateway.api import access_request, profiles_list
 from gateway.errors import GatewayError
+from gateway.sessions import create_session
 from gateway import api
 
 root = Path(os.environ["GWSA_ROOT"])
@@ -411,8 +412,12 @@ try:
     log.unlink()
 except FileNotFoundError:
     pass
+# Jeton de session PORTÉ par l'appel (fiche 0076) — une session existe mais
+# n'a jamais été déverrouillée pour cet alias : le profil verrouillé refuse
+# quand même (policy compte, indépendante du jeton).
+sid = create_session(client="test").session_id
 try:
-    api.gmail_list(alias)
+    api.gmail_list(alias, session=sid)
     raise SystemExit("gmail_list aurait dû refuser (locked)")
 except GatewayError as e:
     assert e.code == "locked", e.code
@@ -425,9 +430,9 @@ assert entries[0]["client"] == os.environ["GWSA_CLIENT"], entries
 
 # fiche 0043 : les nouveaux tools restent derrière le verrou, refus journalisé.
 for call in (
-    lambda: api.drive_read(alias, "FILE1"),
-    lambda: api.drive_copy(alias, "SRC1", "FOLDER"),
-    lambda: api.gmail_attachment_get(alias, "MSG1", "ATT1"),
+    lambda: api.drive_read(alias, "FILE1", session=sid),
+    lambda: api.drive_copy(alias, "SRC1", "FOLDER", session=sid),
+    lambda: api.gmail_attachment_get(alias, "MSG1", "ATT1", session=sid),
 ):
     try:
         call()
@@ -501,7 +506,7 @@ REPLY = {
 }
 
 
-def fake_run(alias, args, timeout=60):
+def fake_run(alias, args, timeout=60, **_kw):
     """Remplace l'aller-retour broker : on inspecte la commande gws construite."""
     CALLS.append(args)
     if "--upload" in args:  # capturer le média AVANT que la gateway ne l'efface
@@ -670,7 +675,7 @@ def method_of(args):
                                           if a.startswith("-")), len(args))])
 
 
-def fake_run(alias, args, timeout=60, raw_output=False):
+def fake_run(alias, args, timeout=60, raw_output=False, **_kw):
     CALLS.append(args)
     ALL.append(args)
     if "--upload" in args:  # capturer le média AVANT que la gateway ne l'efface
@@ -976,7 +981,7 @@ CALLS = []
 UPLOAD = {}
 
 
-def fake_run(alias, args, timeout=60):
+def fake_run(alias, args, timeout=60, **_kw):
     CALLS.append(args)
     if "--upload" in args:
         from pathlib import Path
@@ -1089,7 +1094,7 @@ assert out["deleted"] == "permXYZ"
 
 # F5 (revue sécurité) : content sur un fichier Google NATIF → refus (pas de
 # corruption / échec silencieux) ; drive_update lit d'abord le vrai mimeType.
-def fake_run_native(alias, args, timeout=60):
+def fake_run_native(alias, args, timeout=60, **_kw):
     if method_of(args) == ("drive", "files", "get"):
         return {"id": "FILE1", "mimeType": "application/vnd.google-apps.document"}
     return {"id": "FILE1"}
@@ -1102,7 +1107,7 @@ except GatewayError as e:
 
 # F5 : sur un fichier NON-natif (blob), content passe et est bien uploadé
 UP2 = {}
-def fake_run_blob(alias, args, timeout=60):
+def fake_run_blob(alias, args, timeout=60, **_kw):
     if "--upload" in args:
         from pathlib import Path
         UP2["data"] = Path(args[args.index("--upload") + 1]).read_bytes()
@@ -2500,6 +2505,124 @@ u2_ok="$("$PY" -c "from gateway.sessions import is_session_unlocked; print(is_se
   && pass "unlock session : isolation entre sessions parallèles" \
   || fail "unlock session : autre session hérite ($u2_ok)"
 
+# ── fiche 0076 : droits par session — jeton porté PAR L'APPEL (pas de global) ──
+# ADR-0007 §Décision 2 : gateway.api._run lit le jeton du paramètre `session`
+# de CET appel, jamais un état global de process. On mocke run_via_broker pour
+# rester hermétique (zéro réseau, zéro gws réel) et exercer uniquement
+# l'autorisation portée par le jeton.
+out_call_iso="$("$PY" -c "
+import gateway.api as api
+from gateway.sessions import create_session, session_unlock
+
+def fake_broker(alias, args, timeout=60, raw_output=False, session_id=''):
+    return {'files': [], '_sid': session_id}
+api.run_via_broker = fake_broker
+
+s1 = create_session(client='t076')
+s2 = create_session(client='t076')
+session_unlock(s1.session_id, 'alpha', 30)
+
+ok1 = True
+try:
+    api.gmail_list(alias='alpha', session=s1.session_id)
+except api.GatewayError:
+    ok1 = False
+
+ok2 = True
+code2 = ''
+try:
+    api.gmail_list(alias='alpha', session=s2.session_id)
+except api.GatewayError as e:
+    ok2 = False
+    code2 = e.code
+
+print('ok1', ok1, 'ok2', ok2, 'code2', code2)
+")"
+[[ "$out_call_iso" == *"ok1 True"* && "$out_call_iso" == *"ok2 False"* && "$out_call_iso" == *"code2 locked"* ]] \
+  && pass "api._run : jeton porté par l'appel — deux sessions isolées (pas de global)" \
+  || fail "api._run : isolation par jeton d'appel ($out_call_iso)"
+
+out_no_token="$("$PY" -c "
+import gateway.api as api
+try:
+    api.gmail_list(alias='alpha', session='')
+    print('no-raise')
+except api.GatewayError as e:
+    print('OK' if e.code == 'session' else 'wrong:' + e.code)
+")"
+[[ "$out_no_token" == "OK" ]] \
+  && pass "api._run : appel SANS jeton de session → refus (fail-closed)" \
+  || fail "api._run : appel sans jeton non refusé ($out_no_token)"
+
+out_ttl="$(GWSA_SESSION_TTL_SEC=1 "$PY" -c "
+import time
+from gateway.sessions import create_session, get_session
+s = create_session(client='ttl076')
+time.sleep(1.2)
+print(get_session(s.session_id))
+")"
+[[ "$out_ttl" == "None" ]] \
+  && pass "sessions : TTL expiré → get_session refuse dès l'accès (pas seulement au GC périodique)" \
+  || fail "sessions : TTL non appliqué à l'accès ($out_ttl)"
+
+out_ttl_run="$(GWSA_SESSION_TTL_SEC=1 "$PY" -c "
+import time
+import gateway.api as api
+from gateway.sessions import create_session
+api.run_via_broker = lambda *a, **k: {'files': []}
+s = create_session(client='ttl076run')
+time.sleep(1.2)
+try:
+    api.gmail_list(alias='alpha', session=s.session_id)
+    print('no-raise')
+except api.GatewayError as e:
+    # require_session() lève avec code='error' (« session inconnue ou expirée ») —
+    # ce qui compte pour la DoD est le REFUS, pas le code précis.
+    print('OK' if 'expirée' in str(e) or 'inconnue' in str(e) else 'wrong:' + str(e))
+")"
+[[ "$out_ttl_run" == "OK" ]] \
+  && pass "api._run : session expirée (TTL) → refus au moment de l'appel MCP" \
+  || fail "api._run : session expirée non refusée ($out_ttl_run)"
+
+out_touch="$("$PY" -c "
+import time
+from gateway.sessions import create_session, get_session
+s = create_session(client='touch076')
+created = s.created_at
+time.sleep(0.05)
+s2 = get_session(s.session_id)
+print(s2.last_seen_at > created)
+")"
+[[ "$out_touch" == "True" ]] \
+  && pass "sessions : last_seen_at avance après un accès autorisé (bug 0076 corrigé)" \
+  || fail "sessions : last_seen_at ne bouge pas après accès ($out_touch)"
+
+sid_close076="$("$PY" -c "from gateway.sessions import create_session; print(create_session(client='closecmd076').session_id)")"
+GWSA_ROOT="$SESS_ROOT" "$GWSA" session close "$sid_close076" >/dev/null 2>&1
+gone_close076="$("$PY" -c "from gateway.sessions import get_session; print(get_session('$sid_close076'))")"
+[[ "$gone_close076" == "None" ]] \
+  && pass "gwsa session close : révocation explicite purge la session (cycle de vie découplé de la connexion)" \
+  || fail "gwsa session close : session non purgée ($gone_close076)"
+
+# GC câblé au balayage/accès (pas à la déconnexion) : gateway.broker_server.handle_exec
+# appelle purge_expired() — vérifié directement sur la fonction (hermétique, sans broker
+# réel). Racine DÉDIÉE (isolée de SESS_ROOT, qui accumule des sessions d'autres tests
+# depuis longtemps) pour que le compte purgé soit exactement celui créé ici.
+GC_ROOT076="$TMP/gwsa-sessions-gc076"
+mkdir -p "$GC_ROOT076"
+out_gc="$(GWSA_ROOT="$GC_ROOT076" GWSA_SESSION_TTL_SEC=1 "$PY" -c "
+import time
+from gateway.sessions import create_session, sessions_dir, purge_expired
+s = create_session(client='gc076')
+path = sessions_dir() / (s.session_id + '.json')
+time.sleep(1.2)
+n = purge_expired()
+print(n, path.is_file())
+")"
+[[ "$out_gc" == "1 False" ]] \
+  && pass "sessions : purge_expired() GC les sessions expirées (câblée côté broker à chaque accès)" \
+  || fail "sessions : purge_expired() n'a pas purgé ($out_gc)"
+
 # list_sessions + admin API sessions (fiche 0040 phase C)
 sid_list="$("$PY" -c "
 from gateway.sessions import create_session, session_unlock, list_sessions
@@ -2681,13 +2804,12 @@ print(len(active_drive_zones(sid, 'alpha')))
 pg_out="$("$PY" -c "
 import os
 from unittest.mock import patch
-from gateway.context import set_session_id
 from gateway.api import access_request
 from gateway.project import ProjectContext
 from gateway.sessions import create_session
 
+# jeton porté PAR L'APPEL (fiche 0076) — plus de set_session_id global.
 sid = create_session(client='t').session_id
-set_session_id(sid)
 m = {'capabilities': {'alpha': {
   'drive': {'zones': [{'id': 'folderAAA'}]},
   'gmail': {'read': True, 'drafts': False},
@@ -2696,9 +2818,9 @@ ctx = ProjectContext(manifest_valid=True, manifest=m, git_root='/tmp',
                      manifest_path='/tmp/.gwsa/manifest.json')
 os.environ['GWSA_GIT_ROOT'] = '/tmp'
 with patch('gateway.project.resolve_project', return_value=ctx):
-    ok = access_request('alpha', 'project_grant', folder='folderAAA', hours=2)
+    ok = access_request('alpha', 'project_grant', folder='folderAAA', hours=2, session=sid)
     assert ok.get('kind') == 'project_grant' and 'session grant' in ok.get('suggested_command','')
-    blocked = access_request('alpha', 'project_grant', folder='folderBBB', hours=2)
+    blocked = access_request('alpha', 'project_grant', folder='folderBBB', hours=2, session=sid)
     assert blocked.get('blocked_by_manifest') is True
 from gateway.project import manifest_allows_service
 assert manifest_allows_service(m, 'alpha', 'gmail', 'read') is True
