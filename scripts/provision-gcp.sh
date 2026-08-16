@@ -187,7 +187,7 @@ if [[ "$MODE" == "sync-iam" ]]; then
   echo "   Projet : $PROJECT_ID · propriétaire actif : $ACCOUNT"
   # Mutation IAM = même barrière physique que unlock/grant.
   require_strong_auth "autoriser sync-iam — accorder le rôle IAM sur « $PROJECT_ID »"
-  granted=0; already=0
+  granted=0; already=0; failed=0
   while IFS=$'\t' read -r alias_name pemail state; do
     case "$state" in
       ok)      already=$((already + 1)); ok "$alias_name ($pemail) : déjà OK" ;;
@@ -198,6 +198,7 @@ if [[ "$MODE" == "sync-iam" ]]; then
                --member="user:$pemail" --role="$ROLE_SUC" --condition=None --quiet >/dev/null 2>&1; then
             granted=$((granted + 1)); ok "$alias_name ($pemail) : rôle accordé"
           else
+            failed=$((failed + 1))
             warn "$alias_name ($pemail) : échec du binding — à faire à la main :"
             echo "     gcloud projects add-iam-policy-binding $PROJECT_ID --member=user:$pemail --role=$ROLE_SUC"
           fi
@@ -206,7 +207,13 @@ if [[ "$MODE" == "sync-iam" ]]; then
         fi ;;
     esac
   done < <(iam_profile_states "$PROJECT_ID")
-  echo; ok "terminé — $granted accordé(s), $already déjà en place. Propagation ~2 min."
+  echo
+  if [[ "$failed" -gt 0 ]]; then
+    warn "terminé avec échec — $granted accordé(s), $already déjà en place, $failed échec(s)."
+    warn "Les comptes en échec n'ont PAS le rôle : corrige (session gcloud propriétaire du projet ?) puis relance."
+    exit 1
+  fi
+  ok "terminé — $granted accordé(s), $already déjà en place. Propagation ~2 min."
   exit 0
 fi
 
