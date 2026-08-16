@@ -97,6 +97,7 @@ nav:
           - ADR-0005 · Élicitation signée v2: adr/ADR-0005-elicitation-signee-v2.md
           - ADR-0006 · Fichiers reçus, répertoire dédié: adr/ADR-0006-fichiers-recus-repertoire-dedie.md
           - ADR-0007 · Droits par session: adr/ADR-0007-droits-par-session.md
+          - ADR-0008 · Accès mobile — passkey + holder natif: adr/ADR-0008-acces-mobile-passkey-holder-natif.md
   - Contribuer:
       - Comment contribuer: contribuer.md
       - Validation des PR: PR_VALIDATION.md
