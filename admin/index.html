@@ -133,6 +133,9 @@ th, td { text-align:left; padding:5px 8px; border-bottom:1px solid var(--line); 
 td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
 /* Journal (fiche 0066) : largeurs maîtrisées + wrap + vue dense → plus de scroll horizontal. */
 .logwrap { max-height:55vh; overflow-y:auto; overflow-x:hidden; }
+/* Écrans étroits : les colonnes fixes dépassent la largeur — on rétablit le
+   scroll horizontal plutôt que de clipper la colonne « décision » (Codex, #112). */
+@media (max-width: 560px) { .logwrap { overflow-x:auto; } }
 #logTable { table-layout:fixed; }
 #logTable th, #logTable td { vertical-align:top; overflow-wrap:anywhere; word-break:break-word; }
 #logTable col.c-when { width:122px; }
@@ -354,7 +357,7 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
 <header>
   <h1>google-multi-account <span class="h1-sub">— admin</span></h1>
   <span id="verBadge" class="badge" title="Version du code servi par cette admin">…</span>
-  <button class="hbtn-icon" onclick="openLockAll()" title="Tout verrouiller — coupe l'accès de tous les comptes" aria-label="Tout verrouiller"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></button>
+  <button class="hbtn-icon" onclick="openLockAll()" title="Tout verrouiller — repasse tous les comptes en accès verrouillé" aria-label="Tout verrouiller"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></button>
   <button onclick="openSessions()">💬 Sessions</button>
   <button onclick="openLog()">📓 Journal</button>
   <button onclick="openDoc()">❓ Doc</button>
