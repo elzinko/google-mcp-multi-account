@@ -5,9 +5,9 @@ type: feature
 priority: P2
 version:
 epic: 0045
-status: todo
+status: shipped
 ready: 2026-08-16
-pr: "#108"
+pr: "#108, #110"
 created: 2026-08-15
 ---
 
