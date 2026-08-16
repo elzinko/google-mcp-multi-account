@@ -12,7 +12,7 @@ from typing import Any
 
 from .broker_server import broker_host, broker_port, ensure_token, token_path
 from .config import REPO_DIR, SYS_PYTHON, client_id
-from .context import get_git_root, get_session_id
+from .context import get_git_root
 from .errors import GatewayError
 
 _CONNECT_TIMEOUT = 2.0
@@ -91,7 +91,11 @@ def run_gws(profile_dir: str, args: list[str], timeout: int = 60) -> Any:
 
 
 def run_via_broker(
-    alias: str, args: list[str], timeout: int = 60, raw_output: bool = False
+    alias: str,
+    args: list[str],
+    timeout: int = 60,
+    raw_output: bool = False,
+    session_id: str = "",
 ) -> Any:
     ensure_broker_running()
     tok = ensure_token()
@@ -105,9 +109,9 @@ def run_via_broker(
     if raw_output:
         # Contenu verbatim (drive_read) : le broker renvoie stdout tel quel.
         payload["raw_output"] = True
-    sid = get_session_id()
-    if sid:
-        payload["session_id"] = sid
+    # Jeton porté par l'appelant (paramètre, pas un global — ADR-0007 §Décision 2).
+    if session_id:
+        payload["session_id"] = session_id
     gro = get_git_root()
     if gro:
         payload["git_root"] = gro

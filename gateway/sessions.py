@@ -137,6 +137,14 @@ def new_session_id() -> str:
     return secrets.token_hex(12)
 
 
+def session_ttl_sec() -> int:
+    """TTL effectif d'une session (secondes), surchargeable pour les tests."""
+    try:
+        return int(os.environ.get("GWSA_SESSION_TTL_SEC", str(DEFAULT_SESSION_TTL_SEC)))
+    except ValueError:
+        return DEFAULT_SESSION_TTL_SEC
+
+
 def create_session(
     *,
     parent_id: str = "",
@@ -163,10 +171,23 @@ def create_session(
 
 
 def get_session(session_id: str) -> SessionState | None:
+    """Charge une session active ; None si absente OU expirée (TTL, fail-closed).
+
+    L'expiration est vérifiée à CHAQUE accès (pas seulement au GC périodique) :
+    une session dont le TTL est dépassé ne doit jamais être considérée valide,
+    même si `purge_expired` n'est pas encore passée dessus. Ne délègue pas à
+    `close_session` (récursion : close_session → revoke_descendants →
+    require_session → get_session).
+    """
     if not session_id:
         return None
     state = _load(session_id)
     if state is None:
+        return None
+    now = time.time()
+    last_activity = state.last_seen_at or state.created_at
+    if last_activity and now - last_activity > session_ttl_sec():
+        _path(session_id).unlink(missing_ok=True)
         return None
     state.touch()
     _save(state)
@@ -294,8 +315,13 @@ def create_child_session(parent_id: str, client: str = "mcp") -> SessionState:
 
 
 def revoke_descendants(session_id: str) -> int:
-    """Supprime toutes les sous-sessions directes/indirectes ; retourne le nombre purgé."""
-    root = require_session(session_id)
+    """Supprime toutes les sous-sessions directes/indirectes ; retourne le nombre purgé.
+
+    N'exige PAS que `session_id` existe encore (révocation en cascade appelée
+    depuis `close_session`, y compris sur une session déjà expirée côté GC) —
+    l'id sert de racine de comparaison, pas d'un `require_session`.
+    """
+    root_id = session_id
     purged = 0
     for path in sessions_dir().glob("*.json"):
         try:
@@ -304,14 +330,14 @@ def revoke_descendants(session_id: str) -> int:
                 continue
             sid = str(data.get("session_id") or "")
             pid = str(data.get("parent_id") or "")
-            if not sid or sid == root.session_id:
+            if not sid or sid == root_id:
                 continue
             # descendant si parent_id chain mène à root
             cur = pid
             seen: set[str] = set()
             is_desc = False
             while cur and cur not in seen:
-                if cur == root.session_id:
+                if cur == root_id:
                     is_desc = True
                     break
                 seen.add(cur)
@@ -326,6 +352,8 @@ def revoke_descendants(session_id: str) -> int:
 
 
 def close_session(session_id: str) -> None:
+    """Révocation explicite : purge la session et ses descendants (cycle de vie
+    découplé de la connexion MCP — ADR-0007 §Décision 5)."""
     revoke_descendants(session_id)
     _path(session_id).unlink(missing_ok=True)
 
@@ -387,15 +415,22 @@ def list_sessions(*, include_expired_zones: bool = False) -> list[dict[str, Any]
     return out
 
 
-def purge_expired(max_age_sec: int = DEFAULT_SESSION_TTL_SEC) -> int:
-    """Purge les sessions sans activité depuis max_age_sec."""
+def purge_expired(max_age_sec: int | None = None) -> int:
+    """GC : purge les sessions sans activité depuis max_age_sec (TTL).
+
+    Câblée au balayage/accès (broker `handle_exec`, `create_session`,
+    `list_sessions`) — le cycle de vie d'une session ne dépend jamais de la
+    déconnexion MCP (ADR-0007 §Décision 5). Lit les fichiers directement (pas
+    `get_session`) pour éviter toute récursion avec `close_session`.
+    """
+    limit = max_age_sec if max_age_sec is not None else session_ttl_sec()
     now = time.time()
     n = 0
     for path in sessions_dir().glob("*.json"):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             last = float(data.get("last_seen_at") or data.get("created_at") or 0)
-            if last and now - last > max_age_sec:
+            if last and now - last > limit:
                 sid = str(data.get("session_id") or path.stem)
                 close_session(sid)
                 n += 1

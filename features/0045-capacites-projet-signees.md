@@ -12,6 +12,8 @@ created: 2026-07-28
 updated: 2026-07-28
 ---
 
+> ⚠️ **Statut de ce document.** C'est l'**état des lieux initial** (2026-07-28). Le **modèle retenu** — identité par **geste de consentement signé**, **jeton porté dans l'appel**, **cycle de vie découplé de la connexion MCP** (TTL + révocation explicite) — est défini par **[ADR-0007](../docs/adr/ADR-0007-droits-par-session.md)** et la fiche **[0076](0076-droits-par-session-phase-a.md)**, qui **remplacent toute assertion de ce document liant l'identité ou le cycle de vie à la connexion MCP** — notamment §2.6, §3.x, la machine à états §5.2 et sa table de cycle de vie, les scénarios TGT-0x (§3.4), les critères Phase A (§7) et l'état d'implémentation (§10).
+
 ## Résumé exécutif
 
 Ce document sert de **base de décision** avant toute implémentation. Il décrit
@@ -401,7 +403,7 @@ Fonctionnalité: Sous-agents — héritage et révocation
 
   Scénario: TGT-04 — Fin du parent entraîne fin des enfants
     Étant donné un arbre P → C1, C2
-    Quand la session parent P se termine (déconnexion MCP)
+    Quand la session parent P se termine (close/révocation explicite ou TTL — **pas** la déconnexion MCP, cf. ADR-0007)
     Alors toutes les sous-sessions C1, C2 sont purgées (M-06 étendu à l'arbre)
 ```
 
@@ -672,6 +674,8 @@ Phasage suggéré :
 ## 7. Critères d'acceptation (esquisse)
 
 ### Phase A — Droits par session
+
+> ⚠️ **Certains critères ci-dessous sont remplacés par [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md) / fiche [0076](0076-droits-par-session-phase-a.md).** L'identité ne vient plus de la connexion MCP (« 1 `session_id` par process/conversation », l. 676 & 680) mais d'un **geste de consentement signé, jeton porté dans l'appel** ; et le cycle de vie est **découplé de la connexion** (plus de « purge à la déconnexion », l. 681) — TTL + révocation explicite.
 
 - [ ] Chaque process MCP reçoit un `session_id` stable transmis au broker.
 - [ ] `gwsa grant` n'écrit plus dans `session-grants.json` global par défaut ;
