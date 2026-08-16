@@ -416,7 +416,7 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
       <span class="dlg-confirm-icon info" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>
       <div class="dlg-confirm-titles">
         <h2>Tout verrouiller ?</h2>
-        <p class="dlg-confirm-sub">Tous les comptes connectés repassent en accès verrouillé et les fenêtres de déverrouillage ouvertes se referment. Les assistants ne pourront plus rien lire ni écrire jusqu'au prochain déverrouillage — réversible, compte par compte.</p>
+        <p class="dlg-confirm-sub">Tous les comptes connectés repassent en accès verrouillé : les nouvelles demandes des assistants seront refusées. ⚠️ Une conversation qui a déjà un déverrouillage de session actif y garde accès jusqu'à son expiration. Réversible, compte par compte.</p>
       </div>
     </div>
     <div class="dlg-foot">
@@ -709,7 +709,10 @@ dConfirm.addEventListener("close", () => { if (_confirmResolve) _confirmSettle(f
 
 let LAST_SETUP = null;
 let IAM_PROPAGATING = null; // Set<email> réparés, en attente de propagation Google (~2 min)
-async function openSetup() { IAM_PROPAGATING = null; $("setupBody").innerHTML = "Chargement…"; dSetup.showModal(); await renderSetup(); }
+// Persiste entre ouvertures du Setup : rouvrir pendant la propagation ne doit pas
+// réafficher les comptes en échec (Codex P2, #112). Nettoyé seulement par « Revérifier »
+// (recheckIam) ou implicitement quand le compte n'est plus « missing » (voir isProp).
+async function openSetup() { $("setupBody").innerHTML = "Chargement…"; dSetup.showModal(); await renderSetup(); }
 async function recheckIam() { IAM_PROPAGATING = null; await renderSetup(); }
 async function renderSetup() {
   let r;
