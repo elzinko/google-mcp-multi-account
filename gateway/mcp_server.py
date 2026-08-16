@@ -10,10 +10,10 @@ import traceback
 from typing import Any, Callable
 
 from . import api
-from .context import set_git_root, set_session_id
+from .context import set_git_root
 from .errors import GatewayError
 from .project import git_toplevel
-from .sessions import close_session, create_session
+from .sessions import create_session
 from .version import server_version
 
 SERVER_NAME = "google-mcp-multi-account"
@@ -48,6 +48,18 @@ def _call(fn: Callable, arguments: dict) -> dict:
         return _err_text(e)
 
 
+# Jeton de session porté par CHAQUE appel (ADR-0007 §Décision 2) : lu au
+# tools/call, jamais posé en global de process. Deux conversations sur une
+# même connexion MCP (Claude Desktop) obtiennent chacune leur jeton (renvoyé
+# par `initialize`, ou par `access_request`) et restent isolées.
+_SESSION_PROPERTY: dict[str, Any] = {
+    "type": "string",
+    "description": (
+        "Jeton de session porté par cet appel (session_id renvoyé par "
+        "initialize, ou par access_request). Sans jeton valide : accès refusé."
+    ),
+}
+
 TOOLS: list[dict[str, Any]] = [
     {
         "name": "profiles_list",
@@ -66,8 +78,9 @@ TOOLS: list[dict[str, Any]] = [
                 "alias": {"type": "string", "description": "Profil gwsa (ex. perso)"},
                 "query": {"type": "string", "description": "Requête Gmail (ex. is:unread)", "default": ""},
                 "max_results": {"type": "integer", "description": "1–50", "default": 10},
+                "session": _SESSION_PROPERTY,
             },
-            "required": ["alias"],
+            "required": ["alias", "session"],
             "additionalProperties": False,
         },
     },
@@ -84,8 +97,9 @@ TOOLS: list[dict[str, Any]] = [
                     "enum": ["full", "metadata", "minimal", "raw"],
                     "default": "full",
                 },
+                "session": _SESSION_PROPERTY,
             },
-            "required": ["alias", "message_id"],
+            "required": ["alias", "message_id", "session"],
             "additionalProperties": False,
         },
     },
@@ -103,8 +117,9 @@ TOOLS: list[dict[str, Any]] = [
                 "subject": {"type": "string"},
                 "body": {"type": "string"},
                 "cc": {"type": "string", "default": ""},
+                "session": _SESSION_PROPERTY,
             },
-            "required": ["alias", "to", "subject", "body"],
+            "required": ["alias", "to", "subject", "body", "session"],
             "additionalProperties": False,
         },
     },
@@ -123,8 +138,9 @@ TOOLS: list[dict[str, Any]] = [
                 "query": {"type": "string", "default": "trashed=false"},
                 "page_size": {"type": "integer", "default": 20},
                 "parent": {"type": "string", "description": "ID dossier parent optionnel"},
+                "session": _SESSION_PROPERTY,
             },
-            "required": ["alias"],
+            "required": ["alias", "session"],
             "additionalProperties": False,
         },
     },
@@ -140,8 +156,9 @@ TOOLS: list[dict[str, Any]] = [
             "properties": {
                 "alias": {"type": "string"},
                 "file_id": {"type": "string"},
+                "session": _SESSION_PROPERTY,
             },
-            "required": ["alias", "file_id"],
+            "required": ["alias", "file_id", "session"],
             "additionalProperties": False,
         },
     },
@@ -180,8 +197,9 @@ TOOLS: list[dict[str, Any]] = [
                         "cible est un type Google."
                     ),
                 },
+                "session": _SESSION_PROPERTY,
             },
-            "required": ["alias", "name", "parent_id"],
+            "required": ["alias", "name", "parent_id", "session"],
             "additionalProperties": False,
         },
     },
@@ -210,8 +228,9 @@ TOOLS: list[dict[str, Any]] = [
                     "default": 100000,
                     "description": "Troncature du contenu renvoyé (1 000–1 000 000)",
                 },
+                "session": _SESSION_PROPERTY,
             },
-            "required": ["alias", "file_id"],
+            "required": ["alias", "file_id", "session"],
             "additionalProperties": False,
         },
     },
@@ -231,8 +250,9 @@ TOOLS: list[dict[str, Any]] = [
                 "file_id": {"type": "string", "description": "Fichier source à copier"},
                 "parent_id": {"type": "string", "description": "ID du dossier destination autorisé"},
                 "name": {"type": "string", "description": "Nom de la copie (défaut : celui de Drive)"},
+                "session": _SESSION_PROPERTY,
             },
-            "required": ["alias", "file_id", "parent_id"],
+            "required": ["alias", "file_id", "parent_id", "session"],
             "additionalProperties": False,
         },
     },
@@ -255,8 +275,9 @@ TOOLS: list[dict[str, Any]] = [
                 "parent_id": {"type": "string", "description": "ID du dossier parent autorisé"},
                 "name": {"type": "string", "description": "Nom sur Drive (défaut : nom du fichier)"},
                 "mime_type": {"type": "string", "description": "Type MIME (défaut : deviné de l'extension)"},
+                "session": _SESSION_PROPERTY,
             },
-            "required": ["alias", "path", "parent_id"],
+            "required": ["alias", "path", "parent_id", "session"],
             "additionalProperties": False,
         },
     },
@@ -276,8 +297,9 @@ TOOLS: list[dict[str, Any]] = [
                 "message_id": {"type": "string"},
                 "attachment_id": {"type": "string"},
                 "filename": {"type": "string", "description": "Nom de fichier souhaité (assaini, unifié)"},
+                "session": _SESSION_PROPERTY,
             },
-            "required": ["alias", "message_id", "attachment_id"],
+            "required": ["alias", "message_id", "attachment_id", "session"],
             "additionalProperties": False,
         },
     },
@@ -318,8 +340,9 @@ TOOLS: list[dict[str, Any]] = [
                     "type": "string",
                     "description": "Type MIME cible si content fourni",
                 },
+                "session": _SESSION_PROPERTY,
             },
-            "required": ["alias", "file_id"],
+            "required": ["alias", "file_id", "session"],
             "additionalProperties": False,
         },
     },
@@ -339,8 +362,9 @@ TOOLS: list[dict[str, Any]] = [
                     "type": "string",
                     "description": "Jeton de page suivante (nextPageToken du résultat précédent) — au-delà de 100 permissions",
                 },
+                "session": _SESSION_PROPERTY,
             },
-            "required": ["alias", "file_id"],
+            "required": ["alias", "file_id", "session"],
             "additionalProperties": False,
         },
     },
@@ -368,8 +392,9 @@ TOOLS: list[dict[str, Any]] = [
                     "default": False,
                     "description": "Envoyer un email de notification au destinataire",
                 },
+                "session": _SESSION_PROPERTY,
             },
-            "required": ["alias", "file_id", "email"],
+            "required": ["alias", "file_id", "email", "session"],
             "additionalProperties": False,
         },
     },
@@ -385,8 +410,9 @@ TOOLS: list[dict[str, Any]] = [
                 "alias": {"type": "string"},
                 "file_id": {"type": "string"},
                 "permission_id": {"type": "string"},
+                "session": _SESSION_PROPERTY,
             },
-            "required": ["alias", "file_id", "permission_id"],
+            "required": ["alias", "file_id", "permission_id", "session"],
             "additionalProperties": False,
         },
     },
@@ -414,6 +440,14 @@ TOOLS: list[dict[str, Any]] = [
                 "hours": {"type": "integer", "default": 8, "description": "Durée grant"},
                 "minutes": {"type": "integer", "default": 60, "description": "Durée unlock"},
                 "email": {"type": "string", "description": "Adresse Gmail à connecter (si add_account)"},
+                "session": {
+                    "type": "string",
+                    "description": (
+                        "Jeton de session (requis pour kind=session_unlock / "
+                        "session_grant / project_grant — inutile pour les kinds "
+                        "legacy poste entier ou add_account)."
+                    ),
+                },
             },
             "required": ["alias", "kind"],
             "additionalProperties": False,
@@ -428,11 +462,13 @@ DISPATCH: dict[str, Callable] = {
         alias=kw["alias"],
         query=kw.get("query") or "",
         max_results=int(kw.get("max_results") or 10),
+        session=kw.get("session") or "",
     ),
     "gmail_get": lambda **kw: api.gmail_get(
         alias=kw["alias"],
         message_id=kw["message_id"],
         format=kw.get("format") or "full",
+        session=kw.get("session") or "",
     ),
     "gmail_draft_create": lambda **kw: api.gmail_create_draft(
         alias=kw["alias"],
@@ -440,25 +476,31 @@ DISPATCH: dict[str, Callable] = {
         subject=kw["subject"],
         body=kw.get("body") or "",
         cc=kw.get("cc") or "",
+        session=kw.get("session") or "",
     ),
     "drive_list": lambda **kw: api.drive_list(
         alias=kw["alias"],
         query=kw.get("query") or "trashed=false",
         page_size=int(kw.get("page_size") or 20),
         parent=kw.get("parent") or None,
+        session=kw.get("session") or "",
     ),
-    "drive_get": lambda **kw: api.drive_get(alias=kw["alias"], file_id=kw["file_id"]),
+    "drive_get": lambda **kw: api.drive_get(
+        alias=kw["alias"], file_id=kw["file_id"], session=kw.get("session") or "",
+    ),
     "drive_read": lambda **kw: api.drive_read(
         alias=kw["alias"],
         file_id=kw["file_id"],
         format=kw.get("format") or "",
         max_chars=int(kw.get("max_chars") or 100_000),
+        session=kw.get("session") or "",
     ),
     "drive_copy": lambda **kw: api.drive_copy(
         alias=kw["alias"],
         file_id=kw["file_id"],
         parent_id=kw["parent_id"],
         name=kw.get("name") or "",
+        session=kw.get("session") or "",
     ),
     "drive_upload": lambda **kw: api.drive_upload(
         alias=kw["alias"],
@@ -466,12 +508,14 @@ DISPATCH: dict[str, Callable] = {
         parent_id=kw["parent_id"],
         name=kw.get("name") or "",
         mime_type=kw.get("mime_type") or "",
+        session=kw.get("session") or "",
     ),
     "gmail_attachment_get": lambda **kw: api.gmail_attachment_get(
         alias=kw["alias"],
         message_id=kw["message_id"],
         attachment_id=kw["attachment_id"],
         filename=kw.get("filename") or "",
+        session=kw.get("session") or "",
     ),
     "drive_create": lambda **kw: api.drive_create(
         alias=kw["alias"],
@@ -480,6 +524,7 @@ DISPATCH: dict[str, Callable] = {
         mime_type=kw.get("mime_type") or "application/vnd.google-apps.document",
         content=kw.get("content") or "",
         content_type=kw.get("content_type") or "",
+        session=kw.get("session") or "",
     ),
     "drive_update": lambda **kw: api.drive_update(
         alias=kw["alias"],
@@ -489,12 +534,14 @@ DISPATCH: dict[str, Callable] = {
         content=kw["content"] if "content" in kw else None,
         content_type=kw.get("content_type") or "",
         mime_type=kw.get("mime_type") or "",
+        session=kw.get("session") or "",
     ),
     "drive_permissions_list": lambda **kw: api.drive_permissions_list(
         alias=kw["alias"],
         file_id=kw["file_id"],
         page_size=int(kw.get("page_size") or 100),
         page_token=kw.get("page_token") or "",
+        session=kw.get("session") or "",
     ),
     "drive_permissions_create": lambda **kw: api.drive_permissions_create(
         alias=kw["alias"],
@@ -503,11 +550,13 @@ DISPATCH: dict[str, Callable] = {
         role=kw.get("role") or "reader",
         # Valeur BRUTE (pas de bool() permissif) : l'API rejette tout non-booléen.
         send_notification=kw.get("send_notification", False),
+        session=kw.get("session") or "",
     ),
     "drive_permissions_delete": lambda **kw: api.drive_permissions_delete(
         alias=kw["alias"],
         file_id=kw["file_id"],
         permission_id=kw["permission_id"],
+        session=kw.get("session") or "",
     ),
     "access_request": lambda **kw: api.access_request(
         alias=kw["alias"],
@@ -516,6 +565,7 @@ DISPATCH: dict[str, Callable] = {
         hours=int(kw.get("hours") or 8),
         minutes=int(kw.get("minutes") or 60),
         email=kw.get("email") or "",
+        session=kw.get("session") or "",
     ),
 }
 
@@ -574,62 +624,60 @@ def _handle(msg: dict) -> None:
 
 
 def main() -> None:
-    # stderr pour logs — stdout réservé au JSON-RPC
-    active_session_id = ""
-    try:
-        for line in sys.stdin:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                msg = json.loads(line)
-            except json.JSONDecodeError:
-                sys.stderr.write("gateway-mcp : JSON invalide ignoré\n")
-                continue
-            try:
-                if isinstance(msg, dict) and msg.get("method") == "initialize":
-                    # initialize crée la session — capturée pour purge à la déconnexion
-                    mid = msg.get("id")
-                    params = msg.get("params") or {}
-                    state = create_session(client=SERVER_NAME)
-                    active_session_id = state.session_id
-                    set_session_id(state.session_id)
-                    root = git_toplevel()
-                    if root:
-                        set_git_root(root)
-                    _write({
-                        "jsonrpc": "2.0",
-                        "id": mid,
-                        "result": {
-                            "protocolVersion": PROTOCOL_VERSION,
-                            "capabilities": {"tools": {"listChanged": False}},
-                            "serverInfo": {
-                                "name": SERVER_NAME,
-                                "version": SERVER_VERSION,
-                                "session_id": state.session_id,
-                            },
+    # stderr pour logs — stdout réservé au JSON-RPC.
+    #
+    # Cycle de vie découplé de la connexion (ADR-0007 §Décision 5) : la
+    # déconnexion stdio n'est PAS un signal de cycle de vie — les jetons sont
+    # au porteur et le protocole MCP ne transmet aucun identifiant de
+    # conversation, donc le serveur ne peut pas savoir à la déconnexion quels
+    # jetons appartiennent à quelle conversation. Aucune purge ici : fin de vie
+    # = TTL (gateway.sessions.purge_expired, câblée au broker) ou révocation
+    # explicite (`gma session close` / `revoke-descendants`).
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            msg = json.loads(line)
+        except json.JSONDecodeError:
+            sys.stderr.write("gateway-mcp : JSON invalide ignoré\n")
+            continue
+        try:
+            if isinstance(msg, dict) and msg.get("method") == "initialize":
+                mid = msg.get("id")
+                # `create_session` amorce une session par défaut pour cette
+                # connexion (compat) ; le jeton n'est PLUS posé en global — le
+                # client doit le PORTER dans chaque tools/call (paramètre
+                # `session`). Le bootstrap sans jeton (élicitation de création)
+                # relève d'un lot ultérieur (fiche 0076, hors périmètre ici).
+                state = create_session(client=SERVER_NAME)
+                root = git_toplevel()
+                if root:
+                    set_git_root(root)
+                _write({
+                    "jsonrpc": "2.0",
+                    "id": mid,
+                    "result": {
+                        "protocolVersion": PROTOCOL_VERSION,
+                        "capabilities": {"tools": {"listChanged": False}},
+                        "serverInfo": {
+                            "name": SERVER_NAME,
+                            "version": SERVER_VERSION,
+                            "session_id": state.session_id,
                         },
-                    })
-                    continue
-                _handle(msg)
-            except Exception:
-                traceback.print_exc(file=sys.stderr)
-                mid = msg.get("id") if isinstance(msg, dict) else None
-                if mid is not None:
-                    _write({
-                        "jsonrpc": "2.0",
-                        "id": mid,
-                        "error": {"code": -32603, "message": "internal error"},
-                    })
-    finally:
-        if active_session_id:
-            try:
-                close_session(active_session_id)
-                sys.stderr.write(
-                    f"gateway-mcp : session {active_session_id} purgée (fin connexion stdio)\n"
-                )
-            except Exception:
-                traceback.print_exc(file=sys.stderr)
+                    },
+                })
+                continue
+            _handle(msg)
+        except Exception:
+            traceback.print_exc(file=sys.stderr)
+            mid = msg.get("id") if isinstance(msg, dict) else None
+            if mid is not None:
+                _write({
+                    "jsonrpc": "2.0",
+                    "id": mid,
+                    "error": {"code": -32603, "message": "internal error"},
+                })
 
 
 if __name__ == "__main__":

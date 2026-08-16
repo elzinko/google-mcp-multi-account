@@ -26,7 +26,7 @@ from typing import Any
 from .config import SYS_PYTHON, POLICY_CHECKER, gwsa_root, profile_dir, upload_spool
 from .errors import GatewayError
 from .profiles import is_locked, require_unlocked
-from .sessions import active_drive_zones, is_session_unlocked
+from .sessions import active_drive_zones, is_session_unlocked, purge_expired
 from .usage import log_usage
 from .vault import gws_config_dir, migrate_all
 
@@ -201,6 +201,10 @@ def handle_exec(
         raise GatewayError("args doit être une liste de chaînes", code="error")
     if not args:
         raise GatewayError("args vide", code="error")
+    # GC câblé au balayage/accès (ADR-0007 §Décision 5) : le cycle de vie d'une
+    # session ne dépend jamais de la déconnexion MCP, donc on purge ici plutôt
+    # que d'attendre un signal qui n'existe pas.
+    purge_expired()
     try:
         d = _require_access(alias, session_id)
     except GatewayError as e:

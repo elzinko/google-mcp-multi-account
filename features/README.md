@@ -44,6 +44,7 @@
 | 0044 | Sous strongauth, le dialogue Touch ID nomme « swift-frontend » au lieu du produit | bug | P2 |  |  | ✅ shipped | #74 |
 | 0045 | Droits par session et par projet git — état des lieux, écarts, pistes | feature | P2 |  |  | 🟠 in-progress |  |
 | 0046 | CLI locale pour déployer des sandboxes temporaires (branche / worktree) | feature | P2 |  |  | 🟠 in-progress |  |
+| 0076 | Droits par session (Phase A desktop) — identité par consentement, jeton porté, config fine | feature | P2 |  | 0045 | 🔴 todo | #108 |
 | 0047 | Au moment d'autoriser un accès, nommer le compte (email) — pas seulement l'alias | feature | P2 |  |  | ✅ shipped | #75 |
 | 0068 | Accessibilité — focus-visible + reduced-motion (cadenas/modales/boutons) | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
 | 0069 | Docs in-app — rework orientation utilisateur | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |

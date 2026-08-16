@@ -21,13 +21,13 @@ from .config import (
     upload_roots,
     upload_spool,
 )
-from .context import get_git_root, get_session_id
+from .context import get_git_root
 from .errors import GatewayError
 from .executor import run_via_broker
 from .profiles import is_locked, list_profiles as _list_profiles
-from .profiles import profile_email, require_unlocked, validate_alias
+from .profiles import profile_email, validate_alias
 from .project import git_toplevel
-from .sessions import is_session_unlocked
+from .sessions import is_session_unlocked, require_session
 from .setup_status import setup_status  # noqa: F401 — re-export pour le dispatch MCP
 from .usage import log_usage
 
@@ -86,40 +86,58 @@ def profiles_list() -> dict[str, Any]:
 
 
 def _run(
-    alias: str, gws_args: list[str], timeout: int = 60, raw_output: bool = False
+    alias: str,
+    gws_args: list[str],
+    timeout: int = 60,
+    raw_output: bool = False,
+    session: str = "",
 ) -> Any:
-    sid = get_session_id()
+    """Exécute un appel gws via le broker, autorisé par le jeton PORTÉ par cet appel.
+
+    Fail-closed (ADR-0007 §Repli) : jeton absent, inconnu ou expiré → refus,
+    quel que soit l'état de verrouillage du profil. Plus de repli sur un état
+    global de process — le jeton n'est jamais lu ailleurs que dans `session`,
+    le paramètre que l'appelant (gateway.mcp_server) a extrait de CET appel.
+    """
+    sid = (session or "").strip()
     gro = get_git_root() or git_toplevel()
     try:
-        if sid:
-            d = profile_dir(alias)
-            if not d.is_dir():
-                raise GatewayError(
-                    f"profil inconnu « {alias} » — le créer avec : gma add {alias}",
-                    code="not_found",
-                )
-            if is_locked(d) and not is_session_unlocked(sid, alias):
-                raise GatewayError(
-                    f"profil « {alias} » verrouillé pour cette session — "
-                    f"access_request kind=session_unlock",
-                    code="locked",
-                )
-        else:
-            require_unlocked(alias)
+        if not sid:
+            raise GatewayError(
+                "jeton de session requis — paramètre « session » manquant sur "
+                "cet appel (obtenu à l'initialize, ou via access_request)",
+                code="session",
+            )
+        require_session(sid)  # lève si jeton inconnu ou expiré (TTL)
+        d = profile_dir(alias)
+        if not d.is_dir():
+            raise GatewayError(
+                f"profil inconnu « {alias} » — le créer avec : gma add {alias}",
+                code="not_found",
+            )
+        if is_locked(d) and not is_session_unlocked(sid, alias):
+            raise GatewayError(
+                f"profil « {alias} » verrouillé pour cette session — "
+                f"access_request kind=session_unlock",
+                code="locked",
+            )
     except GatewayError as e:
-        if e.code == "locked":
+        if e.code in ("locked", "session"):
             log_usage(
-                alias, gws_args, client_id(), decision="refus", reason="locked",
+                alias, gws_args, client_id(), decision="refus", reason=e.code,
                 session_id=sid, git_root=gro,
             )
         raise
-    return run_via_broker(alias, gws_args, timeout=timeout, raw_output=raw_output)
+    return run_via_broker(
+        alias, gws_args, timeout=timeout, raw_output=raw_output, session_id=sid,
+    )
 
 
 def gmail_list(
     alias: str,
     query: str = "",
     max_results: int = 10,
+    session: str = "",
 ) -> dict[str, Any]:
     validate_alias(alias)
     max_results = max(1, min(int(max_results), 50))
@@ -129,11 +147,14 @@ def gmail_list(
     data = _run(
         alias,
         ["gmail", "users", "messages", "list", "--params", json.dumps(params)],
+        session=session,
     )
     return {"ok": True, "alias": alias, "result": data}
 
 
-def gmail_get(alias: str, message_id: str, format: str = "full") -> dict[str, Any]:
+def gmail_get(
+    alias: str, message_id: str, format: str = "full", session: str = "",
+) -> dict[str, Any]:
     validate_alias(alias)
     if not message_id or not isinstance(message_id, str):
         raise GatewayError("message_id requis", code="error")
@@ -142,6 +163,7 @@ def gmail_get(alias: str, message_id: str, format: str = "full") -> dict[str, An
     data = _run(
         alias,
         ["gmail", "users", "messages", "get", "--params", json.dumps(params)],
+        session=session,
     )
     return {"ok": True, "alias": alias, "result": data}
 
@@ -152,6 +174,7 @@ def gmail_create_draft(
     subject: str,
     body: str,
     cc: str = "",
+    session: str = "",
 ) -> dict[str, Any]:
     """Crée un brouillon — jamais d'envoi (pas de tool send en v1)."""
     validate_alias(alias)
@@ -175,6 +198,7 @@ def gmail_create_draft(
             "--params", json.dumps({"userId": "me"}),
             "--json", json.dumps(payload),
         ],
+        session=session,
     )
     return {"ok": True, "alias": alias, "result": data}
 
@@ -199,6 +223,7 @@ def drive_list(
     query: str = "trashed=false",
     page_size: int = 20,
     parent: Optional[str] = None,
+    session: str = "",
 ) -> dict[str, Any]:
     validate_alias(alias)
     page_size = max(1, min(int(page_size), 100))
@@ -213,6 +238,7 @@ def drive_list(
     data = _run(
         alias,
         ["drive", "files", "list", "--params", json.dumps(params)],
+        session=session,
     )
     files = data.get("files") if isinstance(data, dict) else None
     ownership = [
@@ -223,7 +249,7 @@ def drive_list(
     return {"ok": True, "alias": alias, "result": data, "ownership": ownership}
 
 
-def drive_get(alias: str, file_id: str) -> dict[str, Any]:
+def drive_get(alias: str, file_id: str, session: str = "") -> dict[str, Any]:
     validate_alias(alias)
     if not file_id:
         raise GatewayError("file_id requis", code="error")
@@ -234,6 +260,7 @@ def drive_get(alias: str, file_id: str) -> dict[str, Any]:
     data = _run(
         alias,
         ["drive", "files", "get", "--params", json.dumps(params)],
+        session=session,
     )
     return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
 
@@ -295,6 +322,7 @@ def drive_create(
     mime_type: str = "application/vnd.google-apps.document",
     content: str = "",
     content_type: str = "",
+    session: str = "",
 ) -> dict[str, Any]:
     """Crée un fichier sous parent_id — soumis aux zones Drive (policy + grants).
 
@@ -318,13 +346,14 @@ def drive_create(
         "--json", json.dumps(body),
     ]
     if not content:
-        data = _run(alias, args)
+        data = _run(alias, args, session=session)
         return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
     ctype = _content_type_for(content_type, mime_type)
     with _spooled_content(content, ctype) as path:
         data = _run(
             alias,
             [*args, "--upload", str(path), "--upload-content-type", ctype],
+            session=session,
         )
     return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
 
@@ -359,6 +388,7 @@ def drive_read(
     file_id: str,
     format: str = "",
     max_chars: int = 100_000,
+    session: str = "",
 ) -> dict[str, Any]:
     """Lit le CONTENU d'un fichier Drive en texte (lecture, sous verrou).
 
@@ -381,6 +411,7 @@ def drive_read(
         alias,
         ["drive", "files", "get", "--params",
          json.dumps({"fileId": file_id, "fields": "id,name,mimeType,size"})],
+        session=session,
     )
     mime = (meta.get("mimeType") or "") if isinstance(meta, dict) else ""
     name = (meta.get("name") or "") if isinstance(meta, dict) else ""
@@ -394,6 +425,7 @@ def drive_read(
             ["drive", "files", "export", "--params",
              json.dumps({"fileId": file_id, "mimeType": export_mime})],
             raw_output=True,
+            session=session,
         )
     elif mime.startswith("text/") or mime in _TEXTY_MIMES:
         _reject_oversize(meta, name or file_id)  # taille connue hors Google
@@ -403,6 +435,7 @@ def drive_read(
             ["drive", "files", "get", "--params",
              json.dumps({"fileId": file_id, "alt": "media"})],
             raw_output=True,
+            session=session,
         )
     else:
         raise GatewayError(
@@ -430,6 +463,7 @@ def drive_copy(
     file_id: str,
     parent_id: str,
     name: str = "",
+    session: str = "",
 ) -> dict[str, Any]:
     """Copie un fichier Drive vers parent_id — soumis aux zones côté destination.
 
@@ -452,6 +486,7 @@ def drive_copy(
             "--params", json.dumps({"fileId": file_id, "fields": _DRIVE_FILE_FIELDS}),
             "--json", json.dumps(body),
         ],
+        session=session,
     )
     return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
 
@@ -462,6 +497,7 @@ def drive_upload(
     parent_id: str,
     name: str = "",
     mime_type: str = "",
+    session: str = "",
 ) -> dict[str, Any]:
     """Téléverse un fichier local (binaire compris) — soumis aux zones Drive.
 
@@ -532,6 +568,7 @@ def drive_upload(
         data = _run(
             alias,
             [*args, "--upload", str(spool), "--upload-content-type", mime],
+            session=session,
         )
     finally:
         try:
@@ -567,6 +604,7 @@ def drive_update(
     content: Optional[str] = None,
     content_type: str = "",
     mime_type: str = "",
+    session: str = "",
 ) -> dict[str, Any]:
     """Met à jour un fichier Drive (nom et/ou contenu) — soumis aux zones.
 
@@ -596,7 +634,7 @@ def drive_update(
         "--json", json.dumps(body),
     ]
     if content is None:
-        data = _run(alias, args)
+        data = _run(alias, args, session=session)
         return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
     # content = remplacement INTÉGRAL (media upload). On lit d'abord le vrai
     # mimeType : un fichier Google natif ne s'édite pas ainsi (média ≠ contenu
@@ -606,6 +644,7 @@ def drive_update(
         alias,
         ["drive", "files", "get", "--params",
          json.dumps({"fileId": file_id, "fields": "mimeType"})],
+        session=session,
     )
     current_mime = current.get("mimeType", "") if isinstance(current, dict) else ""
     if current_mime.startswith("application/vnd.google-apps."):
@@ -621,6 +660,7 @@ def drive_update(
         data = _run(
             alias,
             [*args, "--upload", str(path), "--upload-content-type", ctype],
+            session=session,
         )
     return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
 
@@ -635,6 +675,7 @@ def drive_permissions_list(
     file_id: str,
     page_size: int = 100,
     page_token: str = "",
+    session: str = "",
 ) -> dict[str, Any]:
     """Liste les permissions d'un fichier (lecture).
 
@@ -656,6 +697,7 @@ def drive_permissions_list(
     data = _run(
         alias,
         ["drive", "permissions", "list", "--params", json.dumps(params)],
+        session=session,
     )
     return {"ok": True, "alias": alias, "result": data}
 
@@ -667,6 +709,7 @@ def drive_permissions_create(
     role: str = "reader",
     transfer_ownership: bool = False,
     send_notification: bool = False,
+    session: str = "",
 ) -> dict[str, Any]:
     """Partage un fichier avec un utilisateur (reader/commenter/writer).
 
@@ -720,6 +763,7 @@ def drive_permissions_create(
             "--params", json.dumps(params),
             "--json", json.dumps(body),
         ],
+        session=session,
     )
     return {
         "ok": True,
@@ -733,6 +777,7 @@ def drive_permissions_delete(
     alias: str,
     file_id: str,
     permission_id: str,
+    session: str = "",
 ) -> dict[str, Any]:
     """Révoque une permission (policy share requise)."""
     validate_alias(alias)
@@ -742,6 +787,7 @@ def drive_permissions_delete(
     _run(
         alias,
         ["drive", "permissions", "delete", "--params", json.dumps(params)],
+        session=session,
     )
     return {"ok": True, "alias": alias, "deleted": permission_id}
 
@@ -750,6 +796,7 @@ def gmail_attachment_get(
     message_id: str,
     attachment_id: str,
     filename: str = "",
+    session: str = "",
 ) -> dict[str, Any]:
     """Télécharge une pièce jointe (lecture, sous verrou) vers .downloads.
 
@@ -765,6 +812,7 @@ def gmail_attachment_get(
         alias,
         ["gmail", "users", "messages", "attachments", "get",
          "--params", json.dumps(params)],
+        session=session,
     )
     b64 = data.get("data") if isinstance(data, dict) else None
     if not isinstance(b64, str):
@@ -813,6 +861,7 @@ def access_request(
     hours: int = 8,
     minutes: int = 60,
     email: str = "",
+    session: str = "",
 ) -> dict[str, Any]:
     """Produit un message d'élicitation — n'exécute jamais unlock/grant/add."""
     validate_alias(alias)
@@ -852,7 +901,7 @@ def access_request(
     who = f"« {alias} » ({acct_email})" if acct_email else f"« {alias} »"
     if kind in ("session_unlock", "unlock"):
         mins = max(1, min(int(minutes), 1440))
-        sid = get_session_id()
+        sid = (session or "").strip()
         if sid or kind == "session_unlock":
             if not sid:
                 raise GatewayError("session_unlock nécessite une session MCP active", code="error")
@@ -893,7 +942,7 @@ def access_request(
                 code="error",
             )
         h = max(1, min(int(hours), 168))
-        sid = get_session_id()
+        sid = (session or "").strip()
 
         if kind == "project_grant":
             if not sid:
