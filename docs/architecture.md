@@ -169,6 +169,23 @@ Le préréglage par défaut est délibérément prudent (`gateway/default_policy
 Drive sans zone d'écriture, Gmail en lecture + brouillons **sans envoi**, le reste
 essentiellement en lecture.
 
+### Les droits par session (`sessions.py`)
+
+Au-dessus de la policy (le plancher du poste), chaque **conversation** porte ses
+**propres** droits, signés et éphémères ([ADR-0007](adr/ADR-0007-droits-par-session.md)).
+L'identité d'une session n'est pas la connexion MCP mais un **jeton** que l'humain
+crée d'un geste signé (`gma session open`) et que l'assistant présente **à chaque
+appel** — deux conversations d'une même connexion restent donc isolées.
+
+| Aspect | Comportement |
+|--------|--------------|
+| **Grain** | Capacités par **service × opération × ressource** (ressource optionnelle : zone Drive, label Gmail…) |
+| **Octroi** | `gma session unlock\|grant\|grant-capability` — **toujours signé** (jamais d'élargissement silencieux) |
+| **Effectif** | policy compte ∩ manifeste projet ∩ capacités session (∩, *fail closed* ; anti-downgrade si manifeste altéré) |
+| **Cycle de vie** | TTL + révocation explicite ; la déconnexion MCP ne purge **rien** ; registre `.sessions/<jeton>.json` |
+| **Sous-agents** | Héritage ⊆ parent, pas d'élargissement autonome, révocation en cascade |
+| **Bootstrap** | Sans jeton : aucun accès données, seulement la demande de création (`gma session open`) |
+
 ### L'interface admin
 
 Une petite UI web locale, pensée pour rester inoffensive : elle n'écoute **que** sur
@@ -195,6 +212,7 @@ condition qui le contourne.
 |----------|-----|-------------|------------------|
 | Policy default-deny | `policy-check.py` | Envoi, services non listés, écritures hors zone | L'agent appelle `gws` **hors** `gma`/gateway |
 | Zones Drive + grants | policy + `session-grants.json` | Écriture hors dossiers autorisés | Idem, `gws` nu |
+| Droits par session | `sessions.py` + broker | Fuite de droits entre conversations ; élargissement non signé | L'agent appelle `gws` **hors** gateway (coopératif jusqu'au vault) |
 | Verrou profil | `.locked` / `.unlock-until` | Accès sans votre feu vert | Édition des fichiers, ou `gws` nu |
 | Tools MCP sans `send` | `mcp_server.py` | Envoi de mail via le MCP | Un autre client / le shell |
 | `access_request` non exécutant | `api.py` | Auto-déverrouillage par le LLM | L'humain (ou un agent) exécute la commande |
@@ -236,6 +254,7 @@ l'édition de `~/.config/gws-accounts/` — les données ne passent **que** par 
 |-------|------|---------|
 | **1** | **Déployée** | MCP + gateway + default-deny + docs |
 | **2 A** | **Déployée** | Broker loopback : `gws` uniquement dans le broker |
+| **Droits/session** | **En cours** — [ADR-0007](adr/ADR-0007-droits-par-session.md) | Jeton signé porté par appel, capacités fines par conversation, isolation, audit |
 | **2.1** | Prévue — [fiche 0003](https://github.com/elzinko/google-mcp-multi-account/blob/main/features/0003-vault-credentials-hors-perimetre-agent.md) | Vault des identifiants hors de portée de l'agent |
 | **3** | Idée — [fiche 0001](https://github.com/elzinko/google-mcp-multi-account/blob/main/features/0001-elicitation-signee-strongauth-v2.md) | Élicitation signée par la Secure Enclave |
 

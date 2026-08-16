@@ -2444,6 +2444,11 @@ PY="/usr/bin/python3"
 [[ -x "$PY" ]] || PY="$(command -v python3)"
 
 export GWSA_ROOT="$SESS_ROOT" PYTHONPATH="$(pwd)"
+# fiche 0076 (lot 2) : toute création/élargissement de capacité de SESSION
+# (unlock, grant, grant-capability via GWSA_SESSION_ID) exige désormais une
+# élicitation signée TOUJOURS (indépendamment de .strong-auth — ADR-0007 §3).
+# Enrôlement mock une fois pour toute cette section (clé HMAC de test).
+GWSA_ROOT="$SESS_ROOT" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
 out_s="$("$PY" -c "
 from gateway.sessions import create_session, session_unlock, session_grant_drive, active_drive_zones, create_child_session, revoke_descendants
 s1 = create_session(client='test')
@@ -2971,7 +2976,7 @@ bash -euo pipefail -c '
   c "$3" >/dev/null   # .email absent
 ' _ "$pec_fn" "$pec_dir/corrupt" "$pec_dir/missing" || sete_rc=$?
 if [[ "$r_valid" == "alice@gmail.com" && -z "$r_missing" && -z "$r_corrupt" ]] \
-  && [[ "$n_cached" == 5 && "$sete_rc" == 0 ]] \
+  && [[ "$n_cached" == 6 && "$sete_rc" == 0 ]] \
   && ! sed -n '/^profile_email_cached()/,/^}/p' bin/gwsa | sed 's/#.*//' | grep -q 'gws'; then
   pass "elicitation : email lu cache-only aux points d'autorisation, zéro exec gws (fiche 0047)"
 else
@@ -3007,6 +3012,446 @@ GWSA_ROOT="$ELIC_ROOT" GWSA_SESSION_ID="$sid_e" GWSA_ELICITATION_MOCK=1 \
   "$GWSA" session unlock "$sid_e" alpha 15 >/dev/null 2>&1 \
   && pass "elicitation : gwsa session unlock avec strongauth+mock" \
   || fail "elicitation : gwsa session unlock strongauth"
+
+section "droits par session — lot 2 (fiche 0076, capacités fines)"
+
+# ── (a) capacité gmail:read autorise la lecture, pas gmail:send ni drive:write ──
+CAP_ROOT="$TMP/gwsa-caps"
+mkdir -p "$CAP_ROOT/alpha"
+echo '{"gmail":{"read":true,"send":true,"drafts":true},"drive":{"read":true,"create":true,"zonesOnly":true,"writeFolders":["zoneA","zoneB"]}}' \
+  > "$CAP_ROOT/alpha/policy.json"
+out_cap_a="$(GWSA_ROOT="$CAP_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'gmail','operation':'read'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+def rc(args):
+    r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_ROOT/alpha'] + args, env=env)
+    return r.returncode
+print('read', rc(['gmail','messages','list']))
+print('send', rc(['gmail','messages','send','--json','{}']))
+print('drivewrite', rc(['drive','files','create','--json','{\"parents\":[\"zoneA\"]}']))
+")"
+[[ "$out_cap_a" == *"read 0"* && "$out_cap_a" == *"send 4"* && "$out_cap_a" == *"drivewrite 4"* ]] \
+  && pass "capacités session : gmail:read autorise la lecture, refuse send/drive:write" \
+  || fail "capacités session : gmail:read trop large ou trop étroit ($out_cap_a)"
+
+# ── (b) capacité drive:create:zoneA autorise zoneA, pas zoneB ──
+out_cap_b="$(GWSA_ROOT="$CAP_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'drive','operation':'create','resource':'zoneA'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+def rc(zone):
+    r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_ROOT/alpha',
+                         'drive','files','create','--json', json.dumps({'parents':[zone]})], env=env)
+    return r.returncode
+print('zoneA', rc('zoneA'))
+print('zoneB', rc('zoneB'))
+")"
+[[ "$out_cap_b" == *"zoneA 0"* && "$out_cap_b" == *"zoneB 4"* ]] \
+  && pass "capacités session : drive:create:zoneA autorise zoneA, refuse zoneB" \
+  || fail "capacités session : isolation par ressource Drive ($out_cap_b)"
+
+# ── (c) ressource absente sur Gmail = lecture bornée par la policy (pas de fuite) ──
+out_cap_c="$(GWSA_ROOT="$CAP_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'gmail','operation':'read'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_ROOT/alpha','gmail','messages','list'], env=env)
+print(r.returncode)
+")"
+[[ "$out_cap_c" == "0" ]] \
+  && pass "capacités session : ressource Gmail absente = lecture bornée par la policy" \
+  || fail "capacités session : lecture Gmail sans ressource ($out_cap_c)"
+
+# ── (h) fail-closed sur policy Drive PERMISSIVE — non-zonesOnly (revue sécu P0) ──
+# La garantie de session ne doit PAS tomber quand la policy Drive du compte est
+# ouverte : une session limitée (gmail:read) ne peut pas écrire dans Drive.
+CAP_OPEN="$TMP/gwsa-caps-open"
+mkdir -p "$CAP_OPEN/alpha"
+echo '{"gmail":{"read":true},"drive":{"read":true,"create":true,"update":true,"zonesOnly":false}}' \
+  > "$CAP_OPEN/alpha/policy.json"
+out_cap_h="$(GWSA_ROOT="$CAP_OPEN" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys, os
+env = dict(os.environ, GWSA_SESSION_CAPS=json.dumps([{'service':'gmail','operation':'read'}]))
+env_legacy = dict(os.environ); env_legacy.pop('GWSA_SESSION_CAPS', None)
+def rc(args, e):
+    return subprocess.run([sys.executable,'scripts/policy-check.py','$CAP_OPEN/alpha']+args, env=e).returncode
+print('create', rc(['drive','files','create','--json','{\"parents\":[\"F123\"]}'], env))
+print('update', rc(['drive','files','update','--params','{\"fileId\":\"F1\"}','--json','{}'], env))
+print('legacy', rc(['drive','files','create','--json','{\"parents\":[\"F123\"]}'], env_legacy))
+")"
+[[ "$out_cap_h" == *"create 4"* && "$out_cap_h" == *"update 4"* && "$out_cap_h" == *"legacy 0"* ]] \
+  && pass "capacités session : Drive non-zonesOnly reste fail-closed (session gmail:read refusée en écriture)" \
+  || fail "capacités session : FAIL-OPEN sur Drive non-zonesOnly ($out_cap_h)"
+
+# ── (i) fail-closed sur policy Drive « mode:open » (revue sécu P0) ──
+CAP_MOPEN="$TMP/gwsa-caps-mopen"
+mkdir -p "$CAP_MOPEN/alpha"
+echo '{"gmail":{"read":true},"drive":{"mode":"open"}}' > "$CAP_MOPEN/alpha/policy.json"
+out_cap_i="$(GWSA_ROOT="$CAP_MOPEN" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys, os
+env = dict(os.environ, GWSA_SESSION_CAPS=json.dumps([{'service':'gmail','operation':'read'}]))
+env_legacy = dict(os.environ); env_legacy.pop('GWSA_SESSION_CAPS', None)
+def rc(e):
+    return subprocess.run([sys.executable,'scripts/policy-check.py','$CAP_MOPEN/alpha','drive','files','create','--json','{\"parents\":[\"X\"]}'], env=e).returncode
+print('sess', rc(env)); print('legacy', rc(env_legacy))
+")"
+[[ "$out_cap_i" == *"sess 4"* && "$out_cap_i" == *"legacy 0"* ]] \
+  && pass "capacités session : Drive mode:open reste fail-closed pour une session limitée" \
+  || fail "capacités session : FAIL-OPEN sur Drive mode:open ($out_cap_i)"
+
+# ── (j) zone de session + capacité fine cohabitent (revue P1 — composition) ──
+out_cap_j="$(GWSA_ROOT="$CAP_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys, os
+env = dict(os.environ, GWSA_USE_SESSION_GRANTS='1', GWSA_SESSION_DRIVE_ZONES='zoneA',
+           GWSA_SESSION_CAPS=json.dumps([{'service':'gmail','operation':'read'}]))
+def rc(zone):
+    return subprocess.run([sys.executable,'scripts/policy-check.py','$CAP_ROOT/alpha',
+                           'drive','files','create','--json', json.dumps({'parents':[zone]})], env=env).returncode
+print('zoneA', rc('zoneA')); print('zoneB', rc('zoneB'))
+")"
+[[ "$out_cap_j" == *"zoneA 0"* && "$out_cap_j" == *"zoneB 4"* ]] \
+  && pass "capacités session : zone de session utilisable malgré une capacité fine (composition)" \
+  || fail "capacités session : zone de session cassée par une capacité fine ($out_cap_j)"
+
+# ── (d) octroi de capacité sans élicitation signée → refus ──
+CAP_UNSIGNED="$TMP/gwsa-caps-unsigned"
+mkdir -p "$CAP_UNSIGNED/alpha"
+cp "$CAP_ROOT/alpha/policy.json" "$CAP_UNSIGNED/alpha/policy.json"
+sid_uc="$(GWSA_ROOT="$CAP_UNSIGNED" PYTHONPATH="$(pwd)" "$PY" -c 'from gateway.sessions import create_session; print(create_session(client="t").session_id)')"
+gc_unsigned_rc=0
+GWSA_ROOT="$CAP_UNSIGNED" "$GWSA" session grant-capability "$sid_uc" alpha gmail read "" 1 >/dev/null 2>&1 || gc_unsigned_rc=$?
+[[ "$gc_unsigned_rc" != 0 ]] \
+  && pass "capacités session : octroi sans élicitation signée (pas d'enrôlement) → refus" \
+  || fail "capacités session : octroi non signé accepté à tort"
+
+# ── octroi SIGNÉ (mock) : gwsa session grant-capability écrit bien la capacité ──
+gc_ok=0
+GWSA_ROOT="$CAP_UNSIGNED" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
+GWSA_ROOT="$CAP_UNSIGNED" GWSA_ELICITATION_MOCK=1 \
+  "$GWSA" session grant-capability "$sid_uc" alpha gmail read "" 1 >/dev/null 2>&1 || gc_ok=$?
+has_cap="$(GWSA_ROOT="$CAP_UNSIGNED" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import session_has_capability
+print(session_has_capability('$sid_uc', 'alpha', 'gmail', 'read'))
+")"
+[[ "$gc_ok" == 0 && "$has_cap" == "True" ]] \
+  && pass "capacités session : gwsa session grant-capability (signé, mock) octroie la capacité" \
+  || fail "capacités session : grant-capability signé ($gc_ok has_cap=$has_cap)"
+
+# ── (e) service/opération non déclarés dans les capacités de session → refus ──
+out_cap_e="$(GWSA_ROOT="$CAP_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'gmail','operation':'read'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_ROOT/alpha','gmail','drafts','create','--json','{}'], env=env)
+print(r.returncode)
+")"
+[[ "$out_cap_e" == "4" ]] \
+  && pass "capacités session : opération non déclarée (gmail:drafts) → refus" \
+  || fail "capacités session : opération non déclarée acceptée à tort ($out_cap_e)"
+
+# ── (f) sans manifeste projet : policy ∩ session (pas de plafond manifeste) ──
+NOMANI_REPO="$TMP/gwsa-caps-nomanifest-repo"
+mkdir -p "$NOMANI_REPO"
+git -C "$NOMANI_REPO" init -q
+out_cap_f="$(GWSA_ROOT="$CAP_ROOT" GWSA_GIT_ROOT="$NOMANI_REPO" PYTHONPATH="$(pwd)" "$PY" -c "
+import subprocess, sys
+r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_ROOT/alpha','gmail','messages','list'])
+print(r.returncode)
+")"
+[[ "$out_cap_f" == "0" ]] \
+  && pass "manifeste absent (jamais configuré) : policy ∩ session — pas de plafond" \
+  || fail "manifeste absent : refus à tort ($out_cap_f)"
+
+# ── (g) manifeste altéré après confiance → refus (anti-downgrade, S-07) ──
+ANTIDOWN_ROOT="$TMP/gwsa-antidowngrade-root"
+ANTIDOWN_REPO="$TMP/gwsa-antidowngrade-repo"
+mkdir -p "$ANTIDOWN_REPO"
+git -C "$ANTIDOWN_REPO" init -q
+git -C "$ANTIDOWN_REPO" config user.email t@t.com
+git -C "$ANTIDOWN_REPO" config user.name t
+mkdir -p "$ANTIDOWN_ROOT"
+touch "$ANTIDOWN_ROOT/.strong-auth"
+GWSA_ROOT="$ANTIDOWN_ROOT" GWSA_ELICITATION_MOCK=1 PYTHONPATH="$(pwd)" "$PY" -c "
+from pathlib import Path
+from gateway.elicitation import enroll_mock
+enroll_mock()
+from gateway.project import init_project, sign_manifest
+root = Path('$ANTIDOWN_REPO')
+init_project(root)
+r = sign_manifest(root)
+assert r['ok'], r
+"
+before_trust="$(GWSA_ROOT="$ANTIDOWN_ROOT" GWSA_GIT_ROOT="$ANTIDOWN_REPO" PYTHONPATH="$(pwd)" "$PY" -c "
+import subprocess, sys
+r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_ROOT/alpha','gmail','messages','list'])
+print(r.returncode)
+")"
+# Altération : le fichier manifeste change de contenu sans re-signature.
+printf '{"schema":1,"project_id":"tampered","capabilities":{}}' > "$ANTIDOWN_REPO/.gwsa/manifest.json"
+after_tamper="$(GWSA_ROOT="$ANTIDOWN_ROOT" GWSA_GIT_ROOT="$ANTIDOWN_REPO" PYTHONPATH="$(pwd)" "$PY" -c "
+import subprocess, sys
+r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_ROOT/alpha','gmail','messages','list'])
+print(r.returncode)
+")"
+[[ "$before_trust" == "0" && "$after_tamper" == "4" ]] \
+  && pass "anti-downgrade : manifeste altéré après confiance → refus (S-07)" \
+  || fail "anti-downgrade : manifeste altéré non refusé (before=$before_trust after=$after_tamper)"
+
+section "droits par session — P1 sécu (fiche 0076, session nue = deny-all)"
+
+# Profil déverrouillé (poste), policy permissive gmail/calendar/drive — le
+# verrou GLOBAL du profil ne doit jamais se substituer aux octrois de LA
+# session (revue Codex P1 sur PR #110).
+P1_ROOT="$TMP/gwsa-p1-nudeny"
+mkdir -p "$P1_ROOT/alpha"
+echo '{"gmail":{"read":true,"send":true},"calendar":{"read":true},"drive":{"read":true,"create":true,"zonesOnly":true,"writeFolders":["zoneA"]}}' \
+  > "$P1_ROOT/alpha/policy.json"
+
+out_p1="$(GWSA_ROOT="$P1_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import gateway.broker_server as bs
+from gateway.sessions import create_session, session_unlock, session_grant_capability
+from gateway.errors import GatewayError
+
+bs.run_gws_local = lambda *a, **k: {'ok': True}
+
+def call(session_id, args):
+    try:
+        bs.handle_exec('alpha', args, 'test', session_id=session_id)
+        return 'ok'
+    except GatewayError as e:
+        return 'refus:' + e.code
+
+# (a) session nue (aucun octroi) sur profil déverrouillé → refus Gmail ET Calendar.
+s_naked = create_session(client='t').session_id
+print('naked_gmail', call(s_naked, ['gmail', 'users', 'messages', 'list']))
+print('naked_calendar', call(s_naked, ['calendar', 'events', 'list']))
+
+# (b) session avec session unlock → lecture Gmail autorisée (policy).
+s_unlocked = create_session(client='t').session_id
+session_unlock(s_unlocked, 'alpha', minutes=15)
+print('unlocked_gmail', call(s_unlocked, ['gmail', 'users', 'messages', 'list']))
+print('unlocked_calendar', call(s_unlocked, ['calendar', 'events', 'list']))
+
+# (c) session avec seulement grant-capability gmail:read → lit Gmail, refuse
+# Calendar/Drive.
+s_fine = create_session(client='t').session_id
+session_grant_capability(s_fine, 'alpha', 'gmail', 'read', hours=1)
+print('fine_gmail', call(s_fine, ['gmail', 'users', 'messages', 'list']))
+print('fine_calendar', call(s_fine, ['calendar', 'events', 'list']))
+print('fine_drive', call(s_fine, ['drive', 'files', 'create', '--json', '{\"parents\":[\"zoneA\"]}']))
+
+# (d) legacy sans session_id → inchangé (autorisé par policy).
+print('legacy_gmail', call('', ['gmail', 'users', 'messages', 'list']))
+")"
+
+[[ "$out_p1" == *"naked_gmail refus:policy"* && "$out_p1" == *"naked_calendar refus:policy"* \
+  && "$out_p1" == *"unlocked_gmail ok"* && "$out_p1" == *"unlocked_calendar ok"* \
+  && "$out_p1" == *"fine_gmail ok"* && "$out_p1" == *"fine_calendar refus:policy"* \
+  && "$out_p1" == *"fine_drive refus:policy"* && "$out_p1" == *"legacy_gmail ok"* ]] \
+  && pass "P1 sécu : session nue = deny-all (verrou poste n'y substitue pas ; unlock/capacité/legacy inchangés)" \
+  || fail "P1 sécu : session nue accède sans octroi ($out_p1)"
+
+section "droits par session — lot 3 (fiche 0076, session list + sous-agents + bootstrap + audit)"
+
+# ── (a) gwsa session list : ≥2 sessions actives, configs DISTINCTES (capacités,
+# unlocks, TTL restant, parent/delegated) ──
+L3_ROOT="$TMP/gwsa-lot3-list"
+mkdir -p "$L3_ROOT"
+out_list_cfg="$(GWSA_ROOT="$L3_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from gateway.sessions import create_session, session_unlock, session_grant_capability, list_sessions
+
+s1 = create_session(client='c1')
+s2 = create_session(client='c2')
+session_unlock(s1.session_id, 'alpha', 30)
+session_grant_capability(s2.session_id, 'alpha', 'gmail', 'read', hours=2)
+
+rows = {r['session_id']: r for r in list_sessions()}
+r1, r2 = rows[s1.session_id], rows[s2.session_id]
+assert 'alpha' in r1['unlocks'] and not r1['capabilities'], r1
+assert r2['capabilities'] and r2['capabilities'][0]['service'] == 'gmail', r2
+assert not r2['unlocks'], r2
+assert r1['ttl_seconds_left'] > 0 and r2['ttl_seconds_left'] > 0, (r1, r2)
+print('ok')
+")"
+[[ "$out_list_cfg" == "ok" ]] \
+  && pass "gwsa session list : ≥2 sessions, configs distinctes (capacités/unlocks/TTL)" \
+  || fail "gwsa session list : configs non distinctes ($out_list_cfg)"
+
+# ── (a-bis) gwsa session show affiche aussi les capacités fines (lot 2) ──
+sid_show3="$(GWSA_ROOT="$L3_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, session_grant_capability
+s = create_session(client='show3')
+session_grant_capability(s.session_id, 'alpha', 'drive', 'read', hours=1)
+print(s.session_id)
+")"
+out_show3="$(GWSA_ROOT="$L3_ROOT" "$GWSA" session show "$sid_show3" 2>&1)"
+[[ "$out_show3" == *'"service": "drive"'* && "$out_show3" == *'"operation": "read"'* ]] \
+  && pass "gwsa session show : affiche les capacités fines (lot 2)" \
+  || fail "gwsa session show : capacités fines absentes ($out_show3)"
+
+# ── (b) sous-agent : héritage ⊆ parent, jamais plus ──
+out_inherit="$(GWSA_ROOT="$L3_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import (
+    create_session, create_child_session, session_grant_capability,
+    session_has_capability,
+)
+root = create_session(client='root3')
+session_grant_capability(root.session_id, 'alpha', 'gmail', 'read', hours=1)
+child = create_child_session(root.session_id)
+# le parent a la capacité, jamais accordée directement à l'enfant → l'enfant la
+# VOIT via la chaîne d'ancêtres (héritage), mais rien de PLUS que le parent.
+child_has = session_has_capability(child.session_id, 'alpha', 'gmail', 'read')
+child_lacks_more = session_has_capability(child.session_id, 'alpha', 'drive', 'read')
+print(child_has, child_lacks_more)
+")"
+[[ "$out_inherit" == "True False" ]] \
+  && pass "sous-agents : héritage ⊆ parent (l'enfant voit exactement les capacités du parent)" \
+  || fail "sous-agents : héritage incorrect ($out_inherit)"
+
+# ── (c) sous-agent : ne peut PAS élargir (session_grant_capability / unlock / grant refusés) ──
+out_child_widen="$(GWSA_ROOT="$L3_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, create_child_session, session_grant_capability, session_unlock, session_grant_drive
+from gateway.errors import GatewayError
+root = create_session(client='root3b')
+child = create_child_session(root.session_id)
+results = []
+for fn, args in (
+    (session_grant_capability, (child.session_id, 'alpha', 'gmail', 'read')),
+    (session_unlock, (child.session_id, 'alpha', 30)),
+    (session_grant_drive, (child.session_id, 'alpha', 'fid123')),
+):
+    try:
+        fn(*args)
+        results.append('no-raise')
+    except GatewayError as e:
+        results.append('refused' if e.code == 'error' else 'wrong:' + e.code)
+print(' '.join(results))
+")"
+[[ "$out_child_widen" == "refused refused refused" ]] \
+  && pass "sous-agents : élargissement (grant-capability/unlock/grant) refusé depuis un enfant" \
+  || fail "sous-agents : élargissement non bloqué ($out_child_widen)"
+
+# ── (c-bis) sous-agent : access_request (élargissement) refusé depuis un enfant ──
+out_child_ar="$(GWSA_ROOT="$L3_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import gateway.api as api
+from gateway.sessions import create_session, create_child_session
+root = api.__dict__['create_session'] if False else create_session(client='root3c')
+child = create_child_session(root.session_id)
+try:
+    api.access_request(alias='alpha', kind='session_unlock', session=child.session_id)
+    print('no-raise')
+except api.GatewayError as e:
+    print('OK' if e.code == 'delegated' else 'wrong:' + e.code)
+")"
+[[ "$out_child_ar" == "OK" ]] \
+  && pass "sous-agents : access_request (élargissement) refusé depuis un enfant" \
+  || fail "sous-agents : access_request enfant non bloqué ($out_child_ar)"
+
+# ── (c-ter) la CRÉATION d'un enfant n'exige pas de signature (aucun droit nouveau) ──
+out_child_create="$(GWSA_ROOT="$L3_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, create_child_session
+root = create_session(client='root3d')
+child = create_child_session(root.session_id)
+print(child.delegated, len(child.capabilities))
+")"
+[[ "$out_child_create" == "True 0" ]] \
+  && pass "sous-agents : création d'enfant sans signature (zéro droit nouveau)" \
+  || fail "sous-agents : création d'enfant ($out_child_create)"
+
+# ── (d) revoke-descendants : purge les descendants, PAS la racine ──
+L3_REVOKE="$TMP/gwsa-lot3-revoke"
+mkdir -p "$L3_REVOKE"
+touch "$L3_REVOKE/.strong-auth" 2>/dev/null || true
+read root_id child_id grandchild_id <<< "$(GWSA_ROOT="$L3_REVOKE" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, create_child_session
+root = create_session(client='rootrv')
+child = create_child_session(root.session_id)
+grandchild = create_child_session(child.session_id)
+print(root.session_id, child.session_id, grandchild.session_id)
+")"
+GWSA_ROOT="$L3_REVOKE" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
+GWSA_ROOT="$L3_REVOKE" GWSA_ELICITATION_MOCK=1 "$GWSA" session revoke-descendants "$root_id" >/dev/null 2>&1
+out_after_revoke="$(GWSA_ROOT="$L3_REVOKE" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import get_session
+print(get_session('$root_id') is not None, get_session('$child_id') is None, get_session('$grandchild_id') is None)
+")"
+[[ "$out_after_revoke" == "True True True" ]] \
+  && pass "sous-agents : revoke-descendants purge toute la descendance, PAS la racine" \
+  || fail "sous-agents : revoke-descendants ($out_after_revoke)"
+
+# ── (e) bootstrap : gwsa session open crée une session racine SIGNÉE + imprime le jeton ──
+L3_OPEN="$TMP/gwsa-lot3-open"
+mkdir -p "$L3_OPEN"
+GWSA_ROOT="$L3_OPEN" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
+sid_opened="$(GWSA_ROOT="$L3_OPEN" GWSA_ELICITATION_MOCK=1 "$GWSA" session open test-client 2>/dev/null)"
+out_opened_state="$(GWSA_ROOT="$L3_OPEN" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import get_session
+s = get_session('$sid_opened')
+print(s is not None, s.client if s else None, s.capabilities if s else None, s.delegated if s else None)
+")"
+[[ -n "$sid_opened" && "$out_opened_state" == "True test-client [] False" ]] \
+  && pass "gwsa session open : crée une session racine signée, zéro capacité, jeton imprimé" \
+  || fail "gwsa session open : session ($sid_opened → $out_opened_state)"
+
+# ── (e-bis) gwsa session open SANS enrôlement → refus ──
+L3_OPEN_UNENROLLED="$TMP/gwsa-lot3-open-unenrolled"
+mkdir -p "$L3_OPEN_UNENROLLED"
+GWSA_ROOT="$L3_OPEN_UNENROLLED" "$GWSA" session open test-client >/dev/null 2>&1
+open_unenrolled_rc=$?
+[[ "$open_unenrolled_rc" != 0 ]] \
+  && pass "gwsa session open : refus sans enrôlement (pas de session sans geste signé)" \
+  || fail "gwsa session open : accepté sans enrôlement à tort"
+
+# ── (f) bootstrap sans jeton : access_request ne peut QUE pointer vers la création,
+# jamais un accès aux données ──
+out_bootstrap_ar="$(PYTHONPATH="$(pwd)" GWSA_ROOT="$L3_OPEN" "$PY" -c "
+import gateway.api as api
+r = api.access_request(alias='alpha', kind='session_unlock', session='')
+print(r.get('kind'), 'gma session open' in r.get('suggested_command', ''))
+")"
+[[ "$out_bootstrap_ar" == "session_open True" ]] \
+  && pass "bootstrap sans jeton : access_request sans session pointe vers « gma session open »" \
+  || fail "bootstrap sans jeton : access_request ($out_bootstrap_ar)"
+
+out_bootstrap_data="$(PYTHONPATH="$(pwd)" GWSA_ROOT="$L3_OPEN" "$PY" -c "
+import gateway.api as api
+try:
+    api.gmail_list(alias='alpha', session='')
+    print('no-raise')
+except api.GatewayError as e:
+    print('OK' if e.code == 'session' else 'wrong:' + e.code)
+")"
+[[ "$out_bootstrap_data" == "OK" ]] \
+  && pass "bootstrap sans jeton : aucun accès donnée sans jeton (fail-closed, gmail_list)" \
+  || fail "bootstrap sans jeton : accès donnée accepté sans jeton à tort ($out_bootstrap_data)"
+
+# ── (g) audit : un appel RÉUSSI journalise session_id + service + opération + ressource ──
+L3_AUDIT="$TMP/gwsa-lot3-audit"
+mkdir -p "$L3_AUDIT/alpha"
+out_audit="$(GWSA_ROOT="$L3_AUDIT" PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from pathlib import Path
+import gateway.broker_server as bs
+from gateway.sessions import create_session
+
+s = create_session(client='audit3')
+
+# NB : monkeypatcher subprocess.run directement toucherait AUSSI l'appel
+# subprocess.run interne de gateway.usage.log_usage (même module partagé) —
+# on stubbe run_gws_local à la place, pour laisser le vrai log-usage.py tourner.
+bs.run_gws_local = lambda *a, **k: {'ok': True}
+log = Path('$L3_AUDIT') / 'usage.jsonl'
+log.unlink(missing_ok=True)
+bs.handle_exec('alpha', ['gmail', 'users', 'messages', 'list'], 'audit-client', session_id=s.session_id)
+entries = [json.loads(x) for x in log.read_text().splitlines()]
+e = entries[-1]
+print(e.get('decision'), e.get('session_id') == s.session_id, e.get('service'), e.get('operation'))
+")"
+[[ "$out_audit" == "ok True gmail read" ]] \
+  && pass "audit : appel réussi journalise session_id + service + opération (pas seulement les refus)" \
+  || fail "audit : appel réussi mal journalisé ($out_audit)"
 
 section "sandbox remove (fiche 0041)"
 SB_DEP="$TMP/sandbox-remove"

@@ -56,6 +56,35 @@ Chaque refus est journalisé et invite le LLM à *demander* l'élargissement —
 l'élicitation, encore. *Limite assumée : c'est le wrapper qui contrôle, pas
 Google — le seul verrou 100 % côté Google serait le scope `drive.file`.*
 
+## Droits par session — le grain fin (ADR-0007)
+
+La policy et les zones ci-dessus sont le **plancher du poste**. Par-dessus,
+chaque **conversation** (session LLM) porte ses **propres** droits, signés et
+limités dans le temps — une autre conversation n'en hérite pas. C'est le grain
+le plus fin : par **service × opération × ressource**.
+
+- L'humain ouvre une session (`gma session open`) — un geste **signé** (Touch ID
+  sous strongauth) qui rend un **jeton** ; l'assistant présente ce jeton à
+  chaque appel (sans jeton : aucun accès aux données, seulement la demande de
+  création).
+- Chaque octroi de capacité est **signé** lui aussi — jamais un élargissement
+  silencieux :
+
+```bash
+gma session open                                    # crée une session signée → jeton
+gma session grant-capability <jeton> mw gmail read  # cette session : lecture Gmail
+gma session grant-capability <jeton> mw drive create "Compta 2026"  # écriture zonée
+gma session list                                    # sessions actives + leur config
+```
+
+- **Droits effectifs = policy compte ∩ manifeste projet ∩ capacités session**
+  (intersection, *fail closed*). Hors dépôt git (pas de manifeste), `policy ∩
+  session` ; mais un manifeste **altéré** referme tout (anti-downgrade).
+- Les **sous-agents** héritent d'un sous-ensemble du parent (jamais plus) et ne
+  peuvent pas s'élargir seuls ; le parent révoque toute sa descendance d'un geste.
+
+Détail de conception : [ADR-0007](adr/ADR-0007-droits-par-session.md).
+
 Durcissements de ce modèle déjà tranchés : voir la fiche backlog
 [0002](https://github.com/elzinko/google-mcp-multi-account/blob/main/features/done/0002-durcir-modele-policy-default-deny.md) (default-deny
 vérifié et testé) et [threat-model.md](threat-model.md).

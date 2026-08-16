@@ -17,6 +17,7 @@ MANIFEST_NAME = "manifest.json"
 SIG_NAME = "manifest.sig"
 LOCAL_SIG_PREFIX = "local:"
 CRYPTO_SIG_PREFIX = "p256:"
+TRUST_DIR_NAME = ".project-trust"
 
 
 from .config import gwsa_root
@@ -30,6 +31,48 @@ class ProjectContext:
     manifest: dict[str, Any] = field(default_factory=dict)
     manifest_valid: bool = False
     verify_error: str = ""
+    # Anti-downgrade (ADR-0007 §Décision 3, S-07) : True quand un manifeste
+    # DÉJÀ DE CONFIANCE (signature vérifiée au moins une fois) devient
+    # invalide, altéré, ou disparaît. Le plafond manifeste ne peut alors JAMAIS
+    # être silencieusement omis (ce qui élargirait les droits) : l'appelant
+    # doit refuser globalement plutôt que retomber sur policy ∩ session.
+    fail_closed: bool = False
+
+
+def _trust_dir() -> Path:
+    d = gwsa_root() / TRUST_DIR_NAME
+    d.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(d, 0o700)
+    except OSError:
+        pass
+    return d
+
+
+def _trust_path(project_id: str) -> Path:
+    safe = project_id.replace("/", "_").replace(":", "_") or "unknown"
+    return _trust_dir() / f"{safe}.json"
+
+
+def _mark_trusted(project_id: str) -> None:
+    """Mémorise qu'un manifeste signé valide a été vu pour ce project_id."""
+    if not project_id:
+        return
+    path = _trust_path(project_id)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(
+        json.dumps({"project_id": project_id, "trusted_at": time.time()}),
+        encoding="utf-8",
+    )
+    try:
+        os.chmod(tmp, 0o600)
+    except OSError:
+        pass
+    tmp.replace(path)
+
+
+def _was_trusted(project_id: str) -> bool:
+    return bool(project_id) and _trust_path(project_id).is_file()
 
 
 def git_toplevel(start: Path | None = None) -> str:
@@ -312,17 +355,29 @@ def resolve_project(start: Path | None = None) -> ProjectContext:
     gwsa = Path(root) / GWSA_DIR
     manifest_path = gwsa / MANIFEST_NAME
     sig_path = gwsa / SIG_NAME
+    pid = project_id_from_root(root)
     ctx = ProjectContext(
         git_root=root,
-        project_id=project_id_from_root(root),
+        project_id=pid,
         manifest_path=str(manifest_path) if manifest_path.is_file() else "",
     )
     if not manifest_path.is_file():
+        # Manifeste absent : downgrade silencieux vers policy ∩ session accepté
+        # SEULEMENT si ce projet n'a jamais été de confiance (contexte jamais
+        # configuré). Une suppression APRÈS confiance est un downgrade — refus.
+        if _was_trusted(pid):
+            ctx.fail_closed = True
         return ctx
     ok, err = _verify_signature(manifest_path, sig_path)
     ctx.manifest = _load_manifest(manifest_path)
     ctx.manifest_valid = ok
     ctx.verify_error = err
+    if ok:
+        _mark_trusted(pid)
+    elif _was_trusted(pid):
+        # Manifeste présent mais invalide/altéré, sur un projet déjà de
+        # confiance : jamais un downgrade silencieux vers « pas de plafond ».
+        ctx.fail_closed = True
     return ctx
 
 

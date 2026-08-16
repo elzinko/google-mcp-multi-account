@@ -44,6 +44,7 @@ phase par phase.
 - ⚠ **Partage** (`drive_permissions_*`) n’est gardé que par la policy `drive.share:true` (flag **persistant**), **pas** par les zones ni par un grant de session : une fois `share` activé, l’agent peut partager tout fichier possédé vers tout email (jamais public — `type=user`). **Durcissement à trancher** (revue sécurité F2) : grant de session pour partager.
 - `access_request` propose unlock/grant **sans les exécuter**.
 - Touch ID (`gma strongauth`) : présence physique pour unlock/grant (chemins absolus `/usr/bin/swift` + `/usr/bin/swiftc` + scripts repo — jamais via le PATH).
+- **Droits par session** ([ADR-0007](https://github.com/elzinko/google-mcp-multi-account/blob/main/docs/adr/ADR-0007-droits-par-session.md)) : chaque conversation porte un **jeton** signé ; ses capacités (service × opération × ressource) sont **isolées** des autres sessions et **signées à chaque octroi** ; droits effectifs = policy ∩ manifeste projet ∩ capacités session ; un manifeste projet **altéré** referme tout (anti-downgrade). Cycle de vie TTL / révocation (la déconnexion MCP ne purge rien). Reste **coopératif** tant que le vault n'est pas là.
 
 ## Phase 1 — ce qui n’est **pas** garanti
 
@@ -135,4 +136,6 @@ par le checker tant que tu n’en poses pas une. Pour basculer : préréglage
 `~/.config/gws-accounts/usage.jsonl` — appels autorisés (`decision:ok`), refus
 de policy et refus de verrou (`decision:refus`, `reason:locked`), sur les trois
 chemins (`gma`, broker, fail-fast gateway). Champ `client` via `GWSA_CLIENT`
-(`mcp`, `claude-code`, `cli`, …). Spoofable : utile pour le debug, pas une identité forte.
+(`mcp`, `claude-code`, `cli`, …). Les appels **réussis** portent en plus le
+`session_id` et le service / opération / ressource (attribution par session).
+Spoofable (`GWSA_CLIENT`) : utile pour le debug, pas une identité forte.

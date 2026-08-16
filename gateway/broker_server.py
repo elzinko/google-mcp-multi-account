@@ -26,7 +26,7 @@ from typing import Any
 from .config import SYS_PYTHON, POLICY_CHECKER, gwsa_root, profile_dir, upload_spool
 from .errors import GatewayError
 from .profiles import is_locked, require_unlocked
-from .sessions import active_drive_zones, is_session_unlocked, purge_expired
+from .sessions import active_capabilities, active_drive_zones, is_session_unlocked, purge_expired
 from .usage import log_usage
 from .vault import gws_config_dir, migrate_all
 
@@ -139,6 +139,8 @@ def check_policy(
     git_root: str = "",
     session_drive_zones: set[str] | None = None,
     use_session_grants: bool = False,
+    session_caps: list[Any] | None = None,
+    session_full_access: bool = False,
 ) -> None:
     if not (profile_path / "policy.json").is_file():
         return
@@ -159,6 +161,25 @@ def check_policy(
     if use_session_grants and session_drive_zones is not None:
         env["GWSA_SESSION_DRIVE_ZONES"] = ",".join(sorted(session_drive_zones))
         env["GWSA_USE_SESSION_GRANTS"] = "1"
+    if session_id:
+        # Deny-all par défaut (ADR-0007 §3, revue Codex P1 sur PR #110) : dès
+        # qu'une session existe, GWSA_SESSION_CAPS est posée — même vide.
+        # Un ensemble vide signifie « aucun octroi de session » → policy-check.py
+        # refuse tout, y compris si le PROFIL est déverrouillé au niveau poste
+        # (le verrou global ne doit jamais profiter à une session qui n'a pas
+        # fait son propre octroi). Un `session unlock <alias>` matérialise un
+        # octroi « compte entier » via la capacité joker service=*/opération=*
+        # (bornée ensuite par la policy du compte, comme aujourd'hui) ; sans
+        # session_id (appel legacy), la variable reste absente et
+        # policy-check.py garde son comportement historique (illimité par
+        # session, régi seulement par policy/unlocks/zones).
+        caps_payload = [
+            {"service": c.service, "operation": c.operation, "resource": c.resource}
+            for c in (session_caps or [])
+        ]
+        if session_full_access:
+            caps_payload.append({"service": "*", "operation": "*"})
+        env["GWSA_SESSION_CAPS"] = json.dumps(caps_payload, ensure_ascii=False)
     r = subprocess.run(
         [python, str(POLICY_CHECKER), str(profile_path), *gws_args],
         capture_output=True,
@@ -216,9 +237,13 @@ def handle_exec(
         raise
 
     session_zones: set[str] | None = None
+    session_caps = None
+    session_full_access = False
     use_session = bool(session_id)
     if use_session:
         session_zones = active_drive_zones(session_id, alias)
+        session_caps = active_capabilities(session_id, alias)
+        session_full_access = is_session_unlocked(session_id, alias)
         # Plafond manifeste appliqué dans policy-check via GWSA_GIT_ROOT (intersection)
 
     check_policy(
@@ -227,6 +252,8 @@ def handle_exec(
         git_root=git_root,
         session_drive_zones=session_zones,
         use_session_grants=use_session,
+        session_caps=session_caps,
+        session_full_access=session_full_access,
     )
     result = run_gws_local(alias, args, raw_output=raw_output)
     log_usage(alias, args, client, session_id=session_id, git_root=git_root)

@@ -854,6 +854,44 @@ def gmail_attachment_get(
     }
 
 
+def _bootstrap_no_session(kind: str) -> dict[str, Any]:
+    """Bootstrap SANS jeton (ADR-0007 §Repli) : le seul chemin qu'un appel sans
+
+    jeton peut emprunter est l'élicitation de CRÉATION de session — jamais un
+    accès données. `access_request` reste utilisable sans jeton (ce n'est pas
+    un tool de données), mais un kind qui exige une session en pointe ici vers
+    `gma session open`, plutôt que d'échouer sans piste.
+    """
+    return {
+        "ok": True,
+        "elicitation": True,
+        "kind": "session_open",
+        "requested_kind": kind,
+        "message": (
+            f"« {kind} » nécessite une session MCP active (jeton). Aucune session "
+            f"n'est ouverte pour cette conversation. L'utilisateur doit exécuter :\n"
+            f"  gma session open\n"
+            f"(geste signé — Touch ID/biométrie ; enrôlement requis) puis relancer "
+            f"la demande avec le jeton (session_id) obtenu."
+        ),
+        "suggested_command": "gma session open",
+    }
+
+
+def _reject_if_delegated(sid: str, kind: str) -> None:
+    """Une sous-session déléguée ne peut PAS demander d'élargissement (fiche 0045 /
+    ADR-0007 §Décision 1) : pas d'`access_request` élargissant depuis un enfant."""
+    from .sessions import get_session
+
+    state = get_session(sid)
+    if state is not None and state.delegated:
+        raise GatewayError(
+            f"sous-session déléguée « {sid} » : « {kind} » (élargissement) refusé — "
+            f"seule la session racine (ou l'humain) peut demander plus de droits",
+            code="delegated",
+        )
+
+
 def access_request(
     alias: str,
     kind: str,
@@ -904,7 +942,10 @@ def access_request(
         sid = (session or "").strip()
         if sid or kind == "session_unlock":
             if not sid:
-                raise GatewayError("session_unlock nécessite une session MCP active", code="error")
+                # Bootstrap sans jeton (ADR-0007 §Repli) : pas d'accès données,
+                # juste la piste de création de session.
+                return _bootstrap_no_session(kind)
+            _reject_if_delegated(sid, kind)
             return {
                 "ok": True,
                 "elicitation": True,
@@ -946,7 +987,8 @@ def access_request(
 
         if kind == "project_grant":
             if not sid:
-                raise GatewayError("project_grant nécessite une session MCP active", code="error")
+                return _bootstrap_no_session(kind)
+            _reject_if_delegated(sid, kind)
             from .project import grant_allowed_by_manifest, resolve_project
             from pathlib import Path
 
@@ -1026,7 +1068,8 @@ def access_request(
 
         if sid or kind == "session_grant":
             if not sid:
-                raise GatewayError("session_grant nécessite une session MCP active", code="error")
+                return _bootstrap_no_session(kind)
+            _reject_if_delegated(sid, kind)
             return {
                 "ok": True,
                 "elicitation": True,

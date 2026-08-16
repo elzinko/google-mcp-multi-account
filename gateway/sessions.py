@@ -47,6 +47,31 @@ class DriveZone:
 
 
 @dataclass
+class Capability:
+    """Capacité fine (compte, service, opération, ressource?) avec expiry.
+
+    Généralise `unlocks` / `drive_zones` (conservés pour compat) au grain
+    service × opération × ressource (ADR-0007 §Décision 3). Une ressource
+    ABSENTE signifie « périmètre du service borné par la policy compte »,
+    jamais un wildcard au-delà : Drive exige une ressource en écriture ; Gmail
+    (libellé) et Calendar (agenda) la laissent optionnelle.
+    """
+
+    account: str
+    service: str
+    operation: str
+    resource: str = ""
+    expires_at: float = 0.0
+
+    def active(self, now: float | None = None) -> bool:
+        t = now if now is not None else time.time()
+        return (
+            bool(self.account) and bool(self.service) and bool(self.operation)
+            and self.expires_at > t
+        )
+
+
+@dataclass
 class SessionState:
     session_id: str
     parent_id: str = ""
@@ -57,6 +82,8 @@ class SessionState:
     unlocks: dict[str, float] = field(default_factory=dict)
     # alias → zones Drive temporaires
     drive_zones: dict[str, list[DriveZone]] = field(default_factory=dict)
+    # capacités fines (compte, service, opération, ressource?) — cf. Capability
+    capabilities: list[Capability] = field(default_factory=list)
     delegated: bool = False  # True = sous-session (pas d'access_request direct)
 
     def touch(self) -> None:
@@ -74,6 +101,7 @@ class SessionState:
                 alias: [asdict(z) for z in zones]
                 for alias, zones in self.drive_zones.items()
             },
+            "capabilities": [asdict(c) for c in self.capabilities],
             "delegated": self.delegated,
         }
 
@@ -97,6 +125,21 @@ class SessionState:
         unlocks = data.get("unlocks") or {}
         if not isinstance(unlocks, dict):
             unlocks = {}
+        caps_raw = data.get("capabilities") or []
+        capabilities: list[Capability] = []
+        if isinstance(caps_raw, list):
+            for c in caps_raw:
+                if not isinstance(c, dict):
+                    continue
+                capabilities.append(
+                    Capability(
+                        account=str(c.get("account") or ""),
+                        service=str(c.get("service") or ""),
+                        operation=str(c.get("operation") or ""),
+                        resource=str(c.get("resource") or ""),
+                        expires_at=float(c.get("expires_at") or 0),
+                    )
+                )
         return cls(
             session_id=str(data.get("session_id") or ""),
             parent_id=str(data.get("parent_id") or ""),
@@ -105,6 +148,7 @@ class SessionState:
             last_seen_at=float(data.get("last_seen_at") or 0),
             unlocks={str(k): float(v) for k, v in unlocks.items()},
             drive_zones=dz,
+            capabilities=capabilities,
             delegated=bool(data.get("delegated")),
         )
 
@@ -253,6 +297,12 @@ def session_grant_drive(
         from .project import grant_allowed_by_manifest, resolve_project
 
         proj = resolve_project(Path(git_root))
+        if proj.fail_closed:
+            raise GatewayError(
+                "manifeste projet invalide/altéré/supprimé après confiance — "
+                "refus (anti-downgrade, ADR-0007 §Décision 3)",
+                code="policy",
+            )
         if proj.manifest_valid and proj.manifest:
             if not grant_allowed_by_manifest(proj.manifest, alias, fid):
                 raise GatewayError(
@@ -266,13 +316,8 @@ def session_grant_drive(
     return state
 
 
-def active_drive_zones(session_id: str, alias: str) -> set[str]:
-    """Zones Drive actives pour (session, alias), avec héritage parent."""
-    state = get_session(session_id)
-    if state is None:
-        return set()
-    now = time.time()
-    out: set[str] = set()
+def _ancestor_chain(state: SessionState) -> list[SessionState]:
+    """Session + ses ancêtres (parent_id …), sans boucle infinie sur un cycle."""
     chain: list[SessionState] = []
     cur: SessionState | None = state
     seen: set[str] = set()
@@ -282,7 +327,17 @@ def active_drive_zones(session_id: str, alias: str) -> set[str]:
         if not cur.parent_id:
             break
         cur = _load(cur.parent_id)
-    for s in chain:
+    return chain
+
+
+def active_drive_zones(session_id: str, alias: str) -> set[str]:
+    """Zones Drive actives pour (session, alias), avec héritage parent."""
+    state = get_session(session_id)
+    if state is None:
+        return set()
+    now = time.time()
+    out: set[str] = set()
+    for s in _ancestor_chain(state):
         for z in s.drive_zones.get(alias, []):
             if z.active(now):
                 out.add(z.id)
@@ -294,18 +349,93 @@ def is_session_unlocked(session_id: str, alias: str) -> bool:
     if state is None:
         return False
     now = time.time()
-    chain: list[SessionState] = []
-    cur: SessionState | None = state
-    seen: set[str] = set()
-    while cur and cur.session_id not in seen:
-        seen.add(cur.session_id)
-        chain.append(cur)
-        if not cur.parent_id:
-            break
-        cur = _load(cur.parent_id)
-    for s in chain:
+    for s in _ancestor_chain(state):
         until = s.unlocks.get(alias, 0)
         if until > now:
+            return True
+    return False
+
+
+def session_grant_capability(
+    session_id: str,
+    account: str,
+    service: str,
+    operation: str,
+    resource: str = "",
+    hours: int = 8,
+) -> SessionState:
+    """Octroie une capacité fine (compte, service, opération, ressource?) à une session.
+
+    Réservé à la session racine — une sous-session déléguée ne peut pas
+    s'élargir elle-même (même règle que `session_unlock` / `session_grant_drive`).
+    """
+    state = require_session(session_id)
+    root = _root_session(state)
+    if state.delegated and state.session_id != root.session_id:
+        raise GatewayError(
+            "seule la session racine (ou l'humain) peut accorder une capacité",
+            code="error",
+        )
+    account = account.strip()
+    service = service.strip().lower()
+    operation = operation.strip().lower()
+    resource = resource.strip()
+    if not account or not service or not operation:
+        raise GatewayError("account/service/operation requis", code="error")
+    h = max(1, min(int(hours), 168))
+    expires = time.time() + h * 3600
+    caps = [
+        c
+        for c in state.capabilities
+        if not (
+            c.account == account
+            and c.service == service
+            and c.operation == operation
+            and c.resource == resource
+        )
+    ]
+    caps.append(
+        Capability(
+            account=account, service=service, operation=operation,
+            resource=resource, expires_at=expires,
+        )
+    )
+    state.capabilities = caps
+    _save(state)
+    return state
+
+
+def active_capabilities(session_id: str, account: str, service: str = "") -> list[Capability]:
+    """Capacités actives pour (session, compte[, service]), avec héritage parent."""
+    state = get_session(session_id)
+    if state is None:
+        return []
+    now = time.time()
+    out: list[Capability] = []
+    for s in _ancestor_chain(state):
+        for cap in s.capabilities:
+            if cap.account != account:
+                continue
+            if service and cap.service != service:
+                continue
+            if cap.active(now):
+                out.append(cap)
+    return out
+
+
+def session_has_capability(
+    session_id: str, account: str, service: str, operation: str, resource: str = "",
+) -> bool:
+    """True si la session (ou un ancêtre) porte une capacité active couvrant l'appel.
+
+    Une capacité SANS ressource couvre tout appel de ce service × opération
+    (le périmètre reste borné ailleurs par la policy compte) ; une capacité
+    AVEC ressource ne couvre que cette ressource exacte (ex. zone Drive).
+    """
+    for cap in active_capabilities(session_id, account, service):
+        if cap.operation != operation:
+            continue
+        if not cap.resource or cap.resource == resource:
             return True
     return False
 
@@ -320,34 +450,45 @@ def revoke_descendants(session_id: str) -> int:
     N'exige PAS que `session_id` existe encore (révocation en cascade appelée
     depuis `close_session`, y compris sur une session déjà expirée côté GC) —
     l'id sert de racine de comparaison, pas d'un `require_session`.
+
+    Construit d'abord la carte sid → parent_id de TOUS les fichiers présents
+    (une seule passe de lecture), avant de supprimer quoi que ce soit : sur une
+    chaîne à plusieurs niveaux (petit-enfant → enfant → racine), supprimer
+    l'enfant AVANT d'avoir résolu le petit-enfant casserait la remontée de la
+    chaîne (son parent deviendrait introuvable en cours de route).
     """
     root_id = session_id
-    purged = 0
+    parent_of: dict[str, str] = {}
+    paths: dict[str, Path] = {}
     for path in sessions_dir().glob("*.json"):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             if not isinstance(data, dict):
                 continue
             sid = str(data.get("session_id") or "")
-            pid = str(data.get("parent_id") or "")
-            if not sid or sid == root_id:
+            if not sid:
                 continue
-            # descendant si parent_id chain mène à root
-            cur = pid
-            seen: set[str] = set()
-            is_desc = False
-            while cur and cur not in seen:
-                if cur == root_id:
-                    is_desc = True
-                    break
-                seen.add(cur)
-                parent = _load(cur)
-                cur = parent.parent_id if parent else ""
-            if is_desc:
-                path.unlink(missing_ok=True)
-                purged += 1
+            parent_of[sid] = str(data.get("parent_id") or "")
+            paths[sid] = path
         except (OSError, json.JSONDecodeError):
             continue
+
+    purged = 0
+    for sid, path in paths.items():
+        if sid == root_id:
+            continue
+        cur = parent_of.get(sid, "")
+        seen: set[str] = set()
+        is_desc = False
+        while cur and cur not in seen:
+            if cur == root_id:
+                is_desc = True
+                break
+            seen.add(cur)
+            cur = parent_of.get(cur, "")
+        if is_desc:
+            path.unlink(missing_ok=True)
+            purged += 1
     return purged
 
 
@@ -390,6 +531,19 @@ def list_sessions(*, include_expired_zones: bool = False) -> list[dict[str, Any]
                     )
             if active:
                 zones_live[alias] = active
+        caps_live: list[dict[str, Any]] = []
+        for cap in state.capabilities:
+            if cap.active(now):
+                caps_live.append(
+                    {
+                        "account": cap.account,
+                        "service": cap.service,
+                        "operation": cap.operation,
+                        "resource": cap.resource,
+                        "expires_at": cap.expires_at,
+                        "minutes_left": max(0, int((cap.expires_at - now) / 60)),
+                    }
+                )
         children = 0
         for other in sessions_dir().glob("*.json"):
             try:
@@ -398,6 +552,8 @@ def list_sessions(*, include_expired_zones: bool = False) -> list[dict[str, Any]
                     children += 1
             except (OSError, json.JSONDecodeError):
                 continue
+        last_activity = state.last_seen_at or state.created_at
+        ttl_left = max(0, int(session_ttl_sec() - (now - last_activity))) if last_activity else session_ttl_sec()
         out.append(
             {
                 "session_id": state.session_id,
@@ -408,6 +564,8 @@ def list_sessions(*, include_expired_zones: bool = False) -> list[dict[str, Any]
                 "last_seen_at": state.last_seen_at,
                 "unlocks": unlocks_live,
                 "drive_zones": zones_live,
+                "capabilities": caps_live,
+                "ttl_seconds_left": ttl_left,
                 "child_count": children,
             }
         )
