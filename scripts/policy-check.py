@@ -473,7 +473,12 @@ def _session_cap_allows(caps, service, operation, resource=""):
     for c in caps:
         if not isinstance(c, dict):
             continue
-        if c.get("service") != service or c.get("operation") != operation:
+        c_service = c.get("service")
+        c_operation = c.get("operation")
+        # Capacité joker (service="*"/operation="*") : matérialise un
+        # « session unlock <alias> » — compte entier, borné ensuite par la
+        # policy du compte comme n'importe quel autre appel (ADR-0007 §3).
+        if not (c_service in ("*", service) and c_operation in ("*", operation)):
             continue
         cap_res = c.get("resource") or ""
         # Ressource absente sur la capacité = service×opération entier
@@ -485,10 +490,13 @@ def _session_cap_allows(caps, service, operation, resource=""):
 
 
 def check_session_caps(profile_dir, args, service, operation, resource=""):
-    """Opt-in (GWSA_SESSION_CAPS) : si la session porte des capacités fines,
-    l'appel doit être couvert par l'une d'elles — sinon refus (ADR-0007 §3).
-    Sans GWSA_SESSION_CAPS : pas de contrainte (unlock/zones legacy restent
-    le seul mécanisme, tests existants inchangés)."""
+    """Si GWSA_SESSION_CAPS est présent (un appel porte un session_id), l'appel
+    doit être couvert par une capacité de session — sinon refus (deny-all sur
+    ensemble vide, ADR-0007 §3, revue Codex P1 sur PR #110). Le broker pose
+    toujours la variable dès qu'une session existe, y compris vide ; une
+    capacité joker service=*/opération=* matérialise un `session unlock`.
+    Sans GWSA_SESSION_CAPS (appel legacy sans session_id) : pas de contrainte
+    (unlock/zones legacy restent le seul mécanisme, tests existants inchangés)."""
     caps = _session_caps_from_env()
     if caps is None:
         return
@@ -506,7 +514,8 @@ def check_session_caps(profile_dir, args, service, operation, resource=""):
 
 def _session_drive_ok(profile_dir, parent, cat):
     """La SESSION autorise-t-elle l'écriture drive:<cat> vers `parent` ?
-    Sans capacités fines (opt-in absent) → True (zones/unlock legacy seuls). Sinon :
+    Sans GWSA_SESSION_CAPS (appel legacy sans session_id) → True (zones/unlock
+    legacy seuls). Sinon (y compris ensemble vide → False, deny-all) :
     couvert par une capacité fine `drive:<cat>` (globale ou sur `parent`), OU `parent`
     sous une zone Drive accordée à la SESSION (une zone de session EST une capacité)."""
     caps = _session_caps_from_env()

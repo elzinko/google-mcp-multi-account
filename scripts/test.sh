@@ -3198,6 +3198,60 @@ print(r.returncode)
   && pass "anti-downgrade : manifeste altéré après confiance → refus (S-07)" \
   || fail "anti-downgrade : manifeste altéré non refusé (before=$before_trust after=$after_tamper)"
 
+section "droits par session — P1 sécu (fiche 0076, session nue = deny-all)"
+
+# Profil déverrouillé (poste), policy permissive gmail/calendar/drive — le
+# verrou GLOBAL du profil ne doit jamais se substituer aux octrois de LA
+# session (revue Codex P1 sur PR #110).
+P1_ROOT="$TMP/gwsa-p1-nudeny"
+mkdir -p "$P1_ROOT/alpha"
+echo '{"gmail":{"read":true,"send":true},"calendar":{"read":true},"drive":{"read":true,"create":true,"zonesOnly":true,"writeFolders":["zoneA"]}}' \
+  > "$P1_ROOT/alpha/policy.json"
+
+out_p1="$(GWSA_ROOT="$P1_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import gateway.broker_server as bs
+from gateway.sessions import create_session, session_unlock, session_grant_capability
+from gateway.errors import GatewayError
+
+bs.run_gws_local = lambda *a, **k: {'ok': True}
+
+def call(session_id, args):
+    try:
+        bs.handle_exec('alpha', args, 'test', session_id=session_id)
+        return 'ok'
+    except GatewayError as e:
+        return 'refus:' + e.code
+
+# (a) session nue (aucun octroi) sur profil déverrouillé → refus Gmail ET Calendar.
+s_naked = create_session(client='t').session_id
+print('naked_gmail', call(s_naked, ['gmail', 'users', 'messages', 'list']))
+print('naked_calendar', call(s_naked, ['calendar', 'events', 'list']))
+
+# (b) session avec session unlock → lecture Gmail autorisée (policy).
+s_unlocked = create_session(client='t').session_id
+session_unlock(s_unlocked, 'alpha', minutes=15)
+print('unlocked_gmail', call(s_unlocked, ['gmail', 'users', 'messages', 'list']))
+print('unlocked_calendar', call(s_unlocked, ['calendar', 'events', 'list']))
+
+# (c) session avec seulement grant-capability gmail:read → lit Gmail, refuse
+# Calendar/Drive.
+s_fine = create_session(client='t').session_id
+session_grant_capability(s_fine, 'alpha', 'gmail', 'read', hours=1)
+print('fine_gmail', call(s_fine, ['gmail', 'users', 'messages', 'list']))
+print('fine_calendar', call(s_fine, ['calendar', 'events', 'list']))
+print('fine_drive', call(s_fine, ['drive', 'files', 'create', '--json', '{\"parents\":[\"zoneA\"]}']))
+
+# (d) legacy sans session_id → inchangé (autorisé par policy).
+print('legacy_gmail', call('', ['gmail', 'users', 'messages', 'list']))
+")"
+
+[[ "$out_p1" == *"naked_gmail refus:policy"* && "$out_p1" == *"naked_calendar refus:policy"* \
+  && "$out_p1" == *"unlocked_gmail ok"* && "$out_p1" == *"unlocked_calendar ok"* \
+  && "$out_p1" == *"fine_gmail ok"* && "$out_p1" == *"fine_calendar refus:policy"* \
+  && "$out_p1" == *"fine_drive refus:policy"* && "$out_p1" == *"legacy_gmail ok"* ]] \
+  && pass "P1 sécu : session nue = deny-all (verrou poste n'y substitue pas ; unlock/capacité/legacy inchangés)" \
+  || fail "P1 sécu : session nue accède sans octroi ($out_p1)"
+
 section "droits par session — lot 3 (fiche 0076, session list + sous-agents + bootstrap + audit)"
 
 # ── (a) gwsa session list : ≥2 sessions actives, configs DISTINCTES (capacités,
