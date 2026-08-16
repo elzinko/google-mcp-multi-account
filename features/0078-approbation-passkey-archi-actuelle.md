@@ -6,7 +6,7 @@ priority: P1
 version:
 epic: 0077
 status: todo
-ready:
+ready: 2026-08-16
 pr:
 created: 2026-08-15
 ---
@@ -24,16 +24,18 @@ Face ID). Première marche vers l'ADR-0008, **sans refonte** : le Mac reste le h
 
 ## Proposition
 
-Brancher la **passkey du téléphone** comme signataire de l'élicitation existante, en
-**réutilisant** le protocole de l'ADR-0005 (payload canonique décrivant l'action,
-`nonce` anti-rejeu, reçu vérifiable). Le Mac forge le défi → le téléphone l'affiche
-(**WYSIWYS**) et le signe (Face ID) → le Mac vérifie la signature et exécute.
+**Le téléphone n'approuve que quand tu es loin du Mac.** Devant le Mac, on **garde le Touch ID du Mac** (l'existant) — le téléphone n'intervient pas. À distance (Remote Control, Dispatch), l'approbation bascule sur la **passkey du téléphone**.
+
+Mécanisme (réutilise l'ADR-0005 : payload canonique décrivant l'action, `nonce` anti-rejeu, reçu vérifiable) :
+1. Le Mac (holder) forge un **défi** lié à l'action **et à la session** (`session_id`, cf. #108 / ADR-0007).
+2. Le défi voyage jusqu'au téléphone par un **canal distant** — notif push / relais — **jamais un QR** (tu n'es pas devant l'écran). Le canal n'a **pas besoin d'être secret** : la sécurité vient de WYSIWYS + vérification de signature côté Mac.
+3. Le téléphone **affiche l'action** (WYSIWYS) et la **signe** (biométrie).
+4. Le Mac **vérifie la signature** (device-bound) et exécute — sinon rien (fail-closed).
 
 Périmètre **phase 1** (délibérément étroit) :
 - Mac **allumé**, il reste le holder ; le téléphone n'exécute rien, ne détient aucun jeton.
-- Enrôlement d'**une** passkey de téléphone comme approbateur autorisé (clé publique connue du Mac).
-- Acheminement du défi puis de la signature : d'abord le cas **LAN / même compte** ; le
-  relais aveugle (NAT, agent cloud) est hors phase 1 (ADR/fiche enfant).
+- **Enrôlement** (geste unique, **à côté du Mac**) : par QR / scan local, on enregistre la clé publique d'une passkey **device-bound** du téléphone (platform authenticator, *non synchronisée* + vérification biométrique — cf. ADR-0008). C'est le **seul** usage du QR.
+- **Approbation à distance** via un **canal minimal** (push / relais léger) ; le relais aveugle chiffré E2E complet est un incrément ultérieur.
 
 ## Critères d'acceptation
 
@@ -42,6 +44,9 @@ Périmètre **phase 1** (délibérément étroit) :
 - [ ] Le téléphone **affiche l'action exacte** (compte, cible, durée) avant de signer.
 - [ ] Un refus, un nonce expiré ou une signature invalide → **aucune** exécution (fail-closed).
 - [ ] Aucun jeton Google ne quitte le Mac ; le téléphone ne stocke aucun secret Google.
+- [ ] **Devant le Mac**, le Touch ID du Mac reste le chemin d'approbation (téléphone non requis).
+- [ ] L'enrôlement **exige une passkey device-bound** — une *synced passkey* ou un PIN est refusé.
+- [ ] Le défi est **lié à une session** (`session_id`) : une autre session ne peut pas rejouer l'approbation.
 
 ## Notes
 
