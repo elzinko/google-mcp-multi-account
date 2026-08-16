@@ -12,6 +12,8 @@ created: 2026-07-28
 updated: 2026-07-28
 ---
 
+> ⚠️ **Statut de ce document.** C'est l'**état des lieux initial** (2026-07-28). Le **modèle retenu** — identité par **geste de consentement signé**, **jeton porté dans l'appel**, **cycle de vie découplé de la connexion MCP** (TTL + révocation explicite) — est défini par **[ADR-0007](../docs/adr/ADR-0007-droits-par-session.md)** et la fiche **[0076](0076-droits-par-session-phase-a.md)**, qui **remplacent toute assertion de ce document liant l'identité ou le cycle de vie à la connexion MCP** — notamment §2.6, §3.x, la machine à états §5.2 et sa table de cycle de vie, les scénarios TGT-0x (§3.4), les critères Phase A (§7) et l'état d'implémentation (§10).
+
 ## Résumé exécutif
 
 Ce document sert de **base de décision** avant toute implémentation. Il décrit
