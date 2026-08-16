@@ -14,7 +14,7 @@ Aujourd'hui, tout le système est **local à un Mac** :
 - Le serveur MCP est **stdio** (`gateway/mcp_server.py`) : lancé en process enfant par le client LLM, sur la même machine. Aucun écouteur réseau.
 - Les jetons vivent dans un **vault chiffré local** (`GWSA_ROOT/.vault/<alias>/credentials.enc`), servis par un **broker loopback** `127.0.0.1:4878`.
 - L'approbation d'une action sensible (unlock, grant, add) passe par l'**admin web `127.0.0.1:4877`** — qui n'a **aucune authentification applicative** : elle fait confiance à la session macOS. Être physiquement devant le Mac déverrouillé **est** l'autorisation (autorité *ambiante*).
-- Sous `strongauth`, le consentement est **signé** (Touch ID → ECDSA P-256, Secure Enclave du Mac, nonce anti-rejeu, reçu vérifiable) — cf. [ADR-0005](ADR-0005-elicitation-signee-v2.md).
+- Sous `strongauth`, le consentement est **signé** (Touch ID → ECDSA P-256, nonce anti-rejeu, reçu vérifiable) — cf. [ADR-0005](ADR-0005-elicitation-signee-v2.md). La clé vit en **Secure Enclave *quand elle est disponible*** ; le helper Swift retombe sinon sur le Keychain logiciel, puis sur un fichier `private.p256` **exportable** — donc la garantie « enclave » n'est **pas** universelle aujourd'hui.
 
 Le besoin nouveau (session 2026-08-13) : **utiliser ces comptes depuis un mobile**, dans des contextes où l'agent tourne ailleurs que sur le Mac (Claude Code remote, discussion Claude, cowork, environnement cloud Anthropic), **avec le Mac allumé ou éteint**, et **sans appareil personnel allumé en permanence**.
 
@@ -43,7 +43,7 @@ Adopter un modèle à **trois rôles découplés**, et refonder la brique de dé
 
 6. **Techno retenue : Tauri 2 (cœur Rust, UI web embarquée)** pour le holder/approbateur natif — couvre les 5 OS, petit binaire auditable, accès natif aux coffres matériels, surface d'attaque réduite. *Flutter* est l'alternative documentée (cf. Options).
 
-7. **Logiciel libre, donc zéro point de contrôle centralisé.** Le seul relais éventuel (pour joindre un holder derrière un NAT depuis un agent cloud) est **aveugle** — il ne transporte que des messages **signés et opaques**, jamais un jeton Google — et **auto-hébergeable**. Chaque utilisateur fournit **son propre client OAuth** (déjà le cas via le provisioning GCP). Aucun secret partagé n'entre dans le dépôt.
+7. **Logiciel libre, donc zéro point de contrôle centralisé.** Le seul relais éventuel (pour joindre un holder derrière un NAT depuis un agent cloud) est **aveugle** — il achemine des **enveloppes chiffrées de bout en bout**, opaques pour lui, dans les **deux sens** (requêtes/défis *et* résultats) ; il ne voit jamais ni jeton ni contenu en clair — et **auto-hébergeable**. Chaque utilisateur fournit **son propre client OAuth** (déjà le cas via le provisioning GCP). Aucun secret partagé n'entre dans le dépôt.
 
 8. **Décisions complémentaires (actées le 2026-08-15 avec le PO).**
    - **Enrôlement OAuth par appareil** : chaque appareil (Mac, téléphone) détient ses propres jetons dans son coffre — **pas** de synchronisation de secrets entre appareils.
@@ -129,13 +129,15 @@ Adopter un modèle à **trois rôles découplés**, et refonder la brique de dé
 
 **Passkeys / WebAuthn (retenu)** contre *réécrire un helper biométrique natif par OS*. Le standard FIDO2 donne, via **une** API, clé en enclave + biométrie + signature d'un challenge — sur les 5 OS. Écrire 5 helpers natifs (à la `elicitation-sign.swift`) serait le même travail cinq fois. La logique de l'ADR-0005 (payload canonique, `nonce`, reçu) est **conservée** ; seul le mécanisme de signature change.
 
+**Contrainte device-bound (durcissement).** La passkey approbateur doit être **liée à l'appareil** (platform authenticator, *non synchronisée*) et gardée par **vérification biométrique** — une *synced passkey* (iCloud / Google Password Manager) ou un simple PIN ne garantissent ni « ce téléphone précis » ni l'enclave, et se retrouvent sur d'autres appareils. Enrôlement avec **user verification** exigée et, si possible, **attestation** ; les authentificateurs *synchronisés* ou purement *logiciels* sont **refusés** pour ce rôle.
+
 ## Modèle de menace (nouveau — l'agent cloud change la donne)
 
 L'ADR-0005 supposait un agent **local semi-honnête** (contournable via `gws` nu, mais physiquement proche). Dès que le requester est **cloud**, il faut le supposer **distant et potentiellement hostile**. Conséquences, non négociables :
 
 - Le holder **ne fait jamais confiance** au requester : toute action sensible exige une **approbation signée** fraîche (anti-rejeu par `nonce` + `expires_at`).
 - **WYSIWYS** obligatoire : le téléphone affiche l'action *avant* la signature ; on ne signe jamais un opaque.
-- Le relais (s'il existe) est **aveugle** : il ne voit que des enveloppes signées, jamais un jeton, jamais un contenu Google.
+- Le relais (s'il existe) est **aveugle** : il achemine des enveloppes **chiffrées de bout en bout** dans les deux sens (défis/signatures **et** résultats), sans jamais déchiffrer ni jeton ni contenu. C'est le **seul canal de retour** quand le holder est derrière un NAT — le contenu lu y transite, mais *chiffré*, illisible pour le relais.
 - **Moindre autorité** conservée : l'approbation porte sur *une* action (compte, cible, durée), pas un blanc-seing. La policy default-deny par service et les zones Drive temporaires restent la référence.
 
 ## Articulation avec les droits par session (ADR-0007 / PR #108)

@@ -172,7 +172,7 @@
         <li><span class="pline dash" style="border-color:var(--ph-pair)"></span> Appairage — ouvrir / rejoindre la session</li>
         <li><span class="pline" style="border-color:var(--ph-act)"></span> Demande &amp; exécution</li>
         <li><span class="pline" style="border-color:var(--ph-appr)"></span> Approbation — tu signes (biométrie, WYSIWYS)</li>
-        <li><span class="pline dash" style="border-color:var(--ph-res)"></span> Résultat — le contenu lu remonte à l'agent</li>
+        <li><span class="pline dash" style="border-color:var(--ph-res)"></span> Résultat — le contenu (chiffré E2E) remonte à l'agent <b>via le relais</b></li>
       </ul>
     </div>
   </div>
@@ -212,7 +212,7 @@
     AGENT:{x:560,y:64,w:226,h:92, role:"agent", t:"Agent LLM (cloud)", s:"Code on the web · cowork",
       detail:"L'agent quand il tourne <b>dans le cloud Anthropic</b> (Claude Code on the web, cowork), sur une VM. Hors de ton contrôle : à supposer <b>potentiellement hostile</b>. Il n'agit que sur une <b>approbation signée</b>, et ne voit jamais tes jetons."},
     RELAIS:{x:876,y:250,w:168,h:104, role:"cloud", t:"Relais aveugle", s:"endpoint public",
-      detail:"Point de rendez-vous public pour <b>joindre ton holder derrière ta box</b>, sans lui ouvrir de port. Il n'achemine que des <b>messages signés et opaques</b> — jamais un jeton, jamais un contenu. <b>Auto-hébergeable</b> : pas de point de contrôle central."},
+      detail:"Point de rendez-vous public pour <b>joindre ton holder derrière ta box</b>, sans lui ouvrir de port. C'est le <b>pivot de tous les échanges distants</b> — défi, signature <i>et</i> résultat — acheminés en <b>enveloppes chiffrées de bout en bout</b>, dans les deux sens : il ne voit jamais ni jeton ni contenu en clair. <b>Seul canal de retour</b> quand le holder est derrière un NAT. <b>Auto-hébergeable</b> : pas de point de contrôle central."},
     HOST: {x:322,y:474,w:128,h:84, role:"agent", t:"Host LLM", s:"Claude Code / Desktop",
       detail:"Le client qui fait tourner l'agent <b>sur ton Mac</b> (Claude Code ou Desktop). Il lance le serveur MCP en <code>stdio</code> local (process enfant, même machine)."},
     MCP:  {x:470,y:474,w:132,h:84, role:"hold", t:"Serveur MCP", s:"stdio ↔ HTTP",
@@ -280,9 +280,9 @@
         {f:"MCP",t:"APPR",fs:"t",fo:0.3,ts:"r",p:"appr",n:3,w:[{x:510,y:300},{x:296,y:300},{x:296,y:532}],label:"défi à signer"},
         {f:"APPR",t:"BROKER",fs:"b",ts:"b",p:"appr",n:4,w:[{x:142,y:672},{x:707,y:672}],label:"signe · Face ID"},
         {f:"BROKER",t:"GOOGLE",fs:"r",ts:"l",p:"act",n:5,w:[{x:912,y:516},{x:912,y:522}],label:"lit / écrit"},
-        {f:"BROKER",t:"AGENT",fs:"t",fo:0.8,ts:"b",to:0.7,p:"res",n:6,w:[{x:758,y:205},{x:718,y:205}],label:"résultat → agent"}
+        {f:"BROKER",t:"RELAIS",fs:"r",ts:"b",p:"res",n:6,w:[{x:832,y:516},{x:832,y:354}],label:"résultat chiffré → relais → agent"}
       ],
-      note:"<b>Nuance (flèche 6).</b> Tes <b>jetons</b> ne quittent jamais le Mac, mais le <b>contenu lu</b> (mail, fichier) remonte vers l'agent cloud — inhérent à faire tourner l'agent dans le cloud. L'approbation limite <i>quoi</i>, pas le transit du contenu approuvé."},
+      note:"<b>Résultat via le relais (flèche 6).</b> Le Mac est derrière le NAT : défi, signature et résultat transitent tous par le relais, chiffrés E2E (le schéma ne trace que le résultat, pour rester lisible). Tes <b>jetons</b> ne quittent jamais le Mac ; le <b>contenu lu</b> remonte à l'agent cloud (inhérent à l'agent cloud), illisible pour le relais. L'approbation limite <i>quoi</i>, pas le transit du contenu approuvé."},
     mobile:{tab:"Mobile seul — Mac éteint", dot:"--ph-act", title:"Mobile seul — Mac éteint",
       ctx:"Le Mac est éteint : le téléphone porte les deux rôles — holder natif (jetons en coffre matériel) ET approbateur. L'agent cloud joint le holder via le relais aveugle.",
       active:["APPR","HOLD","AGENT","RELAIS","GOOGLE"],
@@ -291,9 +291,9 @@
         {f:"RELAIS",t:"HOLD",fs:"l",ts:"r",p:"act",n:2,w:[{x:558,y:302},{x:558,y:403}],label:"relaie (opaque)"},
         {f:"APPR",t:"HOLD",fs:"t",ts:"b",p:"appr",n:3,label:"déscelle · Face ID"},
         {f:"HOLD",t:"GOOGLE",fs:"r",ts:"t",p:"act",n:4,w:[{x:1107,y:403}],label:"lit / écrit"},
-        {f:"HOLD",t:"AGENT",fs:"r",fo:0.25,ts:"b",to:0.5,p:"res",n:5,w:[{x:282,y:381},{x:282,y:205},{x:673,y:205}],label:"résultat → agent"}
+        {f:"HOLD",t:"RELAIS",fs:"r",fo:0.3,ts:"l",p:"res",n:5,w:[{x:820,y:386},{x:820,y:302}],label:"résultat chiffré → relais → agent"}
       ],
-      note:"Même nuance qu'à l'onglet précédent : les jetons ne quittent jamais le coffre du téléphone, mais le contenu lu remonte à l'agent. La souveraineté porte sur les <b>identifiants</b>, pas sur le contenu que tu demandes explicitement de traiter. Tout le Mac est éteint (grisé)."}
+      note:"Le résultat repasse <b>par le relais</b> (le téléphone est derrière le NAT — pas de canal direct). Jetons jamais sortis du coffre ; le <b>contenu lu</b> remonte à l'agent, chiffré E2E, illisible pour le relais. La souveraineté porte sur les <b>identifiants</b>, pas sur le contenu que tu demandes de traiter. Le Mac est éteint (grisé)."}
   };
 
   var order=["legende","desktop","remote","dispatch","cloud","mobile"];
