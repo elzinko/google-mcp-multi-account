@@ -401,7 +401,7 @@ Fonctionnalité: Sous-agents — héritage et révocation
 
   Scénario: TGT-04 — Fin du parent entraîne fin des enfants
     Étant donné un arbre P → C1, C2
-    Quand la session parent P se termine (déconnexion MCP)
+    Quand la session parent P se termine (close/révocation explicite ou TTL — **pas** la déconnexion MCP, cf. ADR-0007)
     Alors toutes les sous-sessions C1, C2 sont purgées (M-06 étendu à l'arbre)
 ```
 

@@ -34,7 +34,9 @@ Décision d'architecture : [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md
    broker par jeton) → deux conversations d'une **même connexion** Desktop sont isolées.
 3. **Config fine par session** : (compte, **service × opération × ressource**),
    expirante ; **chaque octroi de capacité est signé** (création *et* élargissement),
-   indépendamment de `.strong-auth` ; droits effectifs = policy ∩ manifeste ∩ session.
+   indépendamment de `.strong-auth` ; droits effectifs = policy ∩ manifeste ∩ session
+   (sans manifeste projet valide : `policy ∩ session` — le manifeste est un plafond
+   *optionnel*, jamais un déni).
 4. **`gma session list`** + vue de la config par session.
 5. **Corriger** : cycle de vie **découplé de la connexion** (TTL réel + `gma session close`/révocation ; une déconnexion de connexion *partagée* ne purge pas les jetons des autres conversations) ; `last_seen` mis à jour à chaque
    appel.
@@ -57,6 +59,7 @@ hôte Android pour desktop éteint (0078).
       `last_seen_at` avance à chaque appel.
 - [ ] Jeton absent / invalide / expiré → **refus** journalisé.
 - [ ] **Appels réussis journalisés** avec `session_id` + service / opération / ressource (pas seulement les refus) — **testé** (M-08 / ADR-0007).
+- [ ] **Sans manifeste projet valide** (hors dépôt git / repo non signé) : droits effectifs = `policy ∩ session` (plafond projet **omis**, jamais un déni) — cas **testé**.
 - [ ] `./scripts/test.sh` vert (tests hermétiques, sans comptes réels).
 
 ## Notes
@@ -68,4 +71,4 @@ hôte Android pour desktop éteint (0078).
   **conditionné au vault** [0003](0003-vault-credentials-hors-perimetre-agent.md).
 - Décisions de cadrage (14/08) : identité = geste de consentement ; granularité la plus
   fine ; mobile = hôte **et** dispositif de consentement selon la topologie.
-- Retours **Codex** ([PR #108](https://github.com/elzinko/google-mcp-multi-account/pull/108)) intégrés : cycle de vie découplé de la connexion MCP (①) ; **création de session sous élicitation signée exigée** (②) ; **chaque octroi de capacité signé, pas seulement la création** (③) ; **héritage sous-agents ⊆ parent préservé** (④) ; ADR ajouté à la nav MkDocs (⑤) ; critères 0045 périmés marqués remplacés (⑥) ; racine non signée refusée (⑦) ; audit des appels réussis couvert (⑧).
+- Retours **Codex** ([PR #108](https://github.com/elzinko/google-mcp-multi-account/pull/108)) intégrés : cycle de vie découplé de la connexion MCP (①) ; **création de session sous élicitation signée exigée** (②) ; **chaque octroi de capacité signé, pas seulement la création** (③) ; **héritage sous-agents ⊆ parent préservé** (④) ; ADR ajouté à la nav MkDocs (⑤) ; critères 0045 périmés marqués remplacés (⑥) ; racine non signée refusée (⑦) ; audit des appels réussis couvert (⑧) ; TGT-04 de 0045 corrigé (⑨) ; intersection sans manifeste = `policy ∩ session` (⑩).
