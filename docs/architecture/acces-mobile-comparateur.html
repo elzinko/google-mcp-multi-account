@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accès mobile — comparateur d'architecture</title>
+<style>
+  :root{
+    --bg:#f4f6f9; --panel:#ffffff; --ink:#12181f; --ink-soft:#4a5765; --line:#d7dee7;
+    --line-strong:#b7c2d0; --accent:#2563eb; --muted:#8a97a6;
+    --toi-f:#dcfce7; --toi-s:#16a34a; --toi-t:#14532d;
+    --hold-f:#fef3c7; --hold-s:#d97706; --hold-t:#7c2d12;
+    --agent-f:#dbeafe; --agent-s:#2563eb; --agent-t:#1e3a8a;
+    --cloud-f:#ede9fe; --cloud-s:#7c3aed; --cloud-t:#4c1d95;
+    --ext-f:#eef2f7; --ext-s:#64748b; --ext-t:#0f172a;
+    --zone-mine:#eaf6ee; --zone-mine-s:#bfe3c9;
+    --zone-cloud:#f1ecfd; --zone-cloud-s:#ddd0f5;
+    --ph-pair:#94a3b8; --ph-act:#2563eb; --ph-appr:#16a34a; --ph-res:#d97706;
+    --off:#c3ccd6; --off-fill:#f0f3f7;
+    --shadow:0 1px 2px rgba(16,24,32,.06),0 8px 24px rgba(16,24,32,.07);
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --bg:#0c1116; --panel:#141c25; --ink:#e7edf4; --ink-soft:#9fb0c0; --line:#243141;
+      --line-strong:#33455a; --accent:#6ea0ff; --muted:#6b7d8f;
+      --toi-f:#12331f; --toi-s:#3fbf6b; --toi-t:#bff3cf;
+      --hold-f:#3a2a0c; --hold-s:#e29a3a; --hold-t:#ffe2b0;
+      --agent-f:#122a44; --agent-s:#5b9bf5; --agent-t:#cfe2ff;
+      --cloud-f:#241a3c; --cloud-s:#a985f5; --cloud-t:#e4d8ff;
+      --ext-f:#1a2430; --ext-s:#7f92a6; --ext-t:#e6eef7;
+      --zone-mine:#10231a; --zone-mine-s:#20402c;
+      --zone-cloud:#1c1730; --zone-cloud-s:#352a52;
+      --ph-pair:#7688a0; --ph-act:#6ea0ff; --ph-appr:#3fbf6b; --ph-res:#e29a3a;
+      --off:#3a4655; --off-fill:#182129;
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.45);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0c1116; --panel:#141c25; --ink:#e7edf4; --ink-soft:#9fb0c0; --line:#243141;
+    --line-strong:#33455a; --accent:#6ea0ff; --muted:#6b7d8f;
+    --toi-f:#12331f; --toi-s:#3fbf6b; --toi-t:#bff3cf;
+    --hold-f:#3a2a0c; --hold-s:#e29a3a; --hold-t:#ffe2b0;
+    --agent-f:#122a44; --agent-s:#5b9bf5; --agent-t:#cfe2ff;
+    --cloud-f:#241a3c; --cloud-s:#a985f5; --cloud-t:#e4d8ff;
+    --ext-f:#1a2430; --ext-s:#7f92a6; --ext-t:#e6eef7;
+    --zone-mine:#10231a; --zone-mine-s:#20402c;
+    --zone-cloud:#1c1730; --zone-cloud-s:#352a52;
+    --ph-pair:#7688a0; --ph-act:#6ea0ff; --ph-appr:#3fbf6b; --ph-res:#e29a3a;
+    --off:#3a4655; --off-fill:#182129;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.45);
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg); color:var(--ink);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.5; -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1200px; margin:0 auto; padding:22px clamp(14px,3vw,30px) 60px}
+
+  header.top{display:flex; flex-wrap:wrap; align-items:baseline; gap:10px 16px; margin-bottom:6px}
+  header.top h1{font-size:clamp(18px,2.3vw,24px); margin:0; letter-spacing:-.02em; text-wrap:balance}
+  header.top .sub{color:var(--ink-soft); font-size:13.5px}
+  .themebtn{margin-left:auto; border:1px solid var(--line-strong); background:var(--panel); color:var(--ink);
+    border-radius:9px; padding:7px 12px; font-size:13px; cursor:pointer}
+  .themebtn:hover{border-color:var(--accent)}
+
+  .tabs{display:flex; flex-wrap:wrap; gap:8px; margin:18px 0 14px}
+  .tab{border:1px solid var(--line-strong); background:var(--panel); color:var(--ink-soft);
+    border-radius:999px; padding:8px 15px; font-size:13.5px; cursor:pointer; display:inline-flex; gap:9px; align-items:center;
+    transition:background .15s,color .15s,border-color .15s}
+  .tab .dot{width:9px;height:9px;border-radius:50%}
+  .tab:hover{border-color:var(--accent); color:var(--ink)}
+  .tab[aria-selected="true"]{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600}
+  .tab[aria-selected="true"] .dot{background:#fff}
+
+  .stage{display:grid; grid-template-columns:1fr 322px; gap:18px; align-items:start}
+  @media (max-width:900px){ .stage{grid-template-columns:1fr} }
+  .board{background:var(--panel); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow);
+    padding:10px; overflow-x:auto}
+  svg.diagram{width:100%; height:auto; display:block; min-width:720px}
+
+  aside.side{background:var(--panel); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow);
+    padding:16px 17px; position:sticky; top:14px}
+  @media (max-width:900px){ aside.side{position:static} }
+  aside .scn-title{font-size:16px; margin:0 0 4px; letter-spacing:-.01em; text-wrap:balance}
+  aside .scn-ctx{font-size:13px; color:var(--ink-soft); margin:0 0 14px}
+  .steps{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:9px}
+  .steps li{display:grid; grid-template-columns:24px 1fr; gap:10px; align-items:start; font-size:13px}
+  .steps li .n{width:24px;height:24px;border-radius:50%; display:grid; place-items:center; font-size:12px; font-weight:700;
+    color:#fff; font-variant-numeric:tabular-nums}
+  .steps li em{font-style:normal; color:var(--ink-soft)}
+  .note{margin-top:14px; padding:11px 12px; border-radius:10px; font-size:12.5px; line-height:1.5;
+    background:var(--off-fill); border:1px solid var(--line); color:var(--ink-soft)}
+  .note b{color:var(--ink)}
+
+  .legend{margin-top:20px; display:grid; grid-template-columns:1fr 1fr; gap:18px}
+  @media (max-width:560px){ .legend{grid-template-columns:1fr} }
+  .legend h3{font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:0 0 9px; font-weight:700}
+  .legend ul{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:7px}
+  .legend li{display:flex; gap:9px; align-items:center; font-size:12.5px; color:var(--ink-soft)}
+  .swatch{width:16px;height:16px;border-radius:5px;border:1.5px solid;flex:none}
+  .pline{width:26px;height:0;border:none;border-top:3px solid;flex:none}
+  .pline.dash{border-top-style:dashed}
+
+  .node .t{font-size:12.5px; font-weight:650}
+  .node .s{font-size:10.5px; fill:var(--ink-soft)}
+  .node.off .box{fill:var(--off-fill)!important; stroke:var(--off)!important}
+  .node.off text{fill:var(--off)!important}
+  .node.off .qp{display:none}
+  .zone rect{rx:14; fill:none; stroke-dasharray:5 5; stroke-width:1.4}
+  .zone .zt{font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; fill:var(--ink-soft)}
+  .qp{cursor:pointer}
+  .qp circle{stroke-width:1.4}
+  .qp text{font-size:12px; font-weight:800; text-anchor:middle}
+  .edge path{fill:none; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round}
+  .edge.dash path{stroke-dasharray:7 6}
+  .num text{font-size:12px; font-weight:800; fill:#fff; text-anchor:middle}
+
+  dialog.modal{border:none; border-radius:16px; padding:0; max-width:440px; width:calc(100% - 32px);
+    background:var(--panel); color:var(--ink); box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  dialog.modal::backdrop{background:rgba(8,12,17,.5)}
+  .modal .mhead{display:flex; gap:11px; align-items:center; padding:16px 18px 10px}
+  .modal .chip{width:13px;height:13px;border-radius:4px;border:1.5px solid;flex:none}
+  .modal h4{margin:0; font-size:16px; letter-spacing:-.01em}
+  .modal .mrole{font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); font-weight:700}
+  .modal .mbody{padding:2px 18px 6px; font-size:13.5px; color:var(--ink-soft); line-height:1.55}
+  .modal .mbody code{background:var(--off-fill); border:1px solid var(--line); border-radius:5px; padding:.5px 5px; font-size:12px; color:var(--ink)}
+  .modal .mfoot{padding:12px 18px 16px; text-align:right}
+  .modal .mfoot button{border:1px solid var(--line-strong); background:transparent; color:var(--ink);
+    border-radius:9px; padding:7px 15px; font-size:13px; cursor:pointer}
+  .modal .mfoot button:hover{border-color:var(--accent)}
+  :focus-visible{outline:2.5px solid var(--accent); outline-offset:2px; border-radius:4px}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Accès Google multi-comptes depuis mobile — comparateur d'architecture</h1>
+    <button class="themebtn" id="themebtn" type="button">◐ Thème</button>
+    <div class="sub" style="flex-basis:100%">Mêmes briques, même place d'un onglet à l'autre. Grisé = pas utilisé dans ce cas. Un « ? » ouvre le détail d'une brique.</div>
+  </header>
+
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Scénarios"></nav>
+
+  <div class="stage">
+    <div class="board">
+      <svg class="diagram" id="svg" viewBox="0 0 1200 700" role="img" aria-label="Schéma d'architecture"></svg>
+    </div>
+    <aside class="side">
+      <h2 class="scn-title" id="scnTitle"></h2>
+      <p class="scn-ctx" id="scnCtx"></p>
+      <ol class="steps" id="steps"></ol>
+      <div class="note" id="scnNote"></div>
+    </aside>
+  </div>
+
+  <div class="legend">
+    <div>
+      <h3>Rôles (couleur des briques)</h3>
+      <ul>
+        <li><span class="swatch" style="background:var(--toi-f);border-color:var(--toi-s)"></span> Toi / approbateur — souverain</li>
+        <li><span class="swatch" style="background:var(--hold-f);border-color:var(--hold-s)"></span> Holder — détient les jetons, exécute</li>
+        <li><span class="swatch" style="background:var(--agent-f);border-color:var(--agent-s)"></span> Agent / host LLM</li>
+        <li><span class="swatch" style="background:var(--cloud-f);border-color:var(--cloud-s)"></span> Cloud Anthropic / relais — hors contrôle</li>
+        <li><span class="swatch" style="background:var(--ext-f);border-color:var(--ext-s)"></span> Google APIs</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Phases (couleur des flèches)</h3>
+      <ul>
+        <li><span class="pline dash" style="border-color:var(--ph-pair)"></span> Appairage — ouvrir / rejoindre la session</li>
+        <li><span class="pline" style="border-color:var(--ph-act)"></span> Demande &amp; exécution</li>
+        <li><span class="pline" style="border-color:var(--ph-appr)"></span> Approbation — tu signes (biométrie, WYSIWYS)</li>
+        <li><span class="pline dash" style="border-color:var(--ph-res)"></span> Résultat — le contenu (chiffré E2E) remonte à l'agent <b>via le relais</b></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<dialog class="modal" id="modal" aria-labelledby="mTitle">
+  <div class="mhead">
+    <span class="chip" id="mChip"></span>
+    <div><div class="mrole" id="mRole"></div><h4 id="mTitle"></h4></div>
+  </div>
+  <div class="mbody" id="mBody"></div>
+  <div class="mfoot"><button type="button" id="mClose" autofocus>Fermer</button></div>
+</dialog>
+
+<script>
+(function(){
+  "use strict";
+  var NS="http://www.w3.org/2000/svg";
+  var ROLE={
+    toi:{f:"--toi-f",s:"--toi-s",t:"--toi-t",label:"Toi / approbateur"},
+    hold:{f:"--hold-f",s:"--hold-s",t:"--hold-t",label:"Holder souverain"},
+    agent:{f:"--agent-f",s:"--agent-s",t:"--agent-t",label:"Agent / host LLM"},
+    cloud:{f:"--cloud-f",s:"--cloud-s",t:"--cloud-t",label:"Cloud / relais — hors contrôle"},
+    ext:{f:"--ext-f",s:"--ext-s",t:"--ext-t",label:"Google"}
+  };
+  var PHASE={pair:"--ph-pair",act:"--ph-act",appr:"--ph-appr",res:"--ph-res"};
+
+  var NODES={
+    TOI:  {x:44,y:236,w:196,h:70, role:"toi", t:"Toi", s:"présence humaine",
+      detail:"L'humain qui approuve. Sur le Mac (aujourd'hui) : Touch ID. Depuis le téléphone : Face ID via une passkey. C'est toi qui tranches — jamais l'agent."},
+    HOLD: {x:44,y:360,w:196,h:86, role:"hold", t:"Holder natif", s:"coffre matériel",
+      detail:"Le téléphone détient les jetons, <b>scellés dans le coffre matériel</b> (Secure Enclave / StrongBox), clé <b>non exportable</b>. Il exécute les appels Google quand le Mac est éteint. Face à un agent distant, il se présente comme un <b>MCP <i>remote</i></b> — pas un <code>stdio</code> local. Règle : <b>le serveur MCP suit les jetons, pas l'écran.</b>"},
+    APPR: {x:44,y:490,w:196,h:84, role:"toi", t:"Approbateur", s:"passkey + biométrie",
+      detail:"Ton téléphone comme approbateur. Une <b>passkey</b> (WebAuthn/FIDO2) gardée par biométrie <b>signe la description exacte de l'action</b> (WYSIWYS : tu signes ce que tu vois). Une seule API, les 5 OS. Remplace le Touch ID du Mac."},
+    ROUTE:{x:322,y:64,w:206,h:92, role:"cloud", t:"Relais de routage", s:"Anthropic · Remote Control",
+      detail:"L'infra Anthropic qui relaie l'écran entre ton téléphone et ta session locale (Remote Control / Dispatch). Ton Mac ne fait que du <b>sortant</b> (il <i>poll</i>), <b>jamais de port ouvert</b>. Le calcul et les fichiers restent sur le Mac."},
+    AGENT:{x:560,y:64,w:226,h:92, role:"agent", t:"Agent LLM (cloud)", s:"Code on the web · cowork",
+      detail:"L'agent quand il tourne <b>dans le cloud Anthropic</b> (Claude Code on the web, cowork), sur une VM. Hors de ton contrôle : à supposer <b>potentiellement hostile</b>. Il n'agit que sur une <b>approbation signée</b>, et ne voit jamais tes jetons."},
+    RELAIS:{x:876,y:250,w:168,h:104, role:"cloud", t:"Relais aveugle", s:"endpoint public",
+      detail:"Point de rendez-vous public pour <b>joindre ton holder derrière ta box</b>, sans lui ouvrir de port. C'est le <b>pivot de tous les échanges distants</b> — défi, signature <i>et</i> résultat — acheminés en <b>enveloppes chiffrées de bout en bout</b>, dans les deux sens : il ne voit jamais ni jeton ni contenu en clair. <b>Seul canal de retour</b> quand le holder est derrière un NAT. <b>Auto-hébergeable</b> : pas de point de contrôle central."},
+    HOST: {x:322,y:474,w:128,h:84, role:"agent", t:"Host LLM", s:"Claude Code / Desktop",
+      detail:"Le client qui fait tourner l'agent <b>sur ton Mac</b> (Claude Code ou Desktop). Il lance le serveur MCP en <code>stdio</code> local (process enfant, même machine)."},
+    MCP:  {x:470,y:474,w:132,h:84, role:"hold", t:"Serveur MCP", s:"stdio ↔ HTTP",
+      detail:"Le serveur d'outils Google. En local : transport <code>stdio</code> (même machine). Joignable de l'extérieur : <b>Streamable HTTP</b> via le relais aveugle. Applique la policy <b>default-deny</b> par service."},
+    BROKER:{x:622,y:474,w:170,h:84, role:"hold", t:"Broker 4878 + Vault", s:"exécuteur · jetons OAuth",
+      detail:"Le <b>broker 4878</b> : seul process qui exécute les appels Google. Le <b>vault chiffré</b> : les jetons OAuth. Applique verrou (« accès sur demande »), zones Drive temporaires et policy."},
+    ADMIN:{x:470,y:572,w:132,h:54, role:"hold", t:"Admin web 4877", s:"cockpit — optionnel",
+      detail:"Cockpit web local <code>127.0.0.1:4877</code>, <b>optionnel</b>. Confort visuel, aucune logique propre (il appelle les mêmes commandes). Pas nécessaire sur mobile."},
+    GOOGLE:{x:1032,y:474,w:150,h:96, role:"ext", t:"Google APIs", s:"Gmail · Drive · Agenda",
+      detail:"Les API Google, destination finale des lectures / écritures <b>approuvées</b>. L'approbation limite <i>quel</i> compte, <i>quel</i> dossier, <i>quelle</i> durée."}
+  };
+
+  var ZONES=[
+    {x:24,y:214,w:236,h:380, t:"Tes appareils — souverains", cls:"mine"},
+    {x:300,y:28,w:506,h:146, t:"Cloud Anthropic — hors de ton contrôle", cls:"cloud"},
+    {x:300,y:436,w:506,h:214, t:"Ton Mac", cls:"mac"}
+  ];
+
+  // e: f,t (ids); fs,ts (sides l/r/t/b); fo,to (fraction 0..1 along side); w (waypoints); p (phase); n; label
+  var SCN={
+    legende:{tab:"Les briques (légende)", dot:"--muted", title:"Toutes les pièces",
+      ctx:"L'inventaire complet, à la même place dans chaque scénario. Aucun flux ici : clique les « ? » pour comprendre chaque brique.",
+      active:Object.keys(NODES), edges:[],
+      note:"Les 5 onglets suivants <b>rejouent ce même plateau</b> : les briques inutilisées passent en gris, seules les flèches du cas s'affichent — tu compares en basculant."},
+    desktop:{tab:"Desktop local", dot:"--ph-act", title:"Desktop local — l'existant",
+      ctx:"Tout tient sur le Mac. Le client LLM parle au MCP en stdio local ; le broker exécute. Tu approuves devant le Mac (Touch ID).",
+      active:["TOI","HOST","MCP","BROKER","ADMIN","GOOGLE"],
+      edges:[
+        {f:"HOST",t:"MCP",fs:"r",ts:"l",p:"act",n:1,label:"demande une action"},
+        {f:"MCP",t:"BROKER",fs:"r",ts:"l",p:"act",n:2,label:"transmet"},
+        {f:"TOI",t:"BROKER",fs:"r",ts:"t",p:"appr",n:3,w:[{x:707,y:271}],label:"Touch ID signe"},
+        {f:"BROKER",t:"GOOGLE",fs:"r",ts:"l",p:"act",n:4,w:[{x:912,y:516},{x:912,y:522}],label:"lit / écrit"}
+      ],
+      note:"C'est l'<b>autorité ambiante</b> d'aujourd'hui : être devant la machine déverrouillée vaut autorisation. Téléphone, cloud et relais ne servent pas."},
+    remote:{tab:"Remote — Mac allumé", dot:"--ph-act", title:"Remote — le Mac tourne, tu le pilotes du tél.",
+      ctx:"L'agent tourne sur ton Mac. Le MCP reste stdio local. Le téléphone est télécommande ET approbateur : l'approbation passe par la passkey (Face ID).",
+      active:["APPR","ROUTE","HOST","MCP","BROKER","GOOGLE"],
+      edges:[
+        {f:"APPR",t:"ROUTE",fs:"r",ts:"l",p:"pair",n:1,w:[{x:281,y:532},{x:281,y:110}],label:"scan QR · même compte"},
+        {f:"ROUTE",t:"HOST",fs:"b",ts:"t",p:"pair",n:2,w:[{x:425,y:315},{x:386,y:315}],label:"pilote la session"},
+        {f:"HOST",t:"MCP",fs:"r",ts:"l",p:"act",n:3,label:"demande"},
+        {f:"MCP",t:"APPR",fs:"t",fo:0.3,ts:"r",p:"appr",n:4,w:[{x:510,y:300},{x:296,y:300},{x:296,y:532}],label:"défi à signer"},
+        {f:"APPR",t:"BROKER",fs:"b",ts:"b",p:"appr",n:5,w:[{x:142,y:672},{x:707,y:672}],label:"signe · Face ID"},
+        {f:"BROKER",t:"GOOGLE",fs:"r",ts:"l",p:"act",n:6,w:[{x:912,y:516},{x:912,y:522}],label:"lit / écrit"}
+      ],
+      note:"Le « relais » ici, c'est <b>l'infra Anthropic</b> (routage d'écran) : ton Mac ne fait que du sortant. Tes serveurs MCP locaux restent sur le Mac. Le relais aveugle ne sert pas encore."},
+    dispatch:{tab:"Dispatch — Mac allumé", dot:"--ph-act", title:"Dispatch — le tél. délègue, le Mac exécute",
+      ctx:"Tu envoies une tâche depuis le tél. (Cowork › Dispatch). Le Mac — allumé, Desktop ouvert — la prend et spawn une session. À chaque action sensible, une notif push te réveille pour signer.",
+      active:["APPR","ROUTE","HOST","MCP","BROKER","GOOGLE"],
+      edges:[
+        {f:"APPR",t:"ROUTE",fs:"r",ts:"l",p:"pair",n:1,w:[{x:281,y:532},{x:281,y:110}],label:"dispatche une tâche · même compte"},
+        {f:"ROUTE",t:"HOST",fs:"b",ts:"t",p:"pair",n:2,w:[{x:425,y:315},{x:386,y:315}],label:"spawn une session sur le Mac"},
+        {f:"HOST",t:"MCP",fs:"r",ts:"l",p:"act",n:3,label:"demande"},
+        {f:"MCP",t:"APPR",fs:"t",fo:0.3,ts:"r",p:"appr",n:4,w:[{x:510,y:300},{x:296,y:300},{x:296,y:532}],label:"notif push · défi à signer"},
+        {f:"APPR",t:"BROKER",fs:"b",ts:"b",p:"appr",n:5,w:[{x:142,y:672},{x:707,y:672}],label:"signe · Face ID"},
+        {f:"BROKER",t:"GOOGLE",fs:"r",ts:"l",p:"act",n:6,w:[{x:912,y:516},{x:912,y:522}],label:"lit / écrit"}
+      ],
+      note:"Différence avec <b>Remote</b> : tu ne pilotes pas une session live — tu <b>délègues</b>, puis une <b>notif push</b> te réveille pour approuver. Le Mac doit rester <b>allumé, Desktop ouvert</b>. (Pro/Max.)"},
+    cloud:{tab:"Agent cloud — Mac allumé", dot:"--ph-act", title:"Agent dans le cloud, Mac allumé (holder)",
+      ctx:"L'agent tourne dans le cloud Anthropic. Il joint le MCP du Mac via le relais aveugle (endpoint public, opaque). Le Mac reste holder ; tu approuves sur le tél.",
+      active:["APPR","AGENT","RELAIS","MCP","BROKER","GOOGLE"],
+      edges:[
+        {f:"AGENT",t:"RELAIS",fs:"b",fo:0.3,ts:"t",p:"act",n:1,w:[{x:628,y:203},{x:960,y:203}],label:"requête · OAuth"},
+        {f:"RELAIS",t:"MCP",fs:"l",ts:"t",to:0.72,p:"act",n:2,w:[{x:565,y:302}],label:"relaie (opaque)"},
+        {f:"MCP",t:"APPR",fs:"t",fo:0.3,ts:"r",p:"appr",n:3,w:[{x:510,y:300},{x:296,y:300},{x:296,y:532}],label:"défi à signer"},
+        {f:"APPR",t:"BROKER",fs:"b",ts:"b",p:"appr",n:4,w:[{x:142,y:672},{x:707,y:672}],label:"signe · Face ID"},
+        {f:"BROKER",t:"GOOGLE",fs:"r",ts:"l",p:"act",n:5,w:[{x:912,y:516},{x:912,y:522}],label:"lit / écrit"},
+        {f:"BROKER",t:"RELAIS",fs:"r",ts:"b",p:"res",n:6,w:[{x:832,y:516},{x:832,y:354}],label:"résultat chiffré → relais → agent"}
+      ],
+      note:"<b>Résultat via le relais (flèche 6).</b> Le Mac est derrière le NAT : défi, signature et résultat transitent tous par le relais, chiffrés E2E (le schéma ne trace que le résultat, pour rester lisible). Tes <b>jetons</b> ne quittent jamais le Mac ; le <b>contenu lu</b> remonte à l'agent cloud (inhérent à l'agent cloud), illisible pour le relais. L'approbation limite <i>quoi</i>, pas le transit du contenu approuvé."},
+    mobile:{tab:"Mobile seul — Mac éteint", dot:"--ph-act", title:"Mobile seul — Mac éteint",
+      ctx:"Le Mac est éteint : le téléphone porte les deux rôles — holder natif (jetons en coffre matériel) ET approbateur. L'agent cloud joint le holder via le relais aveugle.",
+      active:["APPR","HOLD","AGENT","RELAIS","GOOGLE"],
+      edges:[
+        {f:"AGENT",t:"RELAIS",fs:"b",fo:0.3,ts:"t",p:"act",n:1,w:[{x:628,y:203},{x:960,y:203}],label:"requête · OAuth"},
+        {f:"RELAIS",t:"HOLD",fs:"l",ts:"r",p:"act",n:2,w:[{x:558,y:302},{x:558,y:403}],label:"relaie (opaque)"},
+        {f:"APPR",t:"HOLD",fs:"t",ts:"b",p:"appr",n:3,label:"déscelle · Face ID"},
+        {f:"HOLD",t:"GOOGLE",fs:"r",ts:"t",p:"act",n:4,w:[{x:1107,y:403}],label:"lit / écrit"},
+        {f:"HOLD",t:"RELAIS",fs:"r",fo:0.3,ts:"l",p:"res",n:5,w:[{x:820,y:386},{x:820,y:302}],label:"résultat chiffré → relais → agent"}
+      ],
+      note:"Le résultat repasse <b>par le relais</b> (le téléphone est derrière le NAT — pas de canal direct). Jetons jamais sortis du coffre ; le <b>contenu lu</b> remonte à l'agent, chiffré E2E, illisible pour le relais. La souveraineté porte sur les <b>identifiants</b>, pas sur le contenu que tu demandes de traiter. Le Mac est éteint (grisé)."}
+  };
+
+  var order=["legende","desktop","remote","dispatch","cloud","mobile"];
+  var cur="legende";
+  var svg=document.getElementById("svg");
+  function cv(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+  function el(n,a){ var e=document.createElementNS(NS,n); if(a) for(var k in a) e.setAttribute(k,a[k]); return e; }
+
+  function anchor(id,side,frac){
+    var n=NODES[id]; frac=(frac==null?0.5:frac);
+    if(side==="l") return {x:n.x, y:n.y+n.h*frac};
+    if(side==="r") return {x:n.x+n.w, y:n.y+n.h*frac};
+    if(side==="t") return {x:n.x+n.w*frac, y:n.y};
+    return {x:n.x+n.w*frac, y:n.y+n.h};
+  }
+  function roundedPath(pts,r){
+    if(pts.length<2) return "";
+    var d="M"+pts[0].x+","+pts[0].y;
+    for(var i=1;i<pts.length-1;i++){
+      var p=pts[i], a=pts[i-1], b=pts[i+1];
+      var v1x=a.x-p.x,v1y=a.y-p.y,l1=Math.hypot(v1x,v1y)||1;
+      var v2x=b.x-p.x,v2y=b.y-p.y,l2=Math.hypot(v2x,v2y)||1;
+      var r1=Math.min(r,l1/2), r2=Math.min(r,l2/2);
+      var p1={x:p.x+v1x/l1*r1,y:p.y+v1y/l1*r1};
+      var p2={x:p.x+v2x/l2*r2,y:p.y+v2y/l2*r2};
+      d+=" L"+p1.x+","+p1.y+" Q"+p.x+","+p.y+" "+p2.x+","+p2.y;
+    }
+    var last=pts[pts.length-1];
+    d+=" L"+last.x+","+last.y;
+    return d;
+  }
+
+  function drawZones(g){
+    ZONES.forEach(function(z){
+      var col=z.cls==="cloud"?cv("--zone-cloud-s"):(z.cls==="mine"?cv("--zone-mine-s"):cv("--line-strong"));
+      var fill=z.cls==="cloud"?cv("--zone-cloud"):(z.cls==="mine"?cv("--zone-mine"):"none");
+      var zg=el("g",{class:"zone"});
+      var r=el("rect",{x:z.x,y:z.y,width:z.w,height:z.h,stroke:col}); r.setAttribute("fill",fill);
+      zg.appendChild(r);
+      var t=el("text",{x:z.x+14,y:z.y+20,class:"zt"}); t.textContent=z.t; zg.appendChild(t);
+      g.appendChild(zg);
+    });
+  }
+  function drawNode(g,id,activeSet){
+    var n=NODES[id], role=ROLE[n.role], on=activeSet.indexOf(id)>-1;
+    var ng=el("g",{class:"node"+(on?"":" off")});
+    var box=el("rect",{x:n.x,y:n.y,width:n.w,height:n.h,rx:11,class:"box"});
+    box.setAttribute("fill",cv(role.f)); box.setAttribute("stroke",cv(role.s)); box.setAttribute("stroke-width","1.6");
+    ng.appendChild(box);
+    var t=el("text",{x:n.x+13,y:n.y+26,class:"t"}); t.setAttribute("fill",cv(role.t)); t.textContent=n.t; ng.appendChild(t);
+    var s=el("text",{x:n.x+13,y:n.y+43,class:"s"}); s.textContent=n.s; ng.appendChild(s);
+    var qx=n.x+n.w-15, qy=n.y+15;
+    var qg=el("g",{class:"qp",tabindex:"0",role:"button","aria-label":"Détail : "+n.t});
+    var qc=el("circle",{cx:qx,cy:qy,r:10}); qc.setAttribute("fill",cv("--panel")); qc.setAttribute("stroke",cv(role.s));
+    var qt=el("text",{x:qx,y:qy+4}); qt.setAttribute("fill",cv(role.s)); qt.textContent="?";
+    qg.appendChild(qc); qg.appendChild(qt);
+    qg.addEventListener("click",function(e){e.stopPropagation();openModal(id);});
+    qg.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();openModal(id);}});
+    ng.appendChild(qg);
+    g.appendChild(ng);
+  }
+  function drawEdge(g,e){
+    var col=cv(PHASE[e.p]);
+    var pts=[anchor(e.f,e.fs,e.fo)].concat(e.w||[]).concat([anchor(e.t,e.ts,e.to)]);
+    var eg=el("g",{class:"edge"+(e.p==="res"?" dash":"")});
+    var mk="mk_"+e.n+"_"+e.f;
+    var defs=el("defs");
+    var m=el("marker",{id:mk,markerWidth:9,markerHeight:9,refX:7.5,refY:4.5,orient:"auto",markerUnits:"userSpaceOnUse"});
+    var poly=el("path",{d:"M0,0 L9,4.5 L0,9 z"}); poly.setAttribute("fill",col); m.appendChild(poly); defs.appendChild(m); eg.appendChild(defs);
+    var p=el("path",{d:roundedPath(pts,9)}); p.setAttribute("stroke",col); p.setAttribute("marker-end","url(#"+mk+")");
+    eg.appendChild(p); g.appendChild(eg);
+    try{
+      var L=p.getTotalLength(), pt=p.getPointAtLength(L*0.5);
+      var ng=el("g",{class:"num"});
+      var c=el("circle",{cx:pt.x,cy:pt.y,r:11}); c.setAttribute("fill",col);
+      c.setAttribute("stroke",cv("--panel")); c.setAttribute("stroke-width","2");
+      var tx=el("text",{x:pt.x,y:pt.y+4}); tx.textContent=e.n;
+      ng.appendChild(c); ng.appendChild(tx); eg.appendChild(ng);
+    }catch(err){}
+  }
+
+  function render(){
+    var scn=SCN[cur];
+    while(svg.firstChild) svg.removeChild(svg.firstChild);
+    var gz=el("g"); drawZones(gz); svg.appendChild(gz);
+    var gn=el("g"); Object.keys(NODES).forEach(function(id){drawNode(gn,id,scn.active);}); svg.appendChild(gn);
+    var ge=el("g"); scn.edges.forEach(function(e){drawEdge(ge,e);}); svg.appendChild(ge);
+    document.getElementById("scnTitle").textContent=scn.title;
+    document.getElementById("scnCtx").textContent=scn.ctx;
+    var ol=document.getElementById("steps"); ol.innerHTML="";
+    scn.edges.slice().sort(function(a,b){return a.n-b.n;}).forEach(function(e){
+      var li=document.createElement("li");
+      var nn=document.createElement("span"); nn.className="n"; nn.style.background=cv(PHASE[e.p]); nn.textContent=e.n;
+      var tx=document.createElement("div");
+      tx.innerHTML="<b>"+NODES[e.f].t+"</b> → <b>"+NODES[e.t].t+"</b><br><em>"+e.label+"</em>";
+      li.appendChild(nn); li.appendChild(tx); ol.appendChild(li);
+    });
+    ol.style.display=scn.edges.length?"flex":"none";
+    document.getElementById("scnNote").innerHTML=scn.note;
+    document.querySelectorAll(".tab").forEach(function(b){b.setAttribute("aria-selected",b.dataset.k===cur?"true":"false");});
+    svg.setAttribute("aria-label","Schéma : "+scn.title);
+  }
+
+  var modal=document.getElementById("modal");
+  function openModal(id){
+    var n=NODES[id], role=ROLE[n.role];
+    document.getElementById("mTitle").textContent=n.t;
+    document.getElementById("mRole").textContent=role.label;
+    document.getElementById("mBody").innerHTML=n.detail;
+    var chip=document.getElementById("mChip"); chip.style.background=cv(role.f); chip.style.borderColor=cv(role.s);
+    if(typeof modal.showModal==="function"){ if(!modal.open) modal.showModal(); } else modal.setAttribute("open","");
+  }
+  document.getElementById("mClose").addEventListener("click",function(){modal.close();});
+  modal.addEventListener("click",function(e){ if(e.target===modal) modal.close(); });
+
+  var tabs=document.getElementById("tabs");
+  order.forEach(function(k){
+    var b=document.createElement("button"); b.className="tab"; b.type="button"; b.setAttribute("role","tab"); b.dataset.k=k;
+    var d=document.createElement("span"); d.className="dot"; d.style.background=cv(SCN[k].dot);
+    b.appendChild(d); b.appendChild(document.createTextNode(SCN[k].tab));
+    b.addEventListener("click",function(){cur=k;render();});
+    tabs.appendChild(b);
+  });
+  document.getElementById("themebtn").addEventListener("click",function(){
+    var r=document.documentElement, forced=r.getAttribute("data-theme"), isDark;
+    if(forced) isDark=(forced==="dark"); else isDark=matchMedia("(prefers-color-scheme:dark)").matches;
+    r.setAttribute("data-theme", isDark?"light":"dark"); render();
+  });
+  matchMedia("(prefers-color-scheme:dark)").addEventListener("change",function(){ if(!document.documentElement.getAttribute("data-theme")) render(); });
+  render();
+})();
+</script>
+</body>
+</html>

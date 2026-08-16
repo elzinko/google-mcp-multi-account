@@ -50,6 +50,7 @@
 | 0069 | Docs in-app — rework orientation utilisateur | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
 | 0070 | README — quickstart + usage par persona + permissions + contribution | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
 | 0071 | GitHub metadata — description, homepage, topics + badges | chore | P2 | v0.4.0 | 0060 | ✅ shipped |  |
+| 0078 | Approbation par passkey depuis le téléphone (archi actuelle, Mac holder) | feature | P1 |  | 0077 | 🔴 todo |  |
 | 0001 | Élicitation signée — faire monter `gwsa strongauth` de la présence à la signature | feature | P3 |  |  | 🟠 in-progress |  |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)
@@ -58,6 +59,7 @@
 |---|-------|------|------|---------|------|--------|----|
 | 0060 | Admin UX/UI refresh + docs/README + GitHub metadata | epic | P1 | v0.4.0 |  | 🔴 todo |  |
 | 0017 | Généraliser le projet à d'autres utilisateurs que l'auteur | epic | P2 |  |  | 💡 idea |  |
+| 0077 | Accès mobile souverain — approbation passkey + holder natif | epic | P1 |  |  | 🔴 todo |  |
 
 ## 💡 Idées (non groomées)
 
@@ -74,5 +76,6 @@
 | 0021 | Élargir la couverture MCP — Calendar, Docs, Sheets, Tasks (et écritures) | feature | P3 |  | 0017 | 💡 idea |  |
 | 0028 | Ménage des versions déployées (+ CHANGELOG et releases GitHub) | chore | P3 |  |  | 💡 idea |  |
 | 0034 | Mettre à jour le protocole du test manuel drive-2-comptes (limites périmées + nouvelles phases) | chore | P3 |  |  | 💡 idea |  |
+| 0079 | Modèle de soutenabilité — freemium (cœur libre + options payantes) | feature | P2 |  |  | 💡 idea |  |
 
 > Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0020, 0022, 0023, 0024, 0025, 0027, 0029, 0030, 0031, 0032, 0036, 0037, 0040, 0041, 0043, 0044, 0047, 0059, 0071, 0072.
