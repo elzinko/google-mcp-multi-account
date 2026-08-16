@@ -450,34 +450,45 @@ def revoke_descendants(session_id: str) -> int:
     N'exige PAS que `session_id` existe encore (révocation en cascade appelée
     depuis `close_session`, y compris sur une session déjà expirée côté GC) —
     l'id sert de racine de comparaison, pas d'un `require_session`.
+
+    Construit d'abord la carte sid → parent_id de TOUS les fichiers présents
+    (une seule passe de lecture), avant de supprimer quoi que ce soit : sur une
+    chaîne à plusieurs niveaux (petit-enfant → enfant → racine), supprimer
+    l'enfant AVANT d'avoir résolu le petit-enfant casserait la remontée de la
+    chaîne (son parent deviendrait introuvable en cours de route).
     """
     root_id = session_id
-    purged = 0
+    parent_of: dict[str, str] = {}
+    paths: dict[str, Path] = {}
     for path in sessions_dir().glob("*.json"):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             if not isinstance(data, dict):
                 continue
             sid = str(data.get("session_id") or "")
-            pid = str(data.get("parent_id") or "")
-            if not sid or sid == root_id:
+            if not sid:
                 continue
-            # descendant si parent_id chain mène à root
-            cur = pid
-            seen: set[str] = set()
-            is_desc = False
-            while cur and cur not in seen:
-                if cur == root_id:
-                    is_desc = True
-                    break
-                seen.add(cur)
-                parent = _load(cur)
-                cur = parent.parent_id if parent else ""
-            if is_desc:
-                path.unlink(missing_ok=True)
-                purged += 1
+            parent_of[sid] = str(data.get("parent_id") or "")
+            paths[sid] = path
         except (OSError, json.JSONDecodeError):
             continue
+
+    purged = 0
+    for sid, path in paths.items():
+        if sid == root_id:
+            continue
+        cur = parent_of.get(sid, "")
+        seen: set[str] = set()
+        is_desc = False
+        while cur and cur not in seen:
+            if cur == root_id:
+                is_desc = True
+                break
+            seen.add(cur)
+            cur = parent_of.get(cur, "")
+        if is_desc:
+            path.unlink(missing_ok=True)
+            purged += 1
     return purged
 
 
@@ -520,6 +531,19 @@ def list_sessions(*, include_expired_zones: bool = False) -> list[dict[str, Any]
                     )
             if active:
                 zones_live[alias] = active
+        caps_live: list[dict[str, Any]] = []
+        for cap in state.capabilities:
+            if cap.active(now):
+                caps_live.append(
+                    {
+                        "account": cap.account,
+                        "service": cap.service,
+                        "operation": cap.operation,
+                        "resource": cap.resource,
+                        "expires_at": cap.expires_at,
+                        "minutes_left": max(0, int((cap.expires_at - now) / 60)),
+                    }
+                )
         children = 0
         for other in sessions_dir().glob("*.json"):
             try:
@@ -528,6 +552,8 @@ def list_sessions(*, include_expired_zones: bool = False) -> list[dict[str, Any]
                     children += 1
             except (OSError, json.JSONDecodeError):
                 continue
+        last_activity = state.last_seen_at or state.created_at
+        ttl_left = max(0, int(session_ttl_sec() - (now - last_activity))) if last_activity else session_ttl_sec()
         out.append(
             {
                 "session_id": state.session_id,
@@ -538,6 +564,8 @@ def list_sessions(*, include_expired_zones: bool = False) -> list[dict[str, Any]
                 "last_seen_at": state.last_seen_at,
                 "unlocks": unlocks_live,
                 "drive_zones": zones_live,
+                "capabilities": caps_live,
+                "ttl_seconds_left": ttl_left,
                 "child_count": children,
             }
         )

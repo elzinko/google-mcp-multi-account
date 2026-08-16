@@ -579,7 +579,7 @@ for e in active:
 PYEOF
 }
 
-cmd_session() { # gwsa session list|unlock|grant|grant-capability|revoke-descendants|show|close <session_id> …
+cmd_session() { # gwsa session list|open|unlock|grant|grant-capability|revoke-descendants|show|close <session_id> …
   local sub="${1:-}"; shift || true
   case "$sub" in
     list)
@@ -589,6 +589,21 @@ sys.path.insert(0, os.environ['REPO_DIR'])
 from gateway.sessions import list_sessions
 print(json.dumps({'sessions': list_sessions()}, indent=2, ensure_ascii=False))
 "
+      ;;
+    open)
+      # Bootstrap SANS jeton (ADR-0007 §Repli) : seul chemin qui crée une
+      # session racine — geste signé TOUJOURS exigé (enrôlement requis),
+      # indépendamment de .strong-auth. Zéro capacité à la naissance ; imprime
+      # le jeton (session_id) SEUL sur stdout, pour être capturé par l'appelant.
+      local open_client="${1:-mcp}"
+      require_signed_elicitation_always "$(printf '{"action":"session_open","client":"%s"}' "$open_client")"
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import create_session
+s = create_session(client=sys.argv[1])
+print(s.session_id)
+" "$open_client"
       ;;
     unlock)
       local sid="${1:-}" alias="${2:-}" mins="${3:-60}"
@@ -685,7 +700,7 @@ close_session(sys.argv[1])
 " "$sid"
       echo "✓ session $sid purgée (et descendants)."
       ;;
-    *) die "usage : $SELF session list|unlock|grant|grant-capability|revoke-descendants|show|close …" ;;
+    *) die "usage : $SELF session list|open|unlock|grant|grant-capability|revoke-descendants|show|close …" ;;
   esac
 }
 

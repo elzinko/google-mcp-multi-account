@@ -3147,6 +3147,207 @@ print(r.returncode)
   && pass "anti-downgrade : manifeste altéré après confiance → refus (S-07)" \
   || fail "anti-downgrade : manifeste altéré non refusé (before=$before_trust after=$after_tamper)"
 
+section "droits par session — lot 3 (fiche 0076, session list + sous-agents + bootstrap + audit)"
+
+# ── (a) gwsa session list : ≥2 sessions actives, configs DISTINCTES (capacités,
+# unlocks, TTL restant, parent/delegated) ──
+L3_ROOT="$TMP/gwsa-lot3-list"
+mkdir -p "$L3_ROOT"
+out_list_cfg="$(GWSA_ROOT="$L3_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from gateway.sessions import create_session, session_unlock, session_grant_capability, list_sessions
+
+s1 = create_session(client='c1')
+s2 = create_session(client='c2')
+session_unlock(s1.session_id, 'alpha', 30)
+session_grant_capability(s2.session_id, 'alpha', 'gmail', 'read', hours=2)
+
+rows = {r['session_id']: r for r in list_sessions()}
+r1, r2 = rows[s1.session_id], rows[s2.session_id]
+assert 'alpha' in r1['unlocks'] and not r1['capabilities'], r1
+assert r2['capabilities'] and r2['capabilities'][0]['service'] == 'gmail', r2
+assert not r2['unlocks'], r2
+assert r1['ttl_seconds_left'] > 0 and r2['ttl_seconds_left'] > 0, (r1, r2)
+print('ok')
+")"
+[[ "$out_list_cfg" == "ok" ]] \
+  && pass "gwsa session list : ≥2 sessions, configs distinctes (capacités/unlocks/TTL)" \
+  || fail "gwsa session list : configs non distinctes ($out_list_cfg)"
+
+# ── (a-bis) gwsa session show affiche aussi les capacités fines (lot 2) ──
+sid_show3="$(GWSA_ROOT="$L3_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, session_grant_capability
+s = create_session(client='show3')
+session_grant_capability(s.session_id, 'alpha', 'drive', 'read', hours=1)
+print(s.session_id)
+")"
+out_show3="$(GWSA_ROOT="$L3_ROOT" "$GWSA" session show "$sid_show3" 2>&1)"
+[[ "$out_show3" == *'"service": "drive"'* && "$out_show3" == *'"operation": "read"'* ]] \
+  && pass "gwsa session show : affiche les capacités fines (lot 2)" \
+  || fail "gwsa session show : capacités fines absentes ($out_show3)"
+
+# ── (b) sous-agent : héritage ⊆ parent, jamais plus ──
+out_inherit="$(GWSA_ROOT="$L3_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import (
+    create_session, create_child_session, session_grant_capability,
+    session_has_capability,
+)
+root = create_session(client='root3')
+session_grant_capability(root.session_id, 'alpha', 'gmail', 'read', hours=1)
+child = create_child_session(root.session_id)
+# le parent a la capacité, jamais accordée directement à l'enfant → l'enfant la
+# VOIT via la chaîne d'ancêtres (héritage), mais rien de PLUS que le parent.
+child_has = session_has_capability(child.session_id, 'alpha', 'gmail', 'read')
+child_lacks_more = session_has_capability(child.session_id, 'alpha', 'drive', 'read')
+print(child_has, child_lacks_more)
+")"
+[[ "$out_inherit" == "True False" ]] \
+  && pass "sous-agents : héritage ⊆ parent (l'enfant voit exactement les capacités du parent)" \
+  || fail "sous-agents : héritage incorrect ($out_inherit)"
+
+# ── (c) sous-agent : ne peut PAS élargir (session_grant_capability / unlock / grant refusés) ──
+out_child_widen="$(GWSA_ROOT="$L3_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, create_child_session, session_grant_capability, session_unlock, session_grant_drive
+from gateway.errors import GatewayError
+root = create_session(client='root3b')
+child = create_child_session(root.session_id)
+results = []
+for fn, args in (
+    (session_grant_capability, (child.session_id, 'alpha', 'gmail', 'read')),
+    (session_unlock, (child.session_id, 'alpha', 30)),
+    (session_grant_drive, (child.session_id, 'alpha', 'fid123')),
+):
+    try:
+        fn(*args)
+        results.append('no-raise')
+    except GatewayError as e:
+        results.append('refused' if e.code == 'error' else 'wrong:' + e.code)
+print(' '.join(results))
+")"
+[[ "$out_child_widen" == "refused refused refused" ]] \
+  && pass "sous-agents : élargissement (grant-capability/unlock/grant) refusé depuis un enfant" \
+  || fail "sous-agents : élargissement non bloqué ($out_child_widen)"
+
+# ── (c-bis) sous-agent : access_request (élargissement) refusé depuis un enfant ──
+out_child_ar="$(GWSA_ROOT="$L3_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import gateway.api as api
+from gateway.sessions import create_session, create_child_session
+root = api.__dict__['create_session'] if False else create_session(client='root3c')
+child = create_child_session(root.session_id)
+try:
+    api.access_request(alias='alpha', kind='session_unlock', session=child.session_id)
+    print('no-raise')
+except api.GatewayError as e:
+    print('OK' if e.code == 'delegated' else 'wrong:' + e.code)
+")"
+[[ "$out_child_ar" == "OK" ]] \
+  && pass "sous-agents : access_request (élargissement) refusé depuis un enfant" \
+  || fail "sous-agents : access_request enfant non bloqué ($out_child_ar)"
+
+# ── (c-ter) la CRÉATION d'un enfant n'exige pas de signature (aucun droit nouveau) ──
+out_child_create="$(GWSA_ROOT="$L3_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, create_child_session
+root = create_session(client='root3d')
+child = create_child_session(root.session_id)
+print(child.delegated, len(child.capabilities))
+")"
+[[ "$out_child_create" == "True 0" ]] \
+  && pass "sous-agents : création d'enfant sans signature (zéro droit nouveau)" \
+  || fail "sous-agents : création d'enfant ($out_child_create)"
+
+# ── (d) revoke-descendants : purge les descendants, PAS la racine ──
+L3_REVOKE="$TMP/gwsa-lot3-revoke"
+mkdir -p "$L3_REVOKE"
+touch "$L3_REVOKE/.strong-auth" 2>/dev/null || true
+read root_id child_id grandchild_id <<< "$(GWSA_ROOT="$L3_REVOKE" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, create_child_session
+root = create_session(client='rootrv')
+child = create_child_session(root.session_id)
+grandchild = create_child_session(child.session_id)
+print(root.session_id, child.session_id, grandchild.session_id)
+")"
+GWSA_ROOT="$L3_REVOKE" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
+GWSA_ROOT="$L3_REVOKE" GWSA_ELICITATION_MOCK=1 "$GWSA" session revoke-descendants "$root_id" >/dev/null 2>&1
+out_after_revoke="$(GWSA_ROOT="$L3_REVOKE" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import get_session
+print(get_session('$root_id') is not None, get_session('$child_id') is None, get_session('$grandchild_id') is None)
+")"
+[[ "$out_after_revoke" == "True True True" ]] \
+  && pass "sous-agents : revoke-descendants purge toute la descendance, PAS la racine" \
+  || fail "sous-agents : revoke-descendants ($out_after_revoke)"
+
+# ── (e) bootstrap : gwsa session open crée une session racine SIGNÉE + imprime le jeton ──
+L3_OPEN="$TMP/gwsa-lot3-open"
+mkdir -p "$L3_OPEN"
+GWSA_ROOT="$L3_OPEN" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
+sid_opened="$(GWSA_ROOT="$L3_OPEN" GWSA_ELICITATION_MOCK=1 "$GWSA" session open test-client 2>/dev/null)"
+out_opened_state="$(GWSA_ROOT="$L3_OPEN" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import get_session
+s = get_session('$sid_opened')
+print(s is not None, s.client if s else None, s.capabilities if s else None, s.delegated if s else None)
+")"
+[[ -n "$sid_opened" && "$out_opened_state" == "True test-client [] False" ]] \
+  && pass "gwsa session open : crée une session racine signée, zéro capacité, jeton imprimé" \
+  || fail "gwsa session open : session ($sid_opened → $out_opened_state)"
+
+# ── (e-bis) gwsa session open SANS enrôlement → refus ──
+L3_OPEN_UNENROLLED="$TMP/gwsa-lot3-open-unenrolled"
+mkdir -p "$L3_OPEN_UNENROLLED"
+GWSA_ROOT="$L3_OPEN_UNENROLLED" "$GWSA" session open test-client >/dev/null 2>&1
+open_unenrolled_rc=$?
+[[ "$open_unenrolled_rc" != 0 ]] \
+  && pass "gwsa session open : refus sans enrôlement (pas de session sans geste signé)" \
+  || fail "gwsa session open : accepté sans enrôlement à tort"
+
+# ── (f) bootstrap sans jeton : access_request ne peut QUE pointer vers la création,
+# jamais un accès aux données ──
+out_bootstrap_ar="$(PYTHONPATH="$(pwd)" GWSA_ROOT="$L3_OPEN" "$PY" -c "
+import gateway.api as api
+r = api.access_request(alias='alpha', kind='session_unlock', session='')
+print(r.get('kind'), 'gma session open' in r.get('suggested_command', ''))
+")"
+[[ "$out_bootstrap_ar" == "session_open True" ]] \
+  && pass "bootstrap sans jeton : access_request sans session pointe vers « gma session open »" \
+  || fail "bootstrap sans jeton : access_request ($out_bootstrap_ar)"
+
+out_bootstrap_data="$(PYTHONPATH="$(pwd)" GWSA_ROOT="$L3_OPEN" "$PY" -c "
+import gateway.api as api
+try:
+    api.gmail_list(alias='alpha', session='')
+    print('no-raise')
+except api.GatewayError as e:
+    print('OK' if e.code == 'session' else 'wrong:' + e.code)
+")"
+[[ "$out_bootstrap_data" == "OK" ]] \
+  && pass "bootstrap sans jeton : aucun accès donnée sans jeton (fail-closed, gmail_list)" \
+  || fail "bootstrap sans jeton : accès donnée accepté sans jeton à tort ($out_bootstrap_data)"
+
+# ── (g) audit : un appel RÉUSSI journalise session_id + service + opération + ressource ──
+L3_AUDIT="$TMP/gwsa-lot3-audit"
+mkdir -p "$L3_AUDIT/alpha"
+out_audit="$(GWSA_ROOT="$L3_AUDIT" PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from pathlib import Path
+import gateway.broker_server as bs
+from gateway.sessions import create_session
+
+s = create_session(client='audit3')
+
+# NB : monkeypatcher subprocess.run directement toucherait AUSSI l'appel
+# subprocess.run interne de gateway.usage.log_usage (même module partagé) —
+# on stubbe run_gws_local à la place, pour laisser le vrai log-usage.py tourner.
+bs.run_gws_local = lambda *a, **k: {'ok': True}
+log = Path('$L3_AUDIT') / 'usage.jsonl'
+log.unlink(missing_ok=True)
+bs.handle_exec('alpha', ['gmail', 'users', 'messages', 'list'], 'audit-client', session_id=s.session_id)
+entries = [json.loads(x) for x in log.read_text().splitlines()]
+e = entries[-1]
+print(e.get('decision'), e.get('session_id') == s.session_id, e.get('service'), e.get('operation'))
+")"
+[[ "$out_audit" == "ok True gmail read" ]] \
+  && pass "audit : appel réussi journalise session_id + service + opération (pas seulement les refus)" \
+  || fail "audit : appel réussi mal journalisé ($out_audit)"
+
 section "sandbox remove (fiche 0041)"
 SB_DEP="$TMP/sandbox-remove"
 mkdir -p "$SB_DEP/test-sb"
