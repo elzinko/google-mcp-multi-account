@@ -354,7 +354,7 @@ def check_drive(profile_dir, drive_raw, args, pos):
             if not _session_drive_ok(profile_dir, p, cat):
                 deny(profile_dir, args, "drive",
                      "« drive:%s » vers %s hors capacités/zones de session — "
-                     "access_request kind=session_grant_capability" % (cat, p))
+                     "gma session grant-capability" % (cat, p))
             if not under_allowed(profile_dir, p, zones):
                 deny(profile_dir, args, "drive",
                      "parent/destination %s hors zone d'écriture autorisée" % p)
@@ -375,7 +375,7 @@ def check_drive(profile_dir, drive_raw, args, pos):
     if not _session_drive_ok(profile_dir, fid, cat):
         deny(profile_dir, args, "drive",
              "« drive:%s » vers %s hors capacités/zones de session — "
-             "access_request kind=session_grant_capability" % (cat, fid))
+             "gma session grant-capability" % (cat, fid))
     if not under_allowed(profile_dir, fid, zones):
         deny(profile_dir, args, "drive", "cible %s hors zone d'écriture autorisée" % fid)
     # Un déplacement (addParents/removeParents, dans --params OU --json) peut faire

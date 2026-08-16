@@ -73,7 +73,7 @@ le plus fin : par **service × opération × ressource**.
 ```bash
 gma session open                                    # crée une session signée → jeton
 gma session grant-capability <jeton> mw gmail read  # cette session : lecture Gmail
-gma session grant-capability <jeton> mw drive write "Compta 2026"  # écriture zonée
+gma session grant-capability <jeton> mw drive create "Compta 2026"  # écriture zonée
 gma session list                                    # sessions actives + leur config
 ```
 
