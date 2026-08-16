@@ -138,6 +138,16 @@ L'ADR-0005 supposait un agent **local semi-honnête** (contournable via `gws` nu
 - Le relais (s'il existe) est **aveugle** : il ne voit que des enveloppes signées, jamais un jeton, jamais un contenu Google.
 - **Moindre autorité** conservée : l'approbation porte sur *une* action (compte, cible, durée), pas un blanc-seing. La policy default-deny par service et les zones Drive temporaires restent la référence.
 
+## Articulation avec les droits par session (ADR-0007 / PR #108)
+
+Un axe **parallèle** (PR #108, ADR-0007 « droits par session ») isole le périmètre de **chaque session** (conversation) : `session_id` + jeton de droit porté dans l'appel + grain fin, en réutilisant lui aussi l'élicitation signée (ADR-0005). Les deux axes **s'emboîtent** :
+
+- le *requester* de cet ADR **est** une « session » au sens de l'ADR-0007 ;
+- l'*approver* (passkey, phase 1 / fiche 0078) **est** le « consentement distant » des **phases B/C** de l'ADR-0007 — à concevoir **une seule fois** ;
+- ordre : la couche *session* se pose d'abord (ADR-0007 phase A, desktop) ; le consentement mobile (cet axe) s'y branche ensuite.
+
+Les deux ADR restent **distincts** (questions différentes : *isolation par session* vs *où / comment approuver + détenir*) mais **doivent décrire le même mécanisme de consentement signé** (socle ADR-0005).
+
 ## Conséquences
 
 **Devient possible**
@@ -170,6 +180,7 @@ L'ADR-0005 supposait un agent **local semi-honnête** (contournable via `gws` nu
 ## Références
 
 - [ADR-0005](ADR-0005-elicitation-signee-v2.md) — élicitation signée (brique de signature réutilisée).
+- **ADR-0007** « droits par session » (PR #108) — axe complémentaire : isolation par session ; son consentement distant (phases B/C) = la phase 1 de cet axe (fiche 0078). Même socle de signature (ADR-0005).
 - [ADR-0003](ADR-0003-contenu-drive-via-depot-broker.md), [ADR-0006](ADR-0006-fichiers-recus-repertoire-dedie.md) — couloirs de contenu, modèle de menace « default-deny ».
 - Code actuel : `gateway/mcp_server.py` (stdio), `gateway/broker_server.py` (4878), `gateway/elicitation.py`, `scripts/elicitation-sign.swift`, `admin/server.js` (4877).
 - Standards : WebAuthn / FIDO2 (passkeys), coffres matériels (Secure Enclave, Android StrongBox/Keystore, TPM).

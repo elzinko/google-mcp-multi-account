@@ -55,5 +55,7 @@ Incréments prévus (créés au fil de l'eau) :
   Python-macOS** existant + holder natif à côté (pas de big-bang) ; licence **Apache-2.0** ;
   démarrer par la **phase 1**.
 - Priorité **P1** (confirmée par le PO, 2026-08-15) — direction stratégique du projet.
-- Recoupe partiellement [[0018]] (cross-platform hors macOS) et [[0045]] (droits par
-  session) — à articuler, pas à dupliquer.
+- S'emboîte avec l'axe **droits par session** (ADR-0007 / PR #108 ; fiche [[0045]]) : #108
+  isole le périmètre par *session* (couche desktop d'abord) ; cet épic apporte le *consentement
+  mobile* (passkey) + le *holder*. La phase 1 (0078) **est** la phase B de #108 — une seule
+  conception, pas deux. Recoupe aussi [[0018]] (cross-platform hors macOS).
