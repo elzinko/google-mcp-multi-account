@@ -41,8 +41,8 @@ Décision d'architecture : [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md
 5. **Corriger** : cycle de vie **découplé de la connexion** (TTL réel + `gma session close`/révocation ; la **déconnexion MCP ne purge aucun jeton** (au porteur, pas d'id de conversation observable — fin de vie = TTL ou révocation)) ; `last_seen` mis à jour à chaque
    appel.
 
-Hors périmètre (phases suivantes) : consentement distant desktop↔Android (0077),
-hôte Android pour desktop éteint (0078).
+Hors périmètre (**axe mobile souverain** : ADR-0008 / épic 0077, PR #109) : consentement
+distant desktop↔Android, hôte Android pour desktop éteint.
 
 ## Critères d'acceptation
 
@@ -74,8 +74,9 @@ hôte Android pour desktop éteint (0078).
 - Parent / état des lieux : [0045](0045-capacites-projet-signees.md).
 - Élicitation signée réutilisée : [ADR-0005](../docs/adr/ADR-0005-elicitation-signee-v2.md)
   / fiche [0001](0001-elicitation-signee-strongauth-v2.md).
-- Phases suivantes : consentement distant (0077), hôte Android (0078) — ce dernier
-  **conditionné au vault** [0003](0003-vault-credentials-hors-perimetre-agent.md).
+- Phases suivantes (**mobile**) : consentement distant + hôte Android relèvent de l'axe
+  **accès mobile souverain** (ADR-0008 / épic 0077, PR #109), pas de cette fiche — hôte
+  Android **conditionné au vault** [0003](0003-vault-credentials-hors-perimetre-agent.md).
 - Décisions de cadrage (14/08) : identité = geste de consentement ; granularité la plus
   fine ; mobile = hôte **et** dispositif de consentement selon la topologie.
 - Retours **Codex** ([PR #108](https://github.com/elzinko/google-mcp-multi-account/pull/108)) intégrés : cycle de vie découplé de la connexion MCP (①) ; **création de session sous élicitation signée exigée** (②) ; **chaque octroi de capacité signé, pas seulement la création** (③) ; **héritage sous-agents ⊆ parent préservé** (④) ; ADR ajouté à la nav MkDocs (⑤) ; critères 0045 périmés marqués remplacés (⑥) ; racine non signée refusée (⑦) ; audit des appels réussis couvert (⑧) ; TGT-04 de 0045 corrigé (⑨) ; intersection sans manifeste = `policy ∩ session` (⑩) ; bootstrap sans jeton défini (⑪) ; ressource propre au service, optionnelle (⑫) ; supersedance globale de 0045 (⑬) ; anti-downgrade manifeste invalidé (⑭) ; déconnexion MCP retirée du cycle de vie (⑮).

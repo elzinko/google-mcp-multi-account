@@ -28,7 +28,7 @@ Forces en présence :
 3. **Configuration de droits au grain fin.** Le registre de session devient un **document de capacités** : par (compte, **service × opération × ressource**), avec expiry. Droits effectifs = **policy compte ∩ manifeste projet ∩ capacités session** (intersection, *fail-closed*). En **l'absence de manifeste projet valide** (hors dépôt git, ou repo sans manifeste signé), le plafond projet est **omis** : droits effectifs = **policy ∩ session** — le manifeste est un plafond *optionnel*, jamais un plancher (résout la question ouverte n°5 de 0045). **Anti-downgrade** : cette omission ne vaut que pour un contexte **jamais configuré** (aucun manifeste) ; un manifeste **présent-mais-invalide, altéré ou supprimé après avoir été de confiance** → **fail-closed (refus)**, jamais un downgrade silencieux vers `policy ∩ session` (défend S-07 ; confiance mémorisée par `project_id`). La **ressource** est **propre au service** et **optionnelle** : Drive = dossier / zone (exigée pour l'écriture), Gmail = label (optionnel), Calendar = agenda (optionnel) ; **ressource absente = périmètre du service borné par la policy compte** (jamais un wildcard au-delà). Le mapping tool → (opération, ressource) est fixé à l'implémentation.
 4. **Consentement multi-hôte, routable.** Le broker + credentials vivent sur l'**hôte allumé** (desktop par défaut, Android sinon). La validation biométrique se fait **où est l'humain** : Touch ID desktop **ou** biométrie Android — y compris **à distance** (le broker desktop demande une approbation signée au téléphone **appairé**). Clés en **Secure Enclave / Android Keystore**, dispositifs appairés.
 5. **Cycle de vie & observabilité.** Le cycle de vie d'une session est **découplé de la connexion MCP** : expiration **TTL** + **révocation explicite** (`gma session close` / `revoke`). La **déconnexion MCP n'est pas un signal de cycle de vie** : les jetons étant *au porteur* et le protocole ne fournissant aucun identifiant de conversation, le serveur ne peut pas savoir à la déconnexion quels jetons appartiennent à quelle conversation — elle **ne purge donc aucun jeton** (fin de vie = TTL ou révocation explicite uniquement). `gma session list` + **vue de la config par session** ; journal enrichi (`session_id`, service / opération / ressource) ; `last_seen` avance à chaque appel.
-6. **Phasage.** **A — desktop** (fiche 0076, cette PR) : geste local + jeton porté + config fine + `session list` + fix bugs. **B — consentement distant** (0077) : appairage desktop↔Android + approbation signée poussée. **C — hôte Android** (0078) : broker + credentials sur l'APK, **conditionné au vault** (0003).
+6. **Phasage.** **A — desktop** (fiche 0076, cette PR) : geste local + jeton porté + config fine + `session list` + fix bugs. **B & C — mobile** : porter le modèle de droits par session au **mobile** (consentement distant, hôte Android) relève de l'axe **accès mobile souverain** (ADR-0008 / épic 0077, PR #109) — le *consentement distant* = l'**approbation passkey**, l'*hôte Android* = le **holder natif** ; **conditionné au vault** (0003).
 
 ## Options considérées
 
@@ -69,12 +69,11 @@ Forces en présence :
 
 1. [ ] **Phase A** — paramètre `session` sur les tools + autorisation broker par jeton ; registre de capacités (service × op × ressource) **signées à chaque octroi** ; `gma session list` + vue config ; fix purge + `last_seen` ; **héritage sous-agent ⊆ parent + révocation cascade (0045) testés** ; tests hermétiques verts.
 2. [ ] Test **live Desktop** (2 conversations → nombre de `session_id`) pour documenter, même si la décision 2 le rend non-bloquant.
-3. [ ] **Phase B** (0077) — appairage desktop↔Android + approbation signée distante (étend ADR-0005).
-4. [ ] **Phase C** (0078) — broker + credentials Android (APK), **conditionné au vault** (0003).
+3. [ ] **Phases B/C (mobile)** — porter le modèle de droits par session sur l'axe **accès mobile souverain** (ADR-0008 / épic 0077, PR #109) : consentement distant = approbation passkey ; hôte Android = holder natif ; **conditionné au vault** (0003).
 
 ## Références
 
 - Fiches : [0045](../../features/0045-capacites-projet-signees.md), [0076](../../features/0076-droits-par-session-phase-a.md), [0001](../../features/0001-elicitation-signee-strongauth-v2.md), [0003](../../features/0003-vault-credentials-hors-perimetre-agent.md)
-- ADR : [ADR-0005](ADR-0005-elicitation-signee-v2.md) (élicitation signée réutilisée)
+- ADR : [ADR-0005](ADR-0005-elicitation-signee-v2.md) (élicitation signée réutilisée) ; ADR-0008 *accès mobile souverain* (PR #109) porte les phases B/C.
 - Code : `gateway/sessions.py`, `gateway/context.py`, `gateway/broker_server.py`, `gateway/mcp_server.py`
 - Menace : `docs/threat-model.md`, `SECURITY.md`
