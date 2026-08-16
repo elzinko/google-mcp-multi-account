@@ -617,7 +617,7 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
   <h2>Documentation</h2>
   <div class="docbody" id="docBody"></div>
   <div class="mtop">
-    <a class="btn-doclink" href="https://google-multi-account-docs.vercel.app" target="_blank" rel="noopener">📚 Documentation complète en ligne ↗</a>
+    <a class="btn-doclink" href="https://elzinko.github.io/google-mcp-multi-account/" target="_blank" rel="noopener">📚 Documentation complète en ligne ↗</a>
     <span class="spacer"></span>
     <button onclick="dDoc.close()">Fermer</button>
   </div>
@@ -721,6 +721,14 @@ async function renderSetup() {
   if (!r.ok) { $("setupBody").innerHTML = '<p class="note">' + esc(r.error || "indisponible") + "</p>"; return; }
   const s = r.setup;
   LAST_SETUP = s;
+  // Purge du set de propagation les comptes qui ne sont plus « missing » (accès OK) :
+  // sinon un compte redevenu « missing » plus tard s'afficherait à tort « propagation »
+  // (Codex P2, #112) — nettoyage implicite, complémentaire de « Revérifier ».
+  if (IAM_PROPAGATING) {
+    const stillMissing = new Set((s.accounts || []).filter((a) => a.iam === "missing").map((a) => (a.email || "").toLowerCase()));
+    IAM_PROPAGATING = new Set([...IAM_PROPAGATING].filter((e) => stillMissing.has(e)));
+    if (!IAM_PROPAGATING.size) IAM_PROPAGATING = null;
+  }
   const BADGE = { ok: '<span class="badge b-ok">accès OK</span>',
                   missing: '<span class="badge b-bad">sans rôle IAM</span>',
                   unknown: '<span class="badge b-mut">non vérifié</span>' };
@@ -1609,8 +1617,8 @@ function toggleLogDense() {
   try { localStorage.setItem("gwsaLogDense", LOG_DENSE ? "1" : "0"); } catch {}
 }
 // Onglet « Bien démarrer » (fiche 0069) : orientation utilisateur, écrite ici
-// (pas un fichier repo). Le contenu dev/architecte reste dans les autres onglets
-// et sur la doc complète en ligne.
+// (pas un fichier repo). Le contenu détaillé (dev/architecte) vit sur la doc
+// complète en ligne (GitHub Pages).
 const GUIDE_MD = `## Bienvenue 👋
 
 **google-multi-account** relie tes comptes Google à tes assistants (Claude, Cursor…) — **100 % en local**. La règle d'or : **c'est toi qui ouvres chaque porte**, l'assistant ne peut que **demander**.
@@ -1627,12 +1635,10 @@ Se déverrouiller, s'accorder une zone, connecter un compte, envoyer un e-mail. 
 
 ### Pour aller plus loin
 
-- **Installation & usage**, **Connexion Google**, **Outils de l'assistant** : les onglets ci-dessus.
-- **Schémas (architecte)** : la mécanique interne, pour qui veut regarder sous le capot.
-- Doc complète, à jour : **[la documentation en ligne](https://google-multi-account-docs.vercel.app)**.
+Installation détaillée, connexion Google, outils de l'assistant et schémas d'architecture : tout est dans la **[documentation en ligne](https://elzinko.github.io/google-mcp-multi-account/)**, tenue à jour.
 `;
 // Doc in-app allégée (revue P5) : un seul « Bien démarrer » embarqué ; le contenu
-// détaillé (installation, MCP, OAuth, schémas) vit en ligne sur le site Vercel du projet.
+// détaillé (installation, MCP, OAuth, schémas) vit en ligne sur le site du projet (GitHub Pages).
 function openDoc() {
   $("docBody").innerHTML = mdToHtml(GUIDE_MD);
   $("docBody").scrollTop = 0;
