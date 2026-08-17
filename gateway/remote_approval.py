@@ -12,6 +12,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import secrets
 import subprocess
 import tempfile
@@ -67,7 +68,16 @@ def pending_dir() -> Path:
     return d
 
 
+_CHALLENGE_ID_RE = re.compile(r"^[0-9a-f]{1,64}$")
+
+
 def _pending_path(challenge_id: str) -> Path:
+    # Anti-traversée (Codex P2, PR #113) : `challenge_id` vient du CLI
+    # (`verify --challenge-id`). Seul un jeton hexadécimal (cf. `secrets.token_hex`)
+    # est accepté — un id contenant « / », « .. » ou un chemin absolu est refusé
+    # AVANT toute construction de chemin (fail-closed).
+    if not _CHALLENGE_ID_RE.match(challenge_id or ""):
+        raise RemoteApprovalError("challenge_id invalide — jeton hexadécimal requis")
     return pending_dir() / f"{challenge_id}.json"
 
 

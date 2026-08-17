@@ -4436,6 +4436,16 @@ replay_rc=$?
   && pass "remote_approval CLI : rejeu d'un challenge_id déjà clos (« verify ») → refusé (pending one-shot)" \
   || fail "remote_approval CLI : rejeu de challenge_id non refusé ($replay_out, rc=$replay_rc)"
 
+# Anti-traversée (Codex P2, PR #113) : un challenge_id malveillant (« ../ »,
+# chemin absolu) doit être refusé AVANT toute construction de chemin — sinon
+# `verify --challenge-id ../../x` lirait/supprimerait hors du dossier pending.
+trav_out="$(GWSA_ROOT="$RA_OOP" "$PY" scripts/remote-approval-cli.py verify \
+  --challenge-id "../../etc/passwd" --response "$response_file" 2>&1)"
+trav_rc=$?
+[[ "$trav_rc" != "0" ]] && echo "$trav_out" | grep -qi "challenge_id invalide" \
+  && pass "remote_approval CLI : challenge_id de traversée (../) refusé (Codex P2, PR #113)" \
+  || fail "remote_approval CLI : traversée de challenge_id non refusée ($trav_out, rc=$trav_rc)"
+
 # --- gwsa --remote : exécute avec le payload signé, pas les variables shell ---
 #
 # Nit de revue (PR #113) : `require_remote_approval` doit exécuter avec le
