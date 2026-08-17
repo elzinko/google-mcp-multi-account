@@ -1,4 +1,4 @@
-"""Journal d'usage (usage.jsonl) — même trace que bin/gwsa, via scripts/log-usage.py."""
+"""Journal d'usage (usage.jsonl) — même trace que bin/mag, via scripts/log-usage.py."""
 from __future__ import annotations
 
 import os

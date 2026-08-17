@@ -29,22 +29,22 @@ toucher** au stable (4878 / `current`).
 
 ## Proposition
 
-### Commandes (`gwsa sandbox …`)
+### Commandes (`mag sandbox …`)
 
 | Commande | Effet |
 |---|---|
-| `gwsa sandbox deploy [--wire …]` | Figé depuis **HEAD** du dépôt courant (arbre sale → avertissement, archive = fichiers commités seuls). Ne modifie **pas** `current`. Écrit `VERSION` + `.sandbox.json`. Id = `<slug-branche>-<sha>[-dirty]` (pas de préfixe `dev-`). Sans `--wire` : affiche la procédure humaine. Avec `--wire` : branche une entrée MCP **suffixée** (`google-multi-account-<id>`) dans Desktop / Code / Cursor (ne touche pas l'entrée stable). |
-| `gwsa sandbox wire [id] [--wire …]` | Branche les clients MCP sur une sandbox déjà déployée (même entrée suffixée). Sans id → sandbox de la branche courante. |
-| `gwsa sandbox wire [id] --remove […]` | Unwire sélectif : retire l'entrée suffixée des clients listés (`desktop`, `code`, `cursor`, ou `all` si flag seul). **Ne supprime pas** le répertoire sandbox. Ne touche jamais `google-multi-account`. |
-| `gwsa sandbox remove [id]` | **Nucléaire** : unwire tous les clients, arrête broker/admin, **supprime** le répertoire sous `~/.local/share/google-mcp/`. Refuse `current` et archives sans manifeste sandbox. Sans id → sandboxes de la branche courante. |
-| `gwsa sandbox list` | Versions sous `~/.local/share/google-mcp/`, entrées MCP trouvées (Claude Desktop, Cursor), ports broker/admin, binaire. |
-| `gwsa sandbox status [id]` | Par sandbox (ou toutes) : broker (pid/port), admin (port), version. |
+| `mag sandbox deploy [--wire …]` | Figé depuis **HEAD** du dépôt courant (arbre sale → avertissement, archive = fichiers commités seuls). Ne modifie **pas** `current`. Écrit `VERSION` + `.sandbox.json`. Id = `<slug-branche>-<sha>[-dirty]` (pas de préfixe `dev-`). Sans `--wire` : affiche la procédure humaine. Avec `--wire` : branche une entrée MCP **suffixée** (`google-multi-account-<id>`) dans Desktop / Code / Cursor (ne touche pas l'entrée stable). |
+| `mag sandbox wire [id] [--wire …]` | Branche les clients MCP sur une sandbox déjà déployée (même entrée suffixée). Sans id → sandbox de la branche courante. |
+| `mag sandbox wire [id] --remove […]` | Unwire sélectif : retire l'entrée suffixée des clients listés (`desktop`, `code`, `cursor`, ou `all` si flag seul). **Ne supprime pas** le répertoire sandbox. Ne touche jamais `google-multi-account`. |
+| `mag sandbox remove [id]` | **Nucléaire** : unwire tous les clients, arrête broker/admin, **supprime** le répertoire sous `~/.local/share/google-mcp/`. Refuse `current` et archives sans manifeste sandbox. Sans id → sandboxes de la branche courante. |
+| `mag sandbox list` | Versions sous `~/.local/share/google-mcp/`, entrées MCP trouvées (Claude Desktop, Cursor), ports broker/admin, binaire. |
+| `mag sandbox status [id]` | Par sandbox (ou toutes) : broker (pid/port), admin (port), version. |
 
 `--wire` / `--remove` : `all` (défaut si flag seul) ou liste `desktop,code,cursor` (alias `cd` / `cc` / `claude-desktop` / `claude-code`). Ports via `GWSA_DESKTOP_CONFIG` / `GWSA_CURSOR_CONFIG` pour les tests.
 
-**Aide CLI (référence)** : `gwsa sandbox --help` — documente `deploy --wire`, `wire`, `wire --remove` (sélectif) vs `remove` (nucléaire), et les overrides d'env.
+**Aide CLI (référence)** : `mag sandbox --help` — documente `deploy --wire`, `wire`, `wire --remove` (sélectif) vs `remove` (nucléaire), et les overrides d'env.
 
-Alias bash : `scripts/sandbox.sh`. Alias déprécié : `gwsa couloir` / `scripts/couloir.sh` (hint puis forward).
+Alias bash : `scripts/sandbox.sh`. Alias déprécié : `mag couloir` / `scripts/couloir.sh` (hint puis forward).
 
 Compat : les anciens déploiements avec `.couloir.json` restent lisibles par `list` / `status` ; les nouveaux écrivent `.sandbox.json`. Anciens ids `dev-<slug>-…` restent utilisables pour remove/wire/status (pas de renommage auto).
 
@@ -75,10 +75,10 @@ Règles :
 
 Sans `--wire`, le script imprime (ne pas exécuter à la place de l'humain) :
 
-1. Brancher Claude Desktop : `install-claude-desktop.sh --name … --port …` sur la **copie déployée** (jamais le clone) — ou `gwsa sandbox wire`.
+1. Brancher Claude Desktop : `install-claude-desktop.sh --name … --port …` sur la **copie déployée** (jamais le clone) — ou `mag sandbox wire`.
 2. Idem Cursor (`~/.cursor/mcp.json`) si besoin.
 3. Redémarrer le client MCP.
-4. Vérifier : `gwsa sandbox status <id>` ou version dans l'admin.
+4. Vérifier : `mag sandbox status <id>` ou version dans l'admin.
 
 Avec `deploy --wire` / `sandbox wire` : branchement auto de l'entrée suffixée ; checklist courte (redémarrer clients, admin sandbox, vérifier).
 
@@ -87,39 +87,39 @@ Avec `deploy --wire` / `sandbox wire` : branchement auto de l'entrée suffixée 
 ```gherkin
 Scenario: déployer une branche feature sans toucher current
   Given je suis sur la branche feat/foo avec HEAD propre
-  When j'exécute gwsa sandbox deploy --dev
+  When j'exécute mag sandbox deploy --dev
   Then une copie existe sous ~/.local/share/google-mcp/feat-foo-<sha>/
   And current pointe toujours sur la version stable précédente
   And le script affiche une commande install-claude-desktop avec un port != 4878
 
 Scenario: lister les sandboxes branchées
   Given une entrée google-mcp dans Claude Desktop sur le port 4882
-  When j'exécute gwsa sandbox list
+  When j'exécute mag sandbox list
   Then la sortie mentionne le binaire, le port 4882 et le fichier de config
 
 Scenario: statut broker et version
   Given une sandbox dev déployée avec broker démarré
-  When j'exécute gwsa sandbox status feat-foo-<sha>
+  When j'exécute mag sandbox status feat-foo-<sha>
   Then la sortie indique broker en route sur le port du manifeste
   And la version affichée contient "(dev)"
 
 Scenario: unwire sélectif sans supprimer
   Given une sandbox branchée sur Desktop et Cursor
-  When j'exécute gwsa sandbox wire --remove desktop
+  When j'exécute mag sandbox wire --remove desktop
   Then l'entrée suffixée disparaît de Claude Desktop seulement
   And le répertoire ~/.local/share/google-mcp/<id>/ existe encore
   And l'entrée stable google-multi-account est intacte
 
 Scenario: stable intact
   Given le broker stable écoute sur 4878
-  When j'exécute gwsa sandbox deploy --dev
-  Then gwsa broker status sur le déploiement stable signale toujours le broker 4878
+  When j'exécute mag sandbox deploy --dev
+  Then mag broker status sur le déploiement stable signale toujours le broker 4878
 ```
 
 ## Critères d'acceptation
 
 - [x] Fiche backlog + branche `feat/v2-local-deploy`.
-- [x] `gwsa sandbox deploy|list|status` prototype (scripts/sandbox.sh).
+- [x] `mag sandbox deploy|list|status` prototype (scripts/sandbox.sh).
 - [x] `sandbox deploy` ne touche pas `current`.
 - [x] Ports auto ≥ 4882 (broker) et ≥ 4879 (admin) pour les temp sandbox.
 - [x] Version visible dans l'admin (bandeau) et dans la sortie CLI.
@@ -128,14 +128,14 @@ Scenario: stable intact
 - [ ] Scanner les configs Claude Code / Cursor projet (v2).
 - [x] `sandbox remove [id]` (+ sans id = branche courante ; `--all` si plusieurs sha)
 - [x] `sandbox deploy --wire` / `sandbox wire` : entrée MCP suffixée (stable intact) ; unwire sélectif via `wire --remove` ; nucléaire à `remove`
-- [ ] `setup_status` / `gwsa doctor` : dérive config vs déployé (fiche 0026).
+- [ ] `setup_status` / `mag doctor` : dérive config vs déployé (fiche 0026).
 - [x] Tests hermétiques dans `scripts/test.sh`.
 
 ## Notes
 
 - Découle de [[0027]] (commit non taggé) et [[0026]] (savoir qui répond).
 - `deploy-local.sh` reste le chemin **stable** ; `sandbox deploy` est le chemin **jetable**.
-- **PATH** : le `gwsa` du PATH (ex. Homebrew → `current`, v0.2.1) n'expose pas encore `sandbox` — depuis le worktree utiliser `./bin/gwsa sandbox …`, ou déployer la branche puis le `gwsa` du répertoire sandbox sous `~/.local/share/google-mcp/<id>/bin/gwsa`.
+- **PATH** : le `mag` du PATH (ex. Homebrew → `current`, v0.2.1) n'expose pas encore `sandbox` — depuis le worktree utiliser `./bin/mag sandbox …`, ou déployer la branche puis le `mag` du répertoire sandbox sous `~/.local/share/google-mcp/<id>/bin/mag`.
 - Inspiration externe : city-guided (`APP_VERSION` + bandeau admin), ezk-preview
   (URL de démo par branche) — patterns de label `branch@sha`, pas de merge auto.
 
@@ -143,7 +143,7 @@ Scenario: stable intact
 
 - `scripts/sandbox.sh` — deploy / list / status / remove / wire (`--wire`, `--remove`).
 - Id sandbox = `<slug>-<sha>[-dirty]` ; anciens `dev-<slug>-…` toujours reconnus.
-- `gwsa sandbox` — wrapper dans `bin/gwsa` (`couloir` = alias déprécié).
+- `mag sandbox` — wrapper dans `bin/mag` (`couloir` = alias déprécié).
 - Admin : `GET /api/meta` + `GET /api/dev` + bandeau version / branche / sha ; panneau
   Développement (sandboxes, ports, MCP) ; `GWSA_ADMIN_PORT` lu par `admin/server.js`.
   Setup affiche le **projet GCP** (pas la version MCP).

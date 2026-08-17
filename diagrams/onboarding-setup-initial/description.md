@@ -16,5 +16,5 @@ client OAuth « Desktop app » et publier l'app. Il range le
 interroge l'état du setup via le MCP (tool `setup_status`, cible fiche 0009),
 obtient une checklist (comptes connectés ?, rôles IAM ?, app publiée ?), et me
 guide par élicitation : pour chaque manque il me propose LA commande exacte
-(`gwsa add …`, `sync-iam`), c'est moi qui l'exécute. Le LLM n'exécute jamais
+(`mag add …`, `sync-iam`), c'est moi qui l'exécute. Le LLM n'exécute jamais
 rien qui élargisse l'accès.

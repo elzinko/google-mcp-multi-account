@@ -7,7 +7,7 @@ while [[ -L "$src" ]]; do src="$(readlink "$src")"; done
 REPO="$(cd "$(dirname "$src")/.." && pwd)"
 export GWSA_CLIENT="${GWSA_CLIENT:-mcp}"
 export PYTHONPATH="${REPO}${PYTHONPATH:+:$PYTHONPATH}"
-# Interpréteur système (même contrainte que bin/gwsa — pas le python du PATH agent).
+# Interpréteur système (même contrainte que bin/mag — pas le python du PATH agent).
 PYTHON="/usr/bin/python3"
 [[ -x "$PYTHON" ]] || PYTHON="$(command -v python3)"
 cd "$REPO"

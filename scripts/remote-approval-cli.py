@@ -38,7 +38,7 @@ from gateway.remote_approval import (  # noqa: E402
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="gma approbation distante par passkey")
+    p = argparse.ArgumentParser(description="mag approbation distante par passkey")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     e = sub.add_parser("enroll")

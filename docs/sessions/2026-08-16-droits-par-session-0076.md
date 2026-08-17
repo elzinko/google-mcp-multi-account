@@ -7,7 +7,7 @@ Statut : en cours
 
 - [x] **POC cœur** — jeton porté dans l'appel + autorisation broker par jeton + abandon `set_session_id` global + cycle de vie (TTL/révocation ; la déconnexion MCP ne purge rien ; fix `last_seen` + GC)   ✅ commit `d693144`, `test.sh` 320 verts
 - [x] Capacités fines signées — service×op×ressource ; élicitation signée EXIGÉE à chaque octroi ; intersection ∩ ; sans manifeste = policy ∩ session (+ anti-downgrade)   ✅ commit `203cc59`, `test.sh` 328 verts
-- [x] `gma session list` + vue config · sous-agents · bootstrap sans jeton · audit des appels réussis   ✅ commit `72f858a`, `test.sh` 340 verts
+- [x] `mag session list` + vue config · sous-agents · bootstrap sans jeton · audit des appels réussis   ✅ commit `72f858a`, `test.sh` 340 verts
 - [!] **Collision gérée** : PR #108 (design+lot1) squash-mergée dans main par l'autre session (14:15). Branche rebasée sur main → reste = lot2+lot3 (+doc). Nouvelle PR à ouvrir.
 - [x] **Doc** au niveau existant (architecture, policies, threat-model, SECURITY, glossaire)   ✅ commit `b1fe19d`
 - [x] Gate locale verte (py_compile, bash -n, shellcheck, 340 tests, liens)   ✅
@@ -27,5 +27,5 @@ Critères d'acceptation de la fiche 0076 verts (assertions `scripts/test.sh`) �
 
 - **1 PR/fiche** : implémentation sur la branche existante (`claude/session-limited-access-rights-76b457`, PR #108), pas de nouvelle branche — le design y est déjà.
 - Archi **figée** : ADR-0007 (15 findings Codex traités).
-- Tests = **assertions bash hermétiques** dans `scripts/test.sh` (`policy-check.py` + `bin/gwsa`, `GWSA_ROOT` temp, `GWSA_ELICITATION_MOCK=1`).
+- Tests = **assertions bash hermétiques** dans `scripts/test.sh` (`policy-check.py` + `bin/mag`, `GWSA_ROOT` temp, `GWSA_ELICITATION_MOCK=1`).
 - Phases B/C = axe **mobile souverain** (ADR-0008 / PR #109) — hors périmètre.

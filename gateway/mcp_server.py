@@ -75,7 +75,7 @@ TOOLS: list[dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "alias": {"type": "string", "description": "Profil gwsa (ex. perso)"},
+                "alias": {"type": "string", "description": "Profil mag (ex. perso)"},
                 "query": {"type": "string", "description": "Requête Gmail (ex. is:unread)", "default": ""},
                 "max_results": {"type": "integer", "description": "1–50", "default": 10},
                 "session": _SESSION_PROPERTY,
@@ -632,7 +632,7 @@ def main() -> None:
     # conversation, donc le serveur ne peut pas savoir à la déconnexion quels
     # jetons appartiennent à quelle conversation. Aucune purge ici : fin de vie
     # = TTL (gateway.sessions.purge_expired, câblée au broker) ou révocation
-    # explicite (`gma session close` / `revoke-descendants`).
+    # explicite (`mag session close` / `revoke-descendants`).
     for line in sys.stdin:
         line = line.strip()
         if not line:

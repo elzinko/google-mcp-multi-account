@@ -13,14 +13,14 @@ garanties phase par phase) : [docs/threat-model.md](docs/threat-model.md).
 
 | Mesure | Concrètement |
 |---|---|
-| **Default-deny par service** | Un service absent de la policy d'un profil est refusé. Un compte connecté via `gma add` démarre avec une policy prudente (zones Drive vides, pas d'envoi Gmail — même via le CLI). |
+| **Default-deny par service** | Un service absent de la policy d'un profil est refusé. Un compte connecté via `mag add` démarre avec une policy prudente (zones Drive vides, pas d'envoi Gmail — même via le CLI). |
 | **Aucun tool d'envoi** | Les tools MCP Gmail s'arrêtent au **brouillon**. Aucun tool n'envoie de mail ni ne supprime définitivement. |
 | **Écriture Drive zonée** | `drive_create` n'écrit que sous des dossiers autorisés — en permanent (policy) ou en temporaire (grants, qui **expirent**, 8 h par défaut). Idem quand elle dépose un document **avec son contenu** : la destination est vérifiée de la même façon. |
 | **Partage Drive explicite** | `drive_permissions_create` exige `share:true` dans la policy (par défaut **false**) et partage avec un **email Google** (reader/commenter/writer) ; il ne transfère **jamais** la propriété (hors périmètre). |
 | **Pièces jointes bornées** | `gmail_attachment_get` refuse une pièce jointe au-delà de **25 Mo** (surchargeable `GWSA_ATTACHMENT_MAX_MB`) et l'écrit uniquement dans `.downloads`, sous un nom unique — jamais un chemin choisi par l'appelant ([ADR-0006](docs/adr/ADR-0006-fichiers-recus-repertoire-dedie.md)). |
 | **Verrous par compte** | Un profil verrouillé refuse tout accès aux données, en CLI comme via MCP, jusqu'à un `unlock` humain (temporaire par défaut). Seule métadonnée qui reste lisible : l'email du compte, pour le diagnostic (`setup_status`). |
 | **Droits par session** | Chaque conversation porte ses **propres** droits Google, **signés** et à durée limitée, **isolés** des autres sessions : un octroi obtenu par une conversation ne profite pas à une autre. Grain fin (service × opération × ressource) ; droits effectifs = policy ∩ manifeste projet ∩ capacités session ([ADR-0007](docs/adr/ADR-0007-droits-par-session.md)). Garde-fou **coopératif** tant que le vault n'est pas là. |
-| **Touch ID** | `gma strongauth on` exige une preuve de présence physique (Touch ID / mot de passe macOS) pour `unlock`, `grant` et `add`. |
+| **Touch ID** | `mag strongauth on` exige une preuve de présence physique (Touch ID / mot de passe macOS) pour `unlock`, `grant` et `add`. |
 | **Élicitation, pas exécution** | Le tool `access_request` renvoie **la commande que l'humain doit exécuter** — il n'exécute jamais rien lui-même. |
 | **Tokens chiffrés** | Chaque profil stocke un `credentials.enc` (AES-256-GCM, chiffrement du CLI `gws`), clé maître dans le **Trousseau macOS**. Rien de sensible dans le repo (`.gitignore`). |
 | **Broker loopback** | Les appels de données MCP passent par un broker local (`127.0.0.1`, jeton dédié) qui **re-vérifie** verrou et policy avant chaque exécution de `gws`. |
@@ -39,7 +39,7 @@ L'honnêteté fait partie du modèle :
   La parade définitive est prévue : un coffre local (vault) qui met les
   credentials hors de portée de l'agent.
 - **Un profil sans `policy.json`** (créé avant le durcissement des policies)
-  n'est pas filtré du tout : lui poser une policy via l'admin ou `gma policy`.
+  n'est pas filtré du tout : lui poser une policy via l'admin ou `mag policy`.
 - **Le journal est un outil de debug, pas une identité forte** : le champ
   `GWSA_CLIENT` est déclaratif, donc falsifiable.
 - **L'admin web (`127.0.0.1:4877`) n'a pas d'authentification propre** : elle

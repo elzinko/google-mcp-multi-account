@@ -11,7 +11,7 @@ commande d'élicitation (unlock, grant, activation share si besoin), donne-moi
 les liens à vérifier au fur et à mesure, et ne nettoie qu'après mon accord.
 ```
 
-- Les alias par défaut sont **`perso`** et **`mw`** (`gwsa list` pour confirmer).
+- Les alias par défaut sont **`perso`** et **`mw`** (`mag list` pour confirmer).
 - Prérequis : un dossier **`ZZ-TESTS`** à la racine du Drive de **chaque** compte
   (créé par l'humain, interface web — voir PROTOCOLE.md).
 - Complète le test [drive-2-comptes](../drive-2-comptes/) : ici on ajoute

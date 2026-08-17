@@ -71,7 +71,7 @@
       <p class="section-kicker" data-i18n="modelKicker">How it works</p>
       <h2 class="section-title" data-i18n="modelTitle">You open the door. The agent acts within the frame.</h2>
       <p class="section-lede" data-i18n="modelLede">
-        MCP stdio for the LLM, the <code>gwsa</code> CLI and a local admin for you. Every door — unlock, grant, new account — stays a human gesture.
+        MCP stdio for the LLM, the <code>mag</code> CLI and a local admin for you. Every door — unlock, grant, new account — stays a human gesture.
       </p>
       <ol class="model-steps">
         <li>
@@ -158,7 +158,7 @@
         <pre><code>git clone https://github.com/elzinko/google-mcp-multi-account.git
 cd google-mcp-multi-account
 brew install googleworkspace-cli
-ln -sf "$PWD/bin/gwsa" "$(brew --prefix)/bin/gwsa"
+ln -sf "$PWD/bin/mag" "$(brew --prefix)/bin/mag"
 ./scripts/provision-gcp.sh
 ./scripts/update.sh</code></pre>
       </div>
@@ -228,7 +228,7 @@ ln -sf "$PWD/bin/gwsa" "$(brew --prefix)/bin/gwsa"
         prob2P: 'Rien ne tourne dans un SaaS intermédiaire. Le seul passage Google Cloud, c’est la création one-shot de l’identifiant OAuth.',
         modelKicker: 'Comment ça marche',
         modelTitle: 'L’humain ouvre. L’agent exécute dans le cadre.',
-        modelLede: 'MCP stdio pour le LLM, CLI <code>gwsa</code> et admin locale pour toi. Chaque porte — unlock, grant, nouveau compte — reste un geste humain.',
+        modelLede: 'MCP stdio pour le LLM, CLI <code>mag</code> et admin locale pour toi. Chaque porte — unlock, grant, nouveau compte — reste un geste humain.',
         step1Strong: 'Brancher le serveur MCP',
         step1P: 'Claude Desktop / Claude Code / Cursor parlent à <code>bin/google-mcp</code>. Les tools découvrent les profils et demandent l’accès proprement.',
         step2Strong: 'Élicitation, pas exécution',
@@ -272,14 +272,14 @@ ln -sf "$PWD/bin/gwsa" "$(brew --prefix)/bin/gwsa"
           if (v != null) n.innerHTML = v;
         });
         document.documentElement.lang = lang;
-        try { localStorage.setItem('gma-lang', lang); } catch (e) {}
+        try { localStorage.setItem('mag-lang', lang); } catch (e) {}
         if (btn) {
           btn.textContent = lang === 'fr' ? 'EN' : 'FR';
           btn.setAttribute('aria-label', lang === 'fr' ? 'Switch to English' : 'Passer en français');
         }
       }
       var saved = null;
-      try { saved = localStorage.getItem('gma-lang'); } catch (e) {}
+      try { saved = localStorage.getItem('mag-lang'); } catch (e) {}
       if (saved === 'fr') apply('fr');
       if (btn) btn.addEventListener('click', function () {
         apply(document.documentElement.lang === 'fr' ? 'en' : 'fr');

@@ -10,7 +10,7 @@
 | CI | |
 | Tests hermétiques (`./scripts/test.sh`) | ✅ / ⏳ / N.A. |
 | Admin / UI locale | ✅ / ⏳ / N.A. |
-| CLI (`gma`) | ✅ / ⏳ / N.A. |
+| CLI (`mag`) | ✅ / ⏳ / N.A. |
 | Before / after (UI) | ✅ liens / N.A. |
 | Preview distante | **N.A.** (outil local) |
 
@@ -18,7 +18,7 @@
 ```bash
 cd <worktree-ou-clone>
 ./scripts/test.sh
-# commandes exactes pour rejouer la feature (gma admin, gma dev, …)
+# commandes exactes pour rejouer la feature (mag admin, mag dev, …)
 ```
 
 ### Reste à valider (signaux observables)

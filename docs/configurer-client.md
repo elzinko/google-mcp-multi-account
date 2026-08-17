@@ -1,15 +1,15 @@
 # Brancher un client LLM
 
 Une fois le serveur [installé](mcp-setup.md), une **seule commande** le relie à ton
-assistant, depuis n'importe où (`gma` est sur le PATH) :
+assistant, depuis n'importe où (`mag` est sur le PATH) :
 
 ```bash
-gma wire desktop      # Claude Desktop
-gma wire code         # Claude Code (le CLI « claude »)
-gma wire all          # les deux — « --print » pour un dry-run
+mag wire desktop      # Claude Desktop
+mag wire code         # Claude Code (le CLI « claude »)
+mag wire all          # les deux — « --print » pour un dry-run
 ```
 
-`gma wire` résout le chemin absolu, **fusionne** l'entrée `google-multi-account` sans
+`mag wire` résout le chemin absolu, **fusionne** l'entrée `google-multi-account` sans
 écraser tes autres serveurs MCP, et fait un backup. Puis **redémarre le client**.
 
 !!! note "Pourquoi deux noms ?"
@@ -25,8 +25,8 @@ gma wire all          # les deux — « --print » pour un dry-run
     **Recommandé** — une commande :
 
     ```bash
-    gma wire desktop           # branche (ou met à jour)
-    gma wire desktop --print   # dry-run : montre sans écrire
+    mag wire desktop           # branche (ou met à jour)
+    mag wire desktop --print   # dry-run : montre sans écrire
     ```
 
     **À la main** — éditer `~/Library/Application Support/Claude/claude_desktop_config.json` :
@@ -54,7 +54,7 @@ gma wire all          # les deux — « --print » pour un dry-run
     **Recommandé** :
 
     ```bash
-    gma wire code
+    mag wire code
     ```
 
     Sous le capot, ça délègue au CLI officiel (scope `user` = visible partout) :
@@ -69,7 +69,7 @@ gma wire all          # les deux — « --print » pour un dry-run
 
 === "Cursor"
 
-    Pas encore de `gma wire cursor` (suivi : fiche 0074) — la config manuelle est
+    Pas encore de `mag wire cursor` (suivi : fiche 0074) — la config manuelle est
     donc le **seul** moyen. Dans les settings MCP (UI ou `~/.cursor/mcp.json`), le
     `command` pointe le binaire **installé** par `curl` :
 
@@ -95,7 +95,7 @@ gma wire all          # les deux — « --print » pour un dry-run
   client (l'admin protège volontairement l'entrée stable — pas de suppression par mégarde).
 
 !!! info "Sous le capot"
-    `gma wire` appelle `scripts/install-claude-desktop.sh` / `install-claude-code.sh`
+    `mag wire` appelle `scripts/install-claude-desktop.sh` / `install-claude-code.sh`
     (idempotents, avec backup). Tu n'as normalement pas à les lancer à la main — ils
     restent là pour les cas particuliers (nom/port personnalisés, plusieurs versions :
     voir [Installer & mettre à jour](mcp-setup.md)).

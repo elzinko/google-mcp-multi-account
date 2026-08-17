@@ -14,7 +14,7 @@ created: 2026-07-22
 ## Contexte / Problème
 
 Le premier run de `tests/manuels/drive-2-comptes` (2026-07-22) a marché en
-mode 100 % LLM : l'agent improvise les commandes `gwsa` phase par phase et
+mode 100 % LLM : l'agent improvise les commandes `mag` phase par phase et
 raconte. Ça fonctionne, mais : (a) le déroulé mécanique (créer/modifier/
 recompter dans N comptes) est re-synthétisé à chaque run — variabilité et
 tokens ; (b) l'affichage des résultats au fil de l'eau dépend du style de

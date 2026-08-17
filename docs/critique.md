@@ -76,7 +76,7 @@ reste à faire.
 
 17 outils MCP, dont 3 utilitaires. On a Gmail (lire, brouillon, pièces jointes) et
 Drive (lire, créer, modifier, copier, téléverser, partager). Mais Calendar, Docs,
-Sheets, Tasks : **aucun** outil MCP — accessibles seulement via le shell `gma`,
+Sheets, Tasks : **aucun** outil MCP — accessibles seulement via le shell `mag`,
 donc **pas depuis Claude Desktop**. En face,
 [taylorwilsdon/google_workspace_mcp](https://github.com/taylorwilsdon/google_workspace_mcp)
 expose une centaine d'outils sur 12 services. C'est le point le plus faible face à
@@ -100,7 +100,7 @@ seul un développeur déjà à l'aise avec Google Cloud franchira ce setup.
 
 Documentation en **français** (choix assumé) et un chemin de production **macOS
 seulement**. L'installation, en revanche, n'est plus un frein : `curl | bash` sans
-clone, versions taguées et **releases GitHub**, mise à jour par `gma update`. Reste
+clone, versions taguées et **releases GitHub**, mise à jour par `mag update`. Reste
 qu'aucun format « un clic » type [Desktop Extensions
 `.mcpb`](https://www.anthropic.com/engineering/desktop-extensions) n'est encore
 produit, et que l'audience visée demeure étroite.

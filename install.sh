@@ -4,7 +4,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/elzinko/google-mcp-multi-account/main/install.sh | bash
 #
 # Ce que ça fait : télécharge la dernière version publiée depuis GitHub, la fige
-# dans ~/.local/share/google-mcp/<tag>/, pose « current » dessus, met « gma » (+ alias « gwsa »)
+# dans ~/.local/share/google-mcp/<tag>/, pose « current » dessus, met « mag » (+ alias « gma »/« gwsa »)
 # sur le PATH, branche Claude Desktop + Code, puis AFFICHE les étapes OAuth/GCP
 # restantes — jamais exécutées à ta place (doctrine CLAUDE.md).
 #
@@ -14,7 +14,7 @@
 # Surcharges (tests / cas particuliers) :
 #   GWSA_REPO / GWSA_TAGS_URL / GWSA_TARBALL_BASE  (idem lib-github-release.sh)
 #   GWSA_DEPLOY_ROOT   où figer les versions (défaut ~/.local/share/google-mcp)
-#   GWSA_CLI_LINK      lien « gwsa » sur le PATH (défaut : brew, sinon ~/.local/bin)
+#   GWSA_CLI_LINK      lien « mag » sur le PATH (défaut : brew, sinon ~/.local/bin)
 #   GWSA_SKIP_WIRE=1   installe le serveur sans brancher Desktop/Code
 #   GWSA_ALLOW_NO_GWS=1  ne bloque pas si « gws » manque (CI / l'installer après)
 set -euo pipefail
@@ -81,7 +81,7 @@ step "Installation"
 if [[ -d "$TARGET" ]]; then
   # Cible RÉUTILISÉE : valider avant de basculer (revue Codex).
   # (a) une version legacy pré-existante (ancien deploy clone) n'a pas d'updater
-  #     sans clone → n'y bascule jamais current/gwsa (P1).
+  #     sans clone → n'y bascule jamais current/mag (P1).
   [[ -f "$TARGET/scripts/lib-github-release.sh" ]] \
     || die "$LATEST déjà présent mais antérieur à l'update sans clone — supprime « $TARGET » ou installe depuis un clone"
   # (b) collision de tag entre dépôts : ne pas réutiliser un dossier venu d'un
@@ -99,11 +99,11 @@ else
   curl -fsSL "$url" | tar -xz -C "$tmp" --strip-components=1 \
     || { rm -rf "$tmp"; die "téléchargement/extraction de $LATEST en échec ($url)"; }
   # Garde-fou (revue Codex P1) : ne pas installer une version antérieure à
-  # l'update sans clone — son « gma update » exigerait un clone et mourrait.
+  # l'update sans clone — son « mag update » exigerait un clone et mourrait.
   [[ -f "$tmp/scripts/lib-github-release.sh" ]] \
     || { rm -rf "$tmp"; die "$LATEST est antérieure à l'update sans clone — attends la prochaine release, ou installe depuis un clone"; }
   printf '%s\n' "$LATEST" > "$tmp/VERSION"
-  # Marqueur d'origine : « gma update » saura re-tirer depuis GitHub (pas de clone).
+  # Marqueur d'origine : « mag update » saura re-tirer depuis GitHub (pas de clone).
   printf '%s\n' "github:$REPO" > "$tmp/.origin"
   mv "$tmp" "$TARGET"
   ok "copie figée : $TARGET"
@@ -114,27 +114,29 @@ ok "current → $LATEST"
 # Recycler le broker : un broker déjà lancé continue de servir l'ANCIEN code
 # après un ré-install (comme update/deploy-local — revue Codex). Best-effort :
 # à la première install il n'y a pas de broker, c'est sans effet.
-if [[ -x "$CURRENT_LINK/bin/gwsa" ]]; then
-  "$CURRENT_LINK/bin/gwsa" broker stop >/dev/null 2>&1 || true
+if [[ -x "$CURRENT_LINK/bin/mag" ]]; then
+  "$CURRENT_LINK/bin/mag" broker stop >/dev/null 2>&1 || true
 fi
 
-# ── gwsa sur le PATH ─────────────────────────────────────────────
-step "Commandes sur le PATH — gma (+ alias gwsa)"
+# ── mag sur le PATH ─────────────────────────────────────────────
+step "Commandes sur le PATH — mag (+ alias gma/gwsa)"
 link="${GWSA_CLI_LINK:-}"
 if [[ -z "$link" ]]; then
-  if command -v brew >/dev/null 2>&1; then link="$(brew --prefix)/bin/gwsa"; else link="$HOME/.local/bin/gwsa"; fi
+  if command -v brew >/dev/null 2>&1; then link="$(brew --prefix)/bin/mag"; else link="$HOME/.local/bin/mag"; fi
 fi
 mkdir -p "$(dirname "$link")"
-ln -sfn "$CURRENT_LINK/bin/gwsa" "$link"
-ok "gwsa → $link"
-# Alias « gma » (nom aligné sur le connecteur google-multi-account). « gwsa »
-# reste disponible comme alias déprécié.
-gma_link="$(dirname "$link")/gma"
-ln -sfn "$CURRENT_LINK/bin/gma" "$gma_link"
-ok "gma → $gma_link"
+ln -sfn "$CURRENT_LINK/bin/mag" "$link"
+ok "mag → $link"
+# Alias dépréciés « gma » et « gwsa » (compat ; « mag » est le nom courant,
+# aligné sur le connecteur google-multi-account).
+for _alias in gma gwsa; do
+  _alias_link="$(dirname "$link")/$_alias"
+  ln -sfn "$CURRENT_LINK/bin/mag" "$_alias_link"
+  ok "$_alias → $_alias_link"
+done
 case ":$PATH:" in
   *":$(dirname "$link"):"*) ;;
-  *) warn "« $(dirname "$link") » n'est pas dans ton PATH — ajoute-le pour utiliser « gma »";;
+  *) warn "« $(dirname "$link") » n'est pas dans ton PATH — ajoute-le pour utiliser « mag »";;
 esac
 
 # ── brancher les clients LLM ─────────────────────────────────────
@@ -169,11 +171,11 @@ cat <<EOF
      $CURRENT_LINK/scripts/provision-gcp.sh
    Détail : https://github.com/$REPO/blob/main/docs/setup-oauth.md
 2) Connecter un compte (l'email désigne le compte) :
-     gma add perso votre.email@gmail.com
+     mag add perso votre.email@gmail.com
 3) Redémarrer Claude Desktop (Cmd-Q), puis demander à l'agent :
      « fais le point sur mon setup Google »
    Il lit l'état et propose la commande de chaque étape manquante — tu l'exécutes.
 
-Mettre à jour plus tard, sans clone : « gma update ».
+Mettre à jour plus tard, sans clone : « mag update ».
 Le serveur doit annoncer « $LATEST ».
 EOF

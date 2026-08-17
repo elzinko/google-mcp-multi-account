@@ -33,14 +33,14 @@ suivent pas :
 - `CLAUDE.md` : « erreur exit code 2 (auth) → **token expiré** » — l'agent
   répète ce mot à l'utilisateur.
 - Messages d'erreur côté gateway/broker et textes `access_request`.
-- `gwsa list` / sorties CLI destinées à être lues par l'humain.
+- `mag list` / sorties CLI destinées à être lues par l'humain.
 - Docs (`docs/usage.md`, `SECURITY.md`, protocole des tests manuels).
 
 ## Proposition
 
 - Remplacer « token/jeton expiré » par « **connexion à Google expirée — à
   refaire** » dans toutes les surfaces lues par l'humain (messages MCP,
-  CLAUDE.md, docs, sorties gwsa).
+  CLAUDE.md, docs, sorties mag).
 - Ajouter une ligne de glossaire dans SECURITY.md : « verrou (CLI lock/unlock)
   = accès verrouillé dans l'interface ; jeton OAuth = la “connexion” dans
   l'interface » — pour que le CLI expert et les docs techniques gardent leur
@@ -57,7 +57,7 @@ suivent pas :
       expirée — à refaire ».
 - [ ] Modale de déconnexion admin (`admin/index.html`) : retirer « tokens ».
 - [ ] `SECURITY.md` : « jeton » → glossaire (verrou / connexion), sans 3ᵉ mot.
-- [ ] Docs (`docs/usage.md`, protocole tests manuels) + sorties `gwsa` lues par
+- [ ] Docs (`docs/usage.md`, protocole tests manuels) + sorties `mag` lues par
       l'humain : idem.
 
 ## Notes

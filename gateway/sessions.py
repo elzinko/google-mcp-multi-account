@@ -1,7 +1,7 @@
 """Registre des sessions LLM — capacités éphémères par conversation (fiche 0040).
 
 Chaque session MCP reçoit un identifiant à l'initialize. Les unlock et zones
-Drive accordés via « gwsa session … » ne profitent qu'à cette session (et à ses
+Drive accordés via « mag session … » ne profitent qu'à cette session (et à ses
 sous-sessions déclarées), pas aux autres conversations du poste.
 """
 from __future__ import annotations

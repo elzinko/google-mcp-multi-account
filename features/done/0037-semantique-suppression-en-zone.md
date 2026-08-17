@@ -32,7 +32,7 @@ corbeiller le dossier-frontière, pas seulement son contenu.
 
 Le modèle mental attendu (utilisateur) : l'humain crée le dossier (la
 frontière), le LLM travaille **dedans** sans pouvoir supprimer, et « retirer
-une zone » est un geste de **config** (`gwsa grant revoke`), jamais une
+une zone » est un geste de **config** (`mag grant revoke`), jamais une
 suppression Drive. Ce dernier point est **déjà vrai** — revoke n'édite que la
 config. Il manque de rendre le reste cohérent.
 

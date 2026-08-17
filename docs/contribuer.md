@@ -18,7 +18,7 @@ automatiques n'en utilisent aucun).
 Pour voir tourner l'interface admin sur votre code :
 
 ```bash
-./bin/gma dev test         # déploie le clone courant, démarre l'admin, affiche l'URL
+./bin/mag dev test         # déploie le clone courant, démarre l'admin, affiche l'URL
 ```
 
 ## Comment le travail s'organise

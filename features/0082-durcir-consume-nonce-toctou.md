@@ -27,7 +27,7 @@ Défaut **latent** (il faut deux vérifications concurrentes sur le même nonce 
 payload reste **signé** (non forgeable) — d'où **P2**. Mais il touche du code **en production** (le
 Touch ID est live), pas seulement le POC passkey.
 
-Relevé par la revue Codex de la PR #115 : la fiche [0081](0081-durcir-approbation-passkey-distante.md)
+Relevé par la revue Codex de la PR #115 : la fiche [0083](0083-durcir-approbation-passkey-distante.md)
 le mentionnait comme « déjà répertorié » alors qu'**aucune** fiche ne le suivait — ce trou est
 désormais **owné ici**.
 
@@ -35,7 +35,7 @@ désormais **owné ici**.
 
 Sérialiser `load → check → save` de `consume_nonce` derrière un **verrou inter-process** (verrou
 fichier, **même mécanisme** que le TOCTOU `sign_count` de
-[0081](0081-durcir-approbation-passkey-distante.md)), englobant un **rechargement frais** du registre
+[0083](0083-durcir-approbation-passkey-distante.md)), englobant un **rechargement frais** du registre
 de nonces **sous le verrou** — pas l'état chargé avant. Comme la colonne anti-rejeu est **unique et
 partagée**, un seul verrou couvre les deux chemins (Touch ID + passkey).
 
@@ -49,7 +49,7 @@ partagée**, un seul verrou couvre les deux chemins (Touch ID + passkey).
 
 ## Notes
 
-- **Fiche sœur** de [0081](0081-durcir-approbation-passkey-distante.md) (TOCTOU `sign_count`) : **même
+- **Fiche sœur** de [0083](0083-durcir-approbation-passkey-distante.md) (TOCTOU `sign_count`) : **même
   classe**, **même correctif** (verrou inter-process + rechargement frais). Les deux se traitent d'un
   seul geste de verrouillage si tirées ensemble.
 - Colonne anti-rejeu partagée : [ADR-0005](../docs/adr/ADR-0005-elicitation-signee-v2.md) (élicitation

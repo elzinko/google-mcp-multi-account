@@ -3,15 +3,15 @@
 #
 # Complète deploy-local.sh (tags stables + symlink current) pour essayer une
 # feature branch en conditions réelles. Cf. fiche 0041.
-# Alias : gwsa sandbox …  (gwsa couloir … = déprécié).
+# Alias : mag sandbox …  (mag couloir … = déprécié).
 #
 # Usage :
-#   gwsa sandbox deploy [--wire [desktop,code,cursor|all]] [--repo DIR] …
-#   gwsa sandbox list [--json]
-#   gwsa sandbox status [id]
-#   gwsa sandbox remove [id] [--all]
-#   gwsa sandbox wire [id] [--wire desktop,code,cursor|all]
-#   gwsa sandbox wire [id] --remove [desktop,code,cursor|all]
+#   mag sandbox deploy [--wire [desktop,code,cursor|all]] [--repo DIR] …
+#   mag sandbox list [--json]
+#   mag sandbox status [id]
+#   mag sandbox remove [id] [--all]
+#   mag sandbox wire [id] [--wire desktop,code,cursor|all]
+#   mag sandbox wire [id] --remove [desktop,code,cursor|all]
 #
 # deploy
 #   Archive HEAD (fichiers suivis uniquement ; arbre sale → avertissement).
@@ -31,8 +31,8 @@
 #   Retire l'entrée MCP suffixée des clients listés seulement.
 #   Sans valeur : all (desktop, code, cursor). Ne touche JAMAIS l'entrée stable.
 #   Ne supprime PAS le répertoire sandbox (voir remove pour ça).
-#   Ex. : gwsa sandbox wire --remove desktop
-#         gwsa sandbox wire <id> --remove desktop,cursor
+#   Ex. : mag sandbox wire --remove desktop
+#         mag sandbox wire <id> --remove desktop,cursor
 #
 # remove
 #   Nucléaire : unwire tous les clients, arrête broker/admin, puis supprime
@@ -517,7 +517,7 @@ PY
   done
 }
 
-cmd_remove() { # gwsa sandbox remove [id] [--all]
+cmd_remove() { # mag sandbox remove [id] [--all]
   local id="" all=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -537,19 +537,19 @@ cmd_remove() { # gwsa sandbox remove [id] [--all]
   # Sans id : sandboxes de la branche courante du worktree / clone.
   command -v git >/dev/null 2>&1 || die "git est requis pour remove sans id"
   git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1 \
-    || die "pas de dépôt git dans $REPO_ROOT — précise un id : gwsa sandbox remove <id>"
+    || die "pas de dépôt git dans $REPO_ROOT — précise un id : mag sandbox remove <id>"
 
   local branch ids=()
   branch="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
   [[ -n "$branch" ]] \
-    || die "impossible de résoudre HEAD — précise un id : gwsa sandbox list puis remove <id>"
+    || die "impossible de résoudre HEAD — précise un id : mag sandbox list puis remove <id>"
 
   while IFS= read -r line; do
     [[ -n "$line" ]] && ids+=("$line")
   done < <(list_branch_sandbox_ids | sort -u)
 
   if [[ ${#ids[@]} -eq 0 ]]; then
-    die "aucune sandbox pour la branche « $branch » — gwsa sandbox list"
+    die "aucune sandbox pour la branche « $branch » — mag sandbox list"
   fi
 
   if [[ ${#ids[@]} -eq 1 ]]; then
@@ -571,12 +571,12 @@ cmd_remove() { # gwsa sandbox remove [id] [--all]
     printf 'Supprimer les %s ? [y/N] ' "${#ids[@]}" >&2
     local ans=""
     read -r ans || true
-    [[ "$ans" == [yY] ]] || die "annulé — ou : gwsa sandbox remove <id> | remove --all"
+    [[ "$ans" == [yY] ]] || die "annulé — ou : mag sandbox remove <id> | remove --all"
     for x in "${ids[@]}"; do cmd_remove_one "$x"; done
     return 0
   fi
 
-  die "plusieurs matches — précise un id, ou : gwsa sandbox remove --all"
+  die "plusieurs matches — précise un id, ou : mag sandbox remove --all"
 }
 
 # Résout un id sandbox (explicite ou branche courante) → imprime l'id unique.
@@ -592,12 +592,12 @@ resolve_sandbox_id() { # resolve_sandbox_id [id] → id
   local branch ids=()
   branch="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
   [[ -n "$branch" ]] \
-    || die "impossible de résoudre HEAD — précise un id : gwsa sandbox list"
+    || die "impossible de résoudre HEAD — précise un id : mag sandbox list"
   while IFS= read -r line; do
     [[ -n "$line" ]] && ids+=("$line")
   done < <(list_branch_sandbox_ids | sort -u)
   if [[ ${#ids[@]} -eq 0 ]]; then
-    die "aucune sandbox pour la branche « $branch » — gwsa sandbox list"
+    die "aucune sandbox pour la branche « $branch » — mag sandbox list"
   fi
   if [[ ${#ids[@]} -eq 1 ]]; then
     printf '%s' "${ids[0]}"
@@ -606,7 +606,7 @@ resolve_sandbox_id() { # resolve_sandbox_id [id] → id
   echo "Plusieurs sandboxes pour « $branch » :" >&2
   local x
   for x in "${ids[@]}"; do echo "  - $x" >&2; done
-  die "précise un id : gwsa sandbox wire <id> [--wire … | --remove …]"
+  die "précise un id : mag sandbox wire <id> [--wire … | --remove …]"
 }
 
 # Consomme --wire / --remove / formes =… ; pose DO_WIRE, WIRE_SPEC, DO_REMOVE, REMOVE_SPEC.
@@ -647,7 +647,7 @@ parse_wire_flag() {
   done
 }
 
-cmd_wire() { # gwsa sandbox wire [id] [--wire …] | --remove [desktop,code,cursor|all]
+cmd_wire() { # mag sandbox wire [id] [--wire …] | --remove [desktop,code,cursor|all]
   local id=""
   parse_wire_flag "$@"
   if ((${#PARSE_WIRE_REST[@]})); then
@@ -683,7 +683,7 @@ PY
     step "Unwire sélectif « $id » (répertoire conservé)"
     unwire_sandbox_clients "$id" "${mcp_entry:-google-multi-account-${id}}"
     ok "entrée MCP retirée des clients choisis — sandbox « $id » toujours sous $target"
-    echo "  → remove nucléaire (tous clients + supprimer le répertoire) : gwsa sandbox remove $id"
+    echo "  → remove nucléaire (tous clients + supprimer le répertoire) : mag sandbox remove $id"
     return 0
   fi
 
@@ -701,7 +701,7 @@ cmd_deploy() {
   local src="$REPO_ROOT" kind="dev" want_port="" want_admin=""
   parse_wire_flag "$@"
   if [[ -n "$DO_REMOVE" ]]; then
-    die "deploy : utilise « gwsa sandbox wire --remove … » pour unwire (pas --remove sur deploy)"
+    die "deploy : utilise « mag sandbox wire --remove … » pour unwire (pas --remove sur deploy)"
   fi
   if ((${#PARSE_WIRE_REST[@]})); then
     set -- "${PARSE_WIRE_REST[@]}"
@@ -822,9 +822,9 @@ PY
     cat <<EOF
 1. Redémarrer les clients MCP (Cmd-Q Claude Desktop / nouveau « claude » / reload Cursor).
 2. Vérifier l'entrée « $entry_name » (port $broker_port) dans le client — pas « google-multi-account » (4878).
-3. Statut : ./bin/gwsa sandbox status $id
+3. Statut : ./bin/mag sandbox status $id
 4. Admin sandbox : http://127.0.0.1:$admin_port
-   GWSA_ADMIN_PORT=$admin_port $target/bin/gwsa admin
+   GWSA_ADMIN_PORT=$admin_port $target/bin/mag admin
 
 ⚠ http://127.0.0.1:$STABLE_ADMIN = admin stable / worktree, PAS cette sandbox.
 Le déploiement stable (broker $STABLE_BROKER) n'a pas été touché.
@@ -838,7 +838,7 @@ EOF
      --name $entry_name \\
      --port $broker_port
 
-   Ou en une commande : ./bin/gwsa sandbox wire $id --wire desktop,cursor
+   Ou en une commande : ./bin/mag sandbox wire $id --wire desktop,cursor
 
 2. Cursor (~/.cursor/mcp.json) — même binaire et port :
 
@@ -849,14 +849,14 @@ EOF
 
 4. Vérifier :
 
-   ./bin/gwsa sandbox status $id
+   ./bin/mag sandbox status $id
    # admin sandbox (pas 4877) : http://127.0.0.1:$admin_port
 
 5. Admin dédié sandbox (port $admin_port — distinct du stable $STABLE_ADMIN) :
 
-   GWSA_ADMIN_PORT=$admin_port $target/bin/gwsa admin
+   GWSA_ADMIN_PORT=$admin_port $target/bin/mag admin
    # ou depuis le worktree :
-   # GWSA_ADMIN_PORT=$admin_port ./bin/gwsa admin
+   # GWSA_ADMIN_PORT=$admin_port ./bin/mag admin
 
 ⚠ http://127.0.0.1:$STABLE_ADMIN = admin stable / worktree, PAS cette sandbox.
 
@@ -1040,7 +1040,7 @@ PY
     echo
     cmd_status "$name"
   done
-  [[ -n "$any" ]] || warn "aucune sandbox — lance : gwsa sandbox deploy --dev"
+  [[ -n "$any" ]] || warn "aucune sandbox — lance : mag sandbox deploy --dev"
 }
 
 main() {

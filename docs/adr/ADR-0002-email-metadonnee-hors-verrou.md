@@ -37,16 +37,16 @@ lisible : l'email du compte, pour le diagnostic (`setup_status`). »
 changer la nature : c'est une métadonnée persistée, plus jamais le résultat
 d'une exécution gws.**
 
-- À la connexion (`gwsa add`, geste humain), l'email est écrit en clair dans
-  `<profil>/.email`. `gwsa list` et l'admin backfillent les profils créés
+- À la connexion (`mag add`, geste humain), l'email est écrit en clair dans
+  `<profil>/.email`. `mag list` et l'admin backfillent les profils créés
   avant cette décision, dès qu'ils lisent un email non vide.
-- Toutes les surfaces (**`profiles_list`, `setup_status`, admin, gwsa**)
+- Toutes les surfaces (**`profiles_list`, `setup_status`, admin, mag**)
   lisent ce fichier. La gateway ne lance plus aucun subprocess gws pour ça.
 - L'invariant devient net et testable : **verrou ⇒ zéro exécution gws avec
   les credentials du profil**, et `gateway/` ne contient aucun
   `GOOGLE_WORKSPACE_CLI_CONFIG_DIR` hors `broker_server.py` (test statique).
 - Fichier absent (profil legacy) : email vide, IAM « unknown », et
-  `next_actions` suggère `gwsa list` (le backfill est un passage humain).
+  `next_actions` suggère `mag list` (le backfill est un passage humain).
   Un contenu qui n'est pas un email est ignoré (pas de confiance aveugle).
 
 ## Options considérées
@@ -96,7 +96,7 @@ bien plus sensible qu'un email).
   la doctrine (« le verrou bloque *toute* exécution gws »), les tests
   hermétiques (l'email se teste sans binaire gws).
 - Devient plus exigeant : `.email` peut dériver si quelqu'un fait
-  `gws auth login` à la main hors `gwsa` (chemin non supporté) — les
-  passages `gwsa add`/`gwsa list` re-synchronisent.
+  `gws auth login` à la main hors `mag` (chemin non supporté) — les
+  passages `mag add`/`mag list` re-synchronisent.
 - SECURITY.md reste vrai mot pour mot ; threat model mis à jour
   (section « Email = métadonnée d'identité »).

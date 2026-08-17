@@ -28,7 +28,7 @@ Depuis la fenêtre d'ajout de zone de l'admin, deux variantes possibles :
 - **Lien** : un bouton « 📁 Créer un dossier dans Drive… » qui ouvre la page
   Drive de création (l'humain nomme, crée), puis revient sélectionner le
   dossier comme zone.
-- **Création directe** : l'admin crée le dossier lui-même (via `bin/gwsa` /
+- **Création directe** : l'admin crée le dossier lui-même (via `bin/mag` /
   `gws`, geste **humain** initié par le bouton, jamais par le LLM), puis le
   propose aussitôt comme zone.
 

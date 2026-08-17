@@ -16,18 +16,18 @@
 | 0024 | Fiabiliser les tools Gmail/Drive du MCP — brouillon cassé, Drive sans contenu ni propriétaire | bug | P1 |  |  | ✅ shipped | #26 |
 | 0025 | Couloirs étanches — chaque version branchée parle à son propre broker | bug | P1 |  |  | ✅ shipped | #27 |
 | 0029 | Publier et mettre à jour en une commande (release semver + update façon installeur) | feature | P1 |  |  | ✅ shipped | #28 |
-| 0030 | Poste de commande versionné — gwsa update/release et le lien PATH sur la copie installée | feature | P1 |  |  | ✅ shipped | #30 |
+| 0030 | Poste de commande versionné — mag update/release et le lien PATH sur la copie installée | feature | P1 |  |  | ✅ shipped | #30 |
 | 0031 | La suite de tests ne doit jamais pouvoir toucher le PATH réel | bug | P1 |  |  | ✅ shipped | #31 |
 | 0037 | Sémantique de la suppression en zone — corbeille = suppression, racine de zone immuable, avertissement | feature | P1 |  |  | ✅ shipped | #47 |
 | 0043 | Lire, copier, téléverser — contenu Drive et pièces jointes Gmail via MCP | feature | P1 |  |  | ✅ shipped | #73 |
-| 0059 | gwsa ne résout plus un dossier par son nom depuis le vault (grant / policy zone) | bug | P1 |  |  | ✅ shipped | #77 |
-| 0061 | Déconnexion — modale de confirmation + bouton compact | feature | P1 | v0.4.0 | 0060 | 🔴 todo |  |
-| 0062 | Admin header — réordonner actions + mode Avancé + retirer texte long | feature | P1 | v0.4.0 | 0060 | 🔴 todo |  |
-| 0063 | Remplacer « Tout verrouiller » par icône cadenas + modale d'impact | feature | P1 | v0.4.0 | 0060 | 🔴 todo |  |
-| 0064 | Améliorer le bouton retour « ‹ Comptes » (style + position) | feature | P1 | v0.4.0 | 0060 | 🔴 todo |  |
-| 0065 | Masquer « + Connecter un compte » en vue détail | feature | P1 | v0.4.0 | 0060 | 🔴 todo |  |
-| 0066 | Journal — lisibilité (wrap colonnes, plus de scroll horizontal) | feature | P1 | v0.4.0 | 0060 | 🔴 todo |  |
-| 0067 | Admin branding — corriger le titre de page | feature | P1 | v0.4.0 | 0060 | 🔴 todo |  |
+| 0059 | mag ne résout plus un dossier par son nom depuis le vault (grant / policy zone) | bug | P1 |  |  | ✅ shipped | #77 |
+| 0061 | Déconnexion — modale de confirmation + bouton compact | feature | P1 | v0.4.0 | 0060 | ✅ shipped | #112 |
+| 0062 | Admin header — réordonner actions + mode Avancé + retirer texte long | feature | P1 | v0.4.0 | 0060 | ✅ shipped | #112 |
+| 0063 | Remplacer « Tout verrouiller » par icône cadenas + modale d'impact | feature | P1 | v0.4.0 | 0060 | ✅ shipped | #112 |
+| 0064 | Améliorer le bouton retour « ‹ Comptes » (style + position) | feature | P1 | v0.4.0 | 0060 | ✅ shipped | #112 |
+| 0065 | Masquer « + Connecter un compte » en vue détail | feature | P1 | v0.4.0 | 0060 | ✅ shipped | #112 |
+| 0066 | Journal — lisibilité (wrap colonnes, plus de scroll horizontal) | feature | P1 | v0.4.0 | 0060 | ✅ shipped | #112 |
+| 0067 | Admin branding — corriger le titre de page | feature | P1 | v0.4.0 | 0060 | ✅ shipped | #112 |
 | 0074 | Durcir la v1 — punch-list de lancement (doc, tests, hygiène) | feature | P1 | v1.0 |  | 🟠 in-progress |  |
 | 0078 | Approbation par passkey depuis le téléphone (archi actuelle, Mac holder) | feature | P1 |  | 0077 | ✅ shipped | #113 |
 | 0080 | Durcir la couche capacités fines de session (suite revue Codex #110) | feature | P1 |  | 0076 | 🔴 todo |  |
@@ -36,7 +36,7 @@
 | 0008 | Connexion dynamique d'un nouveau compte via élicitation forte (access_request kind=add_account) | feature | P2 |  |  | ✅ shipped | #7 |
 | 0009 | Tool MCP `setup_status` (lecture seule) + `provision-gcp.sh status --json` | feature | P2 |  |  | ✅ shipped | #11 |
 | 0010 | README en quickstart 3 étapes — le détail part dans docs/ | feature | P2 |  |  | ✅ shipped | #13 |
-| 0011 | `gwsa admin` — démarrer/arrêter l'interface web en un geste, proposé par l'élicitation | feature | P2 |  |  | ✅ shipped | #9 |
+| 0011 | `mag admin` — démarrer/arrêter l'interface web en un geste, proposé par l'élicitation | feature | P2 |  |  | ✅ shipped | #9 |
 | 0013 | Brancher le serveur MCP dans Claude Desktop en un geste (script idempotent) | feature | P2 |  |  | ✅ shipped | #15 |
 | 0016 | Porte d'entrée open-source — README copiable, SECURITY.md, licence MIT, badges | feature | P2 |  |  | ✅ shipped | #16 |
 | 0022 | Doc de critique technique lisible (forces / limites / risques) référencée au README | feature | P2 |  |  | ✅ shipped | #23 |
@@ -49,15 +49,16 @@
 | 0045 | Droits par session et par projet git — état des lieux, écarts, pistes | feature | P2 |  |  | 🟠 in-progress |  |
 | 0046 | CLI locale pour déployer des sandboxes temporaires (branche / worktree) | feature | P2 |  |  | 🟠 in-progress |  |
 | 0047 | Au moment d'autoriser un accès, nommer le compte (email) — pas seulement l'alias | feature | P2 |  |  | ✅ shipped | #75 |
-| 0068 | Accessibilité — focus-visible + reduced-motion (cadenas/modales/boutons) | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
-| 0069 | Docs in-app — rework orientation utilisateur | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
+| 0068 | Accessibilité — focus-visible + reduced-motion (cadenas/modales/boutons) | feature | P2 | v0.4.0 | 0060 | ✅ shipped | #112 |
+| 0069 | Docs in-app — rework orientation utilisateur | feature | P2 | v0.4.0 | 0060 | ✅ shipped | #112 |
 | 0070 | README — quickstart + usage par persona + permissions + contribution | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
 | 0071 | GitHub metadata — description, homepage, topics + badges | chore | P2 | v0.4.0 | 0060 | ✅ shipped |  |
 | 0072 | Site de doc en ligne (MkDocs Material + landing) déployé sur Vercel | feature | P2 |  | 0017 | ✅ shipped | #79 |
 | 0076 | Droits par session (Phase A desktop) — identité par consentement, jeton porté, config fine | feature | P2 |  | 0045 | ✅ shipped | #108, #110 |
-| 0081 | Durcir la couche d'approbation passkey distante (suite revue Codex #113) | feature | P2 |  | 0077 | 🔴 todo |  |
+| 0081 | Durcir updater/deploy — rollback à travers le renommage mag & liens PATH cassés | bug | P2 |  |  | 🔴 todo |  |
 | 0082 | Durcir consume_nonce contre une course TOCTOU inter-process (anti-rejeu partagé) | bug | P2 |  |  | 🔴 todo |  |
-| 0001 | Élicitation signée — faire monter `gwsa strongauth` de la présence à la signature | feature | P3 |  |  | 🟠 in-progress |  |
+| 0083 | Durcir la couche d'approbation passkey distante (suite revue Codex #113) | feature | P2 |  | 0077 | 🔴 todo |  |
+| 0001 | Élicitation signée — faire monter `mag strongauth` de la présence à la signature | feature | P3 |  |  | 🟠 in-progress |  |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)
 
@@ -84,4 +85,4 @@
 | 0028 | Ménage des versions déployées (+ CHANGELOG et releases GitHub) | chore | P3 |  |  | 💡 idea |  |
 | 0034 | Mettre à jour le protocole du test manuel drive-2-comptes (limites périmées + nouvelles phases) | chore | P3 |  |  | 💡 idea |  |
 
-> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0020, 0022, 0023, 0024, 0025, 0027, 0029, 0030, 0031, 0032, 0036, 0037, 0040, 0041, 0043, 0044, 0047, 0059, 0071, 0072, 0076, 0078.
+> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0020, 0022, 0023, 0024, 0025, 0027, 0029, 0030, 0031, 0032, 0036, 0037, 0040, 0041, 0043, 0044, 0047, 0059, 0061, 0062, 0063, 0064, 0065, 0066, 0067, 0068, 0069, 0071, 0072, 0076, 0078.

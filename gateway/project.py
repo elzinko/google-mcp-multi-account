@@ -153,7 +153,7 @@ def _verify_signature(manifest_path: Path, sig_path: Path) -> tuple[bool, str]:
             return False, "signature cryptographique invalide"
         except json.JSONDecodeError:
             return False, "reçu signature illisible"
-    return False, "format de signature inconnu (local: en dev ou gwsa project sign)"
+    return False, "format de signature inconnu (local: en dev ou mag project sign)"
 
 
 def gwsa_dir(root: str | Path) -> Path:
@@ -218,7 +218,7 @@ def init_project(start: Path | None = None) -> dict[str, Any]:
         "created": True,
         "manifest_path": str(path),
         "project_id": pid,
-        "message": "manifeste draft créé — éditer capabilities puis « gwsa project sign » (stub local:)",
+        "message": "manifeste draft créé — éditer capabilities puis « mag project sign » (stub local:)",
     }
 
 
@@ -229,7 +229,7 @@ def sign_manifest_local(start: Path | None = None) -> dict[str, Any]:
         raise ValueError("hors dépôt git")
     mpath = manifest_path_for(root)
     if not mpath.is_file():
-        raise ValueError("manifeste absent — « gwsa project init » d'abord")
+        raise ValueError("manifeste absent — « mag project init » d'abord")
     spath = sig_path_for(root)
     token = secrets.token_hex(8)
     sig = f"{LOCAL_SIG_PREFIX}{token}"
@@ -256,7 +256,7 @@ def sign_manifest(start: Path | None = None) -> dict[str, Any]:
         raise ValueError("hors dépôt git")
     mpath = manifest_path_for(root)
     if not mpath.is_file():
-        raise ValueError("manifeste absent — « gwsa project init » d'abord")
+        raise ValueError("manifeste absent — « mag project init » d'abord")
     strong = (gwsa_root() / ".strong-auth").is_file()
     if not strong:
         return sign_manifest_local(start)
@@ -272,7 +272,7 @@ def sign_manifest(start: Path | None = None) -> dict[str, Any]:
 
     if not is_enrolled():
         raise ValueError(
-            "élicitation signée requise — exécuter : gwsa elicitation enroll"
+            "élicitation signée requise — exécuter : mag elicitation enroll"
         )
     mhash = _manifest_hash(mpath)
     payload = build_payload("project_sign", target=mhash[:32])
@@ -352,9 +352,9 @@ def resolve_project(start: Path | None = None) -> ProjectContext:
     root = git_toplevel(start)
     if not root:
         return ProjectContext()
-    gwsa = Path(root) / GWSA_DIR
-    manifest_path = gwsa / MANIFEST_NAME
-    sig_path = gwsa / SIG_NAME
+    mag = Path(root) / GWSA_DIR
+    manifest_path = mag / MANIFEST_NAME
+    sig_path = mag / SIG_NAME
     pid = project_id_from_root(root)
     ctx = ProjectContext(
         git_root=root,

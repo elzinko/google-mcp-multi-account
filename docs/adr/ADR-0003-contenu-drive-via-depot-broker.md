@@ -53,7 +53,7 @@ exécuter gws par le broker avec ce répertoire comme répertoire courant.**
   lit pour vérifier la zone d'écriture. Les zones Drive s'appliquent donc au
   dépôt de contenu exactement comme à la création d'un fichier vide.
 - Le répertoire commence par un point : les trois énumérateurs de profils
-  (`gateway/profiles.py`, `bin/gwsa`, `admin/server.js`) filtrent sur
+  (`gateway/profiles.py`, `bin/mag`, `admin/server.js`) filtrent sur
   `ALIAS_RE`, il n'apparaît jamais comme un compte.
 
 ## Options considérées
@@ -127,7 +127,7 @@ broker devait un jour servir des clients moins fiables que la gateway locale.
   désigner un fichier du projet.
 - Devient plus exigeant : un broker lancé **avant** cette version continue de
   servir l'ancien code et refusera l'upload (`outside the current directory`).
-  Remède : `gwsa broker stop` (il redémarre tout seul au prochain appel) —
+  Remède : `mag broker stop` (il redémarre tout seul au prochain appel) —
   c'est déjà ce que fait `scripts/deploy-local.sh`.
 - Le contenu écrit par le LLM touche le disque, en clair, le temps d'un appel
   (0600, dans un répertoire 0700, effacé en `finally`). C'est le même niveau

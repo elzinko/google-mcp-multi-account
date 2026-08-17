@@ -112,7 +112,7 @@ def _run(
         d = profile_dir(alias)
         if not d.is_dir():
             raise GatewayError(
-                f"profil inconnu « {alias} » — le créer avec : gma add {alias}",
+                f"profil inconnu « {alias} » — le créer avec : mag add {alias}",
                 code="not_found",
             )
         if is_locked(d) and not is_session_unlocked(sid, alias):
@@ -860,7 +860,7 @@ def _bootstrap_no_session(kind: str) -> dict[str, Any]:
     jeton peut emprunter est l'élicitation de CRÉATION de session — jamais un
     accès données. `access_request` reste utilisable sans jeton (ce n'est pas
     un tool de données), mais un kind qui exige une session en pointe ici vers
-    `gma session open`, plutôt que d'échouer sans piste.
+    `mag session open`, plutôt que d'échouer sans piste.
     """
     return {
         "ok": True,
@@ -870,11 +870,11 @@ def _bootstrap_no_session(kind: str) -> dict[str, Any]:
         "message": (
             f"« {kind} » nécessite une session MCP active (jeton). Aucune session "
             f"n'est ouverte pour cette conversation. L'utilisateur doit exécuter :\n"
-            f"  gma session open\n"
+            f"  mag session open\n"
             f"(geste signé — Touch ID/biométrie ; enrôlement requis) puis relancer "
             f"la demande avec le jeton (session_id) obtenu."
         ),
-        "suggested_command": "gma session open",
+        "suggested_command": "mag session open",
     }
 
 
@@ -906,7 +906,7 @@ def access_request(
     kind = (kind or "").lower().strip()
     if kind == "add_account":
         # Connexion d'un NOUVEAU compte : l'alias n'existe pas encore (validé
-        # en format seulement). Le LLM propose ; l'humain exécute gma add
+        # en format seulement). Le LLM propose ; l'humain exécute mag add
         # (consentement OAuth navigateur + Touch ID si strongauth).
         if not email or "@" not in email:
             raise GatewayError(
@@ -922,7 +922,7 @@ def access_request(
             "message": (
                 f"Connexion d'un nouveau compte demandée : « {alias} » ({email}). "
                 f"L'utilisateur doit exécuter lui-même :\n"
-                f"  gma add {alias} {email}\n"
+                f"  mag add {alias} {email}\n"
                 f"(navigateur → choisir {email} → accepter ; Touch ID d'abord si "
                 f"strongauth est activé). Prérequis côté projet GCP : l'adresse doit "
                 f"être test user si l'app est en Testing, et recevoir le rôle IAM "
@@ -930,7 +930,7 @@ def access_request(
                 f"« ./scripts/provision-gcp.sh status » puis « sync-iam » "
                 f"(docs/setup-oauth.md §7). Le LLM ne doit RIEN exécuter de tout ça."
             ),
-            "suggested_command": f"gma add {alias} {email}",
+            "suggested_command": f"mag add {alias} {email}",
         }
     # Nommer le compte au moment d'autoriser (fiche 0047) : « alias » (email).
     # L'email (.email, ADR-0002) est lisible même verrouillé ; repli alias seul
@@ -955,13 +955,13 @@ def access_request(
                 "message": (
                     f"Le profil {who} est verrouillé pour cette session. "
                     f"L'utilisateur doit exécuter :\n"
-                    f"  gma session unlock {sid} {alias} {mins}\n"
+                    f"  mag session unlock {sid} {alias} {mins}\n"
                     f"(déverrouillage limité à cette conversation — {mins} min). "
                     f"À distance (loin du Mac), la même commande + « --remote » "
                     f"bascule l'approbation sur la passkey du téléphone (fiche 0078) "
                     f"— nécessite un enrôlement préalable côté humain."
                 ),
-                "suggested_command": f"gma session unlock {sid} {alias} {mins}",
+                "suggested_command": f"mag session unlock {sid} {alias} {mins}",
             }
         return {
             "ok": True,
@@ -973,11 +973,11 @@ def access_request(
                 f"Le profil {who} est verrouillé (accès sur demande). "
                 f"Depuis une conversation MCP, préférer access_request kind=session_unlock "
                 f"(déverrouillage limité à cette session). Sans session MCP active, legacy poste entier :\n"
-                f"  gma unlock {alias} {mins}\n"
+                f"  mag unlock {alias} {mins}\n"
                 f"(déprécié — partagé entre toutes les sessions ; admin http://127.0.0.1:4877). "
                 f"Le LLM ne doit PAS exécuter cette commande ni contourner le verrou."
             ),
-            "suggested_command": f"gma unlock {alias} {mins}",
+            "suggested_command": f"mag unlock {alias} {mins}",
         }
     if kind in ("session_grant", "grant", "project_grant"):
         if not folder:
@@ -1009,12 +1009,12 @@ def access_request(
                     "message": (
                         f"Aucun manifeste projet (.gwsa/manifest.json). "
                         f"L'utilisateur doit d'abord :\n"
-                        f"  gma project init\n"
+                        f"  mag project init\n"
                         f"  # éditer capabilities.{alias}.drive.zones\n"
-                        f"  gma project sign\n"
+                        f"  mag project sign\n"
                         f"puis access_request kind=project_grant à nouveau."
                     ),
-                    "suggested_command": "gma project init",
+                    "suggested_command": "mag project init",
                 }
             if not proj.manifest_valid:
                 return {
@@ -1027,9 +1027,9 @@ def access_request(
                     "message": (
                         f"Manifeste projet présent mais signature invalide "
                         f"({proj.verify_error or 'non signé'}). "
-                        f"Exécuter : gma project sign"
+                        f"Exécuter : mag project sign"
                     ),
-                    "suggested_command": "gma project sign",
+                    "suggested_command": "mag project sign",
                 }
             # folder peut être un nom — on ne résout pas Drive ici ; on teste si
             # ça ressemble à un id déjà dans le manifeste, sinon on guide quand même
@@ -1047,11 +1047,11 @@ def access_request(
                     "message": (
                         f"« {folder} » n'est pas dans le plafond manifeste projet "
                         f"pour {who} (.gwsa/manifest.json). "
-                        f"L'humain doit éditer capabilities puis « gma project sign », "
+                        f"L'humain doit éditer capabilities puis « mag project sign », "
                         f"ou choisir une zone déjà déclarée. "
                         f"Session grant hors manifeste serait refusé."
                     ),
-                    "suggested_command": "gma project show",
+                    "suggested_command": "mag project show",
                 }
             return {
                 "ok": True,
@@ -1063,10 +1063,10 @@ def access_request(
                 "message": (
                     f"Zone projet « {folder} » dans le plafond .gwsa/ pour {who}. "
                     f"Pour l'activer sur cette conversation :\n"
-                    f'  gma session grant {sid} {alias} "{folder}" {h}\n'
+                    f'  mag session grant {sid} {alias} "{folder}" {h}\n'
                     f"(intersection policy ∩ manifeste ∩ session — {h} h)."
                 ),
-                "suggested_command": f'gma session grant {sid} {alias} "{folder}" {h}',
+                "suggested_command": f'mag session grant {sid} {alias} "{folder}" {h}',
             }
 
         if sid or kind == "session_grant":
@@ -1084,13 +1084,13 @@ def access_request(
                     f"Écriture Drive sous « {folder} » refusée pour cette session "
                     f"(compte {who}). "
                     f"L'utilisateur doit exécuter :\n"
-                    f'  gma session grant {sid} {alias} "{folder}" {h}\n'
+                    f'  mag session grant {sid} {alias} "{folder}" {h}\n'
                     f"(zone valable pour cette conversation seulement — {h} h). "
                     f"Si le dépôt a un .gwsa/ signé, préférer kind=project_grant "
                     f"(vérifie le plafond manifeste). À distance, ajouter « --remote » "
                     f"pour approuver depuis la passkey du téléphone (fiche 0078)."
                 ),
-                "suggested_command": f'gma session grant {sid} {alias} "{folder}" {h}',
+                "suggested_command": f'mag session grant {sid} {alias} "{folder}" {h}',
             }
         return {
             "ok": True,
@@ -1105,11 +1105,11 @@ def access_request(
                 f"Depuis une conversation MCP, préférer access_request kind=session_grant "
                 f"ou kind=project_grant (zone limitée à cette session + plafond .gwsa/). "
                 f"Sans session MCP active, legacy poste entier :\n"
-                f"  gma grant {alias} \"{folder}\" {h}\n"
+                f"  mag grant {alias} \"{folder}\" {h}\n"
                 f"(déprécié — partagé entre toutes les sessions ; admin http://127.0.0.1:4877). "
                 f"Expiration automatique — redemander est normal."
             ),
-            "suggested_command": f'gma grant {alias} "{folder}" {h}',
+            "suggested_command": f'mag grant {alias} "{folder}" {h}',
         }
     raise GatewayError(
         "kind invalide — utiliser « unlock », « grant », « session_unlock », "

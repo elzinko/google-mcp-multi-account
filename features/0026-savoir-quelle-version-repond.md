@@ -30,7 +30,7 @@ en fouillant la config à la main le 2026-07-26.
 
 - `setup_status` annonce sa propre version et son couloir (chemin du binaire,
   port du broker) : l'agent sait à qui il parle, sans terminal.
-- Une commande de contrôle (`deploy-local.sh --check` ou `gwsa doctor`) qui
+- Une commande de contrôle (`deploy-local.sh --check` ou `mag doctor`) qui
   compare l'entrée réellement branchée dans la config du client avec
   `~/.local/share/google-mcp/current`, et signale l'écart.
 

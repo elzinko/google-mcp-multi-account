@@ -15,7 +15,7 @@
 
 ## Contexte
 
-L'approbation d'une action sensible passe aujourd'hui par le **Touch ID du Mac** : `bin/gma`
+L'approbation d'une action sensible passe aujourd'hui par le **Touch ID du Mac** : `bin/mag`
 construit un payload `{action, alias, email, target, session_id, minutes|hours}`, appelle
 `scripts/elicitation-cli.py gate`, et `gateway/elicitation.run_elicitation_gate` **forge** le
 payload canonique (ajout `nonce`/`issued_at`/`expires_at`), **obtient une signature**
@@ -100,11 +100,11 @@ vérification, l'action s'exécute avec la `session_id` **issue du payload sign�
 sequenceDiagram
     autonumber
     participant R as Requester<br/>(session LLM, à distance)
-    participant M as Mac holder<br/>(gma + gateway)
+    participant M as Mac holder<br/>(mag + gateway)
     participant C as ApprovalChannel<br/>(stub POC / relais futur)
     participant P as Téléphone<br/>(passkey device-bound)
 
-    R->>M: gma unlock alias --remote (session_id)
+    R->>M: mag unlock alias --remote (session_id)
     M->>M: forge_challenge() = payload ADR-0005<br/>(action, cible, durée, session_id, nonce, expires_at)
     M->>C: send_challenge(envelope) — défi NON secret
     C->>P: défi + texte WYSIWYS
@@ -129,7 +129,7 @@ branche `else` montre le fail-closed (tout écart ⇒ rien exécuté).*
 ```mermaid
 graph TD
     subgraph infra["Infrastructure (remplaçable)"]
-        CLI["bin/gma --remote<br/>scripts/remote-approval-cli.py"]
+        CLI["bin/mag --remote<br/>scripts/remote-approval-cli.py"]
         STUB["approval_channel.InMemoryChannel<br/>(POC) — futur RelayChannel"]
     end
     subgraph domain["Domaine (stable)"]
@@ -190,4 +190,4 @@ le domaine ne connaît jamais le transport concret — DIP).*
 - [ADR-0007](ADR-0007-droits-par-session.md) — droits par session (`session_id`, couche #110).
 - [ADR-0008](ADR-0008-acces-mobile-passkey-holder-natif.md) — direction mobile ; cette fiche = phase 1.
 - Fiche `features/0078-approbation-passkey-archi-actuelle.md` (7 critères d'acceptation).
-- Code : `gateway/elicitation.py`, `gateway/sessions.py`, `scripts/elicitation-cli.py`, `bin/gma`.
+- Code : `gateway/elicitation.py`, `gateway/sessions.py`, `scripts/elicitation-cli.py`, `bin/mag`.

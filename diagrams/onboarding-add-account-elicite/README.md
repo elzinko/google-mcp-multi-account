@@ -23,13 +23,13 @@ sequenceDiagram
     actor Toi
     participant LLM as LLM (Desktop/Code)
     participant MCP as MCP google-mcp
-    participant GWSA as gwsa (terminal)
+    participant GWSA as mag (terminal)
     participant Google
 
     Toi->>LLM: « connecte ce compte »
     LLM->>MCP: access_request add_account
     MCP-->>LLM: commande suggérée (rien d'exécuté)
-    LLM-->>Toi: propose « gwsa add … »
+    LLM-->>Toi: propose « mag add … »
     Toi->>GWSA: exécute la commande
     GWSA->>Toi: exige Touch ID
     GWSA->>Google: ouvre le consentement OAuth
