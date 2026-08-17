@@ -46,6 +46,7 @@
 | 0046 | CLI locale pour déployer des sandboxes temporaires (branche / worktree) | feature | P2 |  |  | 🟠 in-progress |  |
 | 0076 | Droits par session (Phase A desktop) — identité par consentement, jeton porté, config fine | feature | P2 |  | 0045 | ✅ shipped | #110 |
 | 0080 | Durcir la couche capacités fines de session (suite revue Codex #110) | feature | P1 |  | 0076 | 🔴 todo |  |
+| 0081 | Durcir updater/deploy — rollback à travers le renommage mag & liens PATH cassés | bug | P2 |  |  | 🔴 todo |  |
 | 0047 | Au moment d'autoriser un accès, nommer le compte (email) — pas seulement l'alias | feature | P2 |  |  | ✅ shipped | #75 |
 | 0068 | Accessibilité — focus-visible + reduced-motion (cadenas/modales/boutons) | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
 | 0069 | Docs in-app — rework orientation utilisateur | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
