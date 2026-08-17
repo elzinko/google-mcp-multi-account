@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>gws multi-comptes — admin</title>
+<title>google-multi-account — admin</title>
 <style>
 :root { --bg:#f6f5f0; --card:#fff; --txt:#222; --mut:#71706b; --line:#dedcd3;
   --ok:#0f6e56; --okbg:#e1f5ee; --warn:#854f0b; --warnbg:#faeeda;
@@ -15,7 +15,18 @@
 * { box-sizing:border-box; }
 body { margin:0; font:15px/1.55 -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--txt); }
 header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:16px 22px; border-bottom:1px solid var(--line); }
-h1 { font-size:19px; font-weight:600; margin:0 auto 0 0; }
+h1 { font-size:19px; font-weight:600; margin:0 auto 0 0; letter-spacing:-.01em; }
+.h1-sub { color:var(--mut); font-weight:400; }
+.hmenu { position:relative; display:inline-flex; }
+.hmenu-pop { position:absolute; top:calc(100% + 6px); right:0; z-index:50; min-width:212px;
+  background:var(--card); border:1px solid var(--line); border-radius:11px; padding:6px;
+  box-shadow:0 10px 28px rgba(0,0,0,.16); display:flex; flex-direction:column; gap:2px; }
+.hmenu-pop[hidden] { display:none; }
+.hmenu-pop button { width:100%; justify-content:flex-start; text-align:left; border:0; background:transparent;
+  border-radius:7px; padding:8px 11px; font-size:13.5px; }
+.hmenu-pop button:hover { background:color-mix(in srgb, var(--txt) 8%, var(--card)); }
+#moreBtn[aria-expanded="true"] { background:var(--accbg); color:var(--acc);
+  border-color:color-mix(in srgb,var(--acc) 40%,var(--line)); }
 main { max-width:880px; margin:0 auto; padding:18px 22px 60px; }
 button { font:inherit; border:1px solid var(--line); background:var(--card); color:var(--txt);
   border-radius:8px; padding:7px 13px; cursor:pointer; transition: transform .08s ease, filter .08s ease, box-shadow .08s ease; }
@@ -32,6 +43,8 @@ button.is-loading:not(.lockbtn)::before { content:""; display:inline-block; widt
 @keyframes btn-spin { to { transform:rotate(360deg); } }
 button.danger  { background:var(--badbg); border-color:var(--bad); color:var(--bad); font-weight:600; }
 button.small { padding:4px 9px; font-size:13px; border-radius:6px; }
+button.hbtn-icon { padding:7px 10px; line-height:0; }
+button.hbtn-icon svg { width:16px; height:16px; display:block; }
 .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin:12px 0; }
 .row1 { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .alias { font-family:ui-monospace, monospace; font-weight:700; font-size:16px; }
@@ -50,6 +63,7 @@ button.small { padding:4px 9px; font-size:13px; border-radius:6px; }
 #ctxStrip a.ctx-link { color:inherit; font-weight:600; text-decoration:underline; cursor:pointer; }
 #ctxStrip a.ctx-link:hover { opacity:.85; }
 .add-account-row { display:flex; justify-content:flex-end; margin:10px 0 0; }
+.add-account-row[hidden] { display:none; }
 .btn-add { display:inline-flex; align-items:center; gap:8px; background:var(--card); border:1px solid var(--line);
   border-radius:12px; padding:13px 16px; font:inherit; font-size:15px; font-weight:600; cursor:pointer; color:var(--acc);
   transition:border-color .15s, background .15s, box-shadow .15s, transform .08s; }
@@ -64,6 +78,10 @@ button.small { padding:4px 9px; font-size:13px; border-radius:6px; }
 .devmeta { font-size:12.5px; color:var(--mut); display:grid; gap:2px; }
 .devtabs { margin:10px 0 12px; }
 .devtabs button.active { background:var(--accbg); border-color:var(--acc); color:var(--acc); font-weight:600; }
+.btn-doclink { display:inline-flex; align-items:center; gap:6px; color:var(--acc); text-decoration:none;
+  font-size:13.5px; font-weight:600; border:1px solid color-mix(in srgb,var(--acc) 35%,var(--line));
+  background:var(--accbg); border-radius:9px; padding:7px 13px; }
+.btn-doclink:hover { border-color:var(--acc); filter:brightness(.98); }
 .devpanel { min-height:400px; max-height:52vh; overflow-y:auto; }
 .dev-tab-panel { min-height:400px; }
 .dev-summary { font-size:14px; line-height:1.65; }
@@ -113,6 +131,23 @@ legend { font-weight:600; font-size:14px; padding:0 6px; }
 table { width:100%; border-collapse:collapse; font-size:13px; }
 th, td { text-align:left; padding:5px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
 td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
+/* Journal (fiche 0066) : largeurs maîtrisées + wrap + vue dense → plus de scroll horizontal. */
+.logwrap { max-height:55vh; overflow-y:auto; overflow-x:hidden; }
+/* Écrans étroits : les colonnes fixes dépassent la largeur — on rétablit le
+   scroll horizontal plutôt que de clipper la colonne « décision » (Codex, #112). */
+@media (max-width: 560px) { .logwrap { overflow-x:auto; } }
+#logTable { table-layout:fixed; }
+#logTable th, #logTable td { vertical-align:top; overflow-wrap:anywhere; word-break:break-word; }
+#logTable col.c-when { width:122px; }
+#logTable col.c-client { width:84px; }
+#logTable col.c-acct { width:86px; }
+#logTable col.c-dec { width:108px; }
+#logTable td.cmd { white-space:normal; color:var(--txt); }
+#logTable .note { margin:3px 0 0; }
+#logTable.dense th, #logTable.dense td { padding:3px 7px; font-size:12px; }
+#logTable.dense col.c-when { width:94px; }
+#logTable.dense .badge { font-size:11.5px; padding:1px 7px; }
+#logDenseBtn.active { background:var(--accbg); border-color:var(--acc); color:var(--acc); }
 .docbody { max-height:58vh; overflow:auto; font-size:14px; line-height:1.6; padding-right:6px; }
 .docbody h1 { font-size:19px; margin:14px 0 8px; } .docbody h2 { font-size:16.5px; margin:14px 0 6px; }
 .docbody h3 { font-size:15px; margin:12px 0 4px; }
@@ -123,7 +158,6 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
 .docbody table { border-collapse:collapse; margin:8px 0; font-size:13px; }
 .docbody th, .docbody td { border:1px solid var(--line); padding:4px 8px; text-align:left; vertical-align:top; }
 .docbody th { background:var(--bg); }
-.docbody .mermaid { display:flex; justify-content:center; background:transparent; margin:10px 0; overflow-x:auto; }
 .pickrow { display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:7px; margin:1px 0; font-size:13.5px; cursor:pointer; user-select:none; }
 .pickrow:hover:not(.selected) { background:color-mix(in srgb, var(--txt) 8%, var(--card)); }
 .pickrow.selected { background:var(--accbg); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--acc) 45%, transparent); }
@@ -215,8 +249,12 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
 /* page de détail */
 .detail { background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
 .dhead { padding:14px 16px; border-bottom:1px solid var(--line); }
-.back { display:inline-flex; align-items:center; gap:6px; border:0; background:transparent; color:var(--acc);
-  cursor:pointer; font-size:13.5px; padding:0; margin-bottom:11px; }
+.back { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line); background:var(--card);
+  color:var(--acc); cursor:pointer; font-size:13px; font-weight:600; padding:5px 12px 5px 8px; border-radius:9px;
+  margin-bottom:14px; transition:border-color .12s, background .12s, transform .08s; }
+.back svg { width:15px; height:15px; margin-top:.5px; }
+.back:hover { border-color:color-mix(in srgb,var(--acc) 45%,var(--line)); background:var(--accbg); }
+.back:active { transform:scale(.97); }
 .drow { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .dmail { font-weight:700; font-size:17px; margin-right:auto; }
 .dbody { padding:15px 16px; }
@@ -227,6 +265,15 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
 .caps { display:flex; flex-wrap:wrap; gap:8px; }
 .cap { font-size:12.5px; font-weight:600; } .cap.y { color:var(--ok); } .cap.n { color:var(--bad); }
 .cap .d { color:var(--mut); font-weight:400; }
+/* « Autres services » repliés (revue P4) : Drive/Gmail en avant, le reste ici. */
+.svc-more { margin-top:4px; border-top:1px solid var(--line); }
+.svc-more > summary { cursor:pointer; padding:11px 0 9px; font-weight:600; color:var(--acc);
+  list-style:none; display:flex; align-items:center; gap:8px; }
+.svc-more > summary::-webkit-details-marker { display:none; }
+.svc-more > summary::before { content:"›"; color:var(--mut); font-weight:700; transition:transform .15s; }
+.svc-more[open] > summary::before { transform:rotate(90deg); }
+.svc-more > summary .note { font-weight:400; }
+.svc-more-note { margin:0 0 6px; }
 .danger { margin-top:18px; border:1px solid color-mix(in srgb,var(--bad) 35%,var(--line)); border-radius:10px;
   padding:12px 14px; background:color-mix(in srgb,var(--badbg) 55%,transparent); }
 .danger .drx { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
@@ -250,6 +297,8 @@ dialog.dlg-confirm::backdrop { animation:dlg-backdrop-in .2s ease both; }
   flex-shrink:0; color:var(--bad); background:color-mix(in srgb,var(--badbg) 72%,transparent);
   border:1px solid color-mix(in srgb,var(--bad) 22%,var(--line)); }
 .dlg-confirm-icon svg { width:20px; height:20px; display:block; }
+.dlg-confirm-icon.info { color:var(--acc); background:color-mix(in srgb,var(--accbg) 78%,transparent);
+  border-color:color-mix(in srgb,var(--acc) 24%,var(--line)); }
 .dlg-confirm-titles { min-width:0; }
 .dlg-confirm-titles h2 { margin:0 0 5px; font-size:18px; font-weight:600; letter-spacing:-.015em; line-height:1.25; }
 .dlg-confirm-sub { margin:0; font-size:13.5px; line-height:1.5; color:var(--mut); }
@@ -282,25 +331,46 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
 .dlg-policy-body .addrow { margin:4px 0 0; }
 .dlg-policy-foot { flex-shrink:0; margin:0; padding:12px 20px 16px; border-top:1px solid var(--line);
   display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; background:var(--card); }
+
+/* ── Accessibilité (fiche 0068) : focus visible homogène + reduced-motion ── */
+/* Un seul anneau de focus, cohérent partout (clavier uniquement via :focus-visible),
+   à la couleur d'accent — lisible en clair comme en sombre. */
+:focus-visible { outline:2px solid var(--acc); outline-offset:2px; }
+/* Cibles compactes (cadenas, ±, croix de zone, « Sélectionner ») : anneau au plus près. */
+.lockbtn:focus-visible, .cd-act:focus-visible, .zdel:focus-visible, .row-sel:focus-visible { outline-offset:1px; }
+/* Rangées cliquables : si rendues focusables (tabindex), même anneau. */
+.pickrow:focus-visible, .zonerow:focus-visible, .sbcard:focus-visible, .prow.can:focus-visible,
+.crumb a:focus-visible, .ctx-link:focus-visible { outline:2px solid var(--acc); outline-offset:2px; }
+/* Respecte « animations réduites » : neutralise spinners, dépliage cadenas,
+   flash du décompte critique, entrées de modale — sans casser les états finaux. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+    scroll-behavior:auto !important;
+  }
+}
 </style>
 </head>
 <body>
 <header>
-  <h1>gws multi-comptes — admin</h1>
+  <h1>google-multi-account <span class="h1-sub">— admin</span></h1>
   <span id="verBadge" class="badge" title="Version du code servi par cette admin">…</span>
-  <button onclick="lockAll()">🔒 Tout verrouiller</button>
+  <button class="hbtn-icon" onclick="openLockAll()" title="Tout verrouiller — repasse tous les comptes en accès verrouillé" aria-label="Tout verrouiller"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></button>
   <button onclick="openSessions()">💬 Sessions</button>
   <button onclick="openLog()">📓 Journal</button>
-  <button onclick="openDev()">🛠 Développement</button>
-  <button onclick="openSetup()">🩺 Setup</button>
   <button onclick="openDoc()">❓ Doc</button>
+  <div class="hmenu">
+    <button class="hbtn-icon" id="moreBtn" onclick="toggleMore(event)" aria-haspopup="true" aria-expanded="false" title="Plus d'outils" aria-label="Plus d'outils"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+    <div class="hmenu-pop" id="morePop" role="menu" hidden>
+      <button role="menuitem" onclick="closeMore();openDev()">🛠 Développement</button>
+      <button role="menuitem" onclick="closeMore();openSetup()">🩺 Santé du setup</button>
+    </div>
+  </div>
 </header>
 <div id="ctxStrip" role="status"></div>
 <main>
-  <p class="note">La ligne d'un compte se lit en deux temps.
-  <b>Le cadenas</b> : l'accès est-il verrouillé ou déverrouillé ? C'est un bouton — clique dessus.
-  <b>Le décompte</b> : le temps restant, en vrai.
-  Un compte déconnecté est grisé : « Reconnecter » sur la ligne, ou « + Connecter un compte ».</p>
   <div id="cards"></div>
   <div class="add-account-row">
     <button type="button" id="btnAdd" class="btn-add" onclick="openAdd()">＋ Connecter un compte</button>
@@ -339,6 +409,22 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
     <div class="dlg-foot">
       <button type="button" onclick="dRelock.close()">Annuler</button>
       <button type="button" class="danger-solid" id="relockGo" onclick="doRelock()">Verrouiller maintenant</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="dLockAll" class="dlg-confirm">
+  <div class="dlg-confirm-inner">
+    <div class="dlg-confirm-head">
+      <span class="dlg-confirm-icon info" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>
+      <div class="dlg-confirm-titles">
+        <h2>Tout verrouiller ?</h2>
+        <p class="dlg-confirm-sub">Tous les comptes connectés repassent en accès verrouillé : les nouvelles demandes des assistants seront refusées. ⚠️ Une conversation qui a déjà un déverrouillage de session actif y garde accès jusqu'à son expiration. Réversible, compte par compte.</p>
+      </div>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" onclick="dLockAll.close()">Annuler</button>
+      <button type="button" class="primary" id="lockAllGo" onclick="doLockAll()">Tout verrouiller</button>
     </div>
   </div>
 </dialog>
@@ -393,14 +479,27 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
     <button class="primary" onclick="doSessGrant()">Accorder</button></div>
 </dialog>
 
-<dialog id="dRevoke">
-  <h2>⛔ Révoquer <span id="revokeAlias" class="mono"></span></h2>
-  <p class="note">Les tokens sont supprimés de ce Mac : tous les LLM perdent immédiatement
-  l'accès à ce compte. (Révocable aussi côté Google : myaccount.google.com → Sécurité.)</p>
-  <label>Tape l'alias pour confirmer</label>
-  <input type="text" id="revokeConfirm" placeholder="alias">
-  <div class="mtop"><button onclick="dRevoke.close()">Annuler</button>
-  <button class="danger" onclick="doRevoke()">Révoquer définitivement</button></div>
+<dialog id="dDisconnect" class="dlg-confirm">
+  <div class="dlg-confirm-inner">
+    <div class="dlg-confirm-head">
+      <span class="dlg-confirm-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg></span>
+      <div class="dlg-confirm-titles">
+        <h2>Déconnecter ce compte ?</h2>
+        <p class="dlg-confirm-sub">Les assistants perdront l'accès à ce compte et tes réglages (zones, autorisations) seront oubliés. Rien n'est supprimé dans ton compte Google — pour le réutiliser, il faudra refaire une connexion complète.</p>
+      </div>
+    </div>
+    <div class="dlg-account-chip">
+      <span class="dlg-account-avatar" id="disconnectAvatar" aria-hidden="true"></span>
+      <span class="dlg-account-meta">
+        <span class="dlg-account-email" id="disconnectEmail"></span>
+        <span class="dlg-account-alias mono" id="disconnectAlias"></span>
+      </span>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" onclick="dDisconnect.close()">Annuler</button>
+      <button type="button" class="danger-solid" id="disconnectGo" onclick="doDisconnect()">Déconnecter</button>
+    </div>
+  </div>
 </dialog>
 
 <dialog id="dPolicy" class="dlg-policy">
@@ -495,10 +594,11 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
 <dialog id="dLog">
   <h2>Journal des accès</h2>
   <p class="note">Qui (client LLM via <span class="mono">GWSA_CLIENT</span>), quel compte, quelle commande, décision.</p>
-  <div style="max-height:55vh;overflow:auto"><table id="logTable">
+  <div class="logwrap"><table id="logTable">
+    <colgroup><col class="c-when"><col class="c-client"><col class="c-acct"><col class="c-cmd"><col class="c-dec"></colgroup>
     <thead><tr><th>Quand</th><th>Client</th><th>Compte</th><th>Commande</th><th>Décision</th></tr></thead>
     <tbody></tbody></table></div>
-  <div class="mtop"><button onclick="dLog.close()">Fermer</button></div>
+  <div class="mtop"><button class="small" id="logDenseBtn" onclick="toggleLogDense()">Vue dense</button><span class="spacer"></span><button onclick="dLog.close()">Fermer</button></div>
 </dialog>
 
 <dialog id="dSetup">
@@ -518,23 +618,36 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
 
 <dialog id="dDoc">
   <h2>Documentation</h2>
-  <div class="tabs">
-    <button class="small" onclick="showDoc('readme')">Installation & usage (README)</button>
-    <button class="small" onclick="showDoc('schemas')">Schémas (séquences)</button>
-    <button class="small" onclick="showDoc('mcp')">Serveur MCP & tools</button>
-    <button class="small" onclick="showDoc('oauth')">Setup OAuth (console Google)</button>
-  </div>
   <div class="docbody" id="docBody"></div>
-  <div class="mtop"><button onclick="dDoc.close()">Fermer</button></div>
+  <div class="mtop">
+    <a class="btn-doclink" href="https://elzinko.github.io/google-mcp-multi-account/" target="_blank" rel="noopener">📚 Documentation complète en ligne ↗</a>
+    <span class="spacer"></span>
+    <button onclick="dDoc.close()">Fermer</button>
+  </div>
+</dialog>
+
+<dialog id="dConfirm" class="dlg-confirm">
+  <div class="dlg-confirm-inner">
+    <div class="dlg-confirm-head">
+      <span class="dlg-confirm-icon" id="confirmIcon" aria-hidden="true"></span>
+      <div class="dlg-confirm-titles">
+        <h2 id="confirmTitle"></h2>
+        <p class="dlg-confirm-sub" id="confirmBody"></p>
+      </div>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" id="confirmCancel">Annuler</button>
+      <button type="button" id="confirmOk" class="danger-solid">Confirmer</button>
+    </div>
+  </div>
 </dialog>
 
 <div id="toast"></div>
 
-<script src="/vendor/mermaid.min.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const H = { "Content-Type": "application/json", "X-GWSA-Admin": "1" };
-let PROFILES = [], DOCS = null, polTarget = null, unlockTarget = null, revokeTarget = null, relockTarget = null;
+let PROFILES = [], polTarget = null, unlockTarget = null, disconnectTarget = null, relockTarget = null;
 let SESSIONS = [], sessActionSid = null;
 const LOCK_LOADING = new Set();
 const UNLOCK_ANIM = new Set(); // dépliage gauche du timer après unlock
@@ -578,31 +691,77 @@ async function api(path, opts) {
 }
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.style.opacity = 1; setTimeout(() => t.style.opacity = 0, 3000); }
 
+// Confirmation stylée (aux couleurs de l'app) en remplacement de confirm() natif.
+// Renvoie une Promise<bool>. Icône triangle d'alerte ; bouton rouge par défaut.
+const WARN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
+let _confirmResolve = null;
+function uiConfirm({ title, body, confirmLabel = "Confirmer", danger = true }) {
+  $("confirmTitle").textContent = title;
+  $("confirmBody").textContent = body || "";
+  const ok = $("confirmOk");
+  ok.textContent = confirmLabel;
+  ok.className = danger ? "danger-solid" : "primary";
+  $("confirmIcon").className = "dlg-confirm-icon" + (danger ? "" : " info");
+  $("confirmIcon").innerHTML = WARN_ICON;
+  return new Promise((resolve) => { _confirmResolve = resolve; dConfirm.showModal(); });
+}
+function _confirmSettle(v) { const r = _confirmResolve; _confirmResolve = null; if (dConfirm.open) dConfirm.close(); if (r) r(v); }
+$("confirmOk").addEventListener("click", () => _confirmSettle(true));
+$("confirmCancel").addEventListener("click", () => _confirmSettle(false));
+dConfirm.addEventListener("close", () => { if (_confirmResolve) _confirmSettle(false); }); // Échap / backdrop
+
+let LAST_SETUP = null;
+let IAM_PROPAGATING = null; // Set<email> réparés, en attente de propagation Google (~2 min)
+// Persiste entre ouvertures du Setup : rouvrir pendant la propagation ne doit pas
+// réafficher les comptes en échec (Codex P2, #112). Nettoyé seulement par « Revérifier »
+// (recheckIam) ou implicitement quand le compte n'est plus « missing » (voir isProp).
 async function openSetup() { $("setupBody").innerHTML = "Chargement…"; dSetup.showModal(); await renderSetup(); }
+async function recheckIam() { IAM_PROPAGATING = null; await renderSetup(); }
 async function renderSetup() {
   let r;
   try { r = await api("/api/setup"); }
   catch (e) { $("setupBody").innerHTML = '<p class="note">Erreur : ' + esc(e.message) + "</p>"; return; }
   if (!r.ok) { $("setupBody").innerHTML = '<p class="note">' + esc(r.error || "indisponible") + "</p>"; return; }
   const s = r.setup;
+  LAST_SETUP = s;
+  // Purge du set de propagation les comptes qui ne sont plus « missing » (accès OK) :
+  // sinon un compte redevenu « missing » plus tard s'afficherait à tort « propagation »
+  // (Codex P2, #112) — nettoyage implicite, complémentaire de « Revérifier ».
+  if (IAM_PROPAGATING) {
+    const stillMissing = new Set((s.accounts || []).filter((a) => a.iam === "missing").map((a) => (a.email || "").toLowerCase()));
+    IAM_PROPAGATING = new Set([...IAM_PROPAGATING].filter((e) => stillMissing.has(e)));
+    if (!IAM_PROPAGATING.size) IAM_PROPAGATING = null;
+  }
   const BADGE = { ok: '<span class="badge b-ok">accès OK</span>',
                   missing: '<span class="badge b-bad">sans rôle IAM</span>',
                   unknown: '<span class="badge b-mut">non vérifié</span>' };
+  // Un compte toujours « missing » juste après réparation = propagation Google en
+  // cours (~2 min), pas un échec — badge d'attente au lieu du rouge « sans rôle ».
+  const prop = IAM_PROPAGATING;
+  const isProp = (a) => !!(prop && a.iam === "missing" && prop.has((a.email || "").toLowerCase()));
   const rows = (s.accounts || []).map((a) =>
-    '<div class="zone"><b>' + esc(a.alias) + '</b> <span class="mono">' +
-    esc(a.email || "?") + "</span> " + (BADGE[a.iam] || esc(a.iam)) + "</div>").join("");
+    '<div class="zone"><b>' + esc(a.alias) + '</b> <span class="mono">' + esc(a.email || "?") + "</span> " +
+    (isProp(a) ? '<span class="badge b-warn">propagation ~2 min</span>' : (BADGE[a.iam] || esc(a.iam))) +
+    "</div>").join("");
   const missing = (s.accounts || []).filter((a) => a.iam === "missing");
+  const stillMissing = missing.filter((a) => !isProp(a));
+  const propagating = missing.filter(isProp);
   const head = '<p class="note">Projet <b>GCP</b> (OAuth) : <span class="mono">' + esc(s.project_id || "?") +
     "</span> · " + (s.published ? "app publiée" : "app non publiée") +
     ' — ce n\'est <b>pas</b> la version MCP (voir bandeau / Développement).</p>';
   let action;
-  if (missing.length) {
+  if (stillMissing.length) {
     action = '<div class="mtop" style="justify-content:flex-start">' +
       '<button class="primary" id="syncBtn" onclick="doSyncIam()">🔧 Réparer l\'accès (' +
-      missing.length + ")</button></div>" +
+      stillMissing.length + ")</button></div>" +
       '<p class="note">Accorde le rôle <span class="mono">serviceUsageConsumer</span> aux comptes ci-dessus ' +
       "(Touch ID si l'authentification forte est activée). Requiert que ta session <span class=\"mono\">gcloud</span> " +
       "active soit le propriétaire du projet.</p>";
+  } else if (propagating.length) {
+    action = '<div class="mtop" style="justify-content:flex-start">' +
+      '<button class="small" id="recheckBtn" onclick="recheckIam()">↻ Revérifier</button></div>' +
+      '<p class="note">⏳ Accès accordé — <b>propagation Google en cours (~2 min)</b>. Les comptes ci-dessus ' +
+      "passeront en « accès OK » d'ici là ; clique « Revérifier » dans un moment (ou rouvre le Setup).</p>";
   } else if (s.iam_checked) {
     action = '<p class="note">✓ Tous les comptes connectés ont accès au projet.</p>';
   } else {
@@ -614,9 +773,17 @@ async function renderSetup() {
 async function doSyncIam() {
   const btn = $("syncBtn");
   if (btn) { btn.disabled = true; btn.textContent = "Réparation… (Touch ID ?)"; }
-  try { const r = await api("/api/sync-iam", { method: "POST", body: "{}" });
-    toast(r.ok ? "✓ Accès IAM réparé (propagation ~2 min)" : "Échec — voir le détail"); }
-  catch (e) { toast("Erreur : " + e.message); }
+  // Comptes visés AVANT le sync : on les marquera « propagation » après succès,
+  // pour ne pas les réafficher « sans rôle IAM » (le check IAM immédiat est périmé).
+  const before = new Set(((LAST_SETUP && LAST_SETUP.accounts) || [])
+    .filter((a) => a.iam === "missing").map((a) => (a.email || "").toLowerCase()));
+  let ok = false;
+  try {
+    const r = await api("/api/sync-iam", { method: "POST", body: "{}" });
+    ok = !!r.ok;
+    toast(ok ? "✓ Accès accordé — propagation Google ~2 min" : "Échec — voir le détail (session gcloud propriétaire du projet ?)");
+  } catch (e) { toast("Erreur : " + e.message); }
+  if (ok && before.size) IAM_PROPAGATING = before;
   await renderSetup();
   refresh();
 }
@@ -662,6 +829,7 @@ function summary(p) {
 //   On réutilise les dialogues existants (policy, zones, révocation).
 const LOCK_ICON = '<svg class="lock-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path class="lock-shackle" d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
 const CD_ICON = '<svg class="cd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+const BACK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>';
 const SVCDEF = [
   { key: "drive", name: "Drive", keys: DRIVE_KEYS },
   { key: "gmail", name: "Gmail", keys: GMAIL_KEYS },
@@ -753,6 +921,31 @@ function capsHtml(key, rules, hasPolicy) {
 }
 function render() { rerender(); finishLockExpand(); }
 function rerender() { (VIEW.mode === "detail" && byAlias(VIEW.alias)) ? renderDetail(VIEW.alias) : renderList(); }
+// Chrome hors #cards à accorder au mode de vue (fiche 0065 : masquer le CTA
+// « + Connecter un compte » en vue détail — un compte est déjà ouvert).
+// Appelé par renderList()/renderDetail() eux-mêmes : toute entrée en vue
+// (clic openDetail, retour, refresh) est couverte, sans dépendre de rerender().
+function syncChrome() {
+  const detail = VIEW.mode === "detail";
+  const addRow = document.querySelector(".add-account-row");
+  if (addRow) addRow.hidden = detail;
+}
+// Menu overflow « ⋯ » du header (refonte) : les outils avancés (développement,
+// santé du setup) vivent dans un menu déroulant standard, pas un toggle qui
+// pousse des boutons. Ferme au clic extérieur / Échap.
+function toggleMore(e) {
+  if (e) e.stopPropagation();
+  const pop = $("morePop"), show = pop.hasAttribute("hidden");
+  pop.hidden = !show;
+  $("moreBtn").setAttribute("aria-expanded", show ? "true" : "false");
+}
+function closeMore() {
+  if ($("morePop").hidden) return;
+  $("morePop").hidden = true;
+  $("moreBtn").setAttribute("aria-expanded", "false");
+}
+document.addEventListener("click", (e) => { if (!e.target.closest(".hmenu")) closeMore(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMore(); });
 function finishLockExpand() {
   const pending = document.querySelectorAll(".lockchip[data-pending-expand]");
   if (!pending.length) return;
@@ -767,6 +960,7 @@ function finishLockExpand() {
 }
 function renderList() {
   VIEW = { mode: "list", alias: null };
+  syncChrome();
   const el = $("cards");
   if (!PROFILES.length) { el.innerHTML = '<div class="card">Aucun profil connecté.</div>'; return; }
   el.innerHTML = PROFILES.map((p) => {
@@ -787,20 +981,37 @@ function renderDetail(alias) {
   const p = byAlias(alias);
   if (!p || !p.connected) return renderList();
   VIEW = { mode: "detail", alias };
-  const rows = SVCDEF.filter((s) => ["drive","gmail","calendar","keep"].includes(s.key) || (p.policy && p.policy[s.key]))
-    .map((s) => {
-      const rules = p.policy && p.policy[s.key];
-      return '<div class="srow"><span class="sname">' + s.name + '</span><span class="caps">' + capsHtml(s.key, rules, !!p.policy) + "</span>" +
-        '<span class="actions"><button class="small" onclick="openPolicy(\'' + alias + '\')">Configurer…</button></span></div>';
-    }).join("");
+  syncChrome();
+  const svcRow = (s) => {
+    const rules = p.policy && p.policy[s.key];
+    return '<div class="srow"><span class="sname">' + s.name + '</span><span class="caps">' +
+      capsHtml(s.key, rules, !!p.policy) + "</span>" +
+      '<span class="actions"><button class="small" onclick="openPolicy(\'' + alias + '\')">Configurer…</button></span></div>';
+  };
+  const byKey = (k) => SVCDEF.find((s) => s.key === k);
+  // Primaire = ce que l'assistant utilise via MCP aujourd'hui (Gmail + Drive).
+  const primary = ["drive", "gmail"].map(byKey).filter(Boolean).map(svcRow).join("");
+  // Autres : Agenda/Keep (MCP à venir) toujours ; Docs/Sheets/Tâches uniquement si
+  // présents dans la policy — repliés par défaut pour ne pas encombrer (revue P4).
+  const others = SVCDEF.filter((s) =>
+    ["calendar", "keep"].includes(s.key) ||
+    (["docs", "sheets", "tasks"].includes(s.key) && p.policy && p.policy[s.key]));
+  const othersHtml = others.length
+    ? '<details class="svc-more"><summary>Autres services <span class="note">— ' +
+        others.map((s) => s.name).join(" · ") + "</span></summary>" +
+        '<p class="note svc-more-note">L\'assistant n\'utilise que <b>Drive</b> et <b>Gmail</b> via le MCP aujourd\'hui ' +
+        "(Agenda, Keep à venir ; le reste en ligne de commande). <b>Docs/Sheets</b> sont des fichiers Drive, mais " +
+        "éditer leur contenu passe par une API distincte — d'où une permission séparée.</p>" +
+        others.map(svcRow).join("") + "</details>"
+    : "";
   $("cards").innerHTML = '<div class="detail"><div class="dhead">' +
-    '<button class="back" onclick="renderList()">‹ Comptes</button>' +
+    '<button class="back" onclick="renderList()" aria-label="Retour à la liste des comptes">' + BACK_ICON + "Comptes</button>" +
     '<div class="drow"><span class="dmail">' + esc(p.email || alias) + "</span>" +
       lockHtml(p) + "</div></div>" +
-    '<div class="dbody"><p class="plabel">Droits par application</p>' + rows +
+    '<div class="dbody"><p class="plabel">Droits par application</p>' + primary + othersHtml +
     '<div class="danger"><div class="drx">' +
-      "<p>L'outil oublie ce compte : les assistants n'y auront plus accès et tes réglages (zones, autorisations) seront perdus. Rien n'est supprimé dans ton compte Google. Pour l'utiliser à nouveau, il faudra refaire une connexion complète.</p>" +
-      '<button class="danger" onclick="openRevoke(\'' + alias + '\')">Déconnecter ce compte</button></div></div></div></div>';
+      "<p>Retirer ce compte de l'outil — réversible (reconnexion complète). L'impact s'affiche avant confirmation.</p>" +
+      '<button class="danger small" onclick="openDisconnect(\'' + alias + '\')">Déconnecter…</button></div></div></div></div>';
 }
 function lockClick(alias) {
   const p = byAlias(alias);
@@ -902,7 +1113,12 @@ async function doUnlock(v) {
   dUnlock.close();
   toast(v === "off" ? "🔓 verrou retiré de " + unlockTarget : "🔓 " + unlockTarget + " déverrouillé " + v + " min");
 }
-async function lockAll() { try { await api("/api/lockall", { method: "POST", body: "{}" }); toast("🔒 Tous les profils sont verrouillés"); refresh(); } catch (e) { toast("Erreur : " + e.message); } }
+function openLockAll() { dLockAll.showModal(); }
+async function doLockAll() {
+  dLockAll.close();
+  try { await api("/api/lockall", { method: "POST", body: "{}" }); toast("🔒 Tous les comptes sont verrouillés"); refresh(); }
+  catch (e) { toast("Erreur : " + e.message); }
+}
 
 function fmtMins(m) {
   m = Math.max(0, Math.floor(m || 0));
@@ -1000,7 +1216,7 @@ async function doSessGrant() {
   } catch (e) { toast("Erreur : " + e.message); }
 }
 async function doSessRevokeDesc(sid) {
-  if (!confirm("Révoquer toutes les sous-sessions de " + sid.slice(0, 8) + "… ?")) return;
+  if (!(await uiConfirm({ title: "Révoquer les sous-sessions ?", body: "Toutes les sous-sessions de " + sid.slice(0, 8) + "… perdront leurs accès. La session parente est conservée.", confirmLabel: "Révoquer" }))) return;
   try {
     await api("/api/sessions/" + sid + "/revoke-descendants", { method: "POST", body: "{}" });
     toast("✓ sous-sessions purgées");
@@ -1008,7 +1224,7 @@ async function doSessRevokeDesc(sid) {
   } catch (e) { toast("Erreur : " + e.message); }
 }
 async function doSessClose(sid) {
-  if (!confirm("Purger la session " + sid.slice(0, 8) + "… (et ses enfants) ?")) return;
+  if (!(await uiConfirm({ title: "Purger cette session ?", body: "La session " + sid.slice(0, 8) + "… et ses sous-sessions seront retirées du registre. Réversible : le client MCP en recrée une au besoin.", confirmLabel: "Purger" }))) return;
   try {
     await api("/api/sessions/" + sid + "/close", { method: "POST", body: "{}" });
     toast("✓ session purgée");
@@ -1016,11 +1232,25 @@ async function doSessClose(sid) {
   } catch (e) { toast("Erreur : " + e.message); }
 }
 
-function openRevoke(alias) { revokeTarget = alias; $("revokeAlias").textContent = alias; $("revokeConfirm").value = ""; dRevoke.showModal(); }
-async function doRevoke() {
-  if ($("revokeConfirm").value.trim() !== revokeTarget) return toast("Alias saisi ≠ « " + revokeTarget + " » — révocation annulée");
-  await act(revokeTarget, "revoke");
-  dRevoke.close(); toast("⛔ " + revokeTarget + " déconnecté");
+function openDisconnect(alias) {
+  const p = byAlias(alias);
+  if (!p) return;
+  disconnectTarget = alias;
+  const email = p.email || alias;
+  $("disconnectEmail").textContent = email;
+  const aliasEl = $("disconnectAlias");
+  if (p.email && p.email !== alias) { aliasEl.textContent = alias; aliasEl.hidden = false; }
+  else { aliasEl.textContent = ""; aliasEl.hidden = true; }
+  $("disconnectAvatar").textContent = (email.replace(/@.*/, "")[0] || email[0] || "?").toUpperCase();
+  dDisconnect.showModal();
+}
+async function doDisconnect() {
+  if (!disconnectTarget) return;
+  const alias = disconnectTarget;
+  disconnectTarget = null;
+  dDisconnect.close();
+  await act(alias, "revoke");
+  toast("Compte déconnecté : " + alias);
 }
 function reconnect(alias) { $("addAlias").value = alias; $("addEmail").value = ""; $("addStatus").textContent = ""; dAdd.showModal(); }
 
@@ -1325,7 +1555,7 @@ async function savePolicy() {
 
 function mdToHtml(md) {
   const codes = [];
-  md = md.replace(/```([\w-]*)\n([\s\S]*?)```/g, (_, lang, c) => { codes.push({ lang, c }); return "\x00" + (codes.length - 1) + "\x00"; });
+  md = md.replace(/```(?:[\w-]*)\n([\s\S]*?)```/g, (_, c) => { codes.push(c); return "\x00" + (codes.length - 1) + "\x00"; });
   md = esc(md);
   // Tableaux markdown : bloc de lignes « | … | » ; \| échappé préservé, ligne |---| ignorée.
   md = md.replace(/(?:^\|.+\|[ \t]*(?:\n|$))+/gm, (block) => {
@@ -1354,37 +1584,69 @@ function mdToHtml(md) {
          .replace(/`([^`\n]+)`/g, "<code>$1</code>")
          .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
   md = md.split(/\n{2,}/).map((b) => /^\s*<(h\d|ul|pre|blockquote|hr|table)/.test(b.trim()) ? b : "<p>" + b.replace(/\n/g, "<br>") + "</p>").join("\n");
-  return md.replace(/\x00(\d+)\x00/g, (_, i) => codes[+i].lang === "mermaid"
-    ? '<div class="mermaid">' + esc(codes[+i].c) + "</div>"
-    : "<pre><code>" + esc(codes[+i].c) + "</code></pre>");
+  return md.replace(/\x00(\d+)\x00/g, (_, i) => "<pre><code>" + esc(codes[+i]) + "</code></pre>");
 }
 
+let LOG_ENTRIES = [];
+let LOG_DENSE = (() => { try { return localStorage.getItem("gwsaLogDense") === "1"; } catch { return false; } })();
 async function openLog() {
   try {
-    const { entries } = await api("/api/log");
-    $("logTable").querySelector("tbody").innerHTML = entries.length ? entries.map((e) =>
-      "<tr><td class=mono>" + (e.ts || "").replace("T", " ").slice(0, 19) + "</td><td>" + esc(e.client || "") +
-      "</td><td class=mono>" + esc(e.alias || "") + "</td><td class=mono>" + esc((e.cmd || "").slice(0, 90)) +
-      "</td><td>" + (e.decision === "refus" ? '<span class="badge b-bad">refus</span>' : '<span class="badge b-ok">ok</span>') +
-      (e.reason ? '<div class="note">' + esc(e.reason) + "</div>" : "") + "</td></tr>").join("")
-      : '<tr><td colspan=5>Journal vide pour l\'instant.</td></tr>';
+    LOG_ENTRIES = (await api("/api/log")).entries || [];
+    renderLog();
     dLog.showModal();
   } catch (e) { toast("Erreur : " + e.message); }
 }
-let mmdSeq = 0;
-async function showDoc(which) {
-  if (!DOCS) DOCS = await api("/api/doc");
-  $("docBody").innerHTML = mdToHtml(DOCS[which] || "*(vide)*");
-  if (window.mermaid) {
-    mermaid.initialize({ startOnLoad: false, theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default" });
-    for (const node of document.querySelectorAll("#docBody .mermaid")) {
-      const src = node.textContent;
-      try { const { svg } = await mermaid.render("mmd" + (++mmdSeq), src); node.innerHTML = svg; }
-      catch (e) { node.innerHTML = '<span class="note">diagramme non rendu : ' + esc(String(e.message || e).slice(0, 200)) + "</span>"; }
-    }
-  }
+function renderLog() {
+  const table = $("logTable");
+  table.classList.toggle("dense", LOG_DENSE);
+  const denseBtn = $("logDenseBtn");
+  if (denseBtn) denseBtn.classList.toggle("active", LOG_DENSE);
+  const tb = table.querySelector("tbody");
+  if (!LOG_ENTRIES.length) { tb.innerHTML = '<tr><td colspan=5>Journal vide pour l\'instant.</td></tr>'; return; }
+  tb.innerHTML = LOG_ENTRIES.map((e) => {
+    const ts = (e.ts || "").replace("T", " ");
+    const when = LOG_DENSE ? ts.slice(5, 16) : ts.slice(0, 19); // « MM-JJ HH:MM » vs complet
+    const decision = e.decision === "refus"
+      ? '<span class="badge b-bad">refus</span>'
+      : '<span class="badge b-ok">ok</span>';
+    return '<tr><td class="mono">' + esc(when) + "</td><td>" + esc(e.client || "") +
+      '</td><td class="mono">' + esc(e.alias || "") + '</td><td class="mono cmd">' + esc((e.cmd || "").slice(0, 200)) +
+      "</td><td>" + decision + (e.reason ? '<div class="note">' + esc(e.reason) + "</div>" : "") + "</td></tr>";
+  }).join("");
 }
-async function openDoc() { await showDoc("readme"); dDoc.showModal(); }
+function toggleLogDense() {
+  LOG_DENSE = !LOG_DENSE;
+  renderLog();
+  try { localStorage.setItem("gwsaLogDense", LOG_DENSE ? "1" : "0"); } catch {}
+}
+// Onglet « Bien démarrer » (fiche 0069) : orientation utilisateur, écrite ici
+// (pas un fichier repo). Le contenu détaillé (dev/architecte) vit sur la doc
+// complète en ligne (GitHub Pages).
+const GUIDE_MD = `## Bienvenue 👋
+
+**google-multi-account** relie tes comptes Google à tes assistants (Claude, Cursor…) — **100 % en local**. La règle d'or : **c'est toi qui ouvres chaque porte**, l'assistant ne peut que **demander**.
+
+### Trois gestes, et c'est tout
+
+- **Connecter un compte** — bouton **« + Connecter un compte »**, choisis le bon compte Google, accepte. Il s'ajoute à la liste.
+- **Déverrouiller pour donner l'accès** — clique le **cadenas** d'un compte. L'accès s'ouvre pour la durée que tu choisis, puis se **reverrouille tout seul**.
+- **Accorder une zone Drive** — pour laisser écrire, ouvre le compte → **Configurer** → confie **un dossier** (permanent, ou quelques heures).
+
+### Ce que l'assistant ne peut jamais faire seul
+
+Se déverrouiller, s'accorder une zone, connecter un compte, envoyer un e-mail. Il **propose la commande exacte**, tu l'exécutes. Le **📓 Journal** garde la trace de chaque accès, autorisé ou refusé.
+
+### Pour aller plus loin
+
+Installation détaillée, connexion Google, outils de l'assistant et schémas d'architecture : tout est dans la **[documentation en ligne](https://elzinko.github.io/google-mcp-multi-account/)**, tenue à jour.
+`;
+// Doc in-app allégée (revue P5) : un seul « Bien démarrer » embarqué ; le contenu
+// détaillé (installation, MCP, OAuth, schémas) vit en ligne sur le site du projet (GitHub Pages).
+function openDoc() {
+  $("docBody").innerHTML = mdToHtml(GUIDE_MD);
+  $("docBody").scrollTop = 0;
+  dDoc.showModal();
+}
 
 function fmtPorts(m) {
   return "admin :" + (m.admin_port || "?") + " · broker :" + (m.broker_port || "?");
@@ -1558,7 +1820,7 @@ async function removeMcpClient(idx) {
     toast("Entrée protégée (MCP stable)");
     return;
   }
-  if (!confirm("Retirer l'entrée MCP « " + c.name + " » de\n" + c.config + " ?\n\nLe client MCP devra être redémarré.")) return;
+  if (!(await uiConfirm({ title: "Retirer cette entrée MCP ?", body: "« " + c.name + " » sera retirée de " + c.config + ". Le client MCP devra être redémarré.", confirmLabel: "Retirer" }))) return;
   try {
     await api("/api/dev/mcp-client/remove", {
       method: "POST",
@@ -1574,7 +1836,7 @@ async function removeMcpClient(idx) {
 
 async function removeSandbox(id) {
   if (!id) return;
-  if (!confirm("Supprimer la sandbox « " + id + " » ?\nArrêt broker/admin + suppression du répertoire sous ~/.local/share/google-mcp/.")) return;
+  if (!(await uiConfirm({ title: "Supprimer cette sandbox ?", body: "« " + id + " » : arrêt broker/admin puis suppression du répertoire sous ~/.local/share/google-mcp/.", confirmLabel: "Supprimer" }))) return;
   try {
     await api("/api/dev/sandbox/remove", {
       method: "POST",

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Interface d'admin gws multi-comptes — serveur local (127.0.0.1 uniquement).
+// Interface d'admin google-multi-account — serveur local (127.0.0.1 uniquement).
 // Zéro dépendance : Node stdlib. Toute action passe par bin/gwsa (source de vérité).
 // Sécurité : bind loopback, en-tête X-GWSA-Admin obligatoire sur /api (anti-CSRF,
 // un site tiers ne peut pas l'envoyer sans déclencher un préflight CORS refusé),
@@ -304,36 +304,6 @@ const SERVICES = ["drive", "gmail", "calendar", "keep", "docs", "sheets", "tasks
 const BOOL_KEYS = ["read", "create", "update", "delete", "send", "drafts", "labels", "share", "settings"];
 
 const emailCache = new Map();
-
-// Doc « Schémas » : assemblée depuis diagrams/*/ (triplets versionnés) — les
-// sources restent les .mmd/explanation.md du repo, rien n'est dupliqué ici.
-function buildSchemas() {
-  const dir = path.join(REPO, "diagrams");
-  const rdf = (f) => { try { return fs.readFileSync(f, "utf8"); } catch { return ""; } };
-  let slugs = [];
-  try {
-    slugs = fs.readdirSync(dir, { withFileTypes: true })
-      .filter((e) => e.isDirectory() && fs.existsSync(path.join(dir, e.name, "diagram.mmd")))
-      .map((e) => e.name);
-  } catch { return ""; }
-  const PREF = ["onboarding-setup-initial", "lecture-donnees-elicitee",
-    "onboarding-add-account-elicite", "onboarding-reparation-iam"];
-  slugs.sort((a, b) => {
-    const ia = PREF.indexOf(a); const ib = PREF.indexOf(b);
-    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
-  });
-  const parts = ["# Les scénarios clés, en séquence",
-    "> Schémas versionnés dans `diagrams/` (prose → mermaid → image) — rendus ici en local, sans service externe."];
-  for (const s of slugs) {
-    const m = rdf(path.join(dir, s, "meta.yaml")).match(/^title:\s*"?(.*?)"?\s*$/m);
-    parts.push("## " + ((m && m[1]) || s));
-    const expl = rdf(path.join(dir, s, "explanation.md")).trim();
-    if (expl) parts.push(expl);
-    const mmd = rdf(path.join(dir, s, "diagram.mmd")).trim();
-    if (mmd) parts.push("```mermaid\n" + mmd + "\n```");
-  }
-  return slugs.length ? parts.join("\n\n") : "";
-}
 
 // Timeout court pour les commandes snappy (list/lock/…). Unlock/grant/add
 // attendent Touch ID : 20 s tuait le child au milieu du dialogue → connexion
@@ -658,11 +628,6 @@ const server = http.createServer(async (req, res) => {
   if (p === "/" || p === "/index.html") {
     return send(res, 200, fs.readFileSync(path.join(__dirname, "index.html")), "text/html; charset=utf-8");
   }
-  if (p.startsWith("/vendor/")) {
-    const f = path.join(__dirname, "vendor", path.basename(p));
-    if (!fs.existsSync(f)) return send(res, 404, { error: "introuvable" });
-    return send(res, 200, fs.readFileSync(f), "application/javascript; charset=utf-8");
-  }
   if (!p.startsWith("/api/")) return send(res, 404, { error: "introuvable" });
 
   // Anti-DNS-rebinding : n'accepter que l'hôte loopback sur lequel on écoute.
@@ -771,15 +736,6 @@ const server = http.createServer(async (req, res) => {
       holdHttpForAuth(req, res);
       const r = await provision(["sync-iam", "--yes"], GWSA_TIMEOUT_AUTH_MS);
       return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).slice(-1500) });
-    }
-    if (req.method === "GET" && p === "/api/doc") {
-      const rd = (f) => { try { return fs.readFileSync(path.join(REPO, f), "utf8"); } catch { return ""; } };
-      return send(res, 200, {
-        readme: rd("README.md"),
-        oauth: rd("docs/setup-oauth.md"),
-        mcp: rd("docs/mcp-setup.md"),
-        schemas: buildSchemas(),
-      });
     }
     const anc = p.match(/^\/api\/profiles\/([^/]+)\/ancestors$/);
     if (req.method === "GET" && anc) {
@@ -916,5 +872,5 @@ server.on("error", (err) => {
 server.requestTimeout = Math.max(server.requestTimeout || 0, GWSA_TIMEOUT_AUTH_MS + 30000);
 server.headersTimeout = Math.max(server.headersTimeout || 0, GWSA_TIMEOUT_AUTH_MS + 60000);
 server.listen(PORT, HOST, () => {
-  console.log(`Admin gws multi-comptes : http://${HOST}:${PORT} (local uniquement)`);
+  console.log(`Admin google-multi-account : http://${HOST}:${PORT} (local uniquement)`);
 });
