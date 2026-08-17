@@ -4,7 +4,7 @@ title: Droits par session et par projet git — état des lieux, écarts, pistes
 type: feature
 priority: P2
 version:
-epic:
+epic: 0082
 status: in-progress
 ready:
 pr:

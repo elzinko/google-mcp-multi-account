@@ -42,10 +42,10 @@
 | 0040 | Le déploiement branche Claude Desktop mais pas Claude Code (CLI) — généraliser | feature | P2 |  |  | ✅ shipped | #43 |
 | 0041 | Clarifier l'écart policy admin ↔ surface MCP (Drive copie, contenu, modification) | bug | P2 |  |  | ✅ shipped | #52 |
 | 0044 | Sous strongauth, le dialogue Touch ID nomme « swift-frontend » au lieu du produit | bug | P2 |  |  | ✅ shipped | #74 |
-| 0045 | Droits par session et par projet git — état des lieux, écarts, pistes | feature | P2 |  |  | 🟠 in-progress |  |
+| 0045 | Droits par session et par projet git — état des lieux, écarts, pistes | feature | P2 |  | 0082 | 🟠 in-progress |  |
 | 0046 | CLI locale pour déployer des sandboxes temporaires (branche / worktree) | feature | P2 |  |  | 🟠 in-progress |  |
-| 0076 | Droits par session (Phase A desktop) — identité par consentement, jeton porté, config fine | feature | P2 |  | 0045 | ✅ shipped | #110 |
-| 0080 | Durcir la couche capacités fines de session (suite revue Codex #110) | feature | P1 |  | 0076 | 🔴 todo |  |
+| 0076 | Droits par session (Phase A desktop) — identité par consentement, jeton porté, config fine | feature | P2 |  | 0082 | ✅ shipped | #110 |
+| 0080 | Durcir la couche capacités fines de session (suite revue Codex #110) | feature | P1 |  | 0082 | 🔴 todo |  |
 | 0081 | Durcir updater/deploy — rollback à travers le renommage mag & liens PATH cassés | bug | P2 |  |  | 🔴 todo |  |
 | 0047 | Au moment d'autoriser un accès, nommer le compte (email) — pas seulement l'alias | feature | P2 |  |  | ✅ shipped | #75 |
 | 0068 | Accessibilité — focus-visible + reduced-motion (cadenas/modales/boutons) | feature | P2 | v0.4.0 | 0060 | ✅ shipped | #112 |
@@ -62,6 +62,7 @@
 | 0060 | Admin UX/UI refresh + docs/README + GitHub metadata | epic | P1 | v0.4.0 |  | 🔴 todo |  |
 | 0017 | Généraliser le projet à d'autres utilisateurs que l'auteur | epic | P2 |  |  | 💡 idea |  |
 | 0077 | Accès mobile souverain — approbation passkey + holder natif | epic | P1 |  |  | 🔴 todo |  |
+| 0082 | Droits par session — isolation & capacités fines par conversation | epic | P1 |  |  | 🟠 in-progress |  |
 
 ## 💡 Idées (non groomées)
 
