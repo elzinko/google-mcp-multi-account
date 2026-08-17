@@ -56,6 +56,7 @@
 | 0072 | Site de doc en ligne (MkDocs Material + landing) déployé sur Vercel | feature | P2 |  | 0017 | ✅ shipped | #79 |
 | 0076 | Droits par session (Phase A desktop) — identité par consentement, jeton porté, config fine | feature | P2 |  | 0045 | ✅ shipped | #108, #110 |
 | 0081 | Durcir la couche d'approbation passkey distante (suite revue Codex #113) | feature | P2 |  | 0077 | 🔴 todo |  |
+| 0082 | Durcir consume_nonce contre une course TOCTOU inter-process (anti-rejeu partagé) | bug | P2 |  |  | 🔴 todo |  |
 | 0001 | Élicitation signée — faire monter `gwsa strongauth` de la présence à la signature | feature | P3 |  |  | 🟠 in-progress |  |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)
