@@ -4360,6 +4360,139 @@ echo "$out_ca5b" | grep -q "approbation distante" \
   && pass "gma session unlock --remote : emprunte le chemin frère require_remote_approval (fail-closed sans enrôlement)" \
   || fail "gma session unlock --remote : chemin inattendu ($out_ca5b)"
 
+# --- Fix Codex P1 (PR #113) : échange en deux temps, réellement hors-process ---
+#
+# L'ancien `remote-approval-cli.py gate --response <fichier>` chargeait
+# l'assertion AVANT de forger le défi (dont le nonce est frais à chaque
+# appel) : aucun téléphone hors-process ne pouvait donc jamais produire une
+# réponse valide. Les tests ci-dessous pilotent `challenge` puis `verify`
+# comme DEUX PROCESSUS SÉPARÉS (deux appels `subprocess.run`, aucun état
+# Python partagé entre eux — contrairement à l'ancien `InMemoryChannel`
+# in-process) pour prouver que l'échange fonctionne réellement.
+
+RA_OOP="$TMP/gwsa-remote-approval-oop"
+mkdir -p "$RA_OOP"
+"$PY" -c "
+import sys; sys.path.insert(0, 'tests')
+from pathlib import Path
+from testlib.phone_signer import generate_keypair
+import json, os
+os.environ['GWSA_ROOT'] = '$RA_OOP'
+from gateway.remote_approval import enroll_phone
+tmp = Path('$RA_OOP')
+priv, pub = generate_keypair(tmp)
+enroll_phone({'credential_id': 'cred-oop', 'aaguid': 'a', 'public_key': pub, 'uv': 'biometric', 'be': False, 'sign_count': 0})
+Path('$RA_OOP/priv.pem').write_text(priv.read_text())
+" >/dev/null
+
+# Processus A : publie le défi (out-of-process : c'est un subprocess.run distinct).
+challenge_json="$(GWSA_ROOT="$RA_OOP" "$PY" scripts/remote-approval-cli.py challenge \
+  --json '{"action":"session_unlock","alias":"alpha","email":"a@x.com","session_id":"sidOOP","minutes":15}')"
+
+# Le "téléphone" (aucun accès au process A : il ne voit QUE l'envelope publié)
+# signe exactement ce qui a été publié.
+response_file="$TMP/oop-response.json"
+"$PY" -c "
+import sys; sys.path.insert(0, 'tests')
+import json
+from pathlib import Path
+from testlib.phone_signer import sign_challenge
+out = json.loads('''$challenge_json''')
+envelope_payload = out['envelope']['payload']
+assertion = sign_challenge(envelope_payload, Path('$RA_OOP/priv.pem'), credential_id='cred-oop', sign_count=1)
+Path('$response_file').write_text(json.dumps(assertion))
+"
+
+challenge_id="$("$PY" -c "import json; print(json.loads('''$challenge_json''')['challenge_id'])")"
+
+# Processus B : vérifie et exécute — SANS avoir jamais partagé d'état Python
+# avec le processus A (deux invocations `python3` distinctes, communication
+# uniquement via le pending publié sur disque + le fichier réponse).
+verify_out="$(GWSA_ROOT="$RA_OOP" "$PY" scripts/remote-approval-cli.py verify \
+  --challenge-id "$challenge_id" --response "$response_file" 2>&1)"
+echo "$verify_out" | grep -q '"session_id": *"sidOOP"' \
+  && pass "remote_approval CLI : échange challenge → verify réussit réellement hors-process (répond à Codex P1, PR #113)" \
+  || fail "remote_approval CLI : échange hors-process en échec ($verify_out)"
+
+# Rejeu du pending : réutiliser le même challenge_id après un `verify` déjà
+# consommé (one-shot) doit être refusé — la 2ᵉ tentative n'a plus de défi à
+# consommer, même avec une nouvelle signature valide.
+sign_count2=2
+response_file2="$TMP/oop-response-replay.json"
+"$PY" -c "
+import sys; sys.path.insert(0, 'tests')
+import json
+from pathlib import Path
+from testlib.phone_signer import sign_challenge
+out = json.loads('''$challenge_json''')
+envelope_payload = out['envelope']['payload']
+assertion = sign_challenge(envelope_payload, Path('$RA_OOP/priv.pem'), credential_id='cred-oop', sign_count=$sign_count2)
+Path('$response_file2').write_text(json.dumps(assertion))
+"
+replay_out="$(GWSA_ROOT="$RA_OOP" "$PY" scripts/remote-approval-cli.py verify \
+  --challenge-id "$challenge_id" --response "$response_file2" 2>&1)"
+replay_rc=$?
+[[ "$replay_rc" != "0" ]] && echo "$replay_out" | grep -q "approbation distante" \
+  && pass "remote_approval CLI : rejeu d'un challenge_id déjà clos (« verify ») → refusé (pending one-shot)" \
+  || fail "remote_approval CLI : rejeu de challenge_id non refusé ($replay_out, rc=$replay_rc)"
+
+# --- gwsa --remote : exécute avec le payload signé, pas les variables shell ---
+#
+# Nit de revue (PR #113) : `require_remote_approval` doit exécuter avec le
+# payload SIGNÉ renvoyé par `verify`, jamais avec ses variables shell
+# pré-signature. On le prouve avec un aller-retour RÉEL de bout en bout via
+# `gwsa session unlock … --remote` — GWSA_REMOTE_SIGNER joue le rôle du
+# téléphone : un PROCESSUS SÉPARÉ qui ne reçoit l'envelope QUE lorsqu'il est
+# publié (stdin), preuve que l'échange marche vraiment hors-process, pas
+# seulement au niveau du CLI nu.
+RA_E2E="$TMP/gwsa-remote-approval-e2e"
+mkdir -p "$RA_E2E/prof-e2e"
+echo '{"defaults":{"services":{"gmail":"read"}}}' > "$RA_E2E/prof-e2e/policy.json"
+touch "$RA_E2E/prof-e2e/.locked"
+
+"$PY" -c "
+import sys; sys.path.insert(0, 'tests')
+from pathlib import Path
+from testlib.phone_signer import generate_keypair
+import os
+os.environ['GWSA_ROOT'] = '$RA_E2E'
+from gateway.remote_approval import enroll_phone
+priv, pub = generate_keypair(Path('$RA_E2E'))
+enroll_phone({'credential_id': 'cred-e2e', 'aaguid': 'a', 'public_key': pub, 'uv': 'biometric', 'be': False, 'sign_count': 0})
+Path('$RA_E2E/priv.pem').write_text(priv.read_text())
+"
+sid_e2e="$("$PY" -c "
+import sys, os; sys.path.insert(0, '.')
+os.environ['GWSA_ROOT'] = '$RA_E2E'
+from gateway.sessions import create_session
+print(create_session(client='e2e').session_id)
+")"
+
+signer_e2e="$TMP/phone-signer-e2e.py"
+cat > "$signer_e2e" <<PYEOF
+#!/usr/bin/env python3
+import sys, json
+sys.path.insert(0, "tests")
+from testlib.phone_signer import sign_challenge
+from pathlib import Path
+challenge = json.load(sys.stdin)
+payload = challenge["envelope"]["payload"]
+assertion = sign_challenge(payload, Path("$RA_E2E/priv.pem"), credential_id="cred-e2e", sign_count=1)
+print(json.dumps(assertion))
+PYEOF
+chmod +x "$signer_e2e"
+
+out_e2e="$(GWSA_ROOT="$RA_E2E" GWSA_REMOTE_SIGNER="$signer_e2e" "$GWSA" session unlock "$sid_e2e" prof-e2e 45 --remote 2>&1)"
+unlocked_e2e="$("$PY" -c "
+import sys, os; sys.path.insert(0, '.')
+os.environ['GWSA_ROOT'] = '$RA_E2E'
+from gateway.sessions import is_session_unlocked
+print(is_session_unlocked('$sid_e2e', 'prof-e2e'))
+")"
+[[ "$unlocked_e2e" == "True" ]] \
+  && pass "gwsa session unlock --remote : échange deux-temps réel (téléphone hors-process) exécute effectivement le déverrouillage (nit, PR #113)" \
+  || fail "gwsa session unlock --remote : déverrouillage non exécuté ($out_e2e)"
+
 # --- Bilan ------------------------------------------------------------------
 
 printf '\n\033[1mBilan : %d réussis, %d échoués\033[0m\n' "$PASS" "$FAIL"

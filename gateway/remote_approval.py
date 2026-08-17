@@ -12,6 +12,7 @@ import base64
 import hashlib
 import json
 import os
+import secrets
 import subprocess
 import tempfile
 import time
@@ -31,6 +32,7 @@ from .elicitation import (
 
 REMOTE_APPROVAL_DIR_NAME = ".remote-approval"
 ENROLLMENT_NAME = "phone.json"
+PENDING_DIR_NAME = "pending"
 
 
 class RemoteApprovalError(Exception):
@@ -49,6 +51,24 @@ def remote_approval_dir() -> Path:
 
 def enrollment_path() -> Path:
     return remote_approval_dir() / ENROLLMENT_NAME
+
+
+def pending_dir() -> Path:
+    """Défis publiés, en attente de la réponse du téléphone (échange en deux
+    temps, fix Codex P1 : le défi doit exister AVANT que quiconque puisse
+    présenter une réponse — sinon aucun téléphone hors-process ne peut jamais
+    voir le nonce qu'il doit signer)."""
+    d = remote_approval_dir() / PENDING_DIR_NAME
+    d.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(d, 0o700)
+    except OSError:
+        pass
+    return d
+
+
+def _pending_path(challenge_id: str) -> Path:
+    return pending_dir() / f"{challenge_id}.json"
 
 
 @dataclass
@@ -98,6 +118,68 @@ def forge_challenge(fields: dict[str, Any]) -> ChallengeEnvelope:
         hours=int(fields.get("hours") or 0),
     )
     return ChallengeEnvelope(payload=payload, prompt=prompt_from_payload(payload))
+
+
+def open_remote_challenge(fields: dict[str, Any]) -> tuple[ChallengeEnvelope, str]:
+    """Publie un défi — PREMIER temps de l'échange (fix Codex P1, PR #113).
+
+    L'ancien CLI chargeait `--response` avant de forger le défi, donc son
+    `client_data` (lié au `nonce` frais) ne pouvait par construction jamais
+    correspondre à une assertion produite hors-process. Ici le défi est forgé
+    et PERSISTÉ (fichier 0600) avant que quiconque puisse y répondre — c'est
+    cet envelope qu'on publie tel quel au téléphone (§2 : non secret).
+    """
+    if load_enrollment() is None:
+        raise RemoteApprovalError(
+            "aucune passkey téléphone enrôlée — exécuter : "
+            "scripts/remote-approval-cli.py enroll"
+        )
+    envelope = forge_challenge(fields)
+    challenge_id = secrets.token_hex(16)
+    path = _pending_path(challenge_id)
+    path.write_text(canonical_json(envelope.payload), encoding="utf-8")
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    return envelope, challenge_id
+
+
+def close_remote_challenge(challenge_id: str, assertion: dict[str, Any]) -> dict[str, Any]:
+    """Clôt un défi publié — SECOND temps de l'échange (fix Codex P1).
+
+    One-shot : le pending est chargé PUIS supprimé (pop) avant même la
+    vérification de signature, donc un 2ᵉ `close_remote_challenge` sur le même
+    `challenge_id` échoue systématiquement (anti-rejeu, en plus du registre de
+    nonce partagé avec le Touch ID).
+    """
+    enrollment = load_enrollment()
+    if enrollment is None:
+        raise RemoteApprovalError(
+            "aucune passkey téléphone enrôlée — exécuter : "
+            "scripts/remote-approval-cli.py enroll"
+        )
+    path = _pending_path(challenge_id)
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        raise RemoteApprovalError(
+            "défi distant introuvable ou déjà consommé — action refusée"
+        ) from None
+    try:
+        path.unlink()
+    except OSError:
+        pass
+    try:
+        payload = json.loads(raw)
+    except ValueError:
+        raise RemoteApprovalError("défi distant corrompu — action refusée") from None
+    envelope = ChallengeEnvelope(payload=payload, prompt=prompt_from_payload(payload))
+    if not verify_assertion(envelope, assertion, enrollment):
+        raise RemoteApprovalError("assertion distante invalide — action refusée")
+    consume_nonce(str(envelope.payload["nonce"]), expires_at=int(envelope.payload["expires_at"]))
+    log_receipt(envelope.payload, f"remote-passkey:{enrollment.credential_id}")
+    return envelope.payload
 
 
 def enroll_phone(registration: dict[str, Any]) -> PhoneEnrollment:
