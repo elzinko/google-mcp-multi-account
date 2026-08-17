@@ -229,6 +229,8 @@ link_cli() {
   fi
   case "$target" in
     "$SRC"/bin/mag|"$DEPLOY_ROOT"/*/bin/mag) ;;
+    # cibles legacy d'une install antérieure (lien nommé gma/gwsa) — à migrer aussi
+    "$SRC"/bin/gma|"$SRC"/bin/gwsa|"$DEPLOY_ROOT"/*/bin/gma|"$DEPLOY_ROOT"/*/bin/gwsa) ;;
     *) warn "mag du PATH pointe « $target » (hors projet) — laissé tel quel"; return 0 ;;
   esac
   if ln -sfn "$expected" "$link" 2>/dev/null; then
