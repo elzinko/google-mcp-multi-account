@@ -1,25 +1,25 @@
 ---
-id: 0061
-title: Déconnexion — modale de confirmation + bouton compact
+id: 0068
+title: Accessibilité — focus-visible + reduced-motion (cadenas/modales/boutons)
 type: feature
-priority: P1
+priority: P2
 version: v0.4.0
 epic: 0060
-status: todo
+status: shipped
 ready:
-pr:
+pr: "#112"
 created: 2026-07-29
 ---
 
 ## Contexte / Problème
 
-La zone de déconnexion est trop massive ; wording et interactions peu premium.
-Pas de confirmation d'impact claire avant de déconnecter un compte.
+Micro-interactions (cadenas, modales, boutons) sans états focus/reduced-motion
+homogènes.
 
 ## Proposition
 
-Bouton compact `Déconnecter` + modale de confirmation (résumé d'impact,
-Annuler / Déconnecter danger).
+Uniformiser `:focus-visible`, `:hover`/`:active`/`:disabled` et
+`@media (prefers-reduced-motion: reduce)`.
 
 ## Critères d'acceptation
 
@@ -27,6 +27,6 @@ Annuler / Déconnecter danger).
 
 ## Notes
 
-- **Issue** : [#60](https://github.com/elzinko/google-mcp-multi-account/issues/60)
+- **Issue** : [#68](https://github.com/elzinko/google-mcp-multi-account/issues/68)
 - **Épic** : [[0060]] · [#59](https://github.com/elzinko/google-mcp-multi-account/issues/59)
 - **Project** : [v0.4.0](https://github.com/users/elzinko/projects/2) · **Milestone** : [v0.4.0](https://github.com/elzinko/google-mcp-multi-account/milestone/1)

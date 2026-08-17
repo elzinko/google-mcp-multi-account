@@ -1,25 +1,24 @@
 ---
-id: 0068
-title: Accessibilité — focus-visible + reduced-motion (cadenas/modales/boutons)
+id: 0066
+title: Journal — lisibilité (wrap colonnes, plus de scroll horizontal)
 type: feature
-priority: P2
+priority: P1
 version: v0.4.0
 epic: 0060
-status: todo
+status: shipped
 ready:
-pr:
+pr: "#112"
 created: 2026-07-29
 ---
 
 ## Contexte / Problème
 
-Micro-interactions (cadenas, modales, boutons) sans états focus/reduced-motion
-homogènes.
+Le journal est peu lisible : colonnes longues, scroll horizontal.
 
 ## Proposition
 
-Uniformiser `:focus-visible`, `:hover`/`:active`/`:disabled` et
-`@media (prefers-reduced-motion: reduce)`.
+Largeurs maîtrisées, wrap de `commande`/`reason`, option vue dense (badges +
+timestamp compact).
 
 ## Critères d'acceptation
 
@@ -27,6 +26,6 @@ Uniformiser `:focus-visible`, `:hover`/`:active`/`:disabled` et
 
 ## Notes
 
-- **Issue** : [#68](https://github.com/elzinko/google-mcp-multi-account/issues/68)
+- **Issue** : [#66](https://github.com/elzinko/google-mcp-multi-account/issues/66)
 - **Épic** : [[0060]] · [#59](https://github.com/elzinko/google-mcp-multi-account/issues/59)
 - **Project** : [v0.4.0](https://github.com/users/elzinko/projects/2) · **Milestone** : [v0.4.0](https://github.com/elzinko/google-mcp-multi-account/milestone/1)
