@@ -133,9 +133,15 @@ fi
 if [[ "$INSTALLED" == "$TARGET_VERSION" && -z "$FORCE" ]]; then
   step "Rien à faire"
   ok "déjà à jour ($INSTALLED) — « --force » pour réinstaller quand même"
-  exit 0
+  # ne PAS sortir : on saute l'installation, mais on répare quand même les liens
+  # du PATH plus bas (mag + alias gma/gwsa). Sinon une install antérieure qui n'a
+  # que gma/gwsa n'obtiendrait jamais « mag » par « update » (Codex #114 round 3).
+  SKIP_INSTALL=1
 fi
 
+# Bloc sauté si « déjà à jour » : on ne réinstalle ni ne rebranche, on ne fait
+# que réparer les liens du PATH plus bas.
+if [[ -z "${SKIP_INSTALL:-}" ]]; then
 # ── installation ─────────────────────────────────────────────────
 step "Installation de $TARGET_VERSION"
 if [[ "$MODE_SRC" == "clone" ]]; then
@@ -195,6 +201,8 @@ else
   ok "CLI « claude » absent — Claude Code non branché (normal si tu n'utilises que Desktop)"
 fi
 
+fi  # fin du bloc sauté quand « déjà à jour »
+
 # ── le poste de commande suit la version installée ───────────────
 # mag doit être versionné comme le serveur MCP (fiche 0030) : sinon « mag
 # unlock » exécute le code du clone sur les comptes du couloir stable.
@@ -239,7 +247,6 @@ link_cli() {
     warn "impossible de réécrire « $link » — à refaire à la main : ln -sfn \"$expected\" \"$link\""
   fi
 
-  # Alias « mag » (nom aligné sur le connecteur google-multi-account) — le poser
   # poser/rafraîchir « mag » (nom courant) + les alias dépréciés « gma »/« gwsa »
   # à côté : une install antérieure n'a QUE gma/gwsa, il faut donc y créer mag,
   # sinon les commandes « mag … » documentées manqueraient au PATH après un simple
