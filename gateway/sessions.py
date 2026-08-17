@@ -306,7 +306,7 @@ def session_grant_drive(
         if proj.manifest_valid and proj.manifest:
             if not grant_allowed_by_manifest(proj.manifest, alias, fid):
                 raise GatewayError(
-                    f"zone « {fid} » hors périmètre manifeste projet (.mag/manifest.json)",
+                    f"zone « {fid} » hors périmètre manifeste projet (.gwsa/manifest.json)",
                     code="policy",
                 )
     zones = [z for z in state.drive_zones.get(alias, []) if z.id != fid]

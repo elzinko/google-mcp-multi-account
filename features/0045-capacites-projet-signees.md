@@ -344,7 +344,7 @@ Fonctionnalité: access_request — propose, n'exécute pas
 |----|--------|-------|
 | **M-01** | Identifiant de **session LLM** stable côté broker | Le MCP n'expose pas aujourd'hui de session id au broker |
 | **M-02** | Registre **session → capacités** (éphémère) | Distinct de `session-grants.json` global |
-| **M-03** | Manifeste **`.mag/`** signé dans le dépôt | Capacités projet versionnées |
+| **M-03** | Manifeste **`.gwsa/`** signé dans le dépôt | Capacités projet versionnées |
 | **M-04** | Vérification **signature humaine** avant activation manifeste | Dépend [0001](0001-elicitation-signee-strongauth-v2.md) |
 | **M-05** | `access_request kind=session_grant` et/ou `project_grant` | Élicitation explicite par scope |
 | **M-06** | Révocation **fin de session** (client MCP déconnecté) | Nécessite signal de vie ou TTL |
@@ -367,7 +367,7 @@ précise comment la **couche session** doit se comporter.
 | P6 | **Héritage descendant, pas d'élargissement** | Un sous-agent bénéficie des capacités **déjà accordées** à la session parent (intersection : jamais plus que le parent). |
 | P7 | **Gestion des droits réservée au parent** (et à l'humain) | Seul le parent (ou l'humain via élicitation) peut demander / obtenir un élargissement (`access_request`, grant session). Un sous-agent **ne déclenche pas** d'élargissement autonome. |
 | P8 | **Révocation cascade** | Quand le parent reprend la main (sous-agent bloqué, annulé ou terminé), le parent peut **retirer les droits effectifs de tous les descendants** d'un geste — sans attendre l'expiration TTL. |
-| P9 | **Même projet git** | Sous-agents héritent du `project_id` / `git_root` du parent (même périmètre manifeste `.mag/`). |
+| P9 | **Même projet git** | Sous-agents héritent du `project_id` / `git_root` du parent (même périmètre manifeste `.gwsa/`). |
 
 #### État actuel
 
@@ -463,7 +463,7 @@ flowchart LR
     SB[Session B]
     RA["registre session A"]
     RB["registre session B"]
-    PROJ[".mag/ manifeste signé\n(partagé via git)"]
+    PROJ[".gwsa/ manifeste signé\n(partagé via git)"]
     SA --> RA
     SB --> RB
     RA --> PROJ
@@ -485,7 +485,7 @@ flowchart TB
   LLM -->|contournement 1| GWSNU["gws nu +\nGOOGLE_WORKSPACE_CLI_CONFIG_DIR"]
   LLM -->|contournement 2| EDIT["Édition directe\nsession-grants.json / .unlock-until"]
   LLM -->|contournement 3| GWSA["mag grant / unlock\n(si shell autorisé)"]
-  LLM -->|contournement 4| FORGE["Faux manifeste .mag/\n(sans signature valide)"]
+  LLM -->|contournement 4| FORGE["Faux manifeste .gwsa/\n(sans signature valide)"]
 
   MCP -->|bloque| OK[Accès filtré]
   GWSNU -->|bypass total| FULL[Accès complet credentials]
@@ -504,7 +504,7 @@ flowchart TB
 | S-04 | `mag grant` / `unlock` en shell | Shell autorisé, strongauth off | Élargissement droits **poste entier** | Partiel (Touch ID si strongauth) | `mag strongauth on` | Élicitation signée [0001](0001-elicitation-signee-strongauth-v2.md) |
 | S-05 | Tool MCP `access_request` | — | N'exécute rien | **Oui** | By design | — |
 | S-06 | Falsifier `GWSA_CLIENT` | Shell ou env MCP | Journal trompeur seulement | N/A (pas un bypass droits) | — | Identité session non spoofable (M-01) |
-| S-07 | Commit manifeste `.mag/` non signé | Accès git write | Auto-attribution si pas de vérif | N/A (feature absente) | — | Signature + clé publique hors repo (M-04) |
+| S-07 | Commit manifeste `.gwsa/` non signé | Accès git write | Auto-attribution si pas de vérif | N/A (feature absente) | — | Signature + clé publique hors repo (M-04) |
 | S-08 | Rejeu manifeste volé sur fork | Lecture repo public | Droits sur mauvais remote | N/A | — | `project_id` lié au remote attendu |
 
 ### 4.3 Conséquence pour la « couche session »
@@ -550,8 +550,8 @@ flowchart TB
   end
 
   subgraph projet [Couche 2 — Projet git versionné]
-    MAN[.mag/manifest.json]
-    SIG[.mag/manifest.sig]
+    MAN[.gwsa/manifest.json]
+    SIG[.gwsa/manifest.sig]
   end
 
   subgraph poste [Couche 3 — Plancher poste / compte]
@@ -572,7 +572,7 @@ flowchart TB
 | Couche | Rôle | Durée de vie | Stockage |
 |--------|------|--------------|----------|
 | **3 — Compte** | Plancher global (pas d'envoi mail, services autorisés) | Permanent | `~/.config/gws-accounts/<alias>/policy.json` |
-| **2 — Projet** | « Ce repo a besoin de ces zones / comptes » | Versionné git ; expiration dans manifeste | `.mag/` dans le dépôt |
+| **2 — Projet** | « Ce repo a besoin de ces zones / comptes » | Versionné git ; expiration dans manifeste | `.gwsa/` dans le dépôt |
 | **1 — Session** | « Cette conversation a obtenu unlock + zones **pour ce projet** » | **Fin de session** ou TTL court | Registre broker local éphémère (M-02) |
 
 **Réponse à la tension poste vs session** : l'humain signe le **plafond projet**
@@ -597,12 +597,12 @@ stateDiagram-v2
 | Nouvelle conversation MCP | Vide — repart de zéro | **Inchangé** (legacy) ou déprécié |
 | Humain accorde zone en session | Entrée registre session | Ne plus écrire dans session-grants global (C-02) |
 | Fermeture client MCP | Registre session supprimé | Inchangé |
-| Merge manifeste `.mag/` | Sessions existantes : re-vérif | Manifeste git mis à jour |
+| Merge manifeste `.gwsa/` | Sessions existantes : re-vérif | Manifeste git mis à jour |
 
 ### 5.3 Manifeste projet (couche 2 — inchangé dans l'esprit)
 
 ```
-.mag/
+.gwsa/
   manifest.json      # périmètre max du projet (lisible, diff PR)
   manifest.sig       # signature humaine (Secure Enclave / fiche 0001)
 ```
@@ -633,7 +633,7 @@ Exemple indicatif :
 | Unité d'accès | Compte (poste) | Session × projet × compte |
 | Nouvelle conversation | Hérite grants 8 h | Repart de zéro (C-02) |
 | Sessions parallèles | Droits partagés | Isolées (C-01) |
-| Worktree / merge | Rien dans git | Manifeste `.mag/` (C-05) |
+| Worktree / merge | Rien dans git | Manifeste `.gwsa/` (C-05) |
 | Autre machine | Tout à refaire | Manifeste + trust local (C-06) |
 | Auto-attribution agent | Possible via FS (S-02) | Sig requise pour couche 2 ; session via élicitation |
 | Contournement `gws` nu | Oui (S-01) | Toujours oui sans vault |
@@ -666,7 +666,7 @@ Phasage suggéré :
 | Phase | Contenu | Résout |
 |-------|---------|--------|
 | **A** | Registre session broker + fin de session + déprécation grant global | C-01, C-02, C-03, M-01, M-02, M-06 |
-| **B** | Manifeste `.mag/` signé + intersection 3 couches | C-04, C-05, C-06, M-03, M-04, M-07 |
+| **B** | Manifeste `.gwsa/` signé + intersection 3 couches | C-04, C-05, C-06, M-03, M-04, M-07 |
 | **C** | Admin UI sessions + vault + élicitation signée | M-05, M-08, S-01…S-03 |
 
 ---
@@ -691,7 +691,7 @@ Phasage suggéré :
 
 ### Phase B — Projet git
 
-- [ ] `.mag/manifest.json` + `.mag/manifest.sig` ; draft gitignoré.
+- [ ] `.gwsa/manifest.json` + `.gwsa/manifest.sig` ; draft gitignoré.
 - [ ] Droits effectifs = intersection couche 3 ∩ 2 ∩ 1 (M-07).
 - [ ] Manifeste invalide / expiré / non signé → ignoré (fail closed).
 - [ ] `project_id` stable worktrees inclus (ACT-13 → comportement manifeste).
@@ -734,5 +734,5 @@ Phasage suggéré :
 | Phase | Fait en code | Reste |
 |-------|--------------|-------|
 | **A — session** | `session_id` MCP, registre `.sessions/`, `mag session unlock\|grant\|show\|revoke-descendants`, isolation + héritage enfant, purge TTL / `close_session`, journal `session_id`, `mag grant` global déprécié (warn + legacy) / routage `GWSA_SESSION_ID` → registre session, **`mag unlock` idem**, **purge registre à la fin du stdio MCP** (`close_session` + descendants) | détection déconnexion HTTP broker (si autre transport) ; TTL session si client reste ouvert sans activité |
-| **B — projet** | lecture/écriture `.mag/manifest.json`, **`mag project show\|init\|sign`**, intersection Drive + **services** (policy-check), **`access_request kind=project_grant`** | draft gitignoré ; threat-model |
+| **B — projet** | lecture/écriture `.gwsa/manifest.json`, **`mag project show\|init\|sign`**, intersection Drive + **services** (policy-check), **`access_request kind=project_grant`** | draft gitignoré ; threat-model |
 | **C — durcissement** | vault credentials → `.vault/<alias>/` ; **élicitation signée** unlock/grant/session + `mag elicitation enroll` (mock CI) ; manifeste `project sign` crypto si strongauth ; **admin UI sessions** | validation Touch ID réelle documentée ; threat-model à jour |

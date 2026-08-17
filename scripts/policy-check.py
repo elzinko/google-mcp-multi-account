@@ -624,7 +624,7 @@ def main():
         deny(
             profile_dir, args, service,
             "manifeste projet invalide/altéré/supprimé après confiance — refus "
-            "(anti-downgrade) — reconstituer/signer .mag/manifest.json "
+            "(anti-downgrade) — reconstituer/signer .gwsa/manifest.json "
             "(« mag project sign »)",
         )
 
@@ -656,13 +656,13 @@ def main():
         deny(profile_dir, args, service,
              "%s refusé·e par la policy (« %s %s »)"
              % (LABELS_FR.get(cat, cat), " ".join(resources) or service, raw_method))
-    # Intersection couche projet (.mag) : plafond services si déclaré
+    # Intersection couche projet (.gwsa) : plafond services si déclaré
     alias = os.path.basename(os.path.abspath(profile_dir))
     mcap = _manifest_service_cap(alias, service, cat)
     if mcap is False:
         deny(
             profile_dir, args, service,
-            "%s « %s » hors périmètre manifeste projet (.mag/manifest.json) — "
+            "%s « %s » hors périmètre manifeste projet (.gwsa/manifest.json) — "
             "éditer le manifeste puis « mag project sign », ou access_request "
             "kind=project_grant"
             % (LABELS_FR.get(cat, cat), service),

@@ -211,7 +211,8 @@ link_cli() {
     warn "dépôt d'installation surchargé sans GWSA_CLI_LINK — lien du PATH laissé tel quel"
     return 0
   fi
-  link="${GWSA_CLI_LINK:-$(command -v mag 2>/dev/null || true)}"
+  # une install antérieure n'a que gma/gwsa sur le PATH — on les cherche en repli
+  link="${GWSA_CLI_LINK:-$(command -v mag 2>/dev/null || command -v gma 2>/dev/null || command -v gwsa 2>/dev/null || true)}"
   expected="$DEPLOY_ROOT/current/bin/mag"
 
   [[ -n "$link" ]] || { warn "mag absent du PATH — lien non posé"; return 0; }
@@ -237,18 +238,22 @@ link_cli() {
   fi
 
   # Alias « mag » (nom aligné sur le connecteur google-multi-account) — le poser
-  # ou le rafraîchir à côté de mag, sinon les commandes « mag … » documentées
-  # manqueraient au PATH après un simple « mag update » (revue Codex #92).
-  gma_link="$(dirname "$link")/mag"
-  gma_expected="$DEPLOY_ROOT/current/bin/mag"
-  if [[ -x "$gma_expected" ]]; then
-    if [[ -e "$gma_link" && ! -L "$gma_link" ]]; then
-      warn "« $gma_link » n'est pas un lien symbolique — laissé tel quel"
-    elif ln -sfn "$gma_expected" "$gma_link" 2>/dev/null; then
-      ok "mag du PATH → $gma_expected"
-    else
-      warn "impossible de poser « $gma_link » — à faire à la main : ln -sfn \"$gma_expected\" \"$gma_link\""
-    fi
+  # poser/rafraîchir « mag » (nom courant) + les alias dépréciés « gma »/« gwsa »
+  # à côté : une install antérieure n'a QUE gma/gwsa, il faut donc y créer mag,
+  # sinon les commandes « mag … » documentées manqueraient au PATH après un simple
+  # « mag update » (revue Codex #92, #114).
+  mag_expected="$DEPLOY_ROOT/current/bin/mag"
+  if [[ -x "$mag_expected" ]]; then
+    for _name in mag gma gwsa; do
+      _nlink="$(dirname "$link")/$_name"
+      if [[ -e "$_nlink" && ! -L "$_nlink" ]]; then
+        warn "« $_nlink » n'est pas un lien symbolique — laissé tel quel"
+      elif ln -sfn "$mag_expected" "$_nlink" 2>/dev/null; then
+        ok "$_name du PATH → $mag_expected"
+      else
+        warn "impossible de poser « $_nlink » — à faire à la main : ln -sfn \"$mag_expected\" \"$_nlink\""
+      fi
+    done
   fi
 }
 link_cli

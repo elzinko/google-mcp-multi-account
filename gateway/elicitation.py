@@ -137,7 +137,7 @@ def prompt_from_payload(payload: dict[str, Any]) -> str:
     if action == "grant":
         return f"mag : autoriser l'écriture Drive « {target} » ({acct}, {hours} h)"
     if action == "project_sign":
-        return f"mag : signer le manifeste projet (.mag/)"
+        return f"mag : signer le manifeste projet (.gwsa/)"
     if action == "add_account":
         return f"mag : connecter le compte Google « {alias} » ({target})"
     if action == "revoke_descendants":

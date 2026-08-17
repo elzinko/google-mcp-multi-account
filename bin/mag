@@ -32,7 +32,7 @@
 #   mag update [--check|--to <version>]              Installer la dernière version publiée
 #   mag release [patch|minor|major|--print]          Publier une version (semver + CHANGELOG + tag)
 #   mag sandbox deploy [--wire …]|wire [--remove …]|list|status|remove  Sandboxes jetables (0041 ; détail : mag sandbox --help)
-#   mag project show|init|sign                         Manifeste projet .mag/ (fiche 0040 phase B)
+#   mag project show|init|sign                         Manifeste projet .gwsa/ (fiche 0040 phase B)
 #   mag couloir …                                      Alias déprécié → sandbox
 #   mag remove <alias>                               Déconnecter et supprimer un profil
 #   mag <alias> <commande gws…>                      Exécuter gws sur le compte <alias>
@@ -55,7 +55,7 @@ MASTER_SECRET="$GWSA_ROOT/client_secret.json"
 umask 077
 [[ -d "$GWSA_ROOT" ]] && chmod 700 "$GWSA_ROOT" 2>/dev/null || true
 
-usage() { awk 'NR==1{next} !/^#/{exit} {sub(/^# ?/,""); print}' "$0" | sed "s/mag /$SELF /g"; }  # « mag » commande → $SELF ; épargne « .mag/ » (manifeste)
+usage() { awk 'NR==1{next} !/^#/{exit} {sub(/^# ?/,""); print}' "$0" | sed "s/mag /$SELF /g"; }  # « mag » commande → $SELF ; épargne « .gwsa/ » (manifeste)
 
 resolve_repo_dir() { # suit le symlink éventuel (brew /opt/homebrew/bin/mag, ou bin/gma → mag) jusqu'au repo
   local src="$0" target
@@ -811,7 +811,7 @@ cmd_elicitation() { # mag elicitation enroll|status — clé biométrique (fiche
   esac
 }
 
-cmd_project() { # mag project show|init|sign — manifeste .mag/ (phase B + sig 0001)
+cmd_project() { # mag project show|init|sign — manifeste .gwsa/ (phase B + sig 0001)
   local sub="${1:-show}"; shift || true
   case "$sub" in
     show)

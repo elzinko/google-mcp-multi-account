@@ -1,4 +1,4 @@
-"""Capacités par projet git — lecture `.mag/manifest` (fiche 0040 phase B)."""
+"""Capacités par projet git — lecture `.gwsa/manifest` (fiche 0040 phase B)."""
 from __future__ import annotations
 
 import hashlib
@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-GWSA_DIR = ".mag"
+GWSA_DIR = ".gwsa"
 MANIFEST_NAME = "manifest.json"
 SIG_NAME = "manifest.sig"
 LOCAL_SIG_PREFIX = "local:"
@@ -180,7 +180,7 @@ def _default_manifest(project_id: str) -> dict[str, Any]:
 
 
 def write_manifest(root: str | Path, manifest: dict[str, Any]) -> Path:
-    """Écrit manifest.json sous .mag/ (mode 600)."""
+    """Écrit manifest.json sous .gwsa/ (mode 600)."""
     path = manifest_path_for(root)
     path.parent.mkdir(parents=True, exist_ok=True)
     try:

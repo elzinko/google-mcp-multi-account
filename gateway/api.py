@@ -1007,7 +1007,7 @@ def access_request(
                     "folder": folder,
                     "session_id": sid,
                     "message": (
-                        f"Aucun manifeste projet (.mag/manifest.json). "
+                        f"Aucun manifeste projet (.gwsa/manifest.json). "
                         f"L'utilisateur doit d'abord :\n"
                         f"  mag project init\n"
                         f"  # éditer capabilities.{alias}.drive.zones\n"
@@ -1046,7 +1046,7 @@ def access_request(
                     "blocked_by_manifest": True,
                     "message": (
                         f"« {folder} » n'est pas dans le plafond manifeste projet "
-                        f"pour {who} (.mag/manifest.json). "
+                        f"pour {who} (.gwsa/manifest.json). "
                         f"L'humain doit éditer capabilities puis « mag project sign », "
                         f"ou choisir une zone déjà déclarée. "
                         f"Session grant hors manifeste serait refusé."
@@ -1061,7 +1061,7 @@ def access_request(
                 "folder": folder,
                 "session_id": sid,
                 "message": (
-                    f"Zone projet « {folder} » dans le plafond .mag/ pour {who}. "
+                    f"Zone projet « {folder} » dans le plafond .gwsa/ pour {who}. "
                     f"Pour l'activer sur cette conversation :\n"
                     f'  mag session grant {sid} {alias} "{folder}" {h}\n'
                     f"(intersection policy ∩ manifeste ∩ session — {h} h)."
@@ -1086,7 +1086,7 @@ def access_request(
                     f"L'utilisateur doit exécuter :\n"
                     f'  mag session grant {sid} {alias} "{folder}" {h}\n'
                     f"(zone valable pour cette conversation seulement — {h} h). "
-                    f"Si le dépôt a un .mag/ signé, préférer kind=project_grant "
+                    f"Si le dépôt a un .gwsa/ signé, préférer kind=project_grant "
                     f"(vérifie le plafond manifeste). À distance, ajouter « --remote » "
                     f"pour approuver depuis la passkey du téléphone (fiche 0078)."
                 ),
@@ -1103,7 +1103,7 @@ def access_request(
                 f"Écriture Drive sous « {folder} » refusée sans zone active "
                 f"(compte {who}). "
                 f"Depuis une conversation MCP, préférer access_request kind=session_grant "
-                f"ou kind=project_grant (zone limitée à cette session + plafond .mag/). "
+                f"ou kind=project_grant (zone limitée à cette session + plafond .gwsa/). "
                 f"Sans session MCP active, legacy poste entier :\n"
                 f"  mag grant {alias} \"{folder}\" {h}\n"
                 f"(déprécié — partagé entre toutes les sessions ; admin http://127.0.0.1:4877). "

@@ -2764,15 +2764,15 @@ except api.GatewayError as e:
 PROJ_ROOT="$TMP/mag-proj-inside"
 rm -rf "$PROJ_ROOT"
 git_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-rm -rf "$git_root/.mag"
+rm -rf "$git_root/.gwsa"
 GWSA_ROOT="$SESS_ROOT" "$GWSA" project init >/dev/null 2>&1
 GWSA_ROOT="$SESS_ROOT" "$GWSA" project sign >/dev/null 2>&1
 out_p="$(GWSA_ROOT="$SESS_ROOT" "$GWSA" project show 2>/dev/null)"
-[[ -n "$git_root" && -f "$git_root/.mag/manifest.json" && -f "$git_root/.mag/manifest.sig" \
+[[ -n "$git_root" && -f "$git_root/.gwsa/manifest.json" && -f "$git_root/.gwsa/manifest.sig" \
    && "$out_p" == *'"manifest_valid": true'* ]] \
   && pass "project : init + sign local + show" \
   || fail "project : init/sign/show (root=$git_root out=$out_p)"
-rm -rf "$git_root/.mag" 2>/dev/null || true
+rm -rf "$git_root/.gwsa" 2>/dev/null || true
 
 cap_out="$("$PY" -c "
 import os
@@ -2820,7 +2820,7 @@ m = {'capabilities': {'alpha': {
   'gmail': {'read': True, 'drafts': False},
 }}}
 ctx = ProjectContext(manifest_valid=True, manifest=m, git_root='/tmp',
-                     manifest_path='/tmp/.mag/manifest.json')
+                     manifest_path='/tmp/.gwsa/manifest.json')
 os.environ['GWSA_GIT_ROOT'] = '/tmp'
 with patch('gateway.project.resolve_project', return_value=ctx):
     ok = access_request('alpha', 'project_grant', folder='folderAAA', hours=2, session=sid)
@@ -3188,7 +3188,7 @@ r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_ROOT/alpha'
 print(r.returncode)
 ")"
 # Altération : le fichier manifeste change de contenu sans re-signature.
-printf '{"schema":1,"project_id":"tampered","capabilities":{}}' > "$ANTIDOWN_REPO/.mag/manifest.json"
+printf '{"schema":1,"project_id":"tampered","capabilities":{}}' > "$ANTIDOWN_REPO/.gwsa/manifest.json"
 after_tamper="$(GWSA_ROOT="$ANTIDOWN_ROOT" GWSA_GIT_ROOT="$ANTIDOWN_REPO" PYTHONPATH="$(pwd)" "$PY" -c "
 import subprocess, sys
 r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_ROOT/alpha','gmail','messages','list'])

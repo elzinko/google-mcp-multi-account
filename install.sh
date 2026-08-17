@@ -119,7 +119,7 @@ if [[ -x "$CURRENT_LINK/bin/mag" ]]; then
 fi
 
 # ── mag sur le PATH ─────────────────────────────────────────────
-step "Commandes sur le PATH — mag (+ alias mag)"
+step "Commandes sur le PATH — mag (+ alias gma/gwsa)"
 link="${GWSA_CLI_LINK:-}"
 if [[ -z "$link" ]]; then
   if command -v brew >/dev/null 2>&1; then link="$(brew --prefix)/bin/mag"; else link="$HOME/.local/bin/mag"; fi
@@ -127,11 +127,13 @@ fi
 mkdir -p "$(dirname "$link")"
 ln -sfn "$CURRENT_LINK/bin/mag" "$link"
 ok "mag → $link"
-# Alias « mag » (nom aligné sur le connecteur google-multi-account). « mag »
-# reste disponible comme alias déprécié.
-gma_link="$(dirname "$link")/mag"
-ln -sfn "$CURRENT_LINK/bin/mag" "$gma_link"
-ok "mag → $gma_link"
+# Alias dépréciés « gma » et « gwsa » (compat ; « mag » est le nom courant,
+# aligné sur le connecteur google-multi-account).
+for _alias in gma gwsa; do
+  _alias_link="$(dirname "$link")/$_alias"
+  ln -sfn "$CURRENT_LINK/bin/mag" "$_alias_link"
+  ok "$_alias → $_alias_link"
+done
 case ":$PATH:" in
   *":$(dirname "$link"):"*) ;;
   *) warn "« $(dirname "$link") » n'est pas dans ton PATH — ajoute-le pour utiliser « mag »";;

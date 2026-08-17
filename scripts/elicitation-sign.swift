@@ -15,7 +15,7 @@ import CryptoKit
 import LocalAuthentication
 import Security
 
-let keyTag = "com.mag.elicitation.v1".data(using: .utf8)!
+let keyTag = "com.gwsa.elicitation.v1".data(using: .utf8)!
 let privateFileName = "private.p256"
 
 func die(_ msg: String, code: Int32 = 1) -> Never {
@@ -198,7 +198,7 @@ func promptText(from obj: [String: Any]) -> String {
     case "grant":
         return "mag : autoriser l'écriture Drive « \(target) » (\(acct), \(hours) h)"
     case "project_sign":
-        return "mag : signer le manifeste projet (.mag/)"
+        return "mag : signer le manifeste projet (.gwsa/)"
     case "add_account":
         return "mag : connecter le compte Google « \(alias) » (\(target))"
     case "revoke_descendants":

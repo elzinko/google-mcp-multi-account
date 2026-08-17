@@ -421,7 +421,7 @@ TOOLS: list[dict[str, Any]] = [
         "description": (
             "Demande d'élicitation humaine : kind=session_unlock / session_grant / "
             "project_grant (cette conversation MCP ; project_grant vérifie le plafond "
-            ".mag/), kind=unlock / kind=grant (legacy poste entier, déprécié), ou "
+            ".gwsa/), kind=unlock / kind=grant (legacy poste entier, déprécié), ou "
             "kind=add_account (nouveau compte — alias inexistant + email). "
             "N'exécute RIEN — renvoie la commande exacte à faire exécuter par l'utilisateur."
         ),
