@@ -14,14 +14,14 @@ Ce dossier est le **suivi versionné** des features / bugs / chores. Il vit sur
 |---|---|
 | `<id>_slug.md` | Fiches **actives** (`idea` / `todo` / `in-progress` / `blocked`) — `id` horodaté `AAAAMMDDHHMMSSmmm` ; legacy `0001-slug.md` (4 chiffres) toléré |
 | [`BACKLOG.md`](BACKLOG.md) | **Index généré** (`regen`) — ne pas éditer à la main |
-| [`PLAN.md`](PLAN.md) | Séquence décidée (curée) — horizon **NOW** court, pas une encyclopédie |
+| `PLAN.md` *(optionnel — absent tant que non créé via `plan set`)* | Séquence décidée (curée) — horizon **NOW** court, pas une encyclopédie |
 | [`done/`](done/) | Fiches **livrées** (`status: shipped`) |
 | [`feature-template.md`](feature-template.md) | Gabarit pour une nouvelle fiche |
 
 ## Comment travailler
 
 1. **Capturer** — `/ezk-backlog add …` (anti-doublon, priorité demandée, `idea` si non mûr).
-2. **Séquencer** — buckets `priority` (P0→P3) + `PLAN.md` pour l'ordre réel (NOW = prochaines N cartes).
+2. **Séquencer** — buckets `priority` (P0→P3) ; option `PLAN.md` (via `plan set`) pour figer l'ordre réel (NOW = prochaines N cartes).
 3. **Groomer / ready** — `groom <id>` puis gate `ready <id>` (DoR) avant tirage.
 4. **Tirer** — `next --ready-only` (point d'entrée d'ezk-sprint).
 5. **Livrer** — `ship <id> #PR` → déplacement vers `done/` + regen.
