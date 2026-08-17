@@ -95,7 +95,10 @@ point_current_at() { # point_current_at <version> — bascule atomique du symlin
 
 stop_broker() { # recycle le broker du couloir stable, sinon l'ancien code reste servi
   local mag="$CURRENT_LINK/bin/mag"
-  [[ -x "$mag" ]] || { warn "mag introuvable dans la version déployée — broker non recyclé"; return 0; }
+  # rollback vers une release pré-renommage : le binaire s'appelle gwsa/gma
+  [[ -x "$mag" ]] || mag="$CURRENT_LINK/bin/gwsa"
+  [[ -x "$mag" ]] || mag="$CURRENT_LINK/bin/gma"
+  [[ -x "$mag" ]] || { warn "binaire introuvable dans la version déployée — broker non recyclé"; return 0; }
   "$mag" broker stop || warn "arrêt du broker en échec — le relancer à la main si besoin"
 }
 

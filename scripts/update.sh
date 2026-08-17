@@ -221,10 +221,14 @@ link_cli() {
   fi
   # une install antérieure n'a que gma/gwsa sur le PATH — on les cherche en repli
   link="${GWSA_CLI_LINK:-$(command -v mag 2>/dev/null || command -v gma 2>/dev/null || command -v gwsa 2>/dev/null || true)}"
+  # cible = le binaire de la version installée. Rollback vers une release
+  # pré-renommage : elle n'a que bin/gwsa/bin/gma — on s'y replie (Codex #114 r4).
   expected="$DEPLOY_ROOT/current/bin/mag"
+  [[ -x "$expected" ]] || expected="$DEPLOY_ROOT/current/bin/gwsa"
+  [[ -x "$expected" ]] || expected="$DEPLOY_ROOT/current/bin/gma"
 
   [[ -n "$link" ]] || { warn "mag absent du PATH — lien non posé"; return 0; }
-  [[ -x "$expected" ]] || { warn "mag absent de la copie installée — lien inchangé"; return 0; }
+  [[ -x "$expected" ]] || { warn "binaire absent de la copie installée — liens inchangés"; return 0; }
 
   if [[ ! -L "$link" ]]; then
     warn "« $link » n'est pas un lien symbolique — laissé tel quel"
@@ -233,37 +237,35 @@ link_cli() {
   target="$(readlink "$link")"
   if [[ "$target" == "$expected" ]]; then
     ok "mag du PATH déjà sur la copie installée"
-    return 0
-  fi
-  case "$target" in
-    "$SRC"/bin/mag|"$DEPLOY_ROOT"/*/bin/mag) ;;
-    # cibles legacy d'une install antérieure (lien nommé gma/gwsa) — à migrer aussi
-    "$SRC"/bin/gma|"$SRC"/bin/gwsa|"$DEPLOY_ROOT"/*/bin/gma|"$DEPLOY_ROOT"/*/bin/gwsa) ;;
-    *) warn "mag du PATH pointe « $target » (hors projet) — laissé tel quel"; return 0 ;;
-  esac
-  if ln -sfn "$expected" "$link" 2>/dev/null; then
-    ok "mag du PATH → $expected"
+    # ne PAS return : on continue pour (re)poser les alias gma/gwsa manquants
   else
-    warn "impossible de réécrire « $link » — à refaire à la main : ln -sfn \"$expected\" \"$link\""
+    case "$target" in
+      "$SRC"/bin/mag|"$DEPLOY_ROOT"/*/bin/mag) ;;
+      # cibles legacy d'une install antérieure (lien nommé gma/gwsa) — à migrer aussi
+      "$SRC"/bin/gma|"$SRC"/bin/gwsa|"$DEPLOY_ROOT"/*/bin/gma|"$DEPLOY_ROOT"/*/bin/gwsa) ;;
+      *) warn "mag du PATH pointe « $target » (hors projet) — laissé tel quel"; return 0 ;;
+    esac
+    if ln -sfn "$expected" "$link" 2>/dev/null; then
+      ok "mag du PATH → $expected"
+    else
+      warn "impossible de réécrire « $link » — à refaire à la main : ln -sfn \"$expected\" \"$link\""
+    fi
   fi
 
   # poser/rafraîchir « mag » (nom courant) + les alias dépréciés « gma »/« gwsa »
-  # à côté : une install antérieure n'a QUE gma/gwsa, il faut donc y créer mag,
-  # sinon les commandes « mag … » documentées manqueraient au PATH après un simple
-  # « mag update » (revue Codex #92, #114).
-  mag_expected="$DEPLOY_ROOT/current/bin/mag"
-  if [[ -x "$mag_expected" ]]; then
-    for _name in mag gma gwsa; do
-      _nlink="$(dirname "$link")/$_name"
-      if [[ -e "$_nlink" && ! -L "$_nlink" ]]; then
-        warn "« $_nlink » n'est pas un lien symbolique — laissé tel quel"
-      elif ln -sfn "$mag_expected" "$_nlink" 2>/dev/null; then
-        ok "$_name du PATH → $mag_expected"
-      else
-        warn "impossible de poser « $_nlink » — à faire à la main : ln -sfn \"$mag_expected\" \"$_nlink\""
-      fi
-    done
-  fi
+  # à côté, vers la MÊME cible $expected (repliée sur gwsa/gma au rollback) : une
+  # install antérieure n'a QUE gma/gwsa, il faut donc y créer mag, sinon les
+  # commandes « mag … » manqueraient au PATH après « update » (Codex #92, #114).
+  for _name in mag gma gwsa; do
+    _nlink="$(dirname "$link")/$_name"
+    if [[ -e "$_nlink" && ! -L "$_nlink" ]]; then
+      warn "« $_nlink » n'est pas un lien symbolique — laissé tel quel"
+    elif ln -sfn "$expected" "$_nlink" 2>/dev/null; then
+      ok "$_name du PATH → $expected"
+    else
+      warn "impossible de poser « $_nlink » — à faire à la main : ln -sfn \"$expected\" \"$_nlink\""
+    fi
+  done
 }
 link_cli
 
