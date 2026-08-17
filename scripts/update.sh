@@ -82,7 +82,7 @@ else
   command -v curl >/dev/null 2>&1 || die "curl est requis pour mettre à jour sans clone"
   [[ -f "$LIB_GH" ]] || die "lib introuvable : $LIB_GH"
   # Restaurer le dépôt d'origine : si l'install venait d'un fork (GWSA_REPO),
-  # .origin le note — mais un « gwsa update » ultérieur ne le relit pas, et on
+  # .origin le note — mais un « mag update » ultérieur ne le relit pas, et on
   # interrogerait le dépôt par défaut (mauvais repo/tags). Revue Codex P2.
   # Un GWSA_REPO explicite dans l'environnement garde la priorité.
   if [[ -z "${GWSA_REPO:-}" && -s "$HERE/.origin" ]]; then
@@ -133,9 +133,15 @@ fi
 if [[ "$INSTALLED" == "$TARGET_VERSION" && -z "$FORCE" ]]; then
   step "Rien à faire"
   ok "déjà à jour ($INSTALLED) — « --force » pour réinstaller quand même"
-  exit 0
+  # ne PAS sortir : on saute l'installation, mais on répare quand même les liens
+  # du PATH plus bas (mag + alias gma/gwsa). Sinon une install antérieure qui n'a
+  # que gma/gwsa n'obtiendrait jamais « mag » par « update » (Codex #114 round 3).
+  SKIP_INSTALL=1
 fi
 
+# Bloc sauté si « déjà à jour » : on ne réinstalle ni ne rebranche, on ne fait
+# que réparer les liens du PATH plus bas.
+if [[ -z "${SKIP_INSTALL:-}" ]]; then
 # ── installation ─────────────────────────────────────────────────
 step "Installation de $TARGET_VERSION"
 if [[ "$MODE_SRC" == "clone" ]]; then
@@ -195,27 +201,34 @@ else
   ok "CLI « claude » absent — Claude Code non branché (normal si tu n'utilises que Desktop)"
 fi
 
+fi  # fin du bloc sauté quand « déjà à jour »
+
 # ── le poste de commande suit la version installée ───────────────
-# gwsa doit être versionné comme le serveur MCP (fiche 0030) : sinon « gwsa
+# mag doit être versionné comme le serveur MCP (fiche 0030) : sinon « mag
 # unlock » exécute le code du clone sur les comptes du couloir stable.
-# Prudence : on ne reprend QUE un lien symbolique dont la cible est un bin/gwsa
+# Prudence : on ne reprend QUE un lien symbolique dont la cible est un bin/mag
 # du clone source ou d'une version déployée. Un fichier réel ou une cible
 # étrangère est laissé intact.
 link_cli() {
   local link expected target
   # Garde-fou de bac à sable : si le dépôt d'installation est surchargé (suite de
   # tests) sans que le lien à gérer soit désigné explicitement, on ne touche à
-  # RIEN. Un test ne doit jamais pouvoir réécrire le gwsa du PATH réel — c'est
+  # RIEN. Un test ne doit jamais pouvoir réécrire le mag du PATH réel — c'est
   # arrivé une fois, en retirant une garde pendant un test de mutation.
   if [[ -n "${GWSA_DEPLOY_ROOT:-}" && -z "${GWSA_CLI_LINK:-}" ]]; then
     warn "dépôt d'installation surchargé sans GWSA_CLI_LINK — lien du PATH laissé tel quel"
     return 0
   fi
-  link="${GWSA_CLI_LINK:-$(command -v gwsa 2>/dev/null || true)}"
-  expected="$DEPLOY_ROOT/current/bin/gwsa"
+  # une install antérieure n'a que gma/gwsa sur le PATH — on les cherche en repli
+  link="${GWSA_CLI_LINK:-$(command -v mag 2>/dev/null || command -v gma 2>/dev/null || command -v gwsa 2>/dev/null || true)}"
+  # cible = le binaire de la version installée. Rollback vers une release
+  # pré-renommage : elle n'a que bin/gwsa/bin/gma — on s'y replie (Codex #114 r4).
+  expected="$DEPLOY_ROOT/current/bin/mag"
+  [[ -x "$expected" ]] || expected="$DEPLOY_ROOT/current/bin/gwsa"
+  [[ -x "$expected" ]] || expected="$DEPLOY_ROOT/current/bin/gma"
 
-  [[ -n "$link" ]] || { warn "gwsa absent du PATH — lien non posé"; return 0; }
-  [[ -x "$expected" ]] || { warn "gwsa absent de la copie installée — lien inchangé"; return 0; }
+  [[ -n "$link" ]] || { warn "mag absent du PATH — lien non posé"; return 0; }
+  [[ -x "$expected" ]] || { warn "binaire absent de la copie installée — liens inchangés"; return 0; }
 
   if [[ ! -L "$link" ]]; then
     warn "« $link » n'est pas un lien symbolique — laissé tel quel"
@@ -223,33 +236,36 @@ link_cli() {
   fi
   target="$(readlink "$link")"
   if [[ "$target" == "$expected" ]]; then
-    ok "gwsa du PATH déjà sur la copie installée"
-    return 0
-  fi
-  case "$target" in
-    "$SRC"/bin/gwsa|"$DEPLOY_ROOT"/*/bin/gwsa) ;;
-    *) warn "gwsa du PATH pointe « $target » (hors projet) — laissé tel quel"; return 0 ;;
-  esac
-  if ln -sfn "$expected" "$link" 2>/dev/null; then
-    ok "gwsa du PATH → $expected"
+    ok "mag du PATH déjà sur la copie installée"
+    # ne PAS return : on continue pour (re)poser les alias gma/gwsa manquants
   else
-    warn "impossible de réécrire « $link » — à refaire à la main : ln -sfn \"$expected\" \"$link\""
-  fi
-
-  # Alias « gma » (nom aligné sur le connecteur google-multi-account) — le poser
-  # ou le rafraîchir à côté de gwsa, sinon les commandes « gma … » documentées
-  # manqueraient au PATH après un simple « gwsa update » (revue Codex #92).
-  gma_link="$(dirname "$link")/gma"
-  gma_expected="$DEPLOY_ROOT/current/bin/gma"
-  if [[ -x "$gma_expected" ]]; then
-    if [[ -e "$gma_link" && ! -L "$gma_link" ]]; then
-      warn "« $gma_link » n'est pas un lien symbolique — laissé tel quel"
-    elif ln -sfn "$gma_expected" "$gma_link" 2>/dev/null; then
-      ok "gma du PATH → $gma_expected"
+    case "$target" in
+      "$SRC"/bin/mag|"$DEPLOY_ROOT"/*/bin/mag) ;;
+      # cibles legacy d'une install antérieure (lien nommé gma/gwsa) — à migrer aussi
+      "$SRC"/bin/gma|"$SRC"/bin/gwsa|"$DEPLOY_ROOT"/*/bin/gma|"$DEPLOY_ROOT"/*/bin/gwsa) ;;
+      *) warn "mag du PATH pointe « $target » (hors projet) — laissé tel quel"; return 0 ;;
+    esac
+    if ln -sfn "$expected" "$link" 2>/dev/null; then
+      ok "mag du PATH → $expected"
     else
-      warn "impossible de poser « $gma_link » — à faire à la main : ln -sfn \"$gma_expected\" \"$gma_link\""
+      warn "impossible de réécrire « $link » — à refaire à la main : ln -sfn \"$expected\" \"$link\""
     fi
   fi
+
+  # poser/rafraîchir « mag » (nom courant) + les alias dépréciés « gma »/« gwsa »
+  # à côté, vers la MÊME cible $expected (repliée sur gwsa/gma au rollback) : une
+  # install antérieure n'a QUE gma/gwsa, il faut donc y créer mag, sinon les
+  # commandes « mag … » manqueraient au PATH après « update » (Codex #92, #114).
+  for _name in mag gma gwsa; do
+    _nlink="$(dirname "$link")/$_name"
+    if [[ -e "$_nlink" && ! -L "$_nlink" ]]; then
+      warn "« $_nlink » n'est pas un lien symbolique — laissé tel quel"
+    elif ln -sfn "$expected" "$_nlink" 2>/dev/null; then
+      ok "$_name du PATH → $expected"
+    else
+      warn "impossible de poser « $_nlink » — à faire à la main : ln -sfn \"$expected\" \"$_nlink\""
+    fi
+  done
 }
 link_cli
 

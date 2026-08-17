@@ -46,7 +46,7 @@ Après le broker Phase 2 A (daemon + RPC) :
 
 - [ ] Un process « agent » (même UID sandboxé ou sans droit de lecture vault) ne
       peut pas obtenir un access token Google ni invoquer `gws` utilement
-- [ ] Le broker continue de servir MCP / gwsa pour les opérations autorisées
+- [ ] Le broker continue de servir MCP / mag pour les opérations autorisées
 - [ ] Migration documentée depuis le layout `~/.config/gws-accounts/` actuel
 - [ ] Tests d’acceptation (refus d’accès vault + happy path broker)
 

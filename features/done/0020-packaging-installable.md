@@ -16,11 +16,11 @@ updated: 2026-08-01
 
 L'install et l'update d'aujourd'hui exigent un **clone git présent sur le poste** :
 
-- Install : `git clone` → symlink `gwsa` bootstrap → `provision-gcp.sh` →
+- Install : `git clone` → symlink `mag` bootstrap → `provision-gcp.sh` →
   `update.sh` (qui sert de premier install). Cf. [[0010]], [[0013]].
-- Update : `gwsa update` lit les **tags git du clone** ; depuis la copie
+- Update : `mag update` lit les **tags git du clone** ; depuis la copie
   installée, il suit un fichier `.source` qui pointe vers le clone. Supprimer le
-  clone → `gwsa update` meurt (« clone source introuvable »). Cf. [[0029]], [[0030]].
+  clone → `mag update` meurt (« clone source introuvable »). Cf. [[0029]], [[0030]].
 
 Aucun produit connu (Docker, brew, gh) ne demande de garder un clone pour se
 mettre à jour. C'est **le** principal écart au standard. La mécanique interne est
@@ -34,7 +34,7 @@ Homebrew**. Objectif : « le plus standard et simple possible » (demande utilis
 
 Le déclic qui rend ça simple : **GitHub sert déjà un tarball par tag**
 (`…/archive/refs/tags/vX.Y.Z.tar.gz`) et expose l'API `…/repos/…/tags`. Donc
-`install.sh` et `gwsa update` peuvent tirer une version **sans clone** et **sans
+`install.sh` et `mag update` peuvent tirer une version **sans clone** et **sans
 artefact de release custom** — ils réutilisent tel quel le reste de
 [deploy-local.sh](../scripts/deploy-local.sh) (extraction → `current` → rewire → broker).
 
@@ -48,10 +48,10 @@ permissions d'outils), bascule `current` réservée au rail **stable**.
 
 - `install.sh` (hébergé, `curl -fsSL … | bash`) : vérifie les prérequis (macOS,
   `python3`, `gws` via brew), télécharge le dernier tag, extrait dans
-  `~/.local/share/google-mcp/<tag>/`, bascule `current`, pose `gwsa` sur le PATH,
+  `~/.local/share/google-mcp/<tag>/`, bascule `current`, pose `mag` sur le PATH,
   branche Desktop + Code, puis **imprime** les étapes OAuth/GCP restantes (renvoi
   vers `provision-gcp.sh` / `setup_status` — jamais exécutées à la place de l'humain).
-- `gwsa update` : quand il n'y a pas de clone (`.git` absent **et** `.source`
+- `mag update` : quand il n'y a pas de clone (`.git` absent **et** `.source`
   absent), tire depuis l'API GitHub + tarball ; garde le chemin clone comme
   **fallback contributeur**. Conserve `--to`, `--check`, `--force`.
 
@@ -63,13 +63,13 @@ permissions d'outils), bascule `current` réservée au rail **stable**.
 **À évaluer (hors scope immédiat)**
 
 - Desktop Extension **`.mcpb`** : un-clic pour le **branchement Desktop** seul (ne
-  couvre pas `gws`, l'OAuth, la CLI `gwsa`, le broker) — complément, pas substitut.
+  couvre pas `gws`, l'OAuth, la CLI `mag`, le broker) — complément, pas substitut.
 - Cross-platform (Linux/Intel) : [[0018]].
 
 ## Critères d'acceptation
 
 - [x] Un utilisateur installe **sans cloner le repo** ni éditer un chemin (`curl … | bash`). — `install.sh`
-- [x] `gwsa update` met à jour **sans clone présent** (tarball GitHub), clone = fallback.
+- [x] `mag update` met à jour **sans clone présent** (tarball GitHub), clone = fallback.
 - [x] Suppression du clone → l'update fonctionne encore (copie marquée `.origin`, ni `.git` ni `.source`).
 - [x] Nom de connecteur inchangé (`google-multi-account`) après update (branchement partagé, pas de reset perms).
 - [x] Rollback (`--to vX.Y.Z`) et `--check` conservés.

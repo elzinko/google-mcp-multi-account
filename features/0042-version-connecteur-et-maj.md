@@ -22,7 +22,7 @@ C'est normal que le label « MCP » n'apparaisse pas (on est déjà dans Connect
 En revanche, sans version visible :
 
 - on ne sait pas si Claude parle au **stable** (`current`) ou à un vieux dogfood ;
-- après un merge sur `main` + `gwsa update` / nouveau tag, rien n'indique dans
+- après un merge sur `main` + `mag update` / nouveau tag, rien n'indique dans
   l'UI connecteur qu'une **nouvelle version est disponible** ni qu'elle a été
   prise en compte.
 
@@ -49,11 +49,11 @@ Nom stable **fixe** : `google-multi-account`.
 | Rail | Entrée MCP | Ports | Déploiement | Quand |
 |------|------------|-------|-------------|-------|
 | **Stable** (travail quotidien) | `google-multi-account` | broker **4878**, admin **4877** | `~/.local/share/google-mcp/current` → tag `vX.Y.Z` | Prod locale |
-| **Dogfood** (branche / PR / worktree) | nom **suffixé** ex. `google-multi-account-<sandbox-id>` | broker **≥ 4882**, admin **≥ 4879** | `gwsa sandbox deploy --dev` ([[0046]]) | Essayer une feature **sans** toucher le stable |
+| **Dogfood** (branche / PR / worktree) | nom **suffixé** ex. `google-multi-account-<sandbox-id>` | broker **≥ 4882**, admin **≥ 4879** | `mag sandbox deploy --dev` ([[0046]]) | Essayer une feature **sans** toucher le stable |
 
 **Oui**, on peut démarrer une version de dev sur un worktree / une branche
 **sans abîmer** le MCP déjà en place — c'est exactement le rôle des sandboxes.
-Ne **pas** faire `gwsa update` / basculer `current` pour tester une PR.
+Ne **pas** faire `mag update` / basculer `current` pour tester une PR.
 
 ### 3. Comment « choisir » quelle version le LLM utilise
 
@@ -70,12 +70,12 @@ Mécanisme simple recommandé pour le dogfood humain :
 3. Pour tester la nouvelle : parler au connecteur dogfood (ou désactiver
    temporairement le stable dans Connecteurs si le client mélange les tools).
 4. Fin de dogfood : retirer l'entrée suffixée (admin **Clients MCP → Retirer**)
-   + `gwsa sandbox remove <id>` — le stable continue.
+   + `mag sandbox remove <id>` — le stable continue.
 
 **Pas** d'écrasement de l'ancienne pour le dogfood. Écrasement / bascule
-`current` = uniquement le rail **stable** après release taguée (`gwsa update`).
+`current` = uniquement le rail **stable** après release taguée (`mag update`).
 
-### 4. Comment marche `gwsa update` aujourd'hui (stable)
+### 4. Comment marche `mag update` aujourd'hui (stable)
 
 **Pas** un téléchargement d'asset GitHub (`.tar.gz` de release). Flux actuel :
 
@@ -108,8 +108,8 @@ bascule `current`, nom MCP fixe.
 
 ### B — Mise à jour stable « pour n'importe qui »
 
-1. `gwsa update --check` / admin / `setup_status.next_actions` : « v0.3.0 dispo »
-2. `gwsa update` : bascule `current`, **sans** renommer `google-multi-account`
+1. `mag update --check` / admin / `setup_status.next_actions` : « v0.3.0 dispo »
+2. `mag update` : bascule `current`, **sans** renommer `google-multi-account`
 3. Redémarrer Claude Desktop ; vérifier version via tool / admin
 
 ### C — Activation dogfood (déjà en place via [[0046]], à polir)
@@ -124,7 +124,7 @@ bascule `current`, nom MCP fixe.
 - [x] Décision écrite : dogfood = sandbox parallèle + suffixe ; pas d'écrasement `current`
 - [x] Documenté : update actuel = tags git + `git archive`, pas tar.gz GitHub
 - [ ] Signal fiable « quelle version répond » (tool et/ou admin stable)
-- [ ] Parcours « nouvelle version dispo → `gwsa update` → vérif » testable
+- [ ] Parcours « nouvelle version dispo → `mag update` → vérif » testable
 - [ ] Doc dogfood : 2 connecteurs côte à côte + comment choisir / nettoyer
 - [x] Lien / non-doublon clarifié avec [[0026]] — **frontière** posée des deux
       côtés : 0026 = surface *agent* (annonce version via tools + dérive
@@ -139,18 +139,18 @@ bascule `current`, nom MCP fixe.
 
 # Essayer cette PR / worktree — SANS casser le quotidien
 cd /chemin/worktree
-./bin/gwsa sandbox deploy --dev
+./bin/mag sandbox deploy --dev
 # → id du type feat-v2-local-deploy-<sha>
 # → brancher une 2ᵉ entrée MCP (nom suffixé) sur le broker imprimé
 # → stable reste sur 4878
 
 # Fin de test — unwire un client seulement :
-./bin/gwsa sandbox wire --remove desktop
+./bin/mag sandbox wire --remove desktop
 # Ou nucléaire (tous clients + supprimer le répertoire) :
-./bin/gwsa sandbox remove <id>
+./bin/mag sandbox remove <id>
 ```
 
-Quand la V2 est **mergée** et taguée : `gwsa update` sur le rail stable (écrase
+Quand la V2 est **mergée** et taguée : `mag update` sur le rail stable (écrase
 seulement `current`, pas le dogfood).
 
 ## Notes

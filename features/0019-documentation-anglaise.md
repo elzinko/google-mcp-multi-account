@@ -23,7 +23,7 @@ sont encore majoritairement en **français** :
   GitHub destinés à une audience EN ;
 - README + docs d’accueil (`docs/mcp-setup.md`, `docs/setup-oauth.md`,
   `docs/usage.md`, …) restent FR ;
-- messages CLI / erreurs de `gwsa` : langue non tranchée.
+- messages CLI / erreurs de `mag` : langue non tranchée.
 
 Sans anglais sur ces surfaces, la barrière d’entrée bloque l’adoption open-source
 et la crédibilité d’une publication MCP. Voir épic [[0017]].

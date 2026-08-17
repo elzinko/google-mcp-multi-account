@@ -58,7 +58,7 @@ def has_credentials(alias: str) -> bool:
 
 
 def remove_vault_alias(alias: str) -> None:
-    """Supprime le répertoire vault d'un alias (après gwsa remove)."""
+    """Supprime le répertoire vault d'un alias (après mag remove)."""
     d = gwsa_root() / VAULT_DIR_NAME / alias
     if d.is_dir():
         shutil.rmtree(d, ignore_errors=True)
@@ -68,7 +68,7 @@ def migrate_alias(alias: str) -> bool:
     """Déplace credentials.enc vers le vault si encore dans le profil. Retourne True si déplacé.
 
     Si le vault a déjà des credentials et le profil en a de nouveaux (re-auth /
-    `gwsa add`), remplace atomiquement le vault par la source fraîche.
+    `mag add`), remplace atomiquement le vault par la source fraîche.
     """
     src = profile_credentials_legacy(alias)
     dst = credentials_path(alias)
@@ -129,5 +129,5 @@ def gws_config_dir(alias: str) -> Path:
 
 
 def ensure_vault_layout(alias: str) -> None:
-    """Après gwsa add : rapatrier credentials dans le vault."""
+    """Après mag add : rapatrier credentials dans le vault."""
     migrate_alias(alias)

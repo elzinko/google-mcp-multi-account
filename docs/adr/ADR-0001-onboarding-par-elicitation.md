@@ -9,7 +9,7 @@
 ## Contexte
 
 Le README donne l'impression d'une configuration lourde : provisioning GCP,
-gestes console, `gwsa add` par compte, rôles IAM, branchement MCP, policies…
+gestes console, `mag add` par compte, rôles IAM, branchement MCP, policies…
 La demande produit : que l'humain ne fasse que l'**init GCP** (fiable et
 simple), et que **tout le reste** soit piloté depuis le client LLM via le
 MCP — un « init » guidé, et la connexion de nouveaux comptes par élicitation
@@ -25,10 +25,10 @@ Faits d'architecture qui contraignent la réponse :
    (unlock, grant, connexion de compte, binding IAM) exige un geste humain.
 3. Dans **Claude Desktop, il n'y a pas de shell** : le serveur MCP est le
    seul pont. Or aujourd'hui tout le diagnostic de setup (`provision-gcp.sh
-   status`, `gwsa list` enrichi) n'existe qu'en terminal — un utilisateur
+   status`, `mag list` enrichi) n'existe qu'en terminal — un utilisateur
    Desktop ne peut pas être guidé.
 4. Les briques d'élicitation existent déjà (PRs #5/#6/#7) :
-   `access_request` kind=`add_account` (email requis, Touch ID sur `gwsa
+   `access_request` kind=`add_account` (email requis, Touch ID sur `mag
    add`), sonde IAM post-connexion, `status` avec dérive IAM, `sync-iam`
    idempotent.
 

@@ -1,4 +1,4 @@
-"""Policy prudente écrite à la création d'un profil (gwsa add / docs)."""
+"""Policy prudente écrite à la création d'un profil (mag add / docs)."""
 from __future__ import annotations
 
 import json

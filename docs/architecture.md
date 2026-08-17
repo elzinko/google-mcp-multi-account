@@ -16,7 +16,7 @@ Tout tourne **sur votre machine** — rien n'est hébergé dans un cloud applica
 Votre assistant parle au serveur MCP ; le serveur passe par une **gateway** qui
 vérifie deux choses avant chaque appel à Google : le compte est-il **déverrouillé** ?
 l'action est-elle **autorisée par la policy** ? Vous, l'humain, agissez d'un autre
-côté — la CLI `gma` ou l'interface admin — pour ouvrir ou fermer ces accès. Les deux
+côté — la CLI `mag` ou l'interface admin — pour ouvrir ou fermer ces accès. Les deux
 côtés se rejoignent sur le même **état** (verrous, autorisations, policy) sans que
 l'un puisse commander l'autre.
 
@@ -78,7 +78,7 @@ Sur le poste, six couches se relaient :
 |--------|----------|------|
 | Clients LLM | Claude Desktop, Cursor, Claude Code | Appellent le MCP (données) ou le shell (admin) |
 | MCP | [`bin/google-mcp`](https://github.com/elzinko/google-mcp-multi-account/blob/main/bin/google-mcp) → [`gateway/`](https://github.com/elzinko/google-mcp-multi-account/tree/main/gateway/) | La porte d'entrée **recommandée** pour Gmail/Drive |
-| CLI humaine | [`bin/gma`](https://github.com/elzinko/google-mcp-multi-account/blob/main/bin/gma) | Multi-comptes : `add`, `lock`/`unlock`, `grant`, `policy` |
+| CLI humaine | [`bin/mag`](https://github.com/elzinko/google-mcp-multi-account/blob/main/bin/mag) | Multi-comptes : `add`, `lock`/`unlock`, `grant`, `policy` |
 | Cockpit humain | [`admin/server.js`](https://github.com/elzinko/google-mcp-multi-account/blob/main/admin/server.js) `127.0.0.1:4877` | Interface web locale (jamais exposée hors loopback) |
 | Policy | [`scripts/policy-check.py`](https://github.com/elzinko/google-mcp-multi-account/blob/main/scripts/policy-check.py) | Vérifie « default-deny » avant tout appel à Google |
 | Exécution Google | `gws` + `~/.config/gws-accounts/<alias>/` | Tokens chiffrés + appels API |
@@ -102,7 +102,7 @@ convention MCP :
 Le dépôt porte `mcp` (découvrable, il s'auto-décrit) ; le connecteur est plus court
 car il vit déjà sous `mcpServers` — y répéter « mcp » serait redondant. Même schéma
 partout : `github/github-mcp-server` → connecteur `github` ; le paquet
-`mcp-server-git` → connecteur `git`. La CLI, elle, s'appelle **`gma`**.
+`mcp-server-git` → connecteur `git`. La CLI, elle, s'appelle **`mag`**.
 
 ## Les composants, un par un
 
@@ -117,7 +117,7 @@ sans contrôle.
 | `profiles.py` | Alias, verrous, listage des profils |
 | `executor.py` | Client RPC vers le broker (plus aucun appel `gws` ici) |
 | `broker_server.py` | Le daemon `127.0.0.1:4878` — verrou + policy + journal + `gws` |
-| `default_policy.py` | La policy « prudente » écrite à `gma add` |
+| `default_policy.py` | La policy « prudente » écrite à `mag add` |
 | `mcp_server.py` | L'adaptateur MCP stdio (JSON-RPC, **stdlib seule**) |
 | `errors.py` | `GatewayError` (`locked`, `policy`, `alias`, …) |
 
@@ -125,7 +125,7 @@ Concrètement, un appel comme `gmail_list` traverse cinq étapes : on **valide l
 on **refuse si le profil est verrouillé** (avec un message d'élicitation), on passe la
 commande au **policy-check**, on **journalise**, puis seulement on exécute. Et
 `access_request` ne déverrouille ni n'accorde jamais rien : il **renvoie la commande
-exacte** que l'humain devra lancer (`gma unlock`, `gma grant`).
+exacte** que l'humain devra lancer (`mag unlock`, `mag grant`).
 
 ### Les tools MCP exposés
 
@@ -145,7 +145,7 @@ quelle commande ». Chacun lit ou écrit précisément :
 | `drive_permissions_*` | Partage lecture/écriture (policy `share`) | — |
 | `access_request` | Renvoie une commande à faire exécuter par l'humain | — |
 
-### La CLI `gma`
+### La CLI `mag`
 
 Le poste de pilotage humain. Elle isole chaque compte dans son propre répertoire
 (`~/.config/gws-accounts/<alias>/`), écrit une policy prudente à la connexion, et
@@ -174,23 +174,23 @@ essentiellement en lecture.
 Au-dessus de la policy (le plancher du poste), chaque **conversation** porte ses
 **propres** droits, signés et éphémères ([ADR-0007](adr/ADR-0007-droits-par-session.md)).
 L'identité d'une session n'est pas la connexion MCP mais un **jeton** que l'humain
-crée d'un geste signé (`gma session open`) et que l'assistant présente **à chaque
+crée d'un geste signé (`mag session open`) et que l'assistant présente **à chaque
 appel** — deux conversations d'une même connexion restent donc isolées.
 
 | Aspect | Comportement |
 |--------|--------------|
 | **Grain** | Capacités par **service × opération × ressource** (ressource optionnelle : zone Drive, label Gmail…) |
-| **Octroi** | `gma session unlock\|grant\|grant-capability` — **toujours signé** (jamais d'élargissement silencieux) |
+| **Octroi** | `mag session unlock\|grant\|grant-capability` — **toujours signé** (jamais d'élargissement silencieux) |
 | **Effectif** | policy compte ∩ manifeste projet ∩ capacités session (∩, *fail closed* ; anti-downgrade si manifeste altéré) |
 | **Cycle de vie** | TTL + révocation explicite ; la déconnexion MCP ne purge **rien** ; registre `.sessions/<jeton>.json` |
 | **Sous-agents** | Héritage ⊆ parent, pas d'élargissement autonome, révocation en cascade |
-| **Bootstrap** | Sans jeton : aucun accès données, seulement la demande de création (`gma session open`) |
+| **Bootstrap** | Sans jeton : aucun accès données, seulement la demande de création (`mag session open`) |
 
 ### L'interface admin
 
 Une petite UI web locale, pensée pour rester inoffensive : elle n'écoute **que** sur
 `127.0.0.1:4877`, exige un en-tête `X-GWSA-Admin` et vérifie l'`Origin` (anti-CSRF),
-n'agit que via `execFile(gma)` (jamais un shell), et n'a pas d'authentification
+n'agit que via `execFile(mag)` (jamais un shell), et n'a pas d'authentification
 applicative — la confiance, c'est « on est sur la machine locale ».
 
 ### Où sont les secrets
@@ -210,7 +210,7 @@ condition qui le contourne.
 
 | Contrôle | Où | Contre quoi | Contournable si… |
 |----------|-----|-------------|------------------|
-| Policy default-deny | `policy-check.py` | Envoi, services non listés, écritures hors zone | L'agent appelle `gws` **hors** `gma`/gateway |
+| Policy default-deny | `policy-check.py` | Envoi, services non listés, écritures hors zone | L'agent appelle `gws` **hors** `mag`/gateway |
 | Zones Drive + grants | policy + `session-grants.json` | Écriture hors dossiers autorisés | Idem, `gws` nu |
 | Droits par session | `sessions.py` + broker | Fuite de droits entre conversations ; élargissement non signé | L'agent appelle `gws` **hors** gateway (coopératif jusqu'au vault) |
 | Verrou profil | `.locked` / `.unlock-until` | Accès sans votre feu vert | Édition des fichiers, ou `gws` nu |
@@ -236,7 +236,7 @@ LLM  →  tools MCP  →  gateway  →  policy + verrou  →  broker (gws)  → 
 **Le chemin humain** (vous ouvrez/fermez les accès) :
 
 ```text
-Humain  →  admin OU gma unlock|grant|policy  →  (Touch ID ?)  →  fichiers du profil
+Humain  →  admin OU mag unlock|grant|policy  →  (Touch ID ?)  →  fichiers du profil
 ```
 
 **Le chemin à bloquer** côté permissions de l'agent :
@@ -265,7 +265,7 @@ Les fichiers qui comptent, et de quoi vérifier que tout va bien :
 ```text
 bin/google-mcp          # entrée MCP stdio
 bin/google-broker       # daemon (exécute gws)
-bin/gma                 # la CLI multi-comptes
+bin/mag                 # la CLI multi-comptes
 gateway/                # API + MCP + executor + broker
 scripts/policy-check.py # application de la policy
 admin/server.js         # UI 127.0.0.1:4877
@@ -273,6 +273,6 @@ admin/server.js         # UI 127.0.0.1:4877
 
 ```bash
 ./scripts/test.sh                 # policy + gateway + smoke MCP (hermétique)
-gma list                          # vos comptes
-gma policy vous@gmail.com show    # la policy active d'un compte
+mag list                          # vos comptes
+mag policy vous@gmail.com show    # la policy active d'un compte
 ```

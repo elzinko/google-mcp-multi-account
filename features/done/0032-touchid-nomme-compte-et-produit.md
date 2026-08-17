@@ -48,8 +48,8 @@ Deux manques au moment du consentement :
   ex. `déverrouiller le compte Google thomas@…`
 - Binaire compilé nommé `bin/mcp-google-mcp-multi-account` (macOS n'affiche
   plus « swift » / `swift-frontend` comme demandeur)
-- `gwsa add` : si strongauth est actif, l'**email est requis**
-  (`gwsa add <alias> <email>`) — Touch ID cite cet email, plus jamais l'alias
+- `mag add` : si strongauth est actif, l'**email est requis**
+  (`mag add <alias> <email>`) — Touch ID cite cet email, plus jamais l'alias
   seul (avant connexion il n'y a pas encore de `.email`)
 - Formule retenue : email d'abord (sans « alias + email ») — l'intention
   « nommer le compte » est couverte ; la signature dure reste fiche 0001
@@ -67,5 +67,5 @@ Deux manques au moment du consentement :
 - Règle dégagée au passage : l'alias est la **clé** (nom de répertoire, court,
   stable à travers une reconnexion) ; mais partout où l'humain **consent**
   (Touch ID, confirmation, journal), c'est le **compte** qui doit être nommé.
-  `gwsa list` respecte déjà ça (alias + email) ; le Touch ID l'a oublié.
+  `mag list` respecte déjà ça (alias + email) ; le Touch ID l'a oublié.
 - Voir fiche 0001 (élicitation signée, provenance dure).

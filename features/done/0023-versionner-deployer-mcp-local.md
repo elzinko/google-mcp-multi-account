@@ -36,7 +36,7 @@ connectés. Le rayon d'action d'un bug de développement n'est pas le test.
 Figer le code du serveur MCP **ne suffit pas**. `ensure_broker_running()`
 ([`gateway/executor.py:52`](../gateway/executor.py)) ne relance pas le broker s'il
 répond déjà au ping, et le port est **fixe** (`DEFAULT_PORT = 4878`). Le broker est
-démarré avec `cwd=REPO_DIR` et **rien ne l'arrête** : `bin/gwsa` n'expose aucune
+démarré avec `cwd=REPO_DIR` et **rien ne l'arrête** : `bin/mag` n'expose aucune
 commande de pilotage (pas de `broker stop`/`status`).
 
 Conséquence : dès que deux versions coexistent, **le premier broker démarré impose
@@ -134,7 +134,7 @@ Toutes locales, toutes constatées le **2026-07-25** :
 
 - Packaging distribuable (`.mcpb`, releases publiques) → [[0020]].
 - Figer le binaire `gws` lui-même (voir limite ci-dessus).
-- **Angle mort à documenter** : `bin/gwsa` appelle `gws` **directement**
+- **Angle mort à documenter** : `bin/mag` appelle `gws` **directement**
   (`exec gws "$@"`), sans passer par le broker. Le CLI n'est donc pas isolé par le
   port broker — seulement par `GWSA_ROOT`. Suffisant ici, mais à écrire noir sur
   blanc pour ne pas croire l'isolation plus forte qu'elle n'est.
@@ -151,7 +151,7 @@ Toutes locales, toutes constatées le **2026-07-25** :
   **cible** qui change (artefact déployé au lieu du clone) — et il gère déjà le
   `--name` nécessaire au second couloir.
 - Amorcer le root de dev demandera de connecter au moins un compte
-  (`gwsa add` sur `GWSA_ROOT=~/.config/gws-accounts-dev`) — geste humain, une fois.
+  (`mag add` sur `GWSA_ROOT=~/.config/gws-accounts-dev`) — geste humain, une fois.
 
 ## Livré — PR #25 (rebase-merge le 2026-07-26)
 

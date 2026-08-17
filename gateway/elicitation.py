@@ -125,26 +125,26 @@ def prompt_from_payload(payload: dict[str, Any]) -> str:
     who = f"« {alias} » ({email})" if email else f"« {alias} »"
     acct = f"{alias} · {email}" if email else alias
     if action == "session_unlock":
-        return f"gma : déverrouiller {who} pour la session {sid} ({minutes} min)"
+        return f"mag : déverrouiller {who} pour la session {sid} ({minutes} min)"
     if action == "unlock":
         if target == "off":
-            return f"gma : retirer le verrou permanent sur {who}"
-        return f"gma : déverrouiller {who} ({minutes or target} min, poste entier)"
+            return f"mag : retirer le verrou permanent sur {who}"
+        return f"mag : déverrouiller {who} ({minutes or target} min, poste entier)"
     if action == "session_grant":
-        return f"gma : zone session {sid} — « {target} » ({acct}, {hours} h)"
+        return f"mag : zone session {sid} — « {target} » ({acct}, {hours} h)"
     if action == "session_grant_capability":
-        return f"gma : capacité session {sid} — « {target} » ({acct}, {hours} h)"
+        return f"mag : capacité session {sid} — « {target} » ({acct}, {hours} h)"
     if action == "grant":
-        return f"gma : autoriser l'écriture Drive « {target} » ({acct}, {hours} h)"
+        return f"mag : autoriser l'écriture Drive « {target} » ({acct}, {hours} h)"
     if action == "project_sign":
-        return f"gma : signer le manifeste projet (.gwsa/)"
+        return f"mag : signer le manifeste projet (.gwsa/)"
     if action == "add_account":
-        return f"gma : connecter le compte Google « {alias} » ({target})"
+        return f"mag : connecter le compte Google « {alias} » ({target})"
     if action == "revoke_descendants":
-        return f"gma : révoquer les sous-sessions de {sid or target}"
+        return f"mag : révoquer les sous-sessions de {sid or target}"
     if action == "strongauth_off":
-        return "gma : désactiver l'authentification forte"
-    return f"gma : {action} — {alias} {target}".strip()
+        return "mag : désactiver l'authentification forte"
+    return f"mag : {action} — {alias} {target}".strip()
 
 
 def build_payload(
@@ -262,7 +262,7 @@ def _swift_sign(payload: dict[str, Any]) -> str:
     if proc.returncode == 2:
         raise ElicitationError(
             "biométrie indisponible — pas d'accord silencieux "
-            "(capot fermé, pas de Touch ID, ou clé non enrôlée : gwsa elicitation enroll)"
+            "(capot fermé, pas de Touch ID, ou clé non enrôlée : mag elicitation enroll)"
         )
     if proc.returncode != 0:
         detail = (proc.stderr or proc.stdout or "").strip()
@@ -378,7 +378,7 @@ def run_elicitation_gate(fields: dict[str, Any]) -> None:
     """Point d'entrée : construit le payload, obtient signature, vérifie, journalise."""
     if not is_enrolled():
         raise ElicitationError(
-            "élicitation signée requise mais non enrôlée — exécuter : gwsa elicitation enroll"
+            "élicitation signée requise mais non enrôlée — exécuter : mag elicitation enroll"
         )
     action = str(fields.get("action") or "")
     if not action:

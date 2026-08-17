@@ -22,14 +22,14 @@ Or deux couches distinctes se superposent :
 
 | Couche | Rôle | Drive aujourd'hui |
 |---|---|---|
-| **Policy** (`gwsa policy` / admin) | Ce que `gws` a le droit d'appeler (fail closed) | `files get/list/export/download` ; `create`/`copy` si création ; `update` si modification ; zones |
+| **Policy** (`mag policy` / admin) | Ce que `gws` a le droit d'appeler (fail closed) | `files get/list/export/download` ; `create`/`copy` si création ; `update` si modification ; zones |
 | **Tools MCP** (`google-mcp`) | Ce que le LLM peut réellement invoquer | `drive_list`, `drive_get` (**métadonnées seules**), `drive_create` (fichier neuf + contenu texte optionnel) |
 
 Conséquences concrètes :
 
 1. **Pas de copie via MCP** — pas de tool `drive_copy`. La policy classe pourtant
    `files.copy` comme *création* (donc autorisé si la case est cochée + zone),
-   mais seul `gwsa … drive files copy` y a accès, pas le serveur MCP.
+   mais seul `mag … drive files copy` y a accès, pas le serveur MCP.
 2. **Pas d'approximation « lire puis recréer »** — `drive_get` appelle
    `files.get` sans export/download : le corps du fichier n'est jamais exposé.
    `drive_create(content=…)` ne sert que si le LLM *invente* ou *possède déjà*
@@ -51,7 +51,7 @@ Deux volets, livrables séparément :
 
 Rendre l'écart **visible** là où l'humain configure et lit :
 
-- Note dans le dialogue Policy admin : les cases = droits `gwsa` / API ; la
+- Note dans le dialogue Policy admin : les cases = droits `mag` / API ; la
   surface MCP est un **sous-ensemble** (lien ou rappel des tools Drive
   existants).
 - Précision dans `docs/mcp-setup.md` : `drive_get` = métadonnées ; pas de
