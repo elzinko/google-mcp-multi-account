@@ -34,17 +34,20 @@ l'existant.
 ## Proposition
 
 **Sérialiser la vérification anti-clonage `sign_count` contre une course TOCTOU inter-process.**
-Aujourd'hui l'appelant (`run_remote_approval_gate`, `gateway/remote_approval.py`) **charge
-l'enrôlement AVANT** `verify_assertion`, qui lit-et-compare `sign_count <= enrollment.sign_count`
-(l. 334) puis, plus loin, persiste `enrollment.sign_count = sign_count` + `_save_enrollment`
-(l. 344-345). Un verrou **intra-fonction ne suffit pas** : deux process de vérification (deux
-`gwsa … --remote` concurrents) chargent chacun le **même `sign_count` périmé** et peuvent tous deux
-écraser `phone.json` — une passkey **clonée** rejouée passerait l'anti-clonage.
+Le **vrai chemin CLI** — `bin/gwsa … --remote` → `scripts/remote-approval-cli.py verify` →
+**`close_remote_challenge`** (`gateway/remote_approval.py:166`) — **charge l'enrôlement AVANT**
+`verify_assertion` (tout comme l'appelant in-process `run_remote_approval_gate`). `verify_assertion`
+lit-et-compare `sign_count <= enrollment.sign_count` (l. 334) puis, plus loin, persiste
+`enrollment.sign_count = sign_count` + `_save_enrollment` (l. 344-345). Un verrou **intra-fonction ne
+suffit pas** : deux process de vérification (deux `gwsa … --remote` concurrents) chargent chacun le
+**même `sign_count` périmé** et peuvent tous deux écraser `phone.json` — une passkey **clonée** rejouée
+passerait l'anti-clonage.
 
 Il faut un **verrou inter-process** (verrou fichier, même classe que le TOCTOU `consume_nonce` /
 broker) qui englobe un **rechargement frais** de l'enrôlement depuis le disque + comparaison +
-persistance — pas l'objet enrôlement chargé *avant* le verrou. Le `sign_count` reste **authentifié
-par la signature** (non forgeable) — d'où la sévérité **P2**.
+persistance — pas l'objet enrôlement chargé *avant* le verrou — **dans `close_remote_challenge` (le
+point d'entrée CLI réel) comme dans tout autre point de vérification** (`run_remote_approval_gate`). Le
+`sign_count` reste **authentifié par la signature** (non forgeable) — d'où la sévérité **P2**.
 
 ## Critères d'acceptation
 
