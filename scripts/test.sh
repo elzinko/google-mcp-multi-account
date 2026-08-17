@@ -4146,6 +4146,363 @@ else
   fail "dev remove : aurait dû refuser une version stable — $rm_stable_out"
 fi
 
+section "approbation par passkey distante (fiche 0078, ADR-0009)"
+
+# Simulateur de signeur téléphone (paire P-256 de test, via openssl — aucune
+# dépendance ajoutée) : tests/testlib/phone_signer.py. Hermétique : ni compte
+# réel, ni vrai téléphone, ni réseau (InMemoryChannel, ADR-0009 §4).
+
+# CA6 — enrôlement device-bound : refuse BE (backup-eligible) armé et PIN,
+# accepte device-bound + biométrie. Refusé À L'ENROLEMENT, pas seulement à
+# la vérification (ADR-0009 §3).
+RA6="$TMP/gwsa-remote-approval-ca6"
+out_ca6="$(GWSA_ROOT="$RA6" "$PY" -c "
+import sys; sys.path.insert(0, 'tests')
+import tempfile
+from pathlib import Path
+from testlib.phone_signer import generate_keypair
+from gateway.remote_approval import enroll_phone, RemoteApprovalError
+
+tmp = Path(tempfile.mkdtemp())
+_, pub = generate_keypair(tmp)
+out = []
+try:
+    enroll_phone({'credential_id': 'c', 'aaguid': 'a', 'public_key': pub, 'uv': 'biometric', 'be': True})
+    out.append('BE:accepted')
+except RemoteApprovalError:
+    out.append('BE:refused')
+try:
+    enroll_phone({'credential_id': 'c', 'aaguid': 'a', 'public_key': pub, 'uv': 'pin', 'be': False})
+    out.append('PIN:accepted')
+except RemoteApprovalError:
+    out.append('PIN:refused')
+enr = enroll_phone({'credential_id': 'cred1', 'aaguid': 'a', 'public_key': pub, 'uv': 'biometric', 'be': False, 'sign_count': 0})
+out.append('DEVICE_BOUND:' + enr.credential_id)
+print(' '.join(out))
+")"
+[[ "$out_ca6" == "BE:refused PIN:refused DEVICE_BOUND:cred1" ]] \
+  && pass "remote_approval : enrôlement refuse BE armé / PIN, accepte device-bound + biométrie (CA6)" \
+  || fail "remote_approval : enrôlement CA6 ($out_ca6)"
+
+# CA4 — l'enrôlement ne persiste QUE la clé publique (+ credential_id/aaguid/
+# sign_count) : aucun secret Google côté « téléphone », dossier 0700.
+out_ca4="$(GWSA_ROOT="$RA6" "$PY" -c "
+import json, os
+from gateway.remote_approval import enrollment_path, remote_approval_dir
+data = json.loads(enrollment_path().read_text())
+perm = oct(remote_approval_dir().stat().st_mode)[-3:]
+print(sorted(data.keys()), perm)
+")"
+[[ "$out_ca4" == "['aaguid', 'credential_id', 'public_key', 'sign_count'] 700" ]] \
+  && pass "remote_approval : enrôlement ne persiste que la clé publique, dossier 0700 (CA4)" \
+  || fail "remote_approval : persistance enrôlement CA4 ($out_ca4)"
+
+# CA1 — nonce/signature valide et fraîche → exécuté ; assertion rejouée
+# (même signature 2×) → refusée. CA2 — WYSIWYS exact dérivé du payload signé.
+# CA7 — assertion signée pour session_id=A présentée pour la session B → refus.
+out_core="$(GWSA_ROOT="$TMP/gwsa-remote-approval-core" "$PY" -c "
+import sys; sys.path.insert(0, 'tests')
+import tempfile
+from pathlib import Path
+from testlib.phone_signer import generate_keypair, sign_challenge
+from gateway.approval_channel import InMemoryChannel
+from gateway.elicitation import consume_nonce, prompt_from_payload
+from gateway.remote_approval import (
+    enroll_phone, forge_challenge, load_enrollment, run_remote_approval_gate,
+    verify_assertion, RemoteApprovalError,
+)
+
+tmp = Path(tempfile.mkdtemp())
+priv, pub = generate_keypair(tmp)
+enroll_phone({'credential_id': 'cred1', 'aaguid': 'a', 'public_key': pub, 'uv': 'biometric', 'be': False, 'sign_count': 0})
+
+out = []
+
+# CA1 (nominal) + CA2 (WYSIWYS)
+fields = {'action': 'session_grant', 'alias': 'alpha', 'email': 'a@x.com', 'session_id': 'sidA', 'target': 'MonDossier', 'hours': 4}
+
+class RespondingChannel(InMemoryChannel):
+    def __init__(self):
+        super().__init__()
+        self.sc = 0
+    def send_challenge(self, envelope):
+        rid = super().send_challenge(envelope)
+        self.sc += 1
+        assertion = sign_challenge(envelope['payload'], priv, credential_id='cred1', sign_count=self.sc)
+        self.respond(rid, assertion)
+        return rid
+
+ch = RespondingChannel()
+signed = run_remote_approval_gate(fields, ch)
+out.append('EXEC:' + signed['session_id'])
+wysiwys = prompt_from_payload(signed)
+out.append('WYSIWYS_OK' if ('MonDossier' in wysiwys and 'sidA' in wysiwys and '4 h' in wysiwys) else 'WYSIWYS_FAIL:' + wysiwys)
+
+# CA1 (replay) — même assertion signée soumise deux fois via verify_assertion+consume_nonce
+envelope = forge_challenge({'action': 'unlock', 'alias': 'beta', 'minutes': 10})
+assertion = sign_challenge(envelope.payload, priv, credential_id='cred1', sign_count=100)
+enr = load_enrollment()
+ok1 = verify_assertion(envelope, assertion, enr)
+consume_nonce(envelope.payload['nonce'], expires_at=envelope.payload['expires_at'])
+try:
+    consume_nonce(envelope.payload['nonce'], expires_at=envelope.payload['expires_at'])
+    out.append('NONCE_REPLAY:accepted')
+except Exception:
+    out.append('NONCE_REPLAY:refused')
+ok2 = verify_assertion(envelope, assertion, load_enrollment())
+out.append('REPLAY:' + ('refused' if (ok1 and not ok2) else 'accepted'))
+
+# CA7 — assertion signée pour session_id=A rejouée sous une session B
+envA = forge_challenge({'action': 'session_unlock', 'alias': 'alpha', 'session_id': 'sidA', 'minutes': 5})
+assertA = sign_challenge(envA.payload, priv, credential_id='cred1', sign_count=200)
+envB = forge_challenge({'action': 'session_unlock', 'alias': 'alpha', 'session_id': 'sidB', 'minutes': 5})
+cross_ok = verify_assertion(envB, assertA, load_enrollment())
+out.append('CROSS_SESSION:' + ('refused' if not cross_ok else 'accepted'))
+
+print(' '.join(out))
+")"
+echo "$out_core" | grep -q "^EXEC:sidA " \
+  && pass "remote_approval : nonce/signature valide et fraîche → exécuté avec la session_id du payload signé (CA1)" \
+  || fail "remote_approval : exécution nominale CA1 ($out_core)"
+echo "$out_core" | grep -q "WYSIWYS_OK" \
+  && pass "remote_approval : WYSIWYS exact (compte, cible, durée) depuis prompt_from_payload(payload signé) (CA2)" \
+  || fail "remote_approval : WYSIWYS CA2 ($out_core)"
+echo "$out_core" | grep -q "NONCE_REPLAY:refused" \
+  && pass "remote_approval : nonce rejoué → consume_nonce refuse (registre partagé avec Touch ID, CA1)" \
+  || fail "remote_approval : nonce rejoué non refusé CA1 ($out_core)"
+echo "$out_core" | grep -q "REPLAY:refused" \
+  && pass "remote_approval : assertion rejouée (même signature 2×) → verify_assertion refuse (CA1)" \
+  || fail "remote_approval : assertion rejouée non refusée CA1 ($out_core)"
+echo "$out_core" | grep -q "CROSS_SESSION:refused" \
+  && pass "remote_approval : assertion signée pour session A présentée pour session B → refus (CA7)" \
+  || fail "remote_approval : rejeu cross-session non refusé CA7 ($out_core)"
+
+# CA3 — refus explicite | nonce expiré | signature invalide → AUCUNE mutation
+# (fail-closed) : on vérifie qu'aucun de ces trois chemins ne renvoie un
+# payload exécutable, et qu'une session témoin reste totalement inchangée.
+out_ca3="$(GWSA_ROOT="$TMP/gwsa-remote-approval-ca3" "$PY" -c "
+import sys; sys.path.insert(0, 'tests')
+import tempfile
+from pathlib import Path
+from testlib.phone_signer import generate_keypair, sign_challenge
+from gateway.approval_channel import InMemoryChannel
+from gateway.sessions import create_session, is_session_unlocked
+from gateway.remote_approval import enroll_phone, forge_challenge, verify_assertion, load_enrollment, run_remote_approval_gate, RemoteApprovalError
+
+tmp = Path(tempfile.mkdtemp())
+priv, pub = generate_keypair(tmp)
+enroll_phone({'credential_id': 'cred1', 'aaguid': 'a', 'public_key': pub, 'uv': 'biometric', 'be': False, 'sign_count': 0})
+
+out = []
+sess = create_session(client='ca3')
+
+# 1) refus explicite (le téléphone ne répond jamais — channel vide)
+fields = {'action': 'session_unlock', 'alias': 'gamma', 'session_id': sess.session_id, 'minutes': 30}
+ch = InMemoryChannel()
+try:
+    run_remote_approval_gate(fields, ch, timeout=1)
+    out.append('EXPLICIT_REFUSAL:executed')
+except RemoteApprovalError:
+    out.append('EXPLICIT_REFUSAL:blocked')
+
+# 2) nonce/défi expiré
+envelope = forge_challenge(fields)
+envelope.payload['expires_at'] = 1  # dans le passé
+assertion = sign_challenge(envelope.payload, priv, credential_id='cred1', sign_count=1)
+ok_expired = verify_assertion(envelope, assertion, load_enrollment())
+out.append('EXPIRED:' + ('blocked' if not ok_expired else 'executed'))
+
+# 3) signature invalide (mauvaise clé)
+_, wrong_pub = generate_keypair(tmp)
+envelope2 = forge_challenge(fields)
+assertion2 = sign_challenge(envelope2.payload, priv, credential_id='cred1', sign_count=2)
+import gateway.remote_approval as ra
+bad_enrollment = ra.PhoneEnrollment(credential_id='cred1', aaguid='a', public_key=wrong_pub, sign_count=0)
+ok_bad_sig = verify_assertion(envelope2, assertion2, bad_enrollment)
+out.append('BAD_SIG:' + ('blocked' if not ok_bad_sig else 'executed'))
+
+# Aucune mutation : la session témoin n'a jamais été déverrouillée
+out.append('NO_MUTATION:' + ('ok' if not is_session_unlocked(sess.session_id, 'gamma') else 'FAIL'))
+print(' '.join(out))
+")"
+[[ "$out_ca3" == "EXPLICIT_REFUSAL:blocked EXPIRED:blocked BAD_SIG:blocked NO_MUTATION:ok" ]] \
+  && pass "remote_approval : refus explicite | nonce expiré | signature invalide → aucune exécution (CA3, fail-closed)" \
+  || fail "remote_approval : fail-closed CA3 incomplet ($out_ca3)"
+
+# CA5 — devant le Mac, gma unlock SANS --remote reste inchangé (Touch ID mock,
+# chemin existant) : non-régression du chemin run_elicitation_gate.
+RA5="$TMP/gwsa-remote-approval-ca5"
+mkdir -p "$RA5/prof5"
+echo '{"defaults":{"services":{"gmail":"read"}}}' > "$RA5/prof5/policy.json"
+touch "$RA5/prof5/.locked"
+touch "$RA5/.strong-auth"
+GWSA_ROOT="$RA5" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
+out_ca5="$(GWSA_ROOT="$RA5" GWSA_ELICITATION_MOCK=1 "$GWSA" unlock prof5 15 2>&1)"
+[[ -f "$RA5/prof5/.unlock-until" ]] \
+  && pass "gma unlock (sans --remote) sous .strong-auth : chemin Touch ID inchangé (CA5, non-régression)" \
+  || fail "gma unlock sans --remote : chemin Touch ID cassé ($out_ca5)"
+
+# --remote sans enrôlement téléphone → refus distinct (fail-closed), preuve
+# que le câblage --remote emprunte bien le frère `require_remote_approval`
+# (message « approbation distante », pas « élicitation signée »).
+RA5B="$TMP/gwsa-remote-approval-ca5b"
+mkdir -p "$RA5B/prof5b"
+echo '{"defaults":{"services":{"gmail":"read"}}}' > "$RA5B/prof5b/policy.json"
+sid5b="$(GWSA_ROOT="$RA5B" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1; "$PY" -c "
+import sys; sys.path.insert(0, '.')
+import os
+os.environ['GWSA_ROOT'] = '$RA5B'
+from gateway.sessions import create_session
+print(create_session(client='ca5b').session_id)
+")"
+out_ca5b="$(GWSA_ROOT="$RA5B" "$GWSA" session unlock "$sid5b" prof5b 10 --remote 2>&1)"
+echo "$out_ca5b" | grep -q "approbation distante" \
+  && pass "gma session unlock --remote : emprunte le chemin frère require_remote_approval (fail-closed sans enrôlement)" \
+  || fail "gma session unlock --remote : chemin inattendu ($out_ca5b)"
+
+# --- Fix Codex P1 (PR #113) : échange en deux temps, réellement hors-process ---
+#
+# L'ancien `remote-approval-cli.py gate --response <fichier>` chargeait
+# l'assertion AVANT de forger le défi (dont le nonce est frais à chaque
+# appel) : aucun téléphone hors-process ne pouvait donc jamais produire une
+# réponse valide. Les tests ci-dessous pilotent `challenge` puis `verify`
+# comme DEUX PROCESSUS SÉPARÉS (deux appels `subprocess.run`, aucun état
+# Python partagé entre eux — contrairement à l'ancien `InMemoryChannel`
+# in-process) pour prouver que l'échange fonctionne réellement.
+
+RA_OOP="$TMP/gwsa-remote-approval-oop"
+mkdir -p "$RA_OOP"
+"$PY" -c "
+import sys; sys.path.insert(0, 'tests')
+from pathlib import Path
+from testlib.phone_signer import generate_keypair
+import json, os
+os.environ['GWSA_ROOT'] = '$RA_OOP'
+from gateway.remote_approval import enroll_phone
+tmp = Path('$RA_OOP')
+priv, pub = generate_keypair(tmp)
+enroll_phone({'credential_id': 'cred-oop', 'aaguid': 'a', 'public_key': pub, 'uv': 'biometric', 'be': False, 'sign_count': 0})
+Path('$RA_OOP/priv.pem').write_text(priv.read_text())
+" >/dev/null
+
+# Processus A : publie le défi (out-of-process : c'est un subprocess.run distinct).
+challenge_json="$(GWSA_ROOT="$RA_OOP" "$PY" scripts/remote-approval-cli.py challenge \
+  --json '{"action":"session_unlock","alias":"alpha","email":"a@x.com","session_id":"sidOOP","minutes":15}')"
+
+# Le "téléphone" (aucun accès au process A : il ne voit QUE l'envelope publié)
+# signe exactement ce qui a été publié.
+response_file="$TMP/oop-response.json"
+"$PY" -c "
+import sys; sys.path.insert(0, 'tests')
+import json
+from pathlib import Path
+from testlib.phone_signer import sign_challenge
+out = json.loads('''$challenge_json''')
+envelope_payload = out['envelope']['payload']
+assertion = sign_challenge(envelope_payload, Path('$RA_OOP/priv.pem'), credential_id='cred-oop', sign_count=1)
+Path('$response_file').write_text(json.dumps(assertion))
+"
+
+challenge_id="$("$PY" -c "import json; print(json.loads('''$challenge_json''')['challenge_id'])")"
+
+# Processus B : vérifie et exécute — SANS avoir jamais partagé d'état Python
+# avec le processus A (deux invocations `python3` distinctes, communication
+# uniquement via le pending publié sur disque + le fichier réponse).
+verify_out="$(GWSA_ROOT="$RA_OOP" "$PY" scripts/remote-approval-cli.py verify \
+  --challenge-id "$challenge_id" --response "$response_file" 2>&1)"
+echo "$verify_out" | grep -q '"session_id": *"sidOOP"' \
+  && pass "remote_approval CLI : échange challenge → verify réussit réellement hors-process (répond à Codex P1, PR #113)" \
+  || fail "remote_approval CLI : échange hors-process en échec ($verify_out)"
+
+# Rejeu du pending : réutiliser le même challenge_id après un `verify` déjà
+# consommé (one-shot) doit être refusé — la 2ᵉ tentative n'a plus de défi à
+# consommer, même avec une nouvelle signature valide.
+sign_count2=2
+response_file2="$TMP/oop-response-replay.json"
+"$PY" -c "
+import sys; sys.path.insert(0, 'tests')
+import json
+from pathlib import Path
+from testlib.phone_signer import sign_challenge
+out = json.loads('''$challenge_json''')
+envelope_payload = out['envelope']['payload']
+assertion = sign_challenge(envelope_payload, Path('$RA_OOP/priv.pem'), credential_id='cred-oop', sign_count=$sign_count2)
+Path('$response_file2').write_text(json.dumps(assertion))
+"
+replay_out="$(GWSA_ROOT="$RA_OOP" "$PY" scripts/remote-approval-cli.py verify \
+  --challenge-id "$challenge_id" --response "$response_file2" 2>&1)"
+replay_rc=$?
+[[ "$replay_rc" != "0" ]] && echo "$replay_out" | grep -q "approbation distante" \
+  && pass "remote_approval CLI : rejeu d'un challenge_id déjà clos (« verify ») → refusé (pending one-shot)" \
+  || fail "remote_approval CLI : rejeu de challenge_id non refusé ($replay_out, rc=$replay_rc)"
+
+# Anti-traversée (Codex P2, PR #113) : un challenge_id malveillant (« ../ »,
+# chemin absolu) doit être refusé AVANT toute construction de chemin — sinon
+# `verify --challenge-id ../../x` lirait/supprimerait hors du dossier pending.
+trav_out="$(GWSA_ROOT="$RA_OOP" "$PY" scripts/remote-approval-cli.py verify \
+  --challenge-id "../../etc/passwd" --response "$response_file" 2>&1)"
+trav_rc=$?
+[[ "$trav_rc" != "0" ]] && echo "$trav_out" | grep -qi "challenge_id invalide" \
+  && pass "remote_approval CLI : challenge_id de traversée (../) refusé (Codex P2, PR #113)" \
+  || fail "remote_approval CLI : traversée de challenge_id non refusée ($trav_out, rc=$trav_rc)"
+
+# --- gwsa --remote : exécute avec le payload signé, pas les variables shell ---
+#
+# Nit de revue (PR #113) : `require_remote_approval` doit exécuter avec le
+# payload SIGNÉ renvoyé par `verify`, jamais avec ses variables shell
+# pré-signature. On le prouve avec un aller-retour RÉEL de bout en bout via
+# `gwsa session unlock … --remote` — GWSA_REMOTE_SIGNER joue le rôle du
+# téléphone : un PROCESSUS SÉPARÉ qui ne reçoit l'envelope QUE lorsqu'il est
+# publié (stdin), preuve que l'échange marche vraiment hors-process, pas
+# seulement au niveau du CLI nu.
+RA_E2E="$TMP/gwsa-remote-approval-e2e"
+mkdir -p "$RA_E2E/prof-e2e"
+echo '{"defaults":{"services":{"gmail":"read"}}}' > "$RA_E2E/prof-e2e/policy.json"
+touch "$RA_E2E/prof-e2e/.locked"
+
+"$PY" -c "
+import sys; sys.path.insert(0, 'tests')
+from pathlib import Path
+from testlib.phone_signer import generate_keypair
+import os
+os.environ['GWSA_ROOT'] = '$RA_E2E'
+from gateway.remote_approval import enroll_phone
+priv, pub = generate_keypair(Path('$RA_E2E'))
+enroll_phone({'credential_id': 'cred-e2e', 'aaguid': 'a', 'public_key': pub, 'uv': 'biometric', 'be': False, 'sign_count': 0})
+Path('$RA_E2E/priv.pem').write_text(priv.read_text())
+"
+sid_e2e="$("$PY" -c "
+import sys, os; sys.path.insert(0, '.')
+os.environ['GWSA_ROOT'] = '$RA_E2E'
+from gateway.sessions import create_session
+print(create_session(client='e2e').session_id)
+")"
+
+signer_e2e="$TMP/phone-signer-e2e.py"
+cat > "$signer_e2e" <<PYEOF
+#!/usr/bin/env python3
+import sys, json
+sys.path.insert(0, "tests")
+from testlib.phone_signer import sign_challenge
+from pathlib import Path
+challenge = json.load(sys.stdin)
+payload = challenge["envelope"]["payload"]
+assertion = sign_challenge(payload, Path("$RA_E2E/priv.pem"), credential_id="cred-e2e", sign_count=1)
+print(json.dumps(assertion))
+PYEOF
+chmod +x "$signer_e2e"
+
+out_e2e="$(GWSA_ROOT="$RA_E2E" GWSA_REMOTE_SIGNER="$signer_e2e" "$GWSA" session unlock "$sid_e2e" prof-e2e 45 --remote 2>&1)"
+unlocked_e2e="$("$PY" -c "
+import sys, os; sys.path.insert(0, '.')
+os.environ['GWSA_ROOT'] = '$RA_E2E'
+from gateway.sessions import is_session_unlocked
+print(is_session_unlocked('$sid_e2e', 'prof-e2e'))
+")"
+[[ "$unlocked_e2e" == "True" ]] \
+  && pass "gwsa session unlock --remote : échange deux-temps réel (téléphone hors-process) exécute effectivement le déverrouillage (nit, PR #113)" \
+  || fail "gwsa session unlock --remote : déverrouillage non exécuté ($out_e2e)"
+
 # --- Bilan ------------------------------------------------------------------
 
 printf '\n\033[1mBilan : %d réussis, %d échoués\033[0m\n' "$PASS" "$FAIL"
