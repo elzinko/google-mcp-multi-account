@@ -1,4 +1,4 @@
-// Élicitation signée gwsa — enroll / sign (P-256 + Touch ID).
+// Élicitation signée mag — enroll / sign (P-256 + Touch ID).
 // Usage :
 //   swift scripts/elicitation-sign.swift enroll <public.der path>
 //   swift scripts/elicitation-sign.swift sign '<canonical-json>'
@@ -15,7 +15,7 @@ import CryptoKit
 import LocalAuthentication
 import Security
 
-let keyTag = "com.gwsa.elicitation.v1".data(using: .utf8)!
+let keyTag = "com.mag.elicitation.v1".data(using: .utf8)!
 let privateFileName = "private.p256"
 
 func die(_ msg: String, code: Int32 = 1) -> Never {
@@ -189,24 +189,24 @@ func promptText(from obj: [String: Any]) -> String {
     let acct = email.isEmpty ? alias : "\(alias) · \(email)"
     switch action {
     case "session_unlock":
-        return "gwsa : déverrouiller \(who) pour la session \(sid) (\(minutes) min)"
+        return "mag : déverrouiller \(who) pour la session \(sid) (\(minutes) min)"
     case "unlock":
-        if target == "off" { return "gwsa : retirer le verrou permanent sur \(who)" }
-        return "gwsa : déverrouiller \(who) (\(minutes > 0 ? String(minutes) : target) min, poste entier)"
+        if target == "off" { return "mag : retirer le verrou permanent sur \(who)" }
+        return "mag : déverrouiller \(who) (\(minutes > 0 ? String(minutes) : target) min, poste entier)"
     case "session_grant":
-        return "gwsa : zone session \(sid) — « \(target) » (\(acct), \(hours) h)"
+        return "mag : zone session \(sid) — « \(target) » (\(acct), \(hours) h)"
     case "grant":
-        return "gwsa : autoriser l'écriture Drive « \(target) » (\(acct), \(hours) h)"
+        return "mag : autoriser l'écriture Drive « \(target) » (\(acct), \(hours) h)"
     case "project_sign":
-        return "gwsa : signer le manifeste projet (.gwsa/)"
+        return "mag : signer le manifeste projet (.mag/)"
     case "add_account":
-        return "gwsa : connecter le compte Google « \(alias) » (\(target))"
+        return "mag : connecter le compte Google « \(alias) » (\(target))"
     case "revoke_descendants":
-        return "gwsa : révoquer les sous-sessions de \(sid.isEmpty ? target : sid)"
+        return "mag : révoquer les sous-sessions de \(sid.isEmpty ? target : sid)"
     case "strongauth_off":
-        return "gwsa : désactiver l'authentification forte"
+        return "mag : désactiver l'authentification forte"
     default:
-        return "gwsa : \(action) — \(alias) \(target)"
+        return "mag : \(action) — \(alias) \(target)"
     }
 }
 
@@ -254,7 +254,7 @@ func signWithFileKey(data: Data, reason: String) -> Data {
     let privURL = privateFileURL(dir: elicitationDir())
     guard let raw = try? Data(contentsOf: privURL),
           let priv = try? P256.Signing.PrivateKey(rawRepresentation: raw) else {
-        die("clé fichier absente — gwsa elicitation enroll", code: 2)
+        die("clé fichier absente — mag elicitation enroll", code: 2)
     }
     requireTouchID(reason: reason)
     do {
@@ -284,7 +284,7 @@ func signPayload(_ json: String) {
     } else if FileManager.default.fileExists(atPath: privateFileURL(dir: elicitationDir()).path) {
         sigData = signWithFileKey(data: data, reason: reason)
     } else {
-        die("clé non enrôlée — gwsa elicitation enroll", code: 2)
+        die("clé non enrôlée — mag elicitation enroll", code: 2)
     }
     let b64 = sigData.base64EncodedString()
     let out: [String: Any] = [

@@ -35,7 +35,7 @@ DEFAULT_PORT = 4878
 # Jeton et pidfile sont nommés d'après le PORT, pas seulement d'après GWSA_ROOT
 # (fiche 0025). Deux versions branchées en même temps partagent les comptes mais
 # ont chacune leur broker : sans le port dans le nom, le second écrase le
-# pidfile du premier et « gwsa broker stop » arrête le mauvais process.
+# pidfile du premier et « mag broker stop » arrête le mauvais process.
 TOKEN_FILE_TPL = ".broker-{port}-token"
 PID_FILE_TPL = ".broker-{port}.pid"
 
@@ -195,14 +195,14 @@ def _require_access(alias: str, session_id: str) -> Path:
     d = profile_dir(alias)
     if not d.is_dir():
         raise GatewayError(
-            f"profil inconnu « {alias} » — le créer avec : gma add {alias}",
+            f"profil inconnu « {alias} » — le créer avec : mag add {alias}",
             code="not_found",
         )
     if session_id:
         if is_locked(d) and not is_session_unlocked(session_id, alias):
             raise GatewayError(
                 f"profil « {alias} » verrouillé pour cette session — "
-                f"demander : gma session unlock {session_id} {alias} [minutes]",
+                f"demander : mag session unlock {session_id} {alias} [minutes]",
                 code="locked",
             )
         return d

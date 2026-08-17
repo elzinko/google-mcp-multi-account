@@ -17,17 +17,17 @@ curl -fsSL https://raw.githubusercontent.com/elzinko/google-mcp-multi-account/ma
 ```
 
 Ça télécharge la dernière version publiée, la fige dans
-`~/.local/share/google-mcp/`, met `gma` sur le PATH et branche les clients.
+`~/.local/share/google-mcp/`, met `mag` sur le PATH et branche les clients.
 Reste le setup Google (OAuth/GCP), un **préalable** affiché à la fin — voir
 [Prérequis — OAuth / Google Cloud](setup-oauth.md).
 
 Mettre à jour plus tard, **toujours sans clone** :
 
 ```bash
-gma update            # dernière version publiée · --to v0.1.0 pour un retour arrière
+mag update            # dernière version publiée · --to v0.1.0 pour un retour arrière
 ```
 
-`gma update` lit la dernière version sur GitHub et bascule `current` dessus. Le
+`mag update` lit la dernière version sur GitHub et bascule `current` dessus. Le
 clone git n'est nécessaire que pour **contribuer** (fiche 0020).
 
 ## Brancher un client LLM
@@ -35,9 +35,9 @@ clone git n'est nécessaire que pour **contribuer** (fiche 0020).
 Une fois installé, relie ton assistant en une commande :
 
 ```bash
-gma wire desktop      # Claude Desktop
-gma wire code         # Claude Code (le CLI « claude »)
-gma wire all          # les deux — « --print » pour un dry-run
+mag wire desktop      # Claude Desktop
+mag wire code         # Claude Code (le CLI « claude »)
+mag wire all          # les deux — « --print » pour un dry-run
 ```
 
 Détail par client (Claude Desktop, Claude Code, **Cursor**), config manuelle et
@@ -58,7 +58,7 @@ retrait d'une entrée → **[Configurer un client LLM](configurer-client.md)**.
 | Élicitation | `access_request` | kind=`unlock` \| `grant` \| `add_account` : renvoie **la commande à faire exécuter par l'humain** — n'exécute jamais rien |
 
 **Policy admin ≠ surface MCP.** Cocher une case dans l'admin autorise les
-méthodes API correspondantes via `gma` ; le MCP en expose un sous-ensemble.
+méthodes API correspondantes via `mag` ; le MCP en expose un sous-ensemble.
 Depuis les fiches [0043](https://github.com/elzinko/google-mcp-multi-account/blob/main/features/0043-lire-copier-televerser-drive-et-pj-gmail.md)
 et ce lot (update + partage), lecture de contenu, copie, téléversement,
 modification et partage y sont. Le **transfert de propriété** est hors périmètre
@@ -122,8 +122,8 @@ ailleurs. Relancée sans rien de neuf, elle dit « déjà à jour » et s'arrêt
 Il reste un geste manuel, incompressible : **redémarrer Claude Desktop**. Le
 serveur MCP est lancé par l'application, il ne se recharge pas tout seul.
 
-Les deux commandes sont aussi des verbes de `gma`, qui est dans ton PATH :
-`gma update` et `gma release`. Depuis la copie installée, `gma release`
+Les deux commandes sont aussi des verbes de `mag`, qui est dans ton PATH :
+`mag update` et `mag release`. Depuis la copie installée, `mag release`
 retrouve le clone source tout seul (fichier `.source`).
 
 Pour un cas particulier, les briques restent accessibles :
@@ -155,10 +155,10 @@ déployée annonce son tag, le clone annonce `dev`.
 ```bash
 ./scripts/deploy-local.sh --list        # versions déployées (* = courante)
 ./scripts/deploy-local.sh --rollback v0.1.0
-gma broker status                      # sur le couloir courant
+mag broker status                      # sur le couloir courant
 ```
 
-`gma broker status|stop` ne pilote que le broker de **son** port : le pidfile
+`mag broker status|stop` ne pilote que le broker de **son** port : le pidfile
 s'appelle `.broker-<port>.pid`, le jeton `.broker-<port>-token`.
 
 ## Brancher deux versions en même temps
@@ -172,10 +172,10 @@ besoin de son propre nom **et** de son propre port :
 ```
 
 Pour une **branche / PR jetable** (sans toucher `current` ni l'entrée stable
-`google-multi-account` @ 4878) : `gma sandbox deploy --wire` (ou
-`gma sandbox wire` après coup). Unwire sélectif :
-`gma sandbox wire --remove desktop` (répertoire conservé) ;
-nucléaire : `gma sandbox remove <id>`. Détail : `gma sandbox --help` et fiche
+`google-multi-account` @ 4878) : `mag sandbox deploy --wire` (ou
+`mag sandbox wire` après coup). Unwire sélectif :
+`mag sandbox wire --remove desktop` (répertoire conservé) ;
+nucléaire : `mag sandbox remove <id>`. Détail : `mag sandbox --help` et fiche
 [0046](https://github.com/elzinko/google-mcp-multi-account/blob/main/features/0046-sandbox-deploy-cli.md).
 
 Trois règles, sinon le nom de l'entrée ment sur la version qui répond :
@@ -192,14 +192,14 @@ commandes, le broker les exécute et applique verrous, policy et zones. Deux
 versions sur un même port se partagent le premier broker démarré — le résultat
 ne correspond alors à aucune des deux.
 
-Le couloir de développement part sans comptes : `gma dev deploy --isolated`
+Le couloir de développement part sans comptes : `mag dev deploy --isolated`
 crée `~/.config/gws-accounts-dev` et y copie `client_secret.json` depuis la
 prod (l'app OAuth seulement — pas les tokens). Il reste à connecter au moins
-un compte de test (`GWSA_ROOT=… gma add <alias>`) — geste humain, une fois.
+un compte de test (`GWSA_ROOT=… mag add <alias>`) — geste humain, une fois.
 C'est le prix de l'isolation : ton code en chantier ne voit pas tes vrais
 comptes.
 
-Pour valider une PR depuis un worktree : `./bin/gma dev test` déploie la
+Pour valider une PR depuis un worktree : `./bin/mag dev test` déploie la
 branche courante, redémarre l'admin sur le code déployé et affiche un résumé
 (id, URL, marqueur `afSearchHits`). Voir [PR_VALIDATION.md](PR_VALIDATION.md).
 

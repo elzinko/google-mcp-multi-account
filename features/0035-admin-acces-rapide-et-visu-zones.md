@@ -14,11 +14,11 @@ created: 2026-07-27
 ## Contexte / Problème
 
 Pour voir l'état des accès (profils verrouillés, zones actives), il faut se
-souvenir de `gwsa admin`, l'exécuter, attendre l'ouverture du navigateur. Rien
+souvenir de `mag admin`, l'exécuter, attendre l'ouverture du navigateur. Rien
 ne signale, au repos, qu'un profil est déverrouillé ou qu'une zone est ouverte.
 
 Aujourd'hui :
-- `gwsa admin` démarre le serveur **et** ouvre `http://127.0.0.1:4877` tout seul.
+- `mag admin` démarre le serveur **et** ouvre `http://127.0.0.1:4877` tout seul.
 - L'admin **affiche déjà** les zones (permanentes + temporaires, avec compte à
   rebours) — la donnée est là, c'est l'accès qui manque.
 
@@ -35,7 +35,7 @@ est ouvert.
 - Piste technique : petit agent `launchd` + utilitaire status-bar (Swift natif,
   ou `rumps` en Python). À évaluer contre la contrainte « zéro dépendance
   lourde » du projet.
-- Alternative légère si l'icône est trop coûteuse : `gwsa admin` reste le point
+- Alternative légère si l'icône est trop coûteuse : `mag admin` reste le point
   d'entrée, + un favori navigateur documenté.
 
 ## Critères d'acceptation

@@ -1,0 +1,1854 @@
+#!/usr/bin/env bash
+# mag — multi-comptes pour le Google Workspace CLI (gws)
+#
+# Le CLI gws ne gère qu'un seul compte à la fois (le support natif a été retiré,
+# cf. https://github.com/googleworkspace/cli/issues/293). Ce wrapper isole chaque
+# compte dans son propre répertoire de configuration via la variable officielle
+# GOOGLE_WORKSPACE_CLI_CONFIG_DIR. La clé de chiffrement des tokens est partagée
+# (entrée Trousseau « gws-cli », globale par utilisateur macOS) : chaque profil
+# possède son credentials.enc, déchiffré par la même clé maître — pas de conflit.
+#
+# Usage :
+#   mag add <alias> [email-attendu] [options login]  Créer un profil et connecter un compte
+#                                                   (email obligatoire si strongauth on)
+#   mag list                                         Lister les profils et leur état
+#   mag lock <alias>                                 Verrouiller un profil (accès sur demande)
+#   mag unlock <alias> [minutes]                     Déverrouiller temporairement (défaut 60 min)
+#   mag policy <alias> [show|mode <m>|allow <dossier>|revoke <id>|clear]
+#                                                     Zones d'écriture Drive PERMANENTES
+#   mag grant <alias> <dossier> [heures]             Autorisation Drive TEMPORAIRE (défaut 8 h)
+#   mag grant <alias> revoke <folderId>              Révoquer une autorisation temporaire
+#   mag grants <alias> [clear]                       Lister/vider les autorisations temporaires
+#   mag strongauth on|off|status                     Exiger élicitation signée pour unlock & grant
+#   mag elicitation enroll|status                    Enrôler clé biométrique / état (fiche 0001)
+#   mag admin [stop]                                 Démarrer/arrêter l'interface web (127.0.0.1:4877)
+#   mag broker [status|stop]                         État/arrêt du broker de ce GWSA_ROOT
+#   mag dev deploy [--isolated]                      Déployer le clone courant en version dev temporaire
+#   mag dev test [--no-deploy] [--isolated] [--open] Déployer + redémarrer l'admin + résumé de validation
+#   mag dev list                                     Versions déployées + configs client (Cursor, Desktop…)
+#   mag dev status [id]                              État broker/admin par version dev
+#   mag dev use <id> --cursor|--claude-desktop [--apply]  Snippet (ou écriture) config MCP
+#   mag dev remove <id>                              Supprimer une version dev temporaire
+#   mag update [--check|--to <version>]              Installer la dernière version publiée
+#   mag release [patch|minor|major|--print]          Publier une version (semver + CHANGELOG + tag)
+#   mag sandbox deploy [--wire …]|wire [--remove …]|list|status|remove  Sandboxes jetables (0041 ; détail : mag sandbox --help)
+#   mag project show|init|sign                         Manifeste projet .mag/ (fiche 0040 phase B)
+#   mag couloir …                                      Alias déprécié → sandbox
+#   mag remove <alias>                               Déconnecter et supprimer un profil
+#   mag <alias> <commande gws…>                      Exécuter gws sur le compte <alias>
+#
+# Exemples :
+#   mag add perso                     # scopes par défaut : Gmail (lecture/écriture),
+#                                      # Drive, Calendar, Docs, Sheets, Slides, Tasks
+#   mag add lecture-seule --readonly
+#   mag perso gmail users messages list --params '{"userId":"me","maxResults":5}'
+#   mag perso workflow +agenda
+set -euo pipefail
+
+GWSA_ROOT="${GWSA_ROOT:-$HOME/.config/gws-accounts}"
+MASTER_SECRET="$GWSA_ROOT/client_secret.json"
+
+# Sécurité (info-disclosure) : les métadonnées de comptes (.email, usage.jsonl,
+# policy.json, .unlock-until, copie de client_secret.json…) ne doivent être lisibles
+# que par l'utilisateur. umask 077 → tout fichier/dossier créé ensuite est en 600/700 ;
+# on durcit aussi un GWSA_ROOT préexistant créé en world-readable.
+umask 077
+[[ -d "$GWSA_ROOT" ]] && chmod 700 "$GWSA_ROOT" 2>/dev/null || true
+
+usage() { awk 'NR==1{next} !/^#/{exit} {sub(/^# ?/,""); print}' "$0" | sed "s/mag /$SELF /g"; }  # « mag » commande → $SELF ; épargne « .mag/ » (manifeste)
+
+resolve_repo_dir() { # suit le symlink éventuel (brew /opt/homebrew/bin/mag, ou bin/gma → mag) jusqu'au repo
+  local src="$0" target
+  while [[ -L "$src" ]]; do
+    target="$(readlink "$src")"
+    case "$target" in
+      /*) src="$target" ;;                  # cible absolue (ex. lien brew d'install.sh)
+      *)  src="$(dirname "$src")/$target" ;; # cible relative → résolue depuis le dossier du lien
+    esac
+  done
+  ( cd "$(dirname "$src")/.." && pwd )
+}
+REPO_DIR="$(resolve_repo_dir)"
+POLICY_CHECKER="$REPO_DIR/scripts/policy-check.py"
+USAGE_LOGGER="$REPO_DIR/scripts/log-usage.py"
+
+# Interpréteurs en chemin ABSOLU, jamais résolus via le PATH.
+# Le contrôleur de policy et le cérémonial Touch ID sont les deux garde-fous du
+# projet : les invoquer via le PATH les rendrait triviaux à neutraliser (un faux
+# `python3` renvoyant 0 en tête de PATH désactive silencieusement TOUTE la policy).
+# /usr/bin est protégé par SIP : y écrire exige root, ce que le modèle de menace
+# ne concède pas. Volontairement NON surchargeable par variable d'environnement —
+# une telle porte rouvrirait exactement le trou qu'on ferme ici.
+SYS_PYTHON="/usr/bin/python3"
+SYS_SWIFT="/usr/bin/swift"
+# Même garantie que SYS_PYTHON / SYS_SWIFT : jamais via le PATH (un faux
+# `swiftc` en tête de PATH pourrait compiler un binaire de signature malveillant
+# que require_signed_elicitation ferait ensuite confiance — cf. docs/threat-model.md).
+SYS_SWIFTC="/usr/bin/swiftc"
+SIGN_BIN=""  # chemin du binaire de signature — rempli par ensure_sign_bin (nom = gateway/config.py:PRODUCT_SLUG)
+SELF="$(basename "$0")"  # nom sous lequel on est invoqué : « mag » ou les alias dépréciés « gma »/« gwsa »
+[[ -x "$SYS_PYTHON" ]] || { echo "$SELF : interpréteur système introuvable ($SYS_PYTHON) — installer les outils en ligne de commande : xcode-select --install" >&2; exit 3; }
+
+die() { echo "$SELF : $*" >&2; exit 3; }
+
+check_alias() {
+  [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] \
+    || die "alias invalide « $1 » (lettres, chiffres, - et _ uniquement)"
+  case "$1" in
+    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth|elicitation|admin|broker|dev|update|release|session|vault|project|sandbox|couloir|wire) die "« $1 » est un mot réservé" ;;
+  esac
+}
+
+# resolve_alias <alias-ou-email> → imprime l'alias du profil. Si l'argument
+# ressemble à un email, on cherche le profil dont la métadonnée .email correspond
+# (lecture seule, sans exec gws) — un email est plus parlant qu'un alias dans la
+# doc et les commandes. Sinon, on rend l'argument tel quel (c'est un alias).
+resolve_alias() {
+  case "$1" in
+    *@*)
+      local _d _e
+      for _d in "$GWSA_ROOT"/*/; do
+        [[ -d "$_d" ]] || continue
+        _e="$(profile_email_cached "${_d%/}" 2>/dev/null)"
+        [[ "$_e" == "$1" ]] && { basename "${_d%/}"; return 0; }
+      done
+      die "aucun compte connecté pour « $1 » — voir « $SELF list » ; le connecter : $SELF add <alias> $1"
+      ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+resolve_folder() { # resolve_folder <dir> <idOuNom> → "id<TAB>nom" (die si introuvable/ambigu)
+  local dir="$1" target="$2"
+  # NOTE: les tokens OAuth résident dans le vault (`GWSA_ROOT/.vault/<alias>/`).
+  # Le profil (`GWSA_ROOT/<alias>/`) ne contient que la policy/lock et ne suffit
+  # donc pas pour un appel `gws` (après migration). On doit utiliser
+  # `gateway.vault.gws_config_dir()` pour résoudre correctement par nom.
+  local alias_name cfg_dir
+  alias_name="$(basename "$dir")"
+  cfg_dir="$(GWSA_ROOT="$GWSA_ROOT" REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c '
+import os, sys
+sys.path.insert(0, os.environ["REPO_DIR"])
+from gateway.vault import gws_config_dir
+print(gws_config_dir(sys.argv[1]))
+' "$alias_name" 2>/dev/null || echo "$dir")"
+  if [[ "$target" =~ ^[A-Za-z0-9_-]{20,}$ ]]; then
+    local name
+    name="$(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$cfg_dir" gws drive files get --params "{\"fileId\":\"$target\",\"fields\":\"name\"}" 2>/dev/null \
+      | "$SYS_PYTHON" -c 'import json,sys; print(json.load(sys.stdin).get("name",""))' 2>/dev/null || true)"
+    printf '%s\t%s' "$target" "${name:-$target}"
+    return 0
+  fi
+  # Construire --params via un vrai encodeur JSON (revue F4) : le nom de dossier
+  # est échappé pour le langage q de Drive (\ puis apostrophe), PUIS json.dumps
+  # encode le tout — sinon un " ou un \ dans le nom casse le JSON ou injecte des
+  # clés --params. chr(39)/chr(92) évitent apostrophe/antislash littéraux ici.
+  local params
+  params="$("$SYS_PYTHON" -c '
+import json, sys
+Q = chr(39); B = chr(92)
+name = sys.argv[1].replace(B, B + B).replace(Q, B + Q)
+q = "name=" + Q + name + Q + " and mimeType=" + Q + "application/vnd.google-apps.folder" + Q + " and trashed=false"
+sys.stdout.write(json.dumps({"q": q, "fields": "files(id,name)"}))
+' "$target" 2>/dev/null)"
+  [[ -n "$params" ]] || return 0
+  GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$cfg_dir" gws drive files list --params "$params" 2>/dev/null \
+    | "$SYS_PYTHON" -c '
+import json, sys
+f = json.load(sys.stdin).get("files", [])
+if len(f) == 1:
+    sys.stdout.write(f[0]["id"] + "\t" + f[0]["name"])
+' || true
+}
+
+is_locked() { # is_locked <dir> — vrai si verrouillé ET pas de déverrouillage en cours
+  [[ -f "$1/.locked" ]] || return 1
+  local until_ts; until_ts="$(cat "$1/.unlock-until" 2>/dev/null || echo 0)"
+  [[ "$(date +%s)" -ge "$until_ts" ]]
+}
+
+ensure_sign_bin() { # compile le helper d'élicitation signée en binaire nommé
+  # Nom = gateway/config.py:PRODUCT_SLUG (SOURCE UNIQUE) → dialogue Touch ID
+  # « google-multi-account » au lieu de « swift-frontend » (cf. fiche 0032).
+  # Artefact isolé dans bin/.build/ (gitignoré). Recompile si le source OU le
+  # wrapper a changé (invalide un binaire d'une version/nom antérieurs).
+  local slug src="$REPO_DIR/scripts/elicitation-sign.swift"
+  slug="$("$SYS_PYTHON" -c 'import sys; sys.path.insert(0, sys.argv[1]); from gateway.config import PRODUCT_SLUG; print(PRODUCT_SLUG)' "$REPO_DIR" 2>/dev/null)" || return 1
+  [[ -n "$slug" ]] || return 1
+  SIGN_BIN="$REPO_DIR/bin/.build/$slug"
+  [[ -x "$SIGN_BIN" && "$SIGN_BIN" -nt "$src" && "$SIGN_BIN" -nt "$REPO_DIR/bin/mag" ]] && return 0
+  # Chemin absolu uniquement — jamais `command -v swiftc` (PATH hostile).
+  [[ -x "$SYS_SWIFTC" ]] || return 1
+  mkdir -p "$REPO_DIR/bin/.build"
+  "$SYS_SWIFTC" -o "$SIGN_BIN" "$src" 2>/dev/null
+}
+
+# NB : le compte est nommé dans le prompt Touch ID via le champ « email » du
+# payload signé (fiche 0047), calculé par profile_email au point de construction —
+# plus de raison ad hoc ici (l'ancien strong_auth_reason était du code mort).
+
+require_signed_elicitation() { # JSON payload — signature biométrique si strongauth (fiche 0001)
+  [[ -f "$GWSA_ROOT/.strong-auth" ]] || return 0
+  require_signed_elicitation_always "$@"
+}
+
+require_signed_elicitation_always() { # JSON payload — signature TOUJOURS exigée
+  # Réservé aux opérations de SESSION (créer/élargir une capacité : unlock,
+  # zone Drive, capacité fine) — indépendant de .strong-auth (ADR-0007 §
+  # Décision 1/3 : « identité = geste signé », sans quoi le modèle pourrait
+  # s'élargir jusqu'aux plafonds compte/projet sans aucun geste humain). Sans
+  # enrôlement (`mag elicitation enroll`) → refus (fail-closed).
+  local payload="${1:-}"
+  [[ -n "$payload" ]] || die "élicitation : payload manquant (bug interne mag)"
+  # Précompiler le binaire nommé si possible (dialogue Touch ID « produit », cf. fiche 0032).
+  ensure_sign_bin || true
+  REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" GWSA_SYS_SWIFT="$SYS_SWIFT" \
+    GWSA_SIGN_BIN="${SIGN_BIN:-}" \
+    "$SYS_PYTHON" "$REPO_DIR/scripts/elicitation-cli.py" gate --json "$payload" \
+    || die "élicitation signée refusée — action annulée"
+}
+
+require_remote_approval() { # JSON payload — approbation par passkey téléphone (fiche 0078, ADR-0009)
+  # Frère de require_signed_elicitation_always — sélectionné par l'appelant via
+  # --remote, JAMAIS par défaut (Touch ID reste le chemin devant le Mac,
+  # inchangé). Réutilise le même socle ADR-0005 (payload, nonce, reçu) mais
+  # signe avec la passkey du téléphone au lieu du Secure Enclave du Mac.
+  #
+  # Échange en DEUX TEMPS (fix Codex P1, PR #113) : le défi est publié
+  # (`challenge`) AVANT toute réponse — sinon son nonce frais ne peut par
+  # construction correspondre à rien de signé à l'avance. Le canal réel
+  # (relais aveugle E2E) est différé (épic 0077) : ici, `GWSA_REMOTE_SIGNER`
+  # peut désigner un exécutable qui joue le rôle du téléphone — il reçoit
+  # l'envelope FRAÎCHEMENT publié sur stdin (donc jamais avant qu'il existe)
+  # et rend l'assertion signée sur stdout, dans un PROCESSUS séparé. À défaut,
+  # `--response <fichier>` accepte une assertion déjà préparée.
+  #
+  # Imprime le payload SIGNÉ (stdout) — l'appelant DOIT exécuter avec ces
+  # champs, jamais avec ses propres variables shell pré-signature (nit revue
+  # « sûr par coïncidence » → sûr par construction).
+  local payload="${1:-}" response="${2:-}"
+  [[ -n "$payload" ]] || die "approbation distante : payload manquant (bug interne mag)"
+  local challenge_out
+  challenge_out="$(REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" \
+    "$SYS_PYTHON" "$REPO_DIR/scripts/remote-approval-cli.py" challenge --json "$payload")" \
+    || die "approbation distante refusée — action annulée"
+  local challenge_id
+  challenge_id="$("$SYS_PYTHON" -c 'import json,sys; print(json.loads(sys.argv[1])["challenge_id"])' "$challenge_out")"
+  local response_file="$response"
+  if [[ -z "$response_file" && -n "${GWSA_REMOTE_SIGNER:-}" ]]; then
+    response_file="$(mktemp)"
+    printf '%s' "$challenge_out" | "$GWSA_REMOTE_SIGNER" > "$response_file" \
+      || die "approbation distante refusée — action annulée (signeur distant en échec)"
+  fi
+  [[ -n "$response_file" ]] \
+    || die "approbation distante refusée — action annulée (aucune réponse du téléphone)"
+  REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" \
+    "$SYS_PYTHON" "$REPO_DIR/scripts/remote-approval-cli.py" verify \
+      --challenge-id "$challenge_id" --response "$response_file" \
+    || die "approbation distante refusée — action annulée"
+}
+
+remote_json_field() { # remote_json_field <json> <champ> — extrait un champ du payload signé
+  "$SYS_PYTHON" -c 'import json,sys; print(json.loads(sys.argv[1])[sys.argv[2]])' "$1" "$2"
+}
+
+# Point d'entrée élicitation signée (fiche 0001) — voir require_signed_elicitation().
+
+profile_dir() { printf '%s/%s' "$GWSA_ROOT" "$1"; }
+
+# Scopes par défaut : lecture/écriture Workspace. Plusieurs sont « sensibles »,
+# et deux sont « restreints » (RESTRICTED au sens de Google) : drive (Drive
+# complet) et gmail.modify. D'où une app OAuth non vérifiée — soit en mode
+# Testing (tokens 7 jours, test users), soit publiée non vérifiée : on s'épargne
+# ainsi la vérification Google + l'audit CASA qu'imposent les scopes restreints.
+# Passer ces scopes explicitement évite aussi le sélecteur interactif de gws,
+# dont le pré-cochage embarque des scopes supplémentaires qui font échouer le login.
+DEFAULT_SCOPES="https://www.googleapis.com/auth/drive,https://www.googleapis.com/auth/spreadsheets,https://www.googleapis.com/auth/gmail.modify,https://www.googleapis.com/auth/calendar,https://www.googleapis.com/auth/documents,https://www.googleapis.com/auth/presentations,https://www.googleapis.com/auth/tasks"
+
+profile_email() { # profile_email <dir> — email du compte (métadonnée .email, sinon gws + backfill)
+  # ADR-0002 : .email est la source lue par toutes les surfaces (gateway comprise,
+  # qui elle n'exécute jamais gws). Ici, côté humain, on backfille les profils
+  # d'avant la fiche 0015 dès qu'une lecture gws aboutit. Le cache n'est
+  # autoritatif que s'il ressemble à un email : un .email corrompu ne doit pas
+  # court-circuiter le backfill (retour Codex, PR #18), sinon il reste coincé.
+  local dir="$1" email cached
+  if [[ -s "$dir/.email" ]]; then
+    cached="$(head -1 "$dir/.email")"
+    if [[ "$cached" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]+$ ]]; then
+      printf '%s\n' "$cached"; return 0
+    fi
+  fi
+  email="$(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws auth status 2>/dev/null \
+    | grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]+' | head -1 || true)"
+  [[ -n "$email" ]] && printf '%s\n' "$email" > "$dir/.email"
+  printf '%s\n' "$email"
+}
+
+profile_email_cached() { # profile_email_cached <dir> — .email SANS repli gws (fiche 0047)
+  # Aux POINTS D'AUTORISATION (unlock / grant), on lit la métadonnée seule :
+  # jamais exécuter gws avant le gate d'élicitation (invariant de verrou +
+  # « zéro exécution gws » d'ADR-0002). Métadonnée absente/corrompue → vide,
+  # donc le prompt retombe sur l'alias seul (repli documenté). Le backfill des
+  # vieux profils reste le fait de mag list/add, en contexte déverrouillé.
+  # Toujours retourner 0 : bin/mag tourne sous `set -euo pipefail` et les
+  # appelants font « local email; email="$(profile_email_cached …)" ». Un statut
+  # non-nul (métadonnée absente/corrompue) ferait avorter unlock/grant AVANT le
+  # gate au lieu du repli alias-seul documenté (retour Codex P2, PR #75).
+  local dir="$1" cached
+  [[ -s "$dir/.email" ]] || return 0
+  cached="$(head -1 "$dir/.email")"
+  if [[ "$cached" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]+$ ]]; then
+    printf '%s' "$cached"
+  fi
+  return 0
+}
+
+cmd_add() { # cmd_add <alias> [email-attendu] [options gws auth login]
+  local alias="$1"; shift
+  check_alias "$alias"
+  local expected=""
+  if [[ "${1:-}" == *@* ]]; then expected="$1"; shift; fi
+  [[ -f "$MASTER_SECRET" ]] \
+    || die "client_secret.json introuvable dans $GWSA_ROOT — suivre d'abord docs/setup-oauth.md"
+  # Connecter un compte élargit la surface d'accès : même barrière biométrique
+  # que unlock/grant quand strongauth est activée (après le check du secret,
+  # pour qu'un environnement de test sans secret n'atteigne jamais Touch ID).
+  # Sous strongauth, l'email est obligatoire : pas encore de `.email` avant la
+  # connexion, et Touch ID doit nommer le compte (fiche 0032), pas l'alias.
+  # La barrière biométrique passe par l'élicitation signée (fiche 0001), pas
+  # require_strong_auth nu — sinon double prompt et pas de payload signé.
+  if [[ -z "$expected" && -f "$GWSA_ROOT/.strong-auth" ]]; then
+    die "usage : $SELF add <alias> <email> — email requis quand strongauth est actif (Touch ID nomme le compte)"
+  fi
+  require_signed_elicitation "$(printf '{"action":"add_account","alias":"%s","target":"%s"}' "$alias" "${expected:-}")"
+  local dir; dir="$(profile_dir "$alias")"
+  mkdir -p "$dir"
+  cp "$MASTER_SECRET" "$dir/client_secret.json"
+  chmod 600 "$dir/client_secret.json"  # forcer 0600, même si le master a hérité d'un 0644 (cf. Codex #83)
+  echo "→ Connexion du profil « $alias »${expected:+ (compte attendu : $expected)} : choisir le bon compte Google dans le navigateur…"
+  if [[ $# -eq 0 ]]; then
+    GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws auth login --scopes "$DEFAULT_SCOPES"
+  else
+    GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws auth login "$@"
+  fi
+  rm -f "$dir/.email"   # l'alias a pu changer de compte : forcer une lecture fraîche
+  local email; email="$(profile_email "$dir")"
+  if [[ -n "$expected" && -n "$email" && "$email" != "$expected" ]]; then
+    echo "$SELF : ✗ MAUVAIS COMPTE pour « $alias » : connecté avec $email au lieu de $expected." >&2
+    echo "       Refaire : $SELF add $alias $expected — et choisir $expected dans le navigateur." >&2
+    exit 4
+  fi
+  # Policy prudente par défaut (default-deny) — zones Drive vides, Gmail sans envoi.
+  if [[ ! -f "$dir/policy.json" ]]; then
+    "$SYS_PYTHON" - "$dir/policy.json" "$REPO_DIR" <<'PYEOF'
+import sys
+sys.path.insert(0, sys.argv[2])
+from gateway.default_policy import write_default_policy
+write_default_policy(sys.argv[1])
+PYEOF
+    echo "✓ Policy prudente écrite (Drive zones vides, Gmail brouillons sans envoi)."
+  fi
+  # Sonde API read-only : détecter tôt le 403 « quota project » (compte sans
+  # rôle IAM serviceUsageConsumer sur le projet de l'app OAuth). Sans ça, le
+  # profil paraît « connecté » mais échouera au 1er vrai appel. On propose la
+  # commande gcloud — on ne l'exécute jamais (geste admin humain, cf. §7 setup).
+  if [[ -n "$email" ]]; then
+    local probe rem
+    probe="$(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws drive files list --params '{"pageSize":1}' 2>&1 || true)"
+    rem="$(printf '%s' "$probe" | "$SYS_PYTHON" "$REPO_DIR/scripts/iam-check.py" detect "$email" 2>/dev/null || true)"
+    [[ -n "$rem" ]] && { echo; echo "$rem" >&2; }
+  fi
+  echo "✓ Profil « $alias » connecté${email:+ — $email}. Test : $SELF $alias auth status"
+  REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.vault import ensure_vault_layout
+ensure_vault_layout(sys.argv[1])
+" "$alias" 2>/dev/null || true
+}
+
+cmd_list() {
+  local found=0 dir alias email state
+  if [[ -d "$GWSA_ROOT" ]]; then
+    for dir in "$GWSA_ROOT"/*/; do
+      [[ -d "$dir" ]] || continue
+      found=1
+      alias="$(basename "$dir")"
+      if [[ -f "$dir/credentials.enc" || -f "$GWSA_ROOT/.vault/$alias/credentials.enc" ]]; then
+        email="$(profile_email "$dir")"
+        state="connecté${email:+ — $email}"
+      else
+        state="non connecté (relancer : $SELF add $alias)"
+      fi
+      if [[ -f "$dir/.locked" ]]; then
+        if is_locked "$dir"; then
+          state="$state · 🔒 verrouillé"
+        else
+          until_ts="$(cat "$dir/.unlock-until" 2>/dev/null || echo 0)"
+          state="$state · 🔓 encore $(( (until_ts - $(date +%s)) / 60 )) min"
+        fi
+      fi
+      printf '  %-16s %s\n' "$alias" "$state"
+    done
+  fi
+  [[ $found -eq 1 ]] || echo "Aucun profil. Commencer par : $SELF add <alias>"
+}
+
+cmd_lock() {
+  local alias; alias="$(resolve_alias "$1")" || exit; check_alias "$alias"
+  local dir; dir="$(profile_dir "$alias")"
+  [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+  touch "$dir/.locked"; rm -f "$dir/.unlock-until"
+  echo "🔒 Profil « $alias » verrouillé — accès sur demande uniquement ($SELF unlock $alias [minutes])"
+}
+
+unlock_deprecation_warn() { # stderr — $SELF unlock global (poste entier) déprécié (fiche 0040)
+  echo "⚠ $SELF unlock déverrouille le profil pour TOUTES les sessions sur ce poste (legacy)." >&2
+  echo "  Préférer : $SELF session unlock <session_id> <alias> [minutes]" >&2
+  echo "  ou access_request kind=session_unlock via MCP (session active)." >&2
+}
+
+cmd_unlock() {
+  local alias; alias="$(resolve_alias "$1")" || exit; shift || true
+  check_alias "$alias"
+  local mins="${1:-60}"
+  # Valider la durée AVANT tout court-circuit : une saisie invalide doit être
+  # rejetée même si le profil n'est pas verrouillé (sinon « unlock x abc »
+  # passait pour un no-op silencieux au lieu d'une erreur).
+  [[ "$mins" == "off" || ( "$mins" =~ ^[0-9]+$ && "$mins" -ge 1 ) ]] \
+    || die "durée invalide « $mins » (minutes entières ≥ 1, ou « off » pour retirer le verrou)"
+  local dir; dir="$(profile_dir "$alias")"
+  [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+  local email; email="$(profile_email_cached "$dir")"   # compte nommé, sans exec gws (fiche 0047)
+  local sid="${GWSA_SESSION_ID:-}"
+  if [[ -n "$sid" ]]; then
+    [[ "$mins" == "off" ]] \
+      && die "« unlock off » permanent est poste entier — exécuter sans GWSA_SESSION_ID"
+    [[ -f "$dir/.locked" ]] || { echo "Profil « $alias » non verrouillé — rien à faire."; return 0; }
+    require_signed_elicitation_always "$(printf '{"action":"session_unlock","alias":"%s","email":"%s","session_id":"%s","minutes":%s}' "$alias" "$email" "$sid" "$mins")"
+    REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import session_unlock
+session_unlock(sys.argv[1], sys.argv[2], int(sys.argv[3]))
+" "$sid" "$alias" "$mins"
+    echo "🔓 session $sid : « $alias » déverrouillé pour $mins min (cette conversation — pas .unlock-until global)."
+    return 0
+  fi
+  [[ -f "$dir/.locked" ]] || { echo "Profil « $alias » non verrouillé — rien à faire."; return 0; }
+  if [[ "$mins" != "off" ]]; then
+    unlock_deprecation_warn
+  fi
+  if [[ "$mins" == "off" ]]; then
+    require_signed_elicitation "$(printf '{"action":"unlock","alias":"%s","email":"%s","target":"off"}' "$alias" "$email")"
+  else
+    require_signed_elicitation "$(printf '{"action":"unlock","alias":"%s","email":"%s","minutes":%s}' "$alias" "$email" "$mins")"
+  fi
+  if [[ "$mins" == "off" ]]; then
+    rm -f "$dir/.locked" "$dir/.unlock-until"
+    echo "🔓 Verrou retiré : « $alias » est déverrouillé en permanence."
+    return 0
+  fi
+  [[ "$mins" =~ ^[0-9]+$ && "$mins" -ge 1 ]] || die "durée invalide « $mins » (minutes entières, ou « off » pour retirer le verrou)"
+  echo "$(( $(date +%s) + mins * 60 ))" > "$dir/.unlock-until"
+  echo "🔓 Profil « $alias » déverrouillé pour $mins min (reverrouillage automatique ensuite)."
+}
+
+cmd_policy() { # mag policy <alias> [show|mode <m>|allow <idOuNom>|revoke <id>|clear]
+  local alias; alias="$(resolve_alias "$1")" || exit; shift
+  check_alias "$alias"
+  local dir; dir="$(profile_dir "$alias")"
+  [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+  local P="$dir/policy.json" action="${1:-show}"
+  case "$action" in
+    show)
+      if [[ -f "$P" ]]; then "$SYS_PYTHON" -m json.tool "$P"; else echo "Aucune policy — mode open (écriture Drive libre)."; fi ;;
+    mode)
+      local m="${2:-}"
+      case "$m" in open|readonly|restricted) ;; *) die "mode invalide « ${m:-∅} » (open|readonly|restricted)" ;; esac
+      "$SYS_PYTHON" - "$P" "$m" <<'PYEOF'
+import json, os, sys
+path, mode = sys.argv[1], sys.argv[2]
+d = json.load(open(path)) if os.path.exists(path) else {}
+d.setdefault("drive", {})["mode"] = mode
+json.dump(d, open(path, "w"), indent=2)
+PYEOF
+      echo "✓ mode Drive de « $alias » : $m" ;;
+    allow)
+      local target="${2:-}"; [[ -n "$target" ]] || die "usage : $SELF policy $alias allow <nomDeDossier|folderId>"
+      local resolved fid fname
+      resolved="$(resolve_folder "$dir" "$target")"
+      fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
+      [[ -n "$fid" ]] || die "dossier « $target » introuvable ou ambigu — donne son ID (fin de l'URL du dossier dans Drive)"
+      "$SYS_PYTHON" - "$P" "$fid" "$fname" <<'PYEOF'
+import json, os, sys
+path, fid, fname = sys.argv[1], sys.argv[2], sys.argv[3]
+d = json.load(open(path)) if os.path.exists(path) else {}
+drv = d.setdefault("drive", {})
+drv.pop("mode", None)
+drv.setdefault("read", True)
+drv.setdefault("create", True)
+drv.setdefault("update", True)
+drv.setdefault("delete", False)
+drv.setdefault("share", False)
+drv["zonesOnly"] = True
+wf = drv.setdefault("writeFolders", [])
+if fid not in wf:
+    wf.append(fid)
+drv.setdefault("writeFolderNames", {})[fid] = fname
+json.dump(d, open(path, "w"), indent=2)
+PYEOF
+      echo "✓ « $alias » : écriture autorisée en permanence sous « $fname » ($fid) et ses sous-dossiers" ;;
+    revoke)
+      local rid="${2:-}"; [[ -n "$rid" ]] || die "usage : $SELF policy $alias revoke <folderId>"
+      [[ -f "$P" ]] || die "aucune policy pour « $alias »"
+      "$SYS_PYTHON" - "$P" "$rid" <<'PYEOF'
+import json, sys
+path, rid = sys.argv[1], sys.argv[2]
+d = json.load(open(path))
+drv = d.get("drive", {})
+wf = drv.get("writeFolders", [])
+if rid in wf:
+    wf.remove(rid)
+drv.get("writeFolderNames", {}).pop(rid, None)
+json.dump(d, open(path, "w"), indent=2)
+PYEOF
+      echo "✓ dossier $rid retiré des zones permanentes de « $alias »" ;;
+    clear)
+      if [[ -f "$P" ]]; then
+        "$SYS_PYTHON" - "$P" <<'PYEOF'
+import json, os, sys
+path = sys.argv[1]
+d = json.load(open(path))
+d.pop("drive", None)
+if d:
+    json.dump(d, open(path, "w"), indent=2)
+else:
+    os.remove(path)
+PYEOF
+      fi
+      echo "✓ policy Drive supprimée — Drive de « $alias » repasse en mode open (autres services inchangés)." ;;
+    *) die "action inconnue « $action » (show|mode|allow|revoke|clear)" ;;
+  esac
+}
+
+grant_deprecation_warn() { # stderr — mag grant global (poste entier) déprécié (fiche 0040)
+  echo "⚠ $SELF grant accorde une zone à TOUTES les sessions sur ce poste (legacy)." >&2
+  echo "  Préférer : $SELF session grant <session_id> <alias> <dossier> [heures]" >&2
+  echo "  ou access_request kind=session_grant via MCP (session active)." >&2
+}
+
+cmd_grant() { # mag grant <alias> <dossierIdOuNom> [heures] | $SELF grant <alias> revoke <folderId>
+  local alias; alias="$(resolve_alias "$1")" || exit; shift
+  check_alias "$alias"
+  local dir; dir="$(profile_dir "$alias")"
+  [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+  local email; email="$(profile_email_cached "$dir")"   # compte nommé, sans exec gws (fiche 0047)
+  local G="$dir/session-grants.json"
+  [[ $# -ge 1 ]] || die "usage : $SELF grant $alias <dossier> [heures] | $SELF grant $alias revoke <folderId>"
+  if [[ "$1" == "revoke" ]]; then
+    local rid="${2:-}"; [[ -n "$rid" ]] || die "usage : $SELF grant $alias revoke <folderId>"
+    [[ -f "$G" ]] || { echo "Aucune autorisation temporaire pour « $alias »."; return 0; }
+    "$SYS_PYTHON" - "$G" "$rid" <<'PYEOF'
+import json, sys
+path, rid = sys.argv[1], sys.argv[2]
+d = json.load(open(path))
+d["drive"] = [e for e in d.get("drive", []) if e.get("id") != rid]
+json.dump(d, open(path, "w"), indent=2)
+PYEOF
+    echo "✓ autorisation temporaire $rid révoquée."
+    return 0
+  fi
+  local target="$1" hours="${2:-8}"
+  [[ "$hours" =~ ^[0-9]+$ && "$hours" -ge 1 && "$hours" -le 168 ]] \
+    || die "durée invalide « $hours » (heures entières, 1 à 168)"
+  local resolved fid fname sid="${GWSA_SESSION_ID:-}"
+  # Barrière (Touch ID / déverrouillage) AVANT toute lecture Drive : la
+  # résolution par nom fait un lookup Drive AUTHENTIFIÉ (via le vault) — la faire
+  # précéder le gate laisserait sonder l'existence d'un nom sans franchir Touch ID
+  # (revue sécurité). On signe la cible BRUTE, puis on résout.
+  if [[ -n "$sid" ]]; then
+    require_signed_elicitation_always "$("$SYS_PYTHON" -c 'import json,sys; print(json.dumps({"action":"session_grant","alias":sys.argv[1],"email":sys.argv[2],"session_id":sys.argv[3],"target":sys.argv[4],"hours":int(sys.argv[5])}))' "$alias" "$email" "$sid" "$target" "$hours")"
+    resolved="$(resolve_folder "$dir" "$target")"
+    fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
+    [[ -n "$fid" ]] || die "dossier « $target » introuvable ou ambigu — donne son ID (fin de l'URL du dossier dans Drive)"
+    REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import session_grant_drive
+session_grant_drive(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5]))
+" "$sid" "$alias" "$fid" "$fname" "$hours"
+    echo "🕐 session $sid : zone « $fname » pour $hours h (GWSA_SESSION_ID — pas le fichier global session-grants.json)."
+    return 0
+  fi
+  grant_deprecation_warn
+  require_signed_elicitation "$("$SYS_PYTHON" -c 'import json,sys; print(json.dumps({"action":"grant","alias":sys.argv[1],"email":sys.argv[2],"target":sys.argv[3],"hours":int(sys.argv[4])}))' "$alias" "$email" "$target" "$hours")"
+  resolved="$(resolve_folder "$dir" "$target")"
+  fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
+  [[ -n "$fid" ]] || die "dossier « $target » introuvable ou ambigu — donne son ID (fin de l'URL du dossier dans Drive)"
+  "$SYS_PYTHON" - "$G" "$fid" "$fname" "$hours" <<'PYEOF'
+import json, os, sys, time
+path, fid, fname, hours = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
+d = json.load(open(path)) if os.path.exists(path) else {}
+now = time.time()
+drv = [e for e in d.get("drive", []) if e.get("expiresAt", 0) > now and e.get("id") != fid]
+drv.append({"id": fid, "name": fname, "grantedAt": int(now), "expiresAt": int(now + hours * 3600)})
+d["drive"] = drv
+json.dump(d, open(path, "w"), indent=2)
+PYEOF
+  echo "🕐 « $alias » : écriture autorisée sous « $fname » ($fid) pendant $hours h (sous-dossiers inclus, expiration automatique)."
+}
+
+cmd_grants() { # mag grants <alias> [clear]
+  local alias; alias="$(resolve_alias "$1")" || exit; shift || true
+  check_alias "$alias"
+  local dir; dir="$(profile_dir "$alias")"
+  [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+  local G="$dir/session-grants.json"
+  if [[ "${1:-}" == "clear" ]]; then
+    rm -f "$G"; echo "✓ autorisations temporaires de « $alias » vidées."
+    return 0
+  fi
+  [[ -f "$G" ]] || { echo "Aucune autorisation temporaire — par défaut le LLM ne peut écrire nulle part sur Drive (mode zones)."; return 0; }
+  "$SYS_PYTHON" - "$G" <<'PYEOF'
+import json, sys, time
+d = json.load(open(sys.argv[1]))
+now = time.time()
+active = [e for e in d.get("drive", []) if e.get("expiresAt", 0) > now]
+if not active:
+    print("Aucune autorisation temporaire active.")
+for e in active:
+    mins = int((e["expiresAt"] - now) / 60)
+    print("  🕐 %s (%s) — encore %dh%02d" % (e.get("name", "?"), e["id"], mins // 60, mins % 60))
+PYEOF
+}
+
+cmd_session() { # mag session list|open|unlock|grant|grant-capability|revoke-descendants|show|close <session_id> …
+  local sub="${1:-}"; shift || true
+  case "$sub" in
+    list)
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import json, os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import list_sessions
+print(json.dumps({'sessions': list_sessions()}, indent=2, ensure_ascii=False))
+"
+      ;;
+    open)
+      # Bootstrap SANS jeton (ADR-0007 §Repli) : seul chemin qui crée une
+      # session racine — geste signé TOUJOURS exigé (enrôlement requis),
+      # indépendamment de .strong-auth. Zéro capacité à la naissance ; imprime
+      # le jeton (session_id) SEUL sur stdout, pour être capturé par l'appelant.
+      local open_client="${1:-mcp}"
+      require_signed_elicitation_always "$(printf '{"action":"session_open","client":"%s"}' "$open_client")"
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import create_session
+s = create_session(client=sys.argv[1])
+print(s.session_id)
+" "$open_client"
+      ;;
+    unlock)
+      # --remote (fiche 0078) : approbation par passkey téléphone au lieu du
+      # Touch ID Mac — sélectionné explicitement par l'appelant, jamais par
+      # défaut (peut apparaître n'importe où dans les arguments positionnels).
+      local args=("$@") remote=0 pos=()
+      # Bash 3.2 (macOS) : expanser un tableau VIDE sous `set -u` lève « unbound
+      # variable » — garder derrière un test de taille avant "${args[@]}".
+      if [[ ${#args[@]} -gt 0 ]]; then
+        for a in "${args[@]}"; do
+          if [[ "$a" == "--remote" ]]; then remote=1; else pos+=("$a"); fi
+        done
+      fi
+      local sid="${pos[0]:-}" alias="${pos[1]:-}" mins="${pos[2]:-60}"
+      [[ -n "$sid" && -n "$alias" ]] || die "usage : $SELF session unlock <session_id> <alias> [minutes] [--remote]"
+      check_alias "$alias"
+      local dir; dir="$(profile_dir "$alias")"
+      [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+      local email; email="$(profile_email_cached "$dir")"   # compte nommé, sans exec gws (fiche 0047)
+      local payload; payload="$(printf '{"action":"session_unlock","alias":"%s","email":"%s","session_id":"%s","minutes":%s}' "$alias" "$email" "$sid" "$mins")"
+      if [[ "$remote" == "1" ]]; then
+        # Exécute avec le payload SIGNÉ renvoyé par l'approbation distante —
+        # jamais avec les variables shell pré-signature (nit revue « sûr par
+        # coïncidence » → sûr par construction, PR #113).
+        local signed; signed="$(require_remote_approval "$payload" "${GWSA_REMOTE_RESPONSE:-}")"
+        sid="$(remote_json_field "$signed" session_id)"
+        alias="$(remote_json_field "$signed" alias)"
+        mins="$(remote_json_field "$signed" minutes)"
+      else
+        require_signed_elicitation_always "$payload"
+      fi
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import session_unlock
+session_unlock(sys.argv[1], sys.argv[2], int(sys.argv[3]))
+" "$sid" "$alias" "$mins"
+      echo "🔓 session $sid : « $alias » déverrouillé pour $mins min (cette conversation seulement)."
+      ;;
+    grant)
+      # --remote (fiche 0078) : idem « session unlock » — voir plus haut.
+      local args=("$@") remote=0 pos=()
+      # Bash 3.2 (macOS) : expanser un tableau VIDE sous `set -u` lève « unbound
+      # variable » — garder derrière un test de taille avant "${args[@]}".
+      if [[ ${#args[@]} -gt 0 ]]; then
+        for a in "${args[@]}"; do
+          if [[ "$a" == "--remote" ]]; then remote=1; else pos+=("$a"); fi
+        done
+      fi
+      local sid="${pos[0]:-}" alias="${pos[1]:-}" target="${pos[2]:-}" hours="${pos[3]:-8}"
+      [[ -n "$sid" && -n "$alias" && -n "$target" ]] \
+        || die "usage : $SELF session grant <session_id> <alias> <dossier> [heures] [--remote]"
+      check_alias "$alias"
+      local dir; dir="$(profile_dir "$alias")"
+      [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+      local email; email="$(profile_email_cached "$dir")"   # compte nommé, sans exec gws (fiche 0047)
+      [[ "$hours" =~ ^[0-9]+$ && "$hours" -ge 1 && "$hours" -le 168 ]] \
+        || die "durée invalide « $hours »"
+      local resolved fid fname
+      # Barrière AVANT le lookup Drive authentifié (revue sécurité) : signer la
+      # cible BRUTE, résoudre le nom seulement après Touch ID / déverrouillage
+      # (idem cmd_grant — la route explicite « session grant » avait été oubliée).
+      local payload; payload="$("$SYS_PYTHON" -c 'import json,sys; print(json.dumps({"action":"session_grant","alias":sys.argv[1],"email":sys.argv[2],"session_id":sys.argv[3],"target":sys.argv[4],"hours":int(sys.argv[5])}))' "$alias" "$email" "$sid" "$target" "$hours")"
+      if [[ "$remote" == "1" ]]; then
+        # Exécute avec le payload SIGNÉ renvoyé par l'approbation distante —
+        # jamais avec les variables shell pré-signature (nit revue « sûr par
+        # coïncidence » → sûr par construction, PR #113).
+        local signed; signed="$(require_remote_approval "$payload" "${GWSA_REMOTE_RESPONSE:-}")"
+        sid="$(remote_json_field "$signed" session_id)"
+        alias="$(remote_json_field "$signed" alias)"
+        target="$(remote_json_field "$signed" target)"
+        hours="$(remote_json_field "$signed" hours)"
+        dir="$(profile_dir "$alias")"
+      else
+        require_signed_elicitation_always "$payload"
+      fi
+      resolved="$(resolve_folder "$dir" "$target")"
+      fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
+      [[ -n "$fid" ]] || die "dossier introuvable"
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import session_grant_drive
+session_grant_drive(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5]))
+" "$sid" "$alias" "$fid" "$fname" "$hours"
+      echo "🕐 session $sid : zone « $fname » pour $hours h."
+      ;;
+    grant-capability)
+      local sid="${1:-}" alias="${2:-}" gc_service="${3:-}" gc_op="${4:-}" gc_resource="${5:-}" gc_hours="${6:-8}"
+      [[ -n "$sid" && -n "$alias" && -n "$gc_service" && -n "$gc_op" ]] \
+        || die "usage : $SELF session grant-capability <session_id> <alias> <service> <operation> [ressource] [heures]"
+      check_alias "$alias"
+      local dir; dir="$(profile_dir "$alias")"
+      [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+      local email; email="$(profile_email_cached "$dir")"   # compte nommé, sans exec gws (fiche 0047)
+      [[ "$gc_hours" =~ ^[0-9]+$ && "$gc_hours" -ge 1 && "$gc_hours" -le 168 ]] \
+        || die "durée invalide « $gc_hours »"
+      # Capacité fine : élicitation signée TOUJOURS exigée (ADR-0007 §3), même
+      # sans .strong-auth — le scope exact (service/opération/ressource) est
+      # lié au geste signé (encodé dans « target »).
+      require_signed_elicitation_always "$("$SYS_PYTHON" -c 'import json,sys; print(json.dumps({"action":"session_grant_capability","alias":sys.argv[1],"email":sys.argv[2],"session_id":sys.argv[3],"target":sys.argv[4]+":"+sys.argv[5]+((":"+sys.argv[6]) if sys.argv[6] else ""),"hours":int(sys.argv[7])}))' "$alias" "$email" "$sid" "$gc_service" "$gc_op" "$gc_resource" "$gc_hours")"
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import session_grant_capability
+session_grant_capability(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], int(sys.argv[6]))
+" "$sid" "$alias" "$gc_service" "$gc_op" "$gc_resource" "$gc_hours"
+      echo "🔑 session $sid : capacité « $gc_service:$gc_op${gc_resource:+:$gc_resource} » pour $gc_hours h."
+      ;;
+    revoke-descendants)
+      local sid="${1:-}"; [[ -n "$sid" ]] || die "usage : $SELF session revoke-descendants <session_id>"
+      require_signed_elicitation "$(printf '{"action":"revoke_descendants","session_id":"%s"}' "$sid")"
+      n="$(REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import revoke_descendants
+print(revoke_descendants(sys.argv[1]))
+" "$sid")"
+      echo "✓ $n sous-session(s) purgée(s) pour $sid."
+      ;;
+    show)
+      local sid="${1:-}"; [[ -n "$sid" ]] || die "usage : $SELF session show <session_id>"
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import json, os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import get_session
+s = get_session(sys.argv[1])
+print(json.dumps(s.to_json() if s else {}, indent=2, ensure_ascii=False))
+" "$sid"
+      ;;
+    close)
+      local sid="${1:-}"; [[ -n "$sid" ]] || die "usage : $SELF session close <session_id>"
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import close_session
+close_session(sys.argv[1])
+" "$sid"
+      echo "✓ session $sid purgée (et descendants)."
+      ;;
+    *) die "usage : $SELF session list|open|unlock|grant|grant-capability|revoke-descendants|show|close …" ;;
+  esac
+}
+
+cmd_elicitation() { # mag elicitation enroll|status — clé biométrique (fiche 0001)
+  local sub="${1:-status}"; shift || true
+  case "$sub" in
+    enroll)
+      local mock_flag=""
+      [[ "${1:-}" == "--mock" ]] && mock_flag="--mock"
+      ensure_sign_bin || true
+      REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" GWSA_SYS_SWIFT="$SYS_SWIFT" \
+        GWSA_SIGN_BIN="${SIGN_BIN:-}" GWSA_ELICITATION_MOCK="${GWSA_ELICITATION_MOCK:-}" \
+        "$SYS_PYTHON" "$REPO_DIR/scripts/elicitation-cli.py" enroll $mock_flag
+      ;;
+    status)
+      REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" \
+        "$SYS_PYTHON" "$REPO_DIR/scripts/elicitation-cli.py" status
+      ;;
+    *) die "usage : $SELF elicitation enroll [--mock] | status" ;;
+  esac
+}
+
+cmd_project() { # mag project show|init|sign — manifeste .mag/ (phase B + sig 0001)
+  local sub="${1:-show}"; shift || true
+  case "$sub" in
+    show)
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import json, os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.project import resolve_project
+ctx = resolve_project()
+print(json.dumps({
+    'git_root': ctx.git_root,
+    'project_id': ctx.project_id,
+    'manifest_path': ctx.manifest_path,
+    'manifest_valid': ctx.manifest_valid,
+    'verify_error': ctx.verify_error,
+    'manifest': ctx.manifest if ctx.manifest_valid else {},
+}, indent=2, ensure_ascii=False))
+"
+      ;;
+    init)
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import json, os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.project import init_project
+print(json.dumps(init_project(), indent=2, ensure_ascii=False))
+"
+      ;;
+    sign)
+      # Comme unlock/grant et enroll : précompiler le binaire nommé pour que la
+      # signature du manifeste (élicitation signée) affiche le produit, pas swift.
+      ensure_sign_bin || true
+      REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" GWSA_SYS_SWIFT="$SYS_SWIFT" \
+        GWSA_SIGN_BIN="${SIGN_BIN:-}" "$SYS_PYTHON" -c "
+import json, os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.project import sign_manifest
+print(json.dumps(sign_manifest(), indent=2, ensure_ascii=False))
+"
+      ;;
+    *) die "usage : $SELF project show|init|sign" ;;
+  esac
+}
+
+cmd_vault() { # mag vault migrate — déplace credentials.enc vers .vault/
+  local sub="${1:-migrate}"
+  case "$sub" in
+    migrate)
+      moved="$(REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.vault import migrate_all
+m = migrate_all()
+print(','.join(m) if m else '')
+")"
+      if [[ -n "$moved" ]]; then
+        echo "✓ vault : profils migrés — $moved"
+      else
+        echo "✓ vault : rien à migrer (déjà en place ou aucun credentials.enc dans les profils)."
+      fi
+      ;;
+    status)
+      REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.config import gwsa_root
+from gateway.vault import is_migrated
+root = gwsa_root()
+for p in sorted(root.glob('*/')):
+    if p.name.startswith('.'): continue
+    if (p / 'policy.json').is_file() or (p / 'credentials.enc').is_file():
+        print(p.name, 'vault' if is_migrated(p.name) else 'legacy')
+"
+      ;;
+    *) die "usage : $SELF vault migrate|status" ;;
+  esac
+}
+
+cmd_wire() { # mag wire <desktop|code|all> [--print] — brancher ce serveur MCP dans un client LLM
+  local target="${1:-all}"; [[ $# -gt 0 ]] && shift
+  local desk="$REPO_DIR/scripts/install-claude-desktop.sh"
+  local code="$REPO_DIR/scripts/install-claude-code.sh"
+  case "$target" in
+    -h|--help|help)
+      echo "usage : $SELF wire <desktop|code|all> [--print]"
+      echo "  Branche ce serveur MCP dans Claude Desktop / Claude Code (chemin résolu tout"
+      echo "  seul, entrée fusionnée sans écraser tes autres serveurs MCP). « --print » = dry-run."
+      echo "  Cursor : config manuelle pour l'instant — voir docs/configurer-client.md (onglet Cursor)."
+      echo "  Retirer : Claude Code → « claude mcp remove google-multi-account » ;"
+      echo "           Desktop / Cursor → retirer l'entrée « google-multi-account » du JSON"
+      echo "           de config du client (l'admin protège l'entrée stable, exprès)." ;;
+    desktop) [[ -x "$desk" ]] || die "script Desktop introuvable ($desk)"; "$desk" "$@" ;;
+    code)    [[ -x "$code" ]] || die "script Claude Code introuvable ($code)"; "$code" "$@" ;;
+    cursor)  die "Cursor : config manuelle pour l'instant — voir docs/configurer-client.md (onglet Cursor)." ;;
+    all)
+      local rc=0
+      [[ -x "$desk" ]] && { "$desk" "$@" || { rc=1; echo "$SELF : Desktop — échec (voir ci-dessus)" >&2; }; }
+      [[ -x "$code" ]] && { "$code" "$@" || { rc=1; echo "$SELF : Claude Code — échec (le CLI « claude » est-il installé ?)" >&2; }; }
+      return $rc ;;
+    *) die "usage : $SELF wire <desktop|code|all> [--print]" ;;
+  esac
+}
+
+cmd_sandbox() { # mag sandbox deploy|list|status|remove|wire — sandboxes temporaires (fiche 0041)
+  local script="$REPO_DIR/scripts/sandbox.sh"
+  [[ -x "$script" ]] || die "script sandbox introuvable ($script)"
+  exec "$script" "$@"
+}
+
+cmd_couloir() { # alias déprécié → sandbox
+  echo "⚠ « $SELF couloir » est déprécié — utilise « $SELF sandbox »." >&2
+  cmd_sandbox "$@"
+}
+
+cmd_admin() { # mag admin [stop] — interface web locale, port GWSA_ADMIN_PORT (défaut 4877)
+  local port="${GWSA_ADMIN_PORT:-4877}"
+  local action="${1:-start}" pidf="$GWSA_ROOT/.admin-$port.pid" log="$GWSA_ROOT/admin-$port.log"
+  [[ "$port" =~ ^[0-9]+$ && "$port" -ge 1024 && "$port" -le 65535 ]] \
+    || die "GWSA_ADMIN_PORT invalide : « $port »"
+  admin_listening() {
+    # /dev/tcp peut être indisponible (sandbox) : bascule sur lsof.
+    (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null && return 0
+    lsof -ti "tcp:$port" -sTCP:LISTEN >/dev/null 2>&1
+  }
+  is_admin_pid() {
+    [[ -n "${1:-}" ]] || return 1
+    kill -0 "$1" 2>/dev/null || return 1
+    local cmd
+    cmd="$(ps -p "$1" -o command= 2>/dev/null || true)"
+    if [[ -n "$cmd" ]]; then
+      printf '%s' "$cmd" | grep -q "admin/server.js"
+    else
+      # ps indisponible : accepter le pid vivant qui écoute notre port.
+      local p; p="$(lsof -ti "tcp:$port" -sTCP:LISTEN 2>/dev/null | head -1)"
+      [[ "$p" == "$1" ]]
+    fi
+  }
+  admin_pid_on_port() {
+    local p; p="$(lsof -ti "tcp:$port" -sTCP:LISTEN 2>/dev/null | head -1)"
+    is_admin_pid "$p" && echo "$p"
+  }
+  case "$action" in
+    stop)
+      local pid=""
+      if [[ -f "$pidf" ]]; then pid="$(cat "$pidf" 2>/dev/null || true)"; fi
+      if is_admin_pid "$pid"; then
+        kill "$pid" 2>/dev/null || true
+        rm -f "$pidf"
+        echo "✓ interface admin arrêtée (port $port)."
+      elif pid="$(admin_pid_on_port)"; then
+        kill "$pid" 2>/dev/null || true
+        rm -f "$pidf"
+        echo "✓ interface admin arrêtée (processus orphelin pid $pid, sans pidfile)."
+      elif admin_listening "$port"; then
+        echo "⚠ le port $port est occupé mais ce n'est pas notre admin — rien tué."
+        echo "  repérer : lsof -i :$port"
+      else
+        # rétrocompat : ancien pidfile sans port
+        local legacy="$GWSA_ROOT/.admin.pid"
+        if [[ "$port" == "4877" && -f "$legacy" ]] && is_admin_pid "$(cat "$legacy" 2>/dev/null || true)"; then
+          kill "$(cat "$legacy")" 2>/dev/null || true
+          rm -f "$legacy"
+          echo "✓ interface admin arrêtée (port $port, pidfile legacy)."
+        else
+          rm -f "$pidf"
+          echo "Interface admin non démarrée sur le port $port — rien à faire."
+        fi
+      fi ;;
+    start)
+      command -v node >/dev/null 2>&1 || die "node est requis pour l'interface admin — brew install node"
+      local running=""
+      if [[ -f "$pidf" ]]; then running="$(cat "$pidf" 2>/dev/null || true)"; fi
+      if is_admin_pid "$running"; then
+        echo "✓ interface admin déjà en route — http://127.0.0.1:$port"
+      elif running="$(admin_pid_on_port)"; then
+        echo "$running" > "$pidf"
+        echo "✓ interface admin déjà en route (pid $running) — http://127.0.0.1:$port"
+      elif admin_listening "$port"; then
+        die "le port $port est déjà pris par un autre programme — lsof -i :$port"
+      else
+        mkdir -p "$GWSA_ROOT"
+        GWSA_ADMIN_PORT="$port" nohup node "$REPO_DIR/admin/server.js" >> "$log" 2>&1 &
+        echo $! > "$pidf"
+        # Ne pas se fier au seul pid : un EADDRINUSE tue le process après le
+        # sleep, laissant un pidfile fantôme et une UI « Failed to fetch ».
+        local ok="" i
+        for i in 1 2 3 4 5 6 7 8; do
+          if is_admin_pid "$(cat "$pidf" 2>/dev/null || true)" && admin_listening; then
+            ok=1; break
+          fi
+          sleep 0.25
+        done
+        if [[ -z "$ok" ]]; then
+          kill "$(cat "$pidf" 2>/dev/null || true)" 2>/dev/null || true
+          rm -f "$pidf"
+          die "échec du démarrage de l'admin — voir $log"
+        fi
+        local ver="dev"
+        [[ -s "$REPO_DIR/VERSION" ]] && ver="$(tr -d '[:space:]' < "$REPO_DIR/VERSION")"
+        echo "✓ interface admin démarrée (pid $(cat "$pidf"), port $port, log $log)"
+        echo "  → http://127.0.0.1:$port"
+        echo "  repo $REPO_DIR · version $ver"
+        if [[ "$port" == "4877" ]]; then
+          echo "  note : 4877 = admin stable/worktree ; sandbox → GWSA_ADMIN_PORT=<n> depuis le déploiement"
+        fi
+      fi
+      [[ -z "${GWSA_ADMIN_NO_OPEN:-}" ]] && open "http://127.0.0.1:$port" 2>/dev/null || true ;;
+    *) die "usage : $SELF admin [stop]" ;;
+  esac
+}
+
+cmd_broker() { # mag broker [status|stop] — piloter le broker de CE couloir
+  # Le broker démarre tout seul (gateway/executor.py) et ne s'arrêtait jamais :
+  # après un déploiement, l'ancien code restait servi (fiche 0023). Le pidfile
+  # est nommé d'après GWSA_ROOT *et* le port : deux versions branchées en même
+  # temps partagent les comptes mais pas leur broker — sans le port dans le nom,
+  # on arrêterait celui du voisin (fiche 0025).
+  local port="${GWSA_BROKER_PORT:-4878}"
+  local pidf="$GWSA_ROOT/.broker-$port.pid"
+  local pid=""
+  if [[ -f "$pidf" ]]; then pid="$(cat "$pidf" 2>/dev/null || true)"; fi
+
+  # Un pid vivant ne suffit PAS : les pids sont recyclés, et un pidfile périmé
+  # pointerait un process innocent qu'on tuerait. On exige la signature du broker.
+  is_broker_pid() {
+    [[ -n "${1:-}" ]] || return 1
+    kill -0 "$1" 2>/dev/null || return 1
+    ps -p "$1" -o command= 2>/dev/null | grep -q "gateway.broker_server"
+  }
+  # Un broker lancé AVANT cette version n'a pas de pidfile : sans ce test, on
+  # annoncerait « arrêté » alors qu'il écoute — et qu'il sert l'ancien code.
+  port_listening() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+
+  case "${1:-status}" in
+    status)
+      if is_broker_pid "$pid"; then
+        echo "✓ broker en route — pid $pid, port $port, root $GWSA_ROOT"
+      elif [[ -n "$pid" ]]; then
+        echo "broker arrêté — pidfile obsolète ($pidf)"
+      elif port_listening "$port"; then
+        echo "⚠ un broker écoute sur $port SANS pidfile (démarré avant cette version) — le relancer pour le rendre pilotable"
+      else
+        echo "broker arrêté — port $port, root $GWSA_ROOT"
+      fi ;;
+    stop)
+      if is_broker_pid "$pid"; then
+        kill "$pid" 2>/dev/null || true
+        local waited=0
+        while kill -0 "$pid" 2>/dev/null && [[ "$waited" -lt 25 ]]; do
+          sleep 0.2; waited=$((waited + 1))
+        done
+        if kill -0 "$pid" 2>/dev/null; then kill -9 "$pid" 2>/dev/null || true; fi
+        echo "✓ broker arrêté (pid $pid)."
+      elif port_listening "$port"; then
+        echo "⚠ un broker écoute sur $port sans pidfile — arrêt impossible proprement."
+        echo "  le repérer : ps ax | grep gateway.broker_server"
+      else
+        echo "broker déjà arrêté."
+      fi
+      rm -f "$pidf" ;;
+    *) die "usage : $SELF broker [status|stop]" ;;
+  esac
+}
+
+# ── $SELF dev — couloirs de développement temporaires ─────────────────────────
+DEV_DEPLOY_ROOT="${GWSA_DEPLOY_ROOT:-$HOME/.local/share/google-mcp}"
+DEV_PROD_ROOT="${HOME}/.config/gws-accounts"
+DEV_ISOLATED_ROOT="${HOME}/.config/gws-accounts-dev"
+DEV_BROKER_BASE=4880
+
+dev_source_repo() { # dépôt git du répertoire courant, sinon le repo de ce mag
+  if git -C "${PWD}" rev-parse --git-dir >/dev/null 2>&1; then
+    git -C "${PWD}" rev-parse --show-toplevel
+  else
+    echo "$REPO_DIR"
+  fi
+}
+
+dev_sanitize_part() { # branche → segment d'id (lettres, chiffres, tirets)
+  local s="$1"
+  s="${s//\//-}"
+  s="${s// /-}"
+  printf '%s' "$s" | tr -cd 'A-Za-z0-9-'
+}
+
+dev_version_dir() { printf '%s/%s' "$DEV_DEPLOY_ROOT" "$1"; }
+
+dev_is_dev_id() { [[ "$1" == dev-* ]]; }
+
+dev_read_meta() { # dev_read_meta <dir> <clé> — lit un champ de .dev-meta.json
+  local dir="$1" key="$2"
+  [[ -f "$dir/.dev-meta.json" ]] || return 1
+  "$SYS_PYTHON" - "$dir/.dev-meta.json" "$key" <<'PYEOF'
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+v = d.get(sys.argv[2])
+if v is not None:
+    print(v)
+PYEOF
+}
+
+dev_collect_ports() { # ports broker déjà attribués (meta dev + configs MCP)
+  local d p
+  if [[ -d "$DEV_DEPLOY_ROOT" ]]; then
+    for d in "$DEV_DEPLOY_ROOT"/dev-*/; do
+      [[ -d "$d" ]] || continue
+      p="$(dev_read_meta "$d" broker_port 2>/dev/null || true)"
+      [[ -n "$p" ]] && echo "$p"
+    done
+  fi
+  "$SYS_PYTHON" - <<'PYEOF'
+import json, os, glob
+
+def ports_from(path):
+    if not os.path.isfile(path):
+        return
+    try:
+        data = json.load(open(path, encoding="utf-8"))
+    except Exception:
+        return
+    for srv in (data.get("mcpServers") or {}).values():
+        if not isinstance(srv, dict):
+            continue
+        cmd = srv.get("command") or ""
+        if os.path.basename(cmd) != "google-mcp":
+            continue
+        env = srv.get("env") or {}
+        p = env.get("GWSA_BROKER_PORT")
+        if p:
+            print(p)
+
+home = os.path.expanduser("~")
+paths = [
+    os.path.join(home, ".cursor", "mcp.json"),
+    os.path.join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json"),
+    os.path.join(home, ".claude.json"),
+]
+xdg = os.environ.get("XDG_CONFIG_HOME") or os.path.join(home, ".config")
+paths.append(os.path.join(xdg, "Claude", "claude_desktop_config.json"))
+for p in paths:
+    ports_from(p)
+for p in glob.glob(os.path.join(home, ".claude", "projects", "*", ".mcp.json")):
+    ports_from(p)
+PYEOF
+}
+
+dev_allocate_port() { # premier port libre ≥ DEV_BROKER_BASE
+  local used p="$DEV_BROKER_BASE"
+  local taken
+  taken="$(dev_collect_ports | sort -nu | tr '\n' ' ')"
+  while :; do
+    if [[ " $taken " != *" $p "* ]]; then
+      if ! (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null; then
+        echo "$p"
+        return 0
+      fi
+    fi
+    p=$((p + 1))
+    [[ "$p" -le 65535 ]] || die "plus de port broker libre (≥ $DEV_BROKER_BASE)"
+  done
+}
+
+dev_sync_tree() { # dev_sync_tree <src> <dst> — copie le clone (arbre de travail inclus)
+  local src="$1" dst="$2"
+  mkdir -p "$dst"
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete \
+      --exclude '.git/' \
+      --exclude '.venv/' \
+      --exclude '__pycache__/' \
+      --exclude 'node_modules/' \
+      "$src/" "$dst/"
+  else
+    find "$dst" -mindepth 1 -maxdepth 1 ! -name '.dev-meta.json' -exec rm -rf {} +
+    tar -C "$src" \
+      --exclude='.git' --exclude='.venv' --exclude='__pycache__' --exclude='node_modules' \
+      -cf - . | tar -C "$dst" -xf -
+  fi
+}
+
+dev_broker_running() { # dev_broker_running <gwsa_root> <port> → affiche pid ou rien
+  local root="$1" port="$2" pidf="$root/.broker-$port.pid" pid=""
+  [[ -f "$pidf" ]] && pid="$(cat "$pidf" 2>/dev/null || true)"
+  [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null \
+    && ps -p "$pid" -o command= 2>/dev/null | grep -q "gateway.broker_server" \
+    && { echo "$pid"; return 0; }
+  if (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
+    echo "listening"
+    return 0
+  fi
+  return 1
+}
+
+dev_admin_status() {
+  local port="${GWSA_ADMIN_PORT:-4877}" pidf="$GWSA_ROOT/.admin.pid" pid=""
+  [[ -f "$pidf" ]] && pid="$(cat "$pidf" 2>/dev/null || true)"
+  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null \
+    && ps -p "$pid" -o command= 2>/dev/null | grep -q "admin/server.js"; then
+    echo "admin en route (pid $pid, port $port, root $GWSA_ROOT)"
+    return 0
+  fi
+  if (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
+    echo "admin écoute sur $port (hors pidfile $GWSA_ROOT)"
+    return 0
+  fi
+  echo "admin arrêté (port $port partagé entre toutes les versions)"
+}
+
+cmd_dev_deploy() {
+  local isolated=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --isolated) isolated=1 ;;
+      -h|--help) echo "usage : $SELF dev deploy [--isolated]"; return 0 ;;
+      *) die "usage : $SELF dev deploy [--isolated]" ;;
+    esac
+    shift
+  done
+  local repo branch sha part id target port gwsa_root
+  repo="$(dev_source_repo)"
+  git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 \
+    || die "pas de dépôt git — lance depuis ton clone (actuel : $repo)"
+  branch="$(git -C "$repo" rev-parse --abbrev-ref HEAD)"
+  sha="$(git -C "$repo" rev-parse --short HEAD)"
+  part="$(dev_sanitize_part "$branch")"
+  [[ -n "$part" ]] || part="branch"
+  id="dev-${part}-${sha}"
+  target="$(dev_version_dir "$id")"
+  if [[ -n "$isolated" ]]; then
+    gwsa_root="$DEV_ISOLATED_ROOT"
+  else
+    gwsa_root="${GWSA_ROOT:-$DEV_PROD_ROOT}"
+  fi
+
+  if port="$(dev_read_meta "$target" broker_port 2>/dev/null)"; then
+    : # réutilise le port d'un déploiement précédent du même id
+  else
+    port="$(dev_allocate_port)"
+  fi
+
+  mkdir -p "$DEV_DEPLOY_ROOT"
+  echo "→ Déploiement dev « $id »"
+  echo "  source     : $repo ($branch @ $sha)"
+  echo "  cible      : $target"
+  echo "  broker     : port $port"
+  echo "  GWSA_ROOT  : $gwsa_root$([[ -n "$isolated" ]] && echo ' (isolé)' || echo ' (comptes partagés avec prod)')"
+  dev_sync_tree "$repo" "$target"
+  printf '%s\n' "$id" > "$target/VERSION"
+  printf '%s\n' "$repo" > "$target/.source"
+  "$SYS_PYTHON" - "$target/.dev-meta.json" "$id" "$branch" "$sha" "$repo" "$port" "$gwsa_root" "$isolated" <<'PYEOF'
+import json, sys, time
+path, vid, branch, sha, source, port, groot, isolated = sys.argv[1:9]
+meta = {
+    "id": vid,
+    "branch": branch,
+    "sha": sha,
+    "source": source,
+    "deployed_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+    "broker_port": int(port),
+    "gwsa_root": groot,
+    "isolated": bool(isolated),
+}
+json.dump(meta, open(path, "w", encoding="utf-8"), indent=2)
+PYEOF
+
+  if [[ -n "$isolated" ]]; then
+    # Couloir isolé : comptes séparés de la prod, mais même app OAuth.
+    # Sans client_secret.json, « $SELF add » refuse immédiatement.
+    mkdir -p "$gwsa_root"
+    if [[ ! -f "$gwsa_root/client_secret.json" ]]; then
+      if [[ -f "$DEV_PROD_ROOT/client_secret.json" ]]; then
+        cp "$DEV_PROD_ROOT/client_secret.json" "$gwsa_root/client_secret.json"
+        chmod 600 "$gwsa_root/client_secret.json" 2>/dev/null || true
+        echo "  → OAuth (client_secret.json) copié depuis $DEV_PROD_ROOT (pas les tokens)"
+      else
+        echo "  ⚠ client_secret.json absent de $DEV_PROD_ROOT"
+        echo "    Avant « $SELF add » : placer client_secret.json dans $gwsa_root"
+        echo "    (suivre docs/setup-oauth.md, ou copier depuis un root déjà provisionné)."
+      fi
+    fi
+  fi
+
+  echo
+  echo "✓ Version dev déployée — le symlink « current » n'a PAS bougé."
+  echo
+  echo "Prochaines étapes :"
+  echo
+  echo "  1. Brancher un client MCP sur cette version :"
+  echo "       $SELF dev use $id --cursor --apply"
+  echo "     ou Claude Desktop (propage GWSA_ROOT du couloir) :"
+  echo "       $SELF dev use $id --claude-desktop --apply"
+  echo
+  echo "  2. Redémarrer le client (Cursor : recharger MCP ; Desktop : Cmd-Q)."
+  echo
+  echo "  3. Vérifier :"
+  echo "       $SELF dev status $id"
+  echo
+  echo "  4. mag / broker de CETTE version (depuis n'importe où) :"
+  echo "       GWSA_ROOT=$gwsa_root GWSA_BROKER_PORT=$port $target/bin/mag broker status"
+  echo
+  echo "Note : l'admin web ($SELF admin) partage le port ${GWSA_ADMIN_PORT:-4877} — une seule"
+  echo "instance à la fois. Les versions dev réutilisent les comptes prod sauf --isolated."
+  if [[ -n "$isolated" ]]; then
+    echo "  → couloir isolé ($gwsa_root) : connecter un compte de test avec"
+    echo "       GWSA_ROOT=$gwsa_root $target/bin/mag add <alias>"
+  fi
+}
+
+cmd_dev_list() {
+  [[ $# -eq 0 ]] || die "« $SELF dev list » ne prend aucun argument (reçu : $*)"
+  local cur="" d v kind port groot
+  echo "Versions (~/.local/share/google-mcp/)"
+  if [[ ! -d "$DEV_DEPLOY_ROOT" ]]; then
+    echo "  (aucun déploiement)"
+  else
+    [[ -L "$DEV_DEPLOY_ROOT/current" ]] && cur="$(basename "$(readlink "$DEV_DEPLOY_ROOT/current")")"
+    for d in "$DEV_DEPLOY_ROOT"/*/; do
+      [[ -d "$d" ]] || continue
+      v="$(basename "$d")"
+      [[ "$v" == "current" ]] && continue
+      if dev_is_dev_id "$v"; then kind="dev"; else kind="stable"; fi
+      port="$(dev_read_meta "$d" broker_port 2>/dev/null || true)"
+      [[ -z "$port" ]] && port="4878"
+      groot="$(dev_read_meta "$d" gwsa_root 2>/dev/null || true)"
+      [[ -z "$groot" ]] && groot="$DEV_PROD_ROOT"
+      if [[ "$v" == "$cur" ]]; then
+        printf '  * %-28s %-6s  port %-5s  %s\n' "$v" "($kind)" "$port" "$d"
+      else
+        printf '    %-28s %-6s  port %-5s  %s\n' "$v" "($kind)" "$port" "$d"
+      fi
+      printf '      GWSA_ROOT %s\n' "$groot"
+    done
+  fi
+  echo
+  echo "Configurations client (entrées google-mcp)"
+  "$SYS_PYTHON" - "$DEV_DEPLOY_ROOT" <<'PYEOF'
+import json, os, glob, sys
+
+deploy_root = os.path.expanduser(sys.argv[1])
+home = os.path.expanduser("~")
+
+def resolve_version(path):
+    path = os.path.realpath(path)
+    if path.startswith(deploy_root + os.sep):
+        parts = path[len(deploy_root) + 1 :].split(os.sep)
+        if parts:
+            return parts[0]
+    if os.path.basename(os.path.dirname(path)) == "bin":
+        parent = os.path.dirname(os.path.dirname(path))
+        if os.path.isfile(os.path.join(parent, "VERSION")):
+            return open(os.path.join(parent, "VERSION"), encoding="utf-8").read().strip()
+    return "dev" if "VERSION" not in os.listdir(os.path.dirname(os.path.dirname(path))) else "?"
+
+def scan_file(label, path):
+    if not os.path.isfile(path):
+        return
+    try:
+        data = json.load(open(path, encoding="utf-8"))
+    except Exception:
+        print(f"  {label} ({path}) — JSON illisible")
+        return
+    found = False
+    for name, srv in sorted((data.get("mcpServers") or {}).items()):
+        if not isinstance(srv, dict):
+            continue
+        cmd = srv.get("command") or ""
+        if os.path.basename(cmd) != "google-mcp":
+            continue
+        found = True
+        env = srv.get("env") or {}
+        port = env.get("GWSA_BROKER_PORT", "4878")
+        client = env.get("GWSA_CLIENT", "?")
+        ver = resolve_version(cmd)
+        print(f"  {label}")
+        print(f"    {path}")
+        print(f"    « {name} » → {cmd}")
+        print(f"    version {ver} · client {client} · broker port {port}")
+    if not found:
+        print(f"  {label} ({path}) — pas d'entrée google-mcp")
+
+scan_file("Cursor", os.path.join(home, ".cursor", "mcp.json"))
+scan_file("Claude Desktop", os.path.join(
+    home, "Library", "Application Support", "Claude", "claude_desktop_config.json"))
+xdg = os.environ.get("XDG_CONFIG_HOME") or os.path.join(home, ".config")
+scan_file("Claude Desktop (xdg)", os.path.join(xdg, "Claude", "claude_desktop_config.json"))
+scan_file("Claude Code", os.path.join(home, ".claude.json"))
+for p in sorted(glob.glob(os.path.join(home, ".claude", "projects", "*", ".mcp.json"))):
+    scan_file("Claude Code (projet)", p)
+PYEOF
+}
+
+cmd_dev_status() {
+  local filter="${1:-}"
+  [[ $# -le 1 ]] || die "usage : $SELF dev status [id]"
+  local d v port groot pid admin_port="${GWSA_ADMIN_PORT:-4877}"
+  echo "Admin (partagé, port $admin_port)"
+  dev_admin_status
+  echo
+  if [[ -n "$filter" ]]; then
+    [[ -d "$(dev_version_dir "$filter")" ]] || die "version « $filter » introuvable ($SELF dev list)"
+    echo "Version $filter"
+    d="$(dev_version_dir "$filter")"
+    port="$(dev_read_meta "$d" broker_port 2>/dev/null || echo 4878)"
+    groot="$(dev_read_meta "$d" gwsa_root 2>/dev/null || echo "$DEV_PROD_ROOT")"
+    if pid="$(dev_broker_running "$groot" "$port" 2>/dev/null)"; then
+      [[ "$pid" == listening ]] && echo "  broker : ⚠ écoute sur $port sans pidfile ($groot)" \
+        || echo "  broker : ✓ pid $pid, port $port, root $groot"
+    else
+      echo "  broker : arrêté (port $port, root $groot)"
+    fi
+    return 0
+  fi
+  echo "Brokers par version dev"
+  if [[ ! -d "$DEV_DEPLOY_ROOT" ]]; then
+    echo "  (aucune version dev)"
+    return 0
+  fi
+  local any=0
+  for d in "$DEV_DEPLOY_ROOT"/dev-*/; do
+    [[ -d "$d" ]] || continue
+    any=1
+    v="$(basename "$d")"
+    port="$(dev_read_meta "$d" broker_port 2>/dev/null || echo 4878)"
+    groot="$(dev_read_meta "$d" gwsa_root 2>/dev/null || echo "$DEV_PROD_ROOT")"
+    if pid="$(dev_broker_running "$groot" "$port" 2>/dev/null)"; then
+      [[ "$pid" == listening ]] && printf '  %-28s broker ⚠ port %s (sans pidfile)\n' "$v" "$port" \
+        || printf '  %-28s broker ✓ pid %s port %s\n' "$v" "$pid" "$port"
+    else
+      printf '  %-28s broker arrêté (port %s)\n' "$v" "$port"
+    fi
+  done
+  [[ $any -eq 1 ]] || echo "  (aucune version dev — $SELF dev deploy)"
+}
+
+cmd_dev_use() {
+  local id="" client="" apply=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --cursor) client="cursor" ;;
+      --claude-desktop) client="claude-desktop" ;;
+      --apply) apply=1 ;;
+      -h|--help)
+        echo "usage : $SELF dev use <id> --cursor [--apply]"
+        echo "        $SELF dev use <id> --claude-desktop [--apply]"
+        return 0 ;;
+      *)
+        [[ -z "$id" ]] && id="$1" || die "usage : $SELF dev use <id> --cursor [--apply]"
+        ;;
+    esac
+    shift
+  done
+  [[ -n "$id" && -n "$client" ]] || die "usage : $SELF dev use <id> --cursor [--apply]"
+  local target mcp port groot server_name cfg
+  target="$(dev_version_dir "$id")"
+  [[ -d "$target" ]] || die "version « $id » introuvable — $SELF dev list"
+  mcp="$target/bin/google-mcp"
+  [[ -x "$mcp" ]] || die "binaire MCP absent : $mcp"
+  port="$(dev_read_meta "$target" broker_port 2>/dev/null || echo 4880)"
+  groot="$(dev_read_meta "$target" gwsa_root 2>/dev/null || echo "$DEV_PROD_ROOT")"
+  server_name="google-mcp-$id"
+
+  case "$client" in
+    cursor) cfg="${GWSA_CURSOR_CONFIG:-$HOME/.cursor/mcp.json}" ;;
+    claude-desktop)
+      case "$(uname -s)" in
+        Darwin) cfg="${GWSA_DESKTOP_CONFIG:-$HOME/Library/Application Support/Claude/claude_desktop_config.json}" ;;
+        Linux)  cfg="${GWSA_DESKTOP_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/Claude/claude_desktop_config.json}" ;;
+        *) die "OS non géré — exporte GWSA_DESKTOP_CONFIG" ;;
+      esac ;;
+  esac
+
+  local snippet
+  snippet="$(cat <<EOF
+{
+  "mcpServers": {
+    "$server_name": {
+      "command": "$mcp",
+      "env": {
+        "GWSA_CLIENT": "$client",
+        "GWSA_BROKER_PORT": "$port",
+        "GWSA_ROOT": "$groot"
+      }
+    }
+  }
+}
+EOF
+)"
+
+  if [[ -z "$apply" ]]; then
+    echo "Snippet MCP ($client) — fusionne dans $cfg :"
+    echo
+    echo "$snippet"
+    echo
+    echo "Relance avec --apply pour écrire (backup horodaté, fusion idempotente)."
+    return 0
+  fi
+
+  MCP_BIN="$mcp" SERVER_NAME="$server_name" GWSA_CLIENT="$client" \
+    BROKER_PORT="$port" GWSA_ROOT_CFG="$groot" CONFIG_PATH="$cfg" \
+    "$SYS_PYTHON" - <<'PYEOF'
+import json, os, sys, tempfile, time
+
+cfg = os.environ["CONFIG_PATH"]
+name = os.environ["SERVER_NAME"]
+port = os.environ["BROKER_PORT"]
+entry = {
+    "command": os.environ["MCP_BIN"],
+    "env": {
+        "GWSA_CLIENT": os.environ["GWSA_CLIENT"],
+        "GWSA_BROKER_PORT": port,
+        "GWSA_ROOT": os.environ["GWSA_ROOT_CFG"],
+    },
+}
+data = {}
+if os.path.exists(cfg):
+    raw = open(cfg, encoding="utf-8").read().strip()
+    if raw:
+        data = json.loads(raw)
+servers = data.setdefault("mcpServers", {})
+servers[name] = entry
+rendered = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+backup = ""
+if os.path.exists(cfg):
+    backup = f"{cfg}.bak-{time.strftime('%Y%m%d-%H%M%S')}"
+    open(backup, "w", encoding="utf-8").write(open(cfg, encoding="utf-8").read())
+os.makedirs(os.path.dirname(cfg) or ".", exist_ok=True)
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(cfg) or ".", prefix=".mcpcfg-")
+with os.fdopen(fd, "w", encoding="utf-8") as f:
+    f.write(rendered)
+os.replace(tmp, cfg)
+print(f"✓ entrée « {name} » écrite dans {cfg}")
+if backup:
+    print(f"  backup : {backup}")
+PYEOF
+  echo "→ Redémarre $client pour recharger le serveur MCP."
+}
+
+cmd_dev_test() {
+  local no_deploy="" isolated="" open_browser=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --no-deploy) no_deploy=1 ;;
+      --isolated) isolated=1 ;;
+      --open) open_browser=1 ;;
+      -h|--help)
+        cat <<EOF
+usage : $SELF dev test [--no-deploy] [--isolated] [--open]
+
+Déploie le clone courant (sauf --no-deploy), redémarre l'admin sur le port
+partagé, et affiche un résumé de validation locale.
+
+  --no-deploy   ne pas relancer « $SELF dev deploy » (réutilise le déploiement existant)
+  --isolated    couloir sans comptes prod (transmis à deploy)
+  --open        ouvrir http://127.0.0.1:4877 dans le navigateur (macOS)
+EOF
+        return 0
+        ;;
+      *) die "usage : $SELF dev test [--no-deploy] [--isolated] [--open]" ;;
+    esac
+    shift
+  done
+  local repo branch sha part id target port groot gwsa_bin admin_port admin_url
+  repo="$(dev_source_repo)"
+  git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 \
+    || die "pas de dépôt git — lance depuis ton clone (actuel : $repo)"
+  branch="$(git -C "$repo" rev-parse --abbrev-ref HEAD)"
+  sha="$(git -C "$repo" rev-parse --short HEAD)"
+  part="$(dev_sanitize_part "$branch")"
+  [[ -n "$part" ]] || part="branch"
+  id="dev-${part}-${sha}"
+
+  echo "→ Test local dev"
+  echo "  worktree   : $repo"
+  echo "  branche    : $branch"
+  echo "  commit     : $sha"
+  echo "  id déploy  : $id"
+  echo
+
+  if [[ -z "$no_deploy" ]]; then
+    if [[ -n "$isolated" ]]; then
+      cmd_dev_deploy --isolated
+    else
+      cmd_dev_deploy
+    fi
+    echo
+  else
+    echo "  (déploiement ignoré — --no-deploy)"
+    echo
+  fi
+
+  target="$(dev_version_dir "$id")"
+  [[ -d "$target" ]] || die "version « $id » introuvable — retire --no-deploy ou lance « $SELF dev deploy »"
+  gwsa_bin="$target/bin/mag"
+  [[ -x "$gwsa_bin" ]] || die "mag absent dans le déploiement : $gwsa_bin"
+  port="$(dev_read_meta "$target" broker_port 2>/dev/null || echo 4878)"
+  groot="$(dev_read_meta "$target" gwsa_root 2>/dev/null || echo "$DEV_PROD_ROOT")"
+  admin_port="${GWSA_ADMIN_PORT:-4877}"
+  admin_url="http://127.0.0.1:${admin_port}"
+
+  echo "→ Redémarrage admin (port $admin_port, code déployé)"
+  GWSA_ADMIN_PORT="$admin_port" GWSA_ROOT="$groot" "$gwsa_bin" admin stop
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -ti "tcp:$admin_port" -sTCP:LISTEN 2>/dev/null | xargs kill 2>/dev/null || true
+    sleep 0.2
+  fi
+  if [[ -n "$open_browser" ]]; then
+    GWSA_ADMIN_PORT="$admin_port" GWSA_ROOT="$groot" "$gwsa_bin" admin
+  else
+    GWSA_ADMIN_NO_OPEN=1 GWSA_ADMIN_PORT="$admin_port" GWSA_ROOT="$groot" "$gwsa_bin" admin
+  fi
+
+  local admin_pid admin_ps marker_ok marker_msg curl_out attempt
+  sleep 0.5
+  admin_pid=""
+  if [[ -f "$groot/.admin.pid" ]]; then
+    admin_pid="$(cat "$groot/.admin.pid" 2>/dev/null || true)"
+  fi
+  if [[ -n "$admin_pid" ]] && kill -0 "$admin_pid" 2>/dev/null; then
+    admin_ps="$(ps -p "$admin_pid" -o command= 2>/dev/null || true)"
+  else
+    admin_pid="$(lsof -ti "tcp:$admin_port" -sTCP:LISTEN 2>/dev/null | head -1 || true)"
+    [[ -n "$admin_pid" ]] && admin_ps="$(ps -p "$admin_pid" -o command= 2>/dev/null || true)"
+  fi
+
+  marker_ok="non"
+  marker_msg="admin injoignable"
+  if command -v curl >/dev/null 2>&1; then
+    curl_out=""
+    for attempt in 1 2 3 4 5 6; do
+      curl_out="$(curl -sf "$admin_url/" 2>/dev/null || true)"
+      if [[ -n "$curl_out" ]]; then
+        if grep -qF 'id="afSearchHits"' <<< "$curl_out"; then
+          marker_ok="oui"
+          marker_msg='marqueur PR afSearchHits présent'
+          break
+        fi
+        marker_msg='page servie mais afSearchHits absent'
+      fi
+      [[ "$attempt" -lt 6 ]] && sleep 0.4
+    done
+  else
+    marker_msg="curl absent — vérification manuelle"
+  fi
+
+  echo
+  echo "══════════════════════════════════════════════════════════════"
+  echo "  Résumé — test local"
+  echo "══════════════════════════════════════════════════════════════"
+  echo "  Déploiement : $id"
+  echo "  Source       : $repo ($branch @ $sha)"
+  echo "  Admin        : $admin_url"
+  echo "  GWSA_ROOT    : $groot"
+  echo "  Broker       : port $port"
+  echo "  Marqueur PR  : $marker_ok — $marker_msg"
+  echo "  Process admin:"
+  if [[ -n "$admin_ps" ]]; then
+    echo "    $admin_ps"
+  else
+    echo "    (introuvable)"
+  fi
+  echo "══════════════════════════════════════════════════════════════"
+  echo
+  echo "Commande à recopier :"
+  local oneliner="./bin/mag dev test"
+  [[ -n "$isolated" ]] && oneliner+=" --isolated"
+  [[ -n "$no_deploy" ]] && oneliner+=" --no-deploy"
+  [[ -n "$open_browser" ]] && oneliner+=" --open"
+  echo "  $oneliner"
+  echo
+}
+
+cmd_dev_remove() {
+  local id="${1:-}"
+  [[ $# -eq 1 ]] || die "usage : $SELF dev remove <id>"
+  dev_is_dev_id "$id" || die "« $id » n'est pas une version dev (refus de supprimer une stable)"
+  local target groot port
+  target="$(dev_version_dir "$id")"
+  [[ -d "$target" ]] || die "version « $id » introuvable"
+  groot="$(dev_read_meta "$target" gwsa_root 2>/dev/null || echo "$DEV_PROD_ROOT")"
+  port="$(dev_read_meta "$target" broker_port 2>/dev/null || echo 4880)"
+  if pid="$(dev_broker_running "$groot" "$port" 2>/dev/null)" && [[ "$pid" != listening ]]; then
+    kill "$pid" 2>/dev/null || true
+    rm -f "$groot/.broker-$port.pid"
+    echo "✓ broker arrêté (pid $pid)"
+  fi
+  rm -rf "$target"
+  echo "✓ version dev « $id » supprimée ($target)"
+  echo "  Pense à retirer l'entrée MCP du client si tu l'avais branchée ($SELF dev list)."
+}
+
+cmd_dev() {
+  [[ $# -ge 1 ]] || die "usage : $SELF dev <deploy|test|list|status|use|remove> …"
+  case "$1" in
+    deploy) shift; cmd_dev_deploy "$@" ;;
+    test)   shift; cmd_dev_test "$@" ;;
+    list)   shift; cmd_dev_list "$@" ;;
+    status) shift; cmd_dev_status "$@" ;;
+    use)    shift; cmd_dev_use "$@" ;;
+    remove) shift; cmd_dev_remove "$@" ;;
+    -h|--help)
+      echo "$SELF dev — couloirs de développement temporaires"
+      echo "  deploy [--isolated]     déployer le clone courant"
+      echo "  test [--no-deploy] [--isolated] [--open]"
+      echo "                          déployer + redémarrer l'admin + résumé"
+      echo "  list                    versions + configs client"
+      echo "  status [id]             brokers / admin"
+      echo "  use <id> --cursor [--apply]"
+      echo "  remove <id>             supprimer une version dev"
+      ;;
+    *) die "sous-commande dev inconnue « $1 » (deploy|test|list|status|use|remove)" ;;
+  esac
+}
+
+cmd_update() { # mag update [--check|--to <version>|--force] — installer la version publiée
+  local script="$REPO_DIR/scripts/update.sh"
+  [[ -x "$script" ]] || die "script de mise à jour introuvable ($script)"
+  exec "$script" "$@"
+}
+
+cmd_release() { # mag release [patch|minor|major|--print] — publier une version
+  # Publier demande le dépôt SOURCE. Une copie installée n'a pas de .git, mais
+  # deploy-local.sh y a noté le chemin du clone (.source) — même relais que
+  # update.sh (fiches 0029, 0030).
+  local root="$REPO_DIR"
+  if ! git -C "$root" rev-parse --git-dir >/dev/null 2>&1; then
+    [[ -s "$root/.source" ]] \
+      || die "publier demande le dépôt source : ni .git ni .source dans $root — lance « ./scripts/release.sh » depuis ton clone"
+    root="$(cat "$root/.source")"
+    [[ -d "$root" ]] || die "clone source « $root » introuvable (noté dans $REPO_DIR/.source)"
+  fi
+  local script="$root/scripts/release.sh"
+  [[ -x "$script" ]] || die "script de publication introuvable ($script)"
+  exec "$script" "$@"
+}
+
+cmd_remove() {
+  local alias; alias="$(resolve_alias "$1")" || exit
+  check_alias "$alias"
+  local dir; dir="$(profile_dir "$alias")"
+  [[ -d "$dir" ]] || die "profil inconnu « $alias »"
+  local cfg
+  cfg="$(REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.vault import gws_config_dir
+print(gws_config_dir(sys.argv[1]))
+" "$alias" 2>/dev/null || echo "$dir")"
+  GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$cfg" gws auth logout >/dev/null 2>&1 || true
+  rm -rf "$dir"
+  REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.vault import remove_vault_alias
+remove_vault_alias(sys.argv[1])
+" "$alias" 2>/dev/null || rm -rf "$GWSA_ROOT/.vault/$alias"
+  echo "✓ Profil « $alias » supprimé."
+}
+
+main() {
+  [[ $# -ge 1 ]] || { usage; exit 3; }
+  case "$1" in
+    -h|--help|help) usage ;;
+    add)    shift; [[ $# -ge 1 ]] || die "usage : $SELF add <alias> [email-attendu] [options gws auth login]"; cmd_add "$@" ;;
+    list)   shift; [[ $# -eq 0 ]] || die "« $SELF list » ne prend aucun argument (reçu : $*)"; cmd_list ;;
+    lock)   shift; [[ $# -eq 1 ]] || die "usage : $SELF lock <alias>"; cmd_lock "$@" ;;
+    unlock) shift; [[ $# -ge 1 && $# -le 2 ]] || die "usage : $SELF unlock <alias> [minutes|off]"; cmd_unlock "$@" ;;
+    policy) shift; [[ $# -ge 1 ]] || die "usage : $SELF policy <alias> [show|mode|allow|revoke|clear]"; cmd_policy "$@" ;;
+    grant)  shift; [[ $# -ge 1 ]] || die "usage : $SELF grant <alias> <dossier> [heures]"; cmd_grant "$@" ;;
+    grants) shift; [[ $# -ge 1 && $# -le 2 ]] || die "usage : $SELF grants <alias> [clear]"; cmd_grants "$@" ;;
+    session) shift; cmd_session "$@" ;;
+    elicitation) shift; cmd_elicitation "$@" ;;
+    project) shift; cmd_project "$@" ;;
+    vault) shift; cmd_vault "$@" ;;
+    strongauth)
+      shift
+      [[ $# -le 1 ]] || die "usage : $SELF strongauth on|off|status"
+      case "${1:-status}" in
+        on)  touch "$GWSA_ROOT/.strong-auth"; echo "🔐 Authentification forte ACTIVÉE : unlock/grant exigent une élicitation signée ($SELF elicitation enroll si besoin)." ;;
+        off) require_signed_elicitation '{"action":"strongauth_off"}'; rm -f "$GWSA_ROOT/.strong-auth"; echo "Authentification forte désactivée." ;;
+        status) [[ -f "$GWSA_ROOT/.strong-auth" ]] && echo "🔐 activée" || echo "désactivée" ;;
+        *) die "usage : $SELF strongauth on|off|status" ;;
+      esac ;;
+    admin)  shift; [[ $# -le 1 ]] || die "usage : $SELF admin [stop]"; cmd_admin "$@" ;;
+    broker) shift; [[ $# -le 1 ]] || die "usage : $SELF broker [status|stop]"; cmd_broker "$@" ;;
+    dev)    shift; cmd_dev "$@" ;;
+    update)  shift; cmd_update "$@" ;;
+    release) shift; cmd_release "$@" ;;
+    sandbox) shift; cmd_sandbox "$@" ;;
+    wire) shift; cmd_wire "$@" ;;
+    couloir) shift; cmd_couloir "$@" ;;
+    remove) shift; [[ $# -eq 1 ]] || die "usage : $SELF remove <alias>"; cmd_remove "$@" ;;
+    *)
+      local alias; alias="$(resolve_alias "$1")" || exit; shift
+      check_alias "$alias"
+      [[ $# -ge 1 ]] || die "usage : $SELF $alias <commande gws…> (ex. : $SELF $alias auth status)"
+      local dir; dir="$(profile_dir "$alias")"
+      [[ -d "$dir" ]] || die "profil inconnu « $alias » — le créer avec : $SELF add $alias"
+      if is_locked "$dir"; then
+        # Session unlock (GWSA_SESSION_ID) : même sémantique que le broker —
+        # un unlock de session autorise le chemin CLI direct pendant la fenêtre.
+        local session_ok=0
+        if [[ -n "${GWSA_SESSION_ID:-}" ]]; then
+          if REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import is_session_unlocked
+sys.exit(0 if is_session_unlocked(sys.argv[1], sys.argv[2]) else 1)
+" "$GWSA_SESSION_ID" "$alias" 2>/dev/null; then
+            session_ok=1
+          fi
+        fi
+        if [[ "$session_ok" -eq 0 ]]; then
+          # Journaliser le refus AVANT de mourir — même trace que les refus de
+          # policy, sinon les tentatives sur profil verrouillé restent invisibles.
+          if [[ -f "$USAGE_LOGGER" ]]; then
+            GWSA_LOG_DECISION=refus GWSA_LOG_REASON=locked \
+              "$SYS_PYTHON" "$USAGE_LOGGER" "$GWSA_ROOT" "$alias" "$@" >/dev/null 2>&1 || true
+          fi
+          if [[ -n "${GWSA_SESSION_ID:-}" ]]; then
+            die "profil « $alias » verrouillé 🔒 pour cette session — l'utilisateur doit exécuter « $SELF session unlock ${GWSA_SESSION_ID} $alias [minutes] »"
+          fi
+          die "profil « $alias » verrouillé 🔒 — accès sur demande : l'utilisateur doit d'abord exécuter « $SELF unlock $alias [minutes] » (legacy poste entier) ou « $SELF session unlock <session_id> $alias »"
+        fi
+      fi
+      if [[ -f "$dir/policy.json" ]]; then
+        [[ -f "$POLICY_CHECKER" ]] || die "policy.json présent mais contrôleur absent ($POLICY_CHECKER)"
+        "$SYS_PYTHON" "$POLICY_CHECKER" "$dir" "$@" || exit $?
+      fi
+      if [[ -f "$USAGE_LOGGER" ]]; then
+        "$SYS_PYTHON" "$USAGE_LOGGER" "$GWSA_ROOT" "$alias" "$@" >/dev/null 2>&1 || true
+      fi
+      GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$("$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, '$REPO_DIR')
+from gateway.vault import gws_config_dir
+print(gws_config_dir(sys.argv[1]))
+" "$alias")" exec gws "$@"
+      ;;
+  esac
+}
+
+main "$@"

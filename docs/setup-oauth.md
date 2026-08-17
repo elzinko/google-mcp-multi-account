@@ -88,9 +88,9 @@ compte comme « test user » **et** les tokens expirent tous les 7 jours.
 De retour dans le terminal :
 
 ```bash
-gma add perso perso.email@gmail.com     # compte n°1 : l'email épingle, le navigateur confirme
-gma add assoc assoc.email@gmail.com     # compte n°2
-gma list
+mag add perso perso.email@gmail.com     # compte n°1 : l'email épingle, le navigateur confirme
+mag add assoc assoc.email@gmail.com     # compte n°2
+mag list
 ```
 
 ## 7. Multi-comptes : rôle IAM pour chaque compte connecté
@@ -108,13 +108,13 @@ gcloud projects add-iam-policy-binding <PROJECT_ID> \
   --member=user:<adresse@gmail.com> --role=roles/serviceusage.serviceUsageConsumer
 ```
 
-À refaire pour chaque nouveau compte connecté via `gma add`. C'est la même
+À refaire pour chaque nouveau compte connecté via `mag add`. C'est la même
 liste d'adresses que les *test users* de l'étape 5 (si l'app est restée en
 Testing) : décide-la une fois, sers-t'en deux fois.
 
 **L'outillage te guide** — tu n'as pas à repérer le trou à la main :
 
-- `gma add <alias>` fait une sonde après connexion : si le compte n'a pas le
+- `mag add <alias>` fait une sonde après connexion : si le compte n'a pas le
   rôle, il **affiche directement la commande gcloud** à faire exécuter.
 - `./scripts/provision-gcp.sh status` liste **tous** les comptes connectés
   avec leur état d'accès au projet, et la commande de remédiation pour chacun

@@ -18,13 +18,13 @@ created: 2026-08-08
 > invariants `DEFAULT_POLICY`) ; **refonte doc pro** (page Prise en main,
 > architecture/threat-model/policies réécrites orientées lecteur, page Contribuer).
 > Dans le même élan (hors punch-list initiale) : **rename `gwsa → gma`**, **email au
-> lieu d'alias**, **`gma wire <client>`**.
+> lieu d'alias**, **`mag wire <client>`**.
 >
 > **Livré depuis (v1.0.1, 2026-08-10) :** rampe ADR + glossaire curé ; site public
 > **github.io** ; collision d'id 0073 **résolue** (#82 garde `0073`, #86 renumérotée
 > `0075`) ; unification doc install/OAuth + reliquats `gwsa`→`gma` (PR en cours).
 > **Reste (post-v1, non bloquant) :** préflight `gws` **bloquant** (`die`) dans
-> `install.sh` ; `gma wire cursor` ; durcissements latents (hash manifeste, borne
+> `install.sh` ; `mag wire cursor` ; durcissements latents (hash manifeste, borne
 > pièce jointe, course R-M-W session). Fiche gardée `in-progress` tant que le reliquat traîne.
 
 ## Contexte / Problème
@@ -49,7 +49,7 @@ de tests + hygiène), tous bon marché. Cette fiche les regroupe pour tirer la v
 - [ ] **`gws` durci côté `install.sh`** : préflight `command -v gws` bloquant (`die`)
       ou affiché dans le pavé final — *reste à faire (touche l'installeur, hors PR doc)*.
 - [x] **`critique.md` rafraîchi** : 17 tools (plus « 9 »), services Drive réels,
-      « git clone / pas de release » recadré (curl + releases + `gwsa update`).
+      « git clone / pas de release » recadré (curl + releases + `mag update`).
 - [ ] **Publier le site de doc** : `docs.elzinko.fr` ne résout pas (DNS introuvable) —
       architecture, ADR et le reste sont **inaccessibles au public**. `vercel.json` est
       prêt (build mkdocs) mais **rien ne déploie**. Connecter Vercel **ou** poser un
@@ -57,18 +57,18 @@ de tests + hygiène), tous bon marché. Cette fiche les regroupe pour tirer la v
 
 ### 🟠 À faire
 - [x] **Diagramme mermaid du README corrigé** (revue Codex) : `MCP→gateway→Google` ;
-      `gwsa` et la gateway se **rejoignent sur l'état** (verrous/grants/policy), l'un
+      `mag` et la gateway se **rejoignent sur l'état** (verrous/grants/policy), l'un
       n'appelle pas l'autre.
 - [x] **Diagrammes mermaid rendus sur le site** (mkdocs `custom_fences`) — étaient en
       **texte brut** (architecture + ADR-0004).
-- [x] **Exemples `gwsa add <alias> <email>`** plus parlants : l'email épingle le compte
+- [x] **Exemples `mag add <alias> <email>`** plus parlants : l'email épingle le compte
       (obligatoire sous Touch ID) ; **pas de « clé »**, c'est l'OAuth navigateur —
       README + docs/index + setup-oauth.
 - [x] **Décompte de tools aligné dans `mcp-setup.md`** (17).
 - [ ] **Rampe ADR / lisibilité zéro-contexte** : intro « c'est quoi un ADR ici » +
       **glossaire** (élicitation, broker, zone, verrou, IAM, strongauth) + **TL;DR d'une
       ligne** en tête de chaque ADR — un nouveau venu doit comprendre sans contexte.
-- [x] **Polish Quickstart** : étapes numérotées, `gws` vs `gwsa` défini (bloc Naming),
+- [x] **Polish Quickstart** : étapes numérotées, `gws` vs `mag` défini (bloc Naming),
       timing corrigé (~10 min OAuth, plus de « 3 minutes »), alias `perso` unifié
       README ↔ docs.
 - [ ] **Collision d'id 0073** (#82 transfert Drive vs #86 pagination gmail_list) —

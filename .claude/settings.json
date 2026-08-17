@@ -1,26 +1,26 @@
 {
   "permissions": {
     "ask": [
-      "Bash(gma zz:*)",
-      "Bash(./bin/gma zz:*)",
-      "Bash(gma mw:*)",
-      "Bash(./bin/gma mw:*)",
-      "Bash(gma zebra:*)",
-      "Bash(./bin/gma zebra:*)",
-      "Bash(gma unlock:*)",
-      "Bash(./bin/gma unlock:*)",
-      "Bash(gma grant:*)",
-      "Bash(./bin/gma grant:*)",
-      "Bash(gwsa zz:*)",
-      "Bash(./bin/gwsa zz:*)",
-      "Bash(gwsa mw:*)",
-      "Bash(./bin/gwsa mw:*)",
-      "Bash(gwsa zebra:*)",
-      "Bash(./bin/gwsa zebra:*)",
-      "Bash(gwsa unlock:*)",
-      "Bash(./bin/gwsa unlock:*)",
-      "Bash(gwsa grant:*)",
-      "Bash(./bin/gwsa grant:*)"
+      "Bash(mag zz:*)",
+      "Bash(./bin/mag zz:*)",
+      "Bash(mag mw:*)",
+      "Bash(./bin/mag mw:*)",
+      "Bash(mag zebra:*)",
+      "Bash(./bin/mag zebra:*)",
+      "Bash(mag unlock:*)",
+      "Bash(./bin/mag unlock:*)",
+      "Bash(mag grant:*)",
+      "Bash(./bin/mag grant:*)",
+      "Bash(mag zz:*)",
+      "Bash(./bin/mag zz:*)",
+      "Bash(mag mw:*)",
+      "Bash(./bin/mag mw:*)",
+      "Bash(mag zebra:*)",
+      "Bash(./bin/mag zebra:*)",
+      "Bash(mag unlock:*)",
+      "Bash(./bin/mag unlock:*)",
+      "Bash(mag grant:*)",
+      "Bash(./bin/mag grant:*)"
     ]
   }
 }

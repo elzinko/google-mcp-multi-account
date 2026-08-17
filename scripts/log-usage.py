@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Journalise une exécution gwsa dans ~/.config/gws-accounts/usage.jsonl.
+"""Journalise une exécution mag dans ~/.config/gws-accounts/usage.jsonl.
 
 Décision « ok » par défaut. Un refus amont (verrou) se journalise en passant
 GWSA_LOG_DECISION=refus et GWSA_LOG_REASON=locked dans l'environnement —

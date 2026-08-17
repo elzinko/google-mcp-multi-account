@@ -16,7 +16,7 @@
 | 0024 | Fiabiliser les tools Gmail/Drive du MCP — brouillon cassé, Drive sans contenu ni propriétaire | bug | P1 |  |  | ✅ shipped | #26 |
 | 0025 | Couloirs étanches — chaque version branchée parle à son propre broker | bug | P1 |  |  | ✅ shipped | #27 |
 | 0029 | Publier et mettre à jour en une commande (release semver + update façon installeur) | feature | P1 |  |  | ✅ shipped | #28 |
-| 0030 | Poste de commande versionné — gwsa update/release et le lien PATH sur la copie installée | feature | P1 |  |  | ✅ shipped | #30 |
+| 0030 | Poste de commande versionné — mag update/release et le lien PATH sur la copie installée | feature | P1 |  |  | ✅ shipped | #30 |
 | 0031 | La suite de tests ne doit jamais pouvoir toucher le PATH réel | bug | P1 |  |  | ✅ shipped | #31 |
 | 0037 | Sémantique de la suppression en zone — corbeille = suppression, racine de zone immuable, avertissement | feature | P1 |  |  | ✅ shipped | #47 |
 | 0043 | Lire, copier, téléverser — contenu Drive et pièces jointes Gmail via MCP | feature | P1 |  |  | ✅ shipped | #73 |
@@ -32,7 +32,7 @@
 | 0008 | Connexion dynamique d'un nouveau compte via élicitation forte (access_request kind=add_account) | feature | P2 |  |  | ✅ shipped | #7 |
 | 0009 | Tool MCP `setup_status` (lecture seule) + `provision-gcp.sh status --json` | feature | P2 |  |  | ✅ shipped | #11 |
 | 0010 | README en quickstart 3 étapes — le détail part dans docs/ | feature | P2 |  |  | ✅ shipped | #13 |
-| 0011 | `gwsa admin` — démarrer/arrêter l'interface web en un geste, proposé par l'élicitation | feature | P2 |  |  | ✅ shipped | #9 |
+| 0011 | `mag admin` — démarrer/arrêter l'interface web en un geste, proposé par l'élicitation | feature | P2 |  |  | ✅ shipped | #9 |
 | 0013 | Brancher le serveur MCP dans Claude Desktop en un geste (script idempotent) | feature | P2 |  |  | ✅ shipped | #15 |
 | 0016 | Porte d'entrée open-source — README copiable, SECURITY.md, licence MIT, badges | feature | P2 |  |  | ✅ shipped | #16 |
 | 0022 | Doc de critique technique lisible (forces / limites / risques) référencée au README | feature | P2 |  |  | ✅ shipped | #23 |
@@ -52,7 +52,7 @@
 | 0070 | README — quickstart + usage par persona + permissions + contribution | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
 | 0071 | GitHub metadata — description, homepage, topics + badges | chore | P2 | v0.4.0 | 0060 | ✅ shipped |  |
 | 0078 | Approbation par passkey depuis le téléphone (archi actuelle, Mac holder) | feature | P1 |  | 0077 | ✅ shipped | #113 |
-| 0001 | Élicitation signée — faire monter `gwsa strongauth` de la présence à la signature | feature | P3 |  |  | 🟠 in-progress |  |
+| 0001 | Élicitation signée — faire monter `mag strongauth` de la présence à la signature | feature | P3 |  |  | 🟠 in-progress |  |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)
 

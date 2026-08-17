@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Suite de tests de gwsa — contrôleur de policy + garde-fous du wrapper.
+# Suite de tests de mag — contrôleur de policy + garde-fous du wrapper.
 #
 # Hermétique : aucun compte réel, aucun appel réseau, aucun binaire `gws` requis
 # (le contrôleur fail closed quand gws est absent). Tout se passe dans un
@@ -11,7 +11,7 @@ set -uo pipefail
 
 cd "$(dirname "$0")/.."
 CHECKER="scripts/policy-check.py"
-GWSA="bin/gwsa"
+GWSA="bin/mag"
 
 TMP="$(mktemp -d)"
 export GWSA_ROOT="$TMP/root"
@@ -38,7 +38,7 @@ check() { # check <code-attendu> <description> <args du checker…>
   fi
 }
 
-cli() { # cli <code-attendu> <description> <args de gwsa…>
+cli() { # cli <code-attendu> <description> <args de mag…>
   local want="$1" desc="$2"; shift 2
   "$GWSA" "$@" >/dev/null 2>&1
   local got=$?
@@ -64,7 +64,7 @@ section "Syntaxe des scripts — avec le bash DU SYSTÈME (macOS = 3.2)"
 # local, avec /bin/bash et pas le bash du PATH.
 SYS_BASH="/bin/bash"
 [[ -x "$SYS_BASH" ]] || SYS_BASH="$(command -v bash)"
-for f in bin/gwsa scripts/*.sh; do
+for f in bin/mag scripts/*.sh; do
   if "$SYS_BASH" -n "$f" 2>/dev/null; then
     PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m %s : syntaxe valide (%s)\n' "$f" "$("$SYS_BASH" --version | head -1 | sed 's/.*version \([0-9.]*\).*/\1/')"
   else
@@ -183,7 +183,7 @@ PATH="$F1BIN:$PATH" \
 if [[ $? -eq 4 ]]; then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "F1 : sans CONFIG_DIR vault → refusé (le trou d'avant le fix est exercé)"; else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "F1 : sans vault, refus attendu"; fi
 
 # ── F4 (revue sécurité) : resolve_folder échappe le nom en JSON, pas d'injection ──
-# Réplique l'algo d'échappement de bin/gwsa (\ puis apostrophe pour le langage q,
+# Réplique l'algo d'échappement de bin/mag (\ puis apostrophe pour le langage q,
 # PUIS json.dumps). Un nom malveillant portant ",": doit rester DANS la valeur q,
 # jamais devenir une clé --params ; et un " ne doit pas casser le JSON.
 F4KEYS="$(python3 -c '
@@ -205,7 +205,7 @@ GP="$(python3 -c 'import json,sys; print(json.dumps({"action":"grant","alias":sy
 GT="$(printf '%s' "$GP" | python3 -c 'import json,sys; print(json.load(sys.stdin)["target"])' 2>/dev/null)"
 if [[ "$GT" == "$GTGT" ]]; then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "P1 : payload de grant en JSON — cible malveillante préservée, pas d'injection de clé"; else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "P1 : payload de grant injectable ($GT)"; fi
 
-section "Drive par zones — autorisation temporaire (élicitation gwsa grant)"
+section "Drive par zones — autorisation temporaire (élicitation mag grant)"
 policy <<'EOF'
 {"drive": {"read": true, "create": true, "update": true, "delete": false,
            "share": false, "zonesOnly": true, "writeFolders": []}}
@@ -309,9 +309,9 @@ policy <<'EOF'
 EOF
 check 0 "gmail labels create autorisé si labels:true"                    gmail users labels create --json '{}'
 
-# --- 3. Garde-fous du wrapper gwsa ------------------------------------------
+# --- 3. Garde-fous du wrapper mag ------------------------------------------
 
-section "Wrapper gwsa — validation des arguments"
+section "Wrapper mag — validation des arguments"
 rm -f "$PROFILE/policy.json"
 
 cli 3 "alias invalide (slash) rejeté"                        "bad/alias" auth status
@@ -344,7 +344,7 @@ cli 3 "policy allow sans dossier rejeté"                     policy testprof al
 cli 3 "alias '..' (path-traversal) rejeté"                   ".." auth status
 cli 3 "alias avec espace rejeté"                             "a b" auth status
 
-section "Wrapper gwsa — verrou « accès sur demande »"
+section "Wrapper mag — verrou « accès sur demande »"
 "$GWSA" lock testprof >/dev/null 2>&1
 cli 3 "profil verrouillé → toute commande refusée"           testprof gmail users messages list
 rm -f "$GWSA_ROOT/usage.jsonl"
@@ -404,7 +404,7 @@ pl = profiles_list()
 assert pl["ok"] and any(p["alias"] == alias for p in pl["profiles"]), pl
 
 r = access_request(alias, "unlock", minutes=30)
-assert r.get("elicitation") and "gma unlock" in r["suggested_command"], r
+assert r.get("elicitation") and "mag unlock" in r["suggested_command"], r
 assert not (d / ".unlock-until").exists(), "access_request ne doit pas déverrouiller"
 
 log = root / "usage.jsonl"
@@ -443,13 +443,13 @@ entries = [json.loads(x) for x in log.read_text().splitlines()]
 assert len(entries) == 4 and all(e["reason"] == "locked" for e in entries), entries
 
 r2 = access_request(alias, "grant", folder="LLM", hours=4)
-assert "gma grant" in r2["suggested_command"] and "LLM" in r2["suggested_command"], r2
+assert "mag grant" in r2["suggested_command"] and "LLM" in r2["suggested_command"], r2
 
 # add_account : élicitation pour un compte qui n'existe pas encore — aucune
 # création de profil, email obligatoire, prérequis IAM rappelés.
 r3 = access_request("nouveaucompte", "add_account", email="exemple@gmail.com")
 assert r3.get("elicitation") and r3["kind"] == "add_account", r3
-assert r3["suggested_command"] == "gma add nouveaucompte exemple@gmail.com", r3
+assert r3["suggested_command"] == "mag add nouveaucompte exemple@gmail.com", r3
 assert "sync-iam" in r3["message"], r3
 assert not (root / "nouveaucompte").exists(), "add_account ne doit rien créer"
 try:
@@ -1222,7 +1222,7 @@ assert r["ok"] and "accounts" in r and "next_actions" in r, r
 assert r["project_id"] is None and r["iam_checked"] is False, r
 assert all(a["iam"] == "unknown" for a in r["accounts"]), r
 # Profil verrouillé → commande unlock proposée ; rien n'est exécuté.
-assert any("gma unlock acct1" in a for a in r["next_actions"]), r["next_actions"]
+assert any("mag unlock acct1" in a for a in r["next_actions"]), r["next_actions"]
 assert (d / ".locked").exists() and not (d / ".unlock-until").exists(), "setup_status ne doit rien muter"
 print("ok")
 PY
@@ -1256,7 +1256,7 @@ accs = {a["alias"]: a for a in r["accounts"]}
 assert accs["acct1"]["email"] == "alice@gmail.com", accs  # cohérent avec profiles_list
 assert accs["acct2"]["email"] == "", accs
 # Profil sans .email → suggérer le geste humain qui la renseigne.
-assert any(a.startswith("gma list") for a in r["next_actions"]), r["next_actions"]
+assert any(a.startswith("mag list") for a in r["next_actions"]), r["next_actions"]
 
 # Contenu non-email → ignoré (pas de confiance aveugle dans le fichier).
 (d2 / ".email").write_text("pas-un-email\n")
@@ -1278,15 +1278,15 @@ else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m gateway/ contient un GOOGLE_WORKSPACE_CLI_CONFIG_DIR hors broker_server.py\n'
 fi
 
-# gwsa list lit .email sans gws (métadonnée posée → email affiché tel quel)
+# mag list lit .email sans gws (métadonnée posée → email affiché tel quel)
 mkdir -p "$GWSA_ROOT/emailprof"
 touch "$GWSA_ROOT/emailprof/credentials.enc"
 printf 'bob@gmail.com\n' > "$GWSA_ROOT/emailprof/.email"
 list_out="$("$GWSA" list 2>/dev/null)"   # pas de pipe direct : grep -q + pipefail = SIGPIPE
 if echo "$list_out" | grep -q 'emailprof.*bob@gmail.com'; then
-  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m gwsa list lit la métadonnée .email (aucun gws requis)\n'
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m mag list lit la métadonnée .email (aucun gws requis)\n'
 else
-  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m gwsa list devrait afficher bob@gmail.com via .email\n'
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m mag list devrait afficher bob@gmail.com via .email\n'
 fi
 
 # .email corrompu (contenu non-email) → non autoritatif : jamais affiché tel quel,
@@ -1297,7 +1297,7 @@ touch "$GWSA_ROOT/badmeta/credentials.enc"
 printf 'pas-un-email\n' > "$GWSA_ROOT/badmeta/.email"
 bad_out="$("$GWSA" list 2>/dev/null)"
 if ! echo "$bad_out" | grep -q 'pas-un-email'; then
-  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m .email corrompu ignoré par gwsa list (pas de court-circuit du backfill)\n'
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m .email corrompu ignoré par mag list (pas de court-circuit du backfill)\n'
 else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m .email corrompu ne doit pas être affiché tel quel\n'
 fi
@@ -1735,7 +1735,7 @@ PY
   && pass "version : « dev » sans VERSION, contenu du fichier sinon, « dev » si vide" \
   || fail "version : « dev » sans VERSION, contenu du fichier sinon"
 
-section "Pilotage du broker — gwsa broker status|stop"
+section "Pilotage du broker — mag broker status|stop"
 
 # Port dédié : sans ça, un vrai broker écoutant sur 4878 rendrait le test
 # « status sans pidfile » instable selon la machine.
@@ -1780,7 +1780,7 @@ reserved broker
 
 # Deux couloirs, deux brokers : arrêter l'un ne doit pas toucher l'autre.
 # Sans le port dans le nom du pidfile, le second broker écrasait le fichier du
-# premier et « gwsa broker stop » visait le mauvais process (fiche 0025).
+# premier et « mag broker stop » visait le mauvais process (fiche 0025).
 VOISIN="$GWSA_ROOT/.broker-4988.pid"
 echo "999999" > "$BPID"        # couloir courant (4977), pidfile obsolète
 echo "424242" > "$VOISIN"      # couloir voisin (4988), intact attendu
@@ -1789,7 +1789,7 @@ echo "424242" > "$VOISIN"      # couloir voisin (4988), intact attendu
   && pass "deux couloirs : stop n'efface que le pidfile de SON port" \
   || fail "deux couloirs : stop a touché le pidfile du voisin"
 
-# Et le pidfile lu par gwsa est bien celui que le broker Python écrirait.
+# Et le pidfile lu par mag est bien celui que le broker Python écrirait.
 if python3 -c '
 import os, sys
 os.environ["GWSA_BROKER_PORT"] = "4988"
@@ -1902,7 +1902,7 @@ cp scripts/release.sh scripts/update.sh scripts/deploy-local.sh \
    scripts/lib-github-release.sh scripts/install-claude-desktop.sh "$REL/scripts/"
 printf '#!/bin/sh\nexit 0\n' > "$REL/scripts/test.sh"; chmod +x "$REL/scripts/test.sh"
 printf '#!/bin/sh\necho faux-mcp\n' > "$REL/bin/google-mcp"; chmod +x "$REL/bin/google-mcp"
-cp bin/gwsa "$REL/bin/gwsa"   # embarqué dans les copies déployées (cf. link_cli)
+cp bin/mag "$REL/bin/mag"   # embarqué dans les copies déployées (cf. link_cli)
 echo "coeur" > "$REL/app.txt"
 git -C "$REL" init -q >/dev/null 2>&1
 git -C "$REL" checkout -qb main >/dev/null 2>&1
@@ -1912,11 +1912,11 @@ git -C "$REL" add -A >/dev/null 2>&1
 git -C "$REL" commit -qm "feat(x): premiere fonctionnalite" >/dev/null 2>&1
 UPDATE="$REL/scripts/update.sh"
 # Le lien « PATH » manipulé par les tests vit sous $TMP — jamais le vrai
-# /opt/homebrew/bin/gwsa. relenv le désigne systématiquement : sans ça, un
-# update.sh lancé par un test retomberait sur « command -v gwsa », donc sur le
+# /opt/homebrew/bin/mag. relenv le désigne systématiquement : sans ça, un
+# update.sh lancé par un test retomberait sur « command -v mag », donc sur le
 # lien réel de la machine.
 FAKEBIN="$TMP/fakebin"; mkdir -p "$FAKEBIN"
-LINK="$FAKEBIN/gwsa"
+LINK="$FAKEBIN/mag"
 relenv() {
   GWSA_DEPLOY_ROOT="$RELDEP" GWSA_DESKTOP_CONFIG="$RELCONF" \
   GWSA_CLI_LINK="${GWSA_CLI_LINK:-$LINK}" "$@"
@@ -2073,54 +2073,54 @@ out_u="$(relenv "$RELDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
   && pass "update : lancé depuis la copie installée, retrouve le clone via .source" \
   || fail "update : ne retrouve pas le clone depuis la copie installée"
 
-section "gwsa update / release — un seul poste de commande (fiche 0030)"
+section "mag update / release — un seul poste de commande (fiche 0030)"
 
 # De quoi publier : sans commit nouveau, release refuse (et le test ne dirait
 # rien de la délégation).
 git -C "$REL" commit -q --allow-empty -m "feat(cli): un verbe de plus" >/dev/null 2>&1
-GW="$REL/bin/gwsa"
+GW="$REL/bin/mag"
 gwenv() { GWSA_DEPLOY_ROOT="$RELDEP" GWSA_DESKTOP_CONFIG="$RELCONF" "$@"; }
 
-"$GW" help 2>&1 | grep -q "gwsa update" \
-  && "$GW" help 2>&1 | grep -q "gwsa release" \
-  && pass "gwsa help : les deux verbes sont listés" \
-  || fail "gwsa help : verbes absents"
+"$GW" help 2>&1 | grep -q "mag update" \
+  && "$GW" help 2>&1 | grep -q "mag release" \
+  && pass "mag help : les deux verbes sont listés" \
+  || fail "mag help : verbes absents"
 
 reserved update
 reserved release
 
-# délégation : gwsa update passe la main au script, arguments compris
+# délégation : mag update passe la main au script, arguments compris
 out_g="$(gwenv "$GW" update --check 2>&1)"; rc=$?
 [[ "$rc" -eq 0 && "$out_g" == *"disponible"* ]] \
-  && pass "gwsa update : délègue au script (--check transmis)" \
-  || fail "gwsa update : délégation cassée"
+  && pass "mag update : délègue au script (--check transmis)" \
+  || fail "mag update : délégation cassée"
 
 out_g="$(gwenv "$GW" release --print 2>&1)"; rc=$?
 [[ "$rc" -eq 0 && "$out_g" == *"publierait"* ]] \
-  && pass "gwsa release : délègue au script (--print transmis)" \
-  || fail "gwsa release : délégation cassée"
+  && pass "mag release : délègue au script (--print transmis)" \
+  || fail "mag release : délégation cassée"
 
 # depuis la copie installée : release retrouve le clone via .source
-out_g="$(gwenv "$RELDEP/current/bin/gwsa" release --print 2>&1)"; rc=$?
+out_g="$(gwenv "$RELDEP/current/bin/mag" release --print 2>&1)"; rc=$?
 [[ "$rc" -eq 0 && "$out_g" == *"publierait"* ]] \
-  && pass "gwsa release : depuis la copie installée, relais par .source" \
-  || fail "gwsa release : relais .source cassé"
+  && pass "mag release : depuis la copie installée, relais par .source" \
+  || fail "mag release : relais .source cassé"
 
 # … et sans .source, refus explicite plutôt qu'un comportement au hasard
 NOSRC="$TMP/nosource"
 mkdir -p "$NOSRC/bin" "$NOSRC/scripts"
-cp bin/gwsa "$NOSRC/bin/"
-out_g="$("$NOSRC/bin/gwsa" release --print 2>&1)"; rc=$?
+cp bin/mag "$NOSRC/bin/"
+out_g="$("$NOSRC/bin/mag" release --print 2>&1)"; rc=$?
 [[ "$rc" -ne 0 && "$out_g" == *".source"* ]] \
-  && pass "gwsa release : sans .git ni .source → refus qui dit quoi faire" \
-  || fail "gwsa release : devrait refuser hors dépôt source"
+  && pass "mag release : sans .git ni .source → refus qui dit quoi faire" \
+  || fail "mag release : devrait refuser hors dépôt source"
 
 section "update.sh — le lien PATH suit la version installée (fiche 0030)"
 
 # lien vers le clone (l'état posé par le quickstart) → doit passer sur current
-ln -sfn "$REL/bin/gwsa" "$LINK"
+ln -sfn "$REL/bin/mag" "$LINK"
 GWSA_CLI_LINK="$LINK" relenv "$UPDATE" --force >/dev/null 2>&1
-[[ "$(readlink "$LINK")" == "$RELDEP/current/bin/gwsa" ]] \
+[[ "$(readlink "$LINK")" == "$RELDEP/current/bin/mag" ]] \
   && pass "lien PATH : le lien vers le clone passe sur la copie installée" \
   || fail "lien PATH : pas rebranché sur current"
 
@@ -2141,7 +2141,7 @@ out_l="$(GWSA_CLI_LINK="$LINK" relenv "$UPDATE" --force 2>&1)"
 out_l="$(GWSA_DEPLOY_ROOT="$RELDEP" GWSA_DESKTOP_CONFIG="$RELCONF" "$UPDATE" --force 2>&1)"
 [[ "$out_l" == *"sans GWSA_CLI_LINK"* ]] \
   && pass "lien PATH : dépôt surchargé sans GWSA_CLI_LINK → aucun lien touché" \
-  || fail "lien PATH : un test pourrait atteindre le gwsa réel du PATH"
+  || fail "lien PATH : un test pourrait atteindre le mag réel du PATH"
 
 # fichier réel (pas un lien) → on ne touche pas non plus
 rm -f "$LINK"
@@ -2180,22 +2180,22 @@ grep -q "^github:" "$GHDEP/v0.1.0/.origin" 2>/dev/null && [[ ! -e "$GHDEP/v0.1.0
   || fail "--github : marqueurs d'origine incohérents"
 
 # install.sh : premier install SANS aucun clone (résout le dernier tag via GitHub)
-ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" GWSA_SKIP_WIRE=1 GWSA_ALLOW_NO_GWS=1 \
+ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/mag" GWSA_SKIP_WIRE=1 GWSA_ALLOW_NO_GWS=1 \
   bash install.sh >/dev/null 2>&1; rc=$?
 [[ "$rc" -eq 0 && "$(basename "$(readlink "$GHDEP/current")")" == "v1.0.0" ]] \
   && pass "install.sh : sans clone, installe la dernière version (v1.0.0) et bascule current" \
   || fail "install.sh : n'installe pas la dernière version"
 
-[[ -L "$GHBIN/gwsa" ]] \
-  && pass "install.sh : pose gwsa sur le PATH (lien désigné)" \
-  || fail "install.sh : gwsa non posé sur le PATH"
+[[ -L "$GHBIN/mag" ]] \
+  && pass "install.sh : pose mag sur le PATH (lien désigné)" \
+  || fail "install.sh : mag non posé sur le PATH"
 
 [[ -e "$GHDEP/current/.origin" && ! -e "$GHDEP/current/.source" ]] \
   && pass "install.sh : copie marquée github, prête pour un update sans clone" \
   || fail "install.sh : marqueurs d'origine incohérents"
 
 # update --check depuis la copie installée SANS clone : lit GitHub, se dit à jour
-out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
+out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/mag" \
          "$GHDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
 [[ "$rc" -eq 0 && "$out_u" == *"à jour"* ]] \
   && pass "update --check : sans clone, interroge GitHub et se dit à jour" \
@@ -2207,21 +2207,21 @@ git -C "$REL" tag v2.0.0
 git -C "$REL" archive --format=tar.gz --prefix="pkg-2.0.0/" v2.0.0 > "$GHTB/v2.0.0.tar.gz"
 printf '[{"name":"v2.0.0"},{"name":"v1.0.0"},{"name":"v0.1.0"}]\n' > "$GHTAGS"
 ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_DESKTOP_CONFIG="$TMP/ghdesktop.json" \
-  GWSA_CLI_LINK="$GHBIN/gwsa" "$GHDEP/current/scripts/update.sh" >/dev/null 2>&1; rc=$?
+  GWSA_CLI_LINK="$GHBIN/mag" "$GHDEP/current/scripts/update.sh" >/dev/null 2>&1; rc=$?
 [[ "$rc" -eq 0 && "$(basename "$(readlink "$GHDEP/current")")" == "v2.0.0" ]] \
   && pass "update : sans clone, installe une nouvelle version publiée (v2.0.0)" \
   || fail "update sans clone : n'a pas installé la nouvelle version"
 
 # GitHub injoignable (tags introuvables) → refus explicite, current intact
 out_u="$(GWSA_TAGS_URL="file://$TMP/inexistant.json" GWSA_TARBALL_BASE="file://$GHTB" \
-         GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
+         GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/mag" \
          "$GHDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
 [[ "$rc" -ne 0 && "$(basename "$(readlink "$GHDEP/current")")" == "v2.0.0" ]] \
   && pass "update : GitHub injoignable → refus, current inchangé (v2.0.0)" \
   || fail "update : mauvais comportement quand GitHub est injoignable"
 
 # --check --to <tag inexistant> : sans clone, refus (comme refs/tags côté clone). Codex P2.
-out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
+out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/mag" \
          "$GHDEP/current/scripts/update.sh" --check --to v9.9.9 2>&1)"; rc=$?
 [[ "$rc" -ne 0 && "$out_u" == *"introuvable"* ]] \
   && pass "update --check --to : tag inexistant refusé (validé contre GitHub)" \
@@ -2229,7 +2229,7 @@ out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
 
 # --to <version self-updatable> : rollback sans clone OK (v0.1.0 embarque l'updater)
 ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_DESKTOP_CONFIG="$TMP/ghdesktop.json" \
-  GWSA_CLI_LINK="$GHBIN/gwsa" "$GHDEP/current/scripts/update.sh" --to v0.1.0 >/dev/null 2>&1; rc=$?
+  GWSA_CLI_LINK="$GHBIN/mag" "$GHDEP/current/scripts/update.sh" --to v0.1.0 >/dev/null 2>&1; rc=$?
 [[ "$rc" -eq 0 && "$(basename "$(readlink "$GHDEP/current")")" == "v0.1.0" ]] \
   && pass "update --to : rollback sans clone vers une version self-updatable (v0.1.0)" \
   || fail "update --to : rollback sans clone en échec"
@@ -2255,15 +2255,15 @@ ghenv GWSA_DEPLOY_ROOT="$LEG2" "$REL/scripts/deploy-local.sh" --github v0.5.0 >/
 
 # idem côté install.sh : un dossier legacy du dernier tag déjà présent → refus
 LEG3="$TMP/legacydep3"; mkdir -p "$LEG3/v2.0.0/scripts"
-ghenv GWSA_DEPLOY_ROOT="$LEG3" GWSA_CLI_LINK="$LEG3/gwsa" GWSA_SKIP_WIRE=1 GWSA_ALLOW_NO_GWS=1 \
+ghenv GWSA_DEPLOY_ROOT="$LEG3" GWSA_CLI_LINK="$LEG3/mag" GWSA_SKIP_WIRE=1 GWSA_ALLOW_NO_GWS=1 \
   bash install.sh >/dev/null 2>&1; rc=$?
 [[ "$rc" -ne 0 && ! -e "$LEG3/current" ]] \
   && pass "install.sh : cible legacy pré-existante refusée (current pas basculé)" \
   || fail "install.sh : a basculé sur une cible legacy pré-existante"
 
-# fork : « gwsa update » sans clone restaure GWSA_REPO depuis .origin. Codex P2.
+# fork : « mag update » sans clone restaure GWSA_REPO depuis .origin. Codex P2.
 printf 'github:someone/fork\n' > "$GHDEP/current/.origin"
-out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
+out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/mag" \
          "$GHDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
 [[ "$out_u" == *"someone/fork"* ]] \
   && pass "update sans clone : repo restauré depuis .origin (fork préservé)" \
@@ -2284,15 +2284,15 @@ ghenv GWSA_DEPLOY_ROOT="$LEG4" "$REL/scripts/deploy-local.sh" --github v0.7.0 >/
 # « git rev-parse » remontait jusqu'à ce .git → mode clone → « aucune version ».
 GA="$TMP/git-ancestor"; mkdir -p "$GA"; git -C "$GA" init -q >/dev/null 2>&1
 GADEP="$GA/.local/share/google-mcp"
-ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/gwsa" GWSA_SKIP_WIRE=1 GWSA_ALLOW_NO_GWS=1 bash install.sh >/dev/null 2>&1
-out_u="$(ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/gwsa" \
+ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/mag" GWSA_SKIP_WIRE=1 GWSA_ALLOW_NO_GWS=1 bash install.sh >/dev/null 2>&1
+out_u="$(ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/mag" \
          "$GADEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
 [[ "$rc" -eq 0 && "$out_u" == *"GitHub"* && "$out_u" != *"aucune version"* ]] \
   && pass "update : install sous un dépôt git ancêtre → mode github (marqueurs, pas walk-up)" \
   || fail "update : détecté à tort comme clone sous un ancêtre git"
 
 # régression P3 : « update --to » sans valeur → pas d'abandon silencieux (retombe latest)
-out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
+out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/mag" \
          "$GHDEP/current/scripts/update.sh" --check --to 2>&1)"; rc=$?
 [[ "$rc" -eq 0 && "$out_u" == *"disponible"* ]] \
   && pass "update --to sans valeur : retombe sur latest (pas d'abandon silencieux)" \
@@ -2305,21 +2305,21 @@ out_d="$(ghenv GWSA_DEPLOY_ROOT="$TMP/dghnoval" "$REL/scripts/deploy-local.sh" -
   || fail "deploy-local --github sans valeur : abandon silencieux"
 
 # install.sh recycle le broker après bascule current (revue Codex round-4) : le
-# gwsa de la copie doit recevoir « broker stop ». Tag dont le gwsa logue l'appel.
+# mag de la copie doit recevoir « broker stop ». Tag dont le mag logue l'appel.
 BRK="$TMP/brokerpkg"; mkdir -p "$BRK/scripts" "$BRK/bin"
 cp "$REL/scripts/lib-github-release.sh" "$BRK/scripts/"
-cat > "$BRK/bin/gwsa" <<EOF
+cat > "$BRK/bin/mag" <<EOF
 #!/usr/bin/env bash
 [ "\$1 \$2" = "broker stop" ] && : > "$TMP/broker-stop.log"
 exit 0
 EOF
-chmod +x "$BRK/bin/gwsa"
+chmod +x "$BRK/bin/mag"
 git -C "$BRK" init -q >/dev/null 2>&1; git -C "$BRK" config user.email t@t; git -C "$BRK" config user.name t
 git -C "$BRK" add -A >/dev/null 2>&1; git -C "$BRK" commit -qm x >/dev/null 2>&1; git -C "$BRK" tag v3.0.0
 git -C "$BRK" archive --format=tar.gz --prefix="pkg-3.0.0/" v3.0.0 > "$GHTB/v3.0.0.tar.gz"
 printf '[{"name":"v3.0.0"},{"name":"v2.0.0"},{"name":"v1.0.0"},{"name":"v0.1.0"}]\n' > "$GHTAGS"
 rm -f "$TMP/broker-stop.log"
-ghenv GWSA_DEPLOY_ROOT="$TMP/brokerdep" GWSA_CLI_LINK="$TMP/brokerdep/gwsa" GWSA_SKIP_WIRE=1 GWSA_ALLOW_NO_GWS=1 \
+ghenv GWSA_DEPLOY_ROOT="$TMP/brokerdep" GWSA_CLI_LINK="$TMP/brokerdep/mag" GWSA_SKIP_WIRE=1 GWSA_ALLOW_NO_GWS=1 \
   bash install.sh >/dev/null 2>&1
 [[ -f "$TMP/broker-stop.log" ]] \
   && pass "install.sh : recycle le broker après bascule current (broker stop appelé)" \
@@ -2329,7 +2329,7 @@ ghenv GWSA_DEPLOY_ROOT="$TMP/brokerdep" GWSA_CLI_LINK="$TMP/brokerdep/gwsa" GWSA
 # clone est supprimé, l'update sans clone vise le BON dépôt, pas upstream. Codex round-4.
 FORK="$TMP/forkclone"; mkdir -p "$FORK/scripts" "$FORK/bin"
 cp "$REL/scripts/lib-github-release.sh" "$REL/scripts/deploy-local.sh" "$REL/scripts/update.sh" "$FORK/scripts/"
-cp "$REL/bin/gwsa" "$FORK/bin/"; printf '#!/bin/sh\nexit 0\n' > "$FORK/bin/google-mcp"; chmod +x "$FORK/bin/"*
+cp "$REL/bin/mag" "$FORK/bin/"; printf '#!/bin/sh\nexit 0\n' > "$FORK/bin/google-mcp"; chmod +x "$FORK/bin/"*
 git -C "$FORK" init -q >/dev/null 2>&1; git -C "$FORK" config user.email t@t; git -C "$FORK" config user.name t
 git -C "$FORK" remote add origin https://github.com/someone/forkrepo.git
 git -C "$FORK" add -A >/dev/null 2>&1; git -C "$FORK" commit -qm x >/dev/null 2>&1; git -C "$FORK" tag v1.0.0
@@ -2351,7 +2351,7 @@ XDEP="$TMP/xrepodep"; mkdir -p "$XDEP/v1.0.0"
 printf 'github:elzinko/upstream\n' > "$XDEP/v1.0.0/.origin"        # dossier « upstream »
 XFORK="$TMP/xfork"; mkdir -p "$XFORK/scripts" "$XFORK/bin"
 cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$XFORK/scripts/"
-printf '#!/bin/sh\nexit 0\n' > "$XFORK/bin/gwsa"; chmod +x "$XFORK/bin/gwsa"
+printf '#!/bin/sh\nexit 0\n' > "$XFORK/bin/mag"; chmod +x "$XFORK/bin/mag"
 git -C "$XFORK" init -q >/dev/null 2>&1; git -C "$XFORK" config user.email t@t; git -C "$XFORK" config user.name t
 git -C "$XFORK" remote add origin https://github.com/someone/other.git
 git -C "$XFORK" add -A >/dev/null 2>&1; git -C "$XFORK" commit -qm x >/dev/null 2>&1; git -C "$XFORK" tag v1.0.0
@@ -2363,7 +2363,7 @@ env GWSA_DEPLOY_ROOT="$XDEP" "$XFORK/scripts/deploy-local.sh" --tag v1.0.0 >/dev
 # provenance ssh:// URI bien normalisée en .origin (Codex round-5).
 SSHC="$TMP/sshclone"; mkdir -p "$SSHC/scripts" "$SSHC/bin"
 cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$SSHC/scripts/"
-printf '#!/bin/sh\nexit 0\n' > "$SSHC/bin/gwsa"; chmod +x "$SSHC/bin/gwsa"
+printf '#!/bin/sh\nexit 0\n' > "$SSHC/bin/mag"; chmod +x "$SSHC/bin/mag"
 git -C "$SSHC" init -q >/dev/null 2>&1; git -C "$SSHC" config user.email t@t; git -C "$SSHC" config user.name t
 git -C "$SSHC" remote add origin ssh://git@github.com/someone/sshrepo.git
 git -C "$SSHC" add -A >/dev/null 2>&1; git -C "$SSHC" commit -qm x >/dev/null 2>&1; git -C "$SSHC" tag v1.0.0
@@ -2375,7 +2375,7 @@ env GWSA_DEPLOY_ROOT="$TMP/sshdep" "$SSHC/scripts/deploy-local.sh" --tag v1.0.0 
 # provenance ssh:// avec PORT explicite bien normalisée (Codex round-6).
 PORTC="$TMP/portclone"; mkdir -p "$PORTC/scripts" "$PORTC/bin"
 cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$PORTC/scripts/"
-printf '#!/bin/sh\nexit 0\n' > "$PORTC/bin/gwsa"; chmod +x "$PORTC/bin/gwsa"
+printf '#!/bin/sh\nexit 0\n' > "$PORTC/bin/mag"; chmod +x "$PORTC/bin/mag"
 git -C "$PORTC" init -q >/dev/null 2>&1; git -C "$PORTC" config user.email t@t; git -C "$PORTC" config user.name t
 git -C "$PORTC" remote add origin ssh://git@github.com:22/someone/portrepo.git
 git -C "$PORTC" add -A >/dev/null 2>&1; git -C "$PORTC" commit -qm x >/dev/null 2>&1; git -C "$PORTC" tag v1.0.0
@@ -2387,7 +2387,7 @@ env GWSA_DEPLOY_ROOT="$TMP/portdep" "$PORTC/scripts/deploy-local.sh" --tag v1.0.
 # hôte non-GitHub qui CONTIENT « github.com » → jamais pris pour GitHub (Codex round-7).
 NGH="$TMP/notgithub"; mkdir -p "$NGH/scripts" "$NGH/bin"
 cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$NGH/scripts/"
-printf '#!/bin/sh\nexit 0\n' > "$NGH/bin/gwsa"; chmod +x "$NGH/bin/gwsa"
+printf '#!/bin/sh\nexit 0\n' > "$NGH/bin/mag"; chmod +x "$NGH/bin/mag"
 git -C "$NGH" init -q >/dev/null 2>&1; git -C "$NGH" config user.email t@t; git -C "$NGH" config user.name t
 git -C "$NGH" remote add origin https://notgithub.com/someone/repo.git
 git -C "$NGH" add -A >/dev/null 2>&1; git -C "$NGH" commit -qm x >/dev/null 2>&1; git -C "$NGH" tag v1.0.0
@@ -2399,7 +2399,7 @@ env GWSA_DEPLOY_ROOT="$TMP/nghdep" "$NGH/scripts/deploy-local.sh" --tag v1.0.0 >
 # clone SANS provenance GitHub, supprimé → update REFUSE (pas de fallback upstream) (Codex round-7).
 NOG="$TMP/nogithub"; mkdir -p "$NOG/scripts" "$NOG/bin"
 cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$REL/scripts/update.sh" "$NOG/scripts/"
-cp "$REL/bin/gwsa" "$NOG/bin/"; printf '#!/bin/sh\nexit 0\n' > "$NOG/bin/google-mcp"; chmod +x "$NOG/bin/"*
+cp "$REL/bin/mag" "$NOG/bin/"; printf '#!/bin/sh\nexit 0\n' > "$NOG/bin/google-mcp"; chmod +x "$NOG/bin/"*
 git -C "$NOG" init -q >/dev/null 2>&1; git -C "$NOG" config user.email t@t; git -C "$NOG" config user.name t
 git -C "$NOG" add -A >/dev/null 2>&1; git -C "$NOG" commit -qm x >/dev/null 2>&1; git -C "$NOG" tag v1.0.0
 NOGDEP="$TMP/nogdep"
@@ -2419,7 +2419,7 @@ out_u="$(env GWSA_TAGS_URL="file://$GHTAGS" GWSA_TARBALL_BASE="file://$GHTB" \
 # owner/repo reste sensible à la casse (Codex round-8).
 CASE="$TMP/caseclone"; mkdir -p "$CASE/scripts" "$CASE/bin"
 cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$CASE/scripts/"
-printf '#!/bin/sh\nexit 0\n' > "$CASE/bin/gwsa"; chmod +x "$CASE/bin/gwsa"
+printf '#!/bin/sh\nexit 0\n' > "$CASE/bin/mag"; chmod +x "$CASE/bin/mag"
 git -C "$CASE" init -q >/dev/null 2>&1; git -C "$CASE" config user.email t@t; git -C "$CASE" config user.name t
 git -C "$CASE" remote add origin https://GitHub.com/someone/CaseRepo.git
 git -C "$CASE" add -A >/dev/null 2>&1; git -C "$CASE" commit -qm x >/dev/null 2>&1; git -C "$CASE" tag v1.0.0
@@ -2436,7 +2436,7 @@ tags_url_def="$(unset GWSA_TAGS_URL; GWSA_REPO=owner/repo; . "$REL/scripts/lib-g
 
 section "sessions + vault (fiche 0040)"
 
-SESS_ROOT="$TMP/gwsa-sessions"
+SESS_ROOT="$TMP/mag-sessions"
 mkdir -p "$SESS_ROOT/alpha"
 echo '{"drive":{"read":true,"create":true,"zonesOnly":true,"writeFolders":[]}}' > "$SESS_ROOT/alpha/policy.json"
 touch "$SESS_ROOT/alpha/.locked"
@@ -2606,14 +2606,14 @@ sid_close076="$("$PY" -c "from gateway.sessions import create_session; print(cre
 GWSA_ROOT="$SESS_ROOT" "$GWSA" session close "$sid_close076" >/dev/null 2>&1
 gone_close076="$("$PY" -c "from gateway.sessions import get_session; print(get_session('$sid_close076'))")"
 [[ "$gone_close076" == "None" ]] \
-  && pass "gwsa session close : révocation explicite purge la session (cycle de vie découplé de la connexion)" \
-  || fail "gwsa session close : session non purgée ($gone_close076)"
+  && pass "mag session close : révocation explicite purge la session (cycle de vie découplé de la connexion)" \
+  || fail "mag session close : session non purgée ($gone_close076)"
 
 # GC câblé au balayage/accès (pas à la déconnexion) : gateway.broker_server.handle_exec
 # appelle purge_expired() — vérifié directement sur la fonction (hermétique, sans broker
 # réel). Racine DÉDIÉE (isolée de SESS_ROOT, qui accumule des sessions d'autres tests
 # depuis longtemps) pour que le compte purgé soit exactement celui créé ici.
-GC_ROOT076="$TMP/gwsa-sessions-gc076"
+GC_ROOT076="$TMP/mag-sessions-gc076"
 mkdir -p "$GC_ROOT076"
 out_gc="$(GWSA_ROOT="$GC_ROOT076" GWSA_SESSION_TTL_SEC=1 "$PY" -c "
 import time
@@ -2644,8 +2644,8 @@ n_list="${sid_list##* }"
 
 out_slist="$(GWSA_ROOT="$SESS_ROOT" "$GWSA" session list 2>/dev/null)"
 [[ "$out_slist" == *"$sid_list_id"* && "$out_slist" == *'"sessions"'* ]] \
-  && pass "gwsa session list : JSON avec session_id" \
-  || fail "gwsa session list ($out_slist)"
+  && pass "mag session list : JSON avec session_id" \
+  || fail "mag session list ($out_slist)"
 
 ADMIN_PORT=$((49000 + RANDOM % 1000))
 GWSA_ROOT="$SESS_ROOT" GWSA_ADMIN_PORT="$ADMIN_PORT" node "$(pwd)/admin/server.js" >/dev/null 2>&1 &
@@ -2669,7 +2669,7 @@ if [[ "$admin_ready" -eq 1 ]]; then
     "http://127.0.0.1:$ADMIN_PORT/api/sessions/$sid_admin/unlock")"
   u_admin="$("$PY" -c "from gateway.sessions import is_session_unlocked; print(is_session_unlocked('$sid_admin', 'alpha'))")"
   [[ "$admin_un" == *'"ok":true'* && "$u_admin" == "True" ]] \
-    && pass "admin POST unlock session via gwsa" \
+    && pass "admin POST unlock session via mag" \
     || fail "admin POST unlock ($admin_un unlock=$u_admin)"
 
   admin_close="$(curl -sf -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
@@ -2718,7 +2718,7 @@ print('parent', get_session(pid), 'child', get_session(cid))
   && pass "close_session : purge parent + descendants" \
   || fail "close_session : purge incomplète ($out_close)"
 
-# ── DEFAULT_POLICY : invariants de sûreté du default-deny livré par `gwsa add` ──
+# ── DEFAULT_POLICY : invariants de sûreté du default-deny livré par `mag add` ──
 # Garde le point d'entrée : basculer send/share/delete ou ouvrir les zones ferait
 # passer la CI au vert tout en livrant un défaut permissif à chaque nouveau compte.
 pol_inv="$("$PY" -c "
@@ -2761,18 +2761,18 @@ except api.GatewayError as e:
   && pass "gmail_attachment_get : borne la taille des pièces jointes (refus au-delà, avant écriture)" \
   || fail "borne pièce jointe ($att_inv)"
 
-PROJ_ROOT="$TMP/gwsa-proj-inside"
+PROJ_ROOT="$TMP/mag-proj-inside"
 rm -rf "$PROJ_ROOT"
 git_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-rm -rf "$git_root/.gwsa"
+rm -rf "$git_root/.mag"
 GWSA_ROOT="$SESS_ROOT" "$GWSA" project init >/dev/null 2>&1
 GWSA_ROOT="$SESS_ROOT" "$GWSA" project sign >/dev/null 2>&1
 out_p="$(GWSA_ROOT="$SESS_ROOT" "$GWSA" project show 2>/dev/null)"
-[[ -n "$git_root" && -f "$git_root/.gwsa/manifest.json" && -f "$git_root/.gwsa/manifest.sig" \
+[[ -n "$git_root" && -f "$git_root/.mag/manifest.json" && -f "$git_root/.mag/manifest.sig" \
    && "$out_p" == *'"manifest_valid": true'* ]] \
   && pass "project : init + sign local + show" \
   || fail "project : init/sign/show (root=$git_root out=$out_p)"
-rm -rf "$git_root/.gwsa" 2>/dev/null || true
+rm -rf "$git_root/.mag" 2>/dev/null || true
 
 cap_out="$("$PY" -c "
 import os
@@ -2820,7 +2820,7 @@ m = {'capabilities': {'alpha': {
   'gmail': {'read': True, 'drafts': False},
 }}}
 ctx = ProjectContext(manifest_valid=True, manifest=m, git_root='/tmp',
-                     manifest_path='/tmp/.gwsa/manifest.json')
+                     manifest_path='/tmp/.mag/manifest.json')
 os.environ['GWSA_GIT_ROOT'] = '/tmp'
 with patch('gateway.project.resolve_project', return_value=ctx):
     ok = access_request('alpha', 'project_grant', folder='folderAAA', hours=2, session=sid)
@@ -2897,7 +2897,7 @@ assert not has_credentials('beta')
   || fail "vault : migration"
 
 section "élicitation signée (fiche 0001)"
-ELIC_ROOT="$TMP/gwsa-elicitation"
+ELIC_ROOT="$TMP/mag-elicitation"
 mkdir -p "$ELIC_ROOT/alpha"
 touch "$ELIC_ROOT/.strong-auth"
 export GWSA_ROOT="$ELIC_ROOT" GWSA_ELICITATION_MOCK=1 PYTHONPATH="$(pwd)"
@@ -2959,15 +2959,15 @@ print('ok')
 pec_dir="$TMP/pec"; mkdir -p "$pec_dir/valid" "$pec_dir/missing" "$pec_dir/corrupt"
 printf 'alice@gmail.com\n' > "$pec_dir/valid/.email"
 printf 'pas-un-email\n'    > "$pec_dir/corrupt/.email"
-eval "$(sed -n '/^profile_email_cached()/,/^}/p' bin/gwsa)"
+eval "$(sed -n '/^profile_email_cached()/,/^}/p' bin/mag)"
 r_valid="$(profile_email_cached "$pec_dir/valid")"
 r_missing="$(profile_email_cached "$pec_dir/missing")"
 r_corrupt="$(profile_email_cached "$pec_dir/corrupt")"
-n_cached="$(grep -c 'profile_email_cached "' bin/gwsa || true)"  # appels seuls (pas la déf)
-# Sous `set -euo pipefail` (comme bin/gwsa) et la forme appelante exacte
+n_cached="$(grep -c 'profile_email_cached "' bin/mag || true)"  # appels seuls (pas la déf)
+# Sous `set -euo pipefail` (comme bin/mag) et la forme appelante exacte
 # « local email; email="$(…)" », la fonction ne doit JAMAIS avorter — même sur
 # .email corrompu (sinon unlock/grant meurt avant le gate — retour Codex P2).
-pec_fn="$TMP/pec_fn.sh"; sed -n '/^profile_email_cached()/,/^}/p' bin/gwsa > "$pec_fn"
+pec_fn="$TMP/pec_fn.sh"; sed -n '/^profile_email_cached()/,/^}/p' bin/mag > "$pec_fn"
 sete_rc=0
 bash -euo pipefail -c '
   . "$1"
@@ -2977,7 +2977,7 @@ bash -euo pipefail -c '
 ' _ "$pec_fn" "$pec_dir/corrupt" "$pec_dir/missing" || sete_rc=$?
 if [[ "$r_valid" == "alice@gmail.com" && -z "$r_missing" && -z "$r_corrupt" ]] \
   && [[ "$n_cached" == 6 && "$sete_rc" == 0 ]] \
-  && ! sed -n '/^profile_email_cached()/,/^}/p' bin/gwsa | sed 's/#.*//' | grep -q 'gws'; then
+  && ! sed -n '/^profile_email_cached()/,/^}/p' bin/mag | sed 's/#.*//' | grep -q 'gws'; then
   pass "elicitation : email lu cache-only aux points d'autorisation, zéro exec gws (fiche 0047)"
 else
   fail "elicitation : cache-only (valid=$r_valid missing=[$r_missing] corrupt=[$r_corrupt] sites=$n_cached set-e_rc=$sete_rc)"
@@ -2997,26 +2997,26 @@ else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m résolution email (email=%s alias=%s rc=%s msg=%s)\n' "$er_by_email" "$er_by_alias" "$er_rc" "$er_unknown"
 fi
 
-# ── gma wire : brancher un client en une commande (dry-run, sans écrire) ──
+# ── mag wire : brancher un client en une commande (dry-run, sans écrire) ──
 w_cfg="$TMP/wire-desktop.json"
 w_out="$(GWSA_ROOT="$TMP/wire-root" "$GWSA" wire desktop --print --config "$w_cfg" 2>&1)"
 w_cursor="$(GWSA_ROOT="$TMP/wire-root" "$GWSA" wire cursor 2>&1)"; w_cur_rc=$?
 if [[ "$w_out" == *"Dry-run"* && ! -f "$w_cfg" && "$w_cur_rc" != 0 && "$w_cursor" == *"Cursor"* ]]; then
-  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m gma wire desktop --print : dry-run sans écriture ; wire cursor renvoie vers la doc\n'
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m mag wire desktop --print : dry-run sans écriture ; wire cursor renvoie vers la doc\n'
 else
-  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m gma wire (out=%s cursor_rc=%s)\n' "$w_out" "$w_cur_rc"
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m mag wire (out=%s cursor_rc=%s)\n' "$w_out" "$w_cur_rc"
 fi
 
 sid_e="$("$PY" -c 'from gateway.sessions import create_session; print(create_session(client="t").session_id)')"
 GWSA_ROOT="$ELIC_ROOT" GWSA_SESSION_ID="$sid_e" GWSA_ELICITATION_MOCK=1 \
   "$GWSA" session unlock "$sid_e" alpha 15 >/dev/null 2>&1 \
-  && pass "elicitation : gwsa session unlock avec strongauth+mock" \
-  || fail "elicitation : gwsa session unlock strongauth"
+  && pass "elicitation : mag session unlock avec strongauth+mock" \
+  || fail "elicitation : mag session unlock strongauth"
 
 section "droits par session — lot 2 (fiche 0076, capacités fines)"
 
 # ── (a) capacité gmail:read autorise la lecture, pas gmail:send ni drive:write ──
-CAP_ROOT="$TMP/gwsa-caps"
+CAP_ROOT="$TMP/mag-caps"
 mkdir -p "$CAP_ROOT/alpha"
 echo '{"gmail":{"read":true,"send":true,"drafts":true},"drive":{"read":true,"create":true,"zonesOnly":true,"writeFolders":["zoneA","zoneB"]}}' \
   > "$CAP_ROOT/alpha/policy.json"
@@ -3066,7 +3066,7 @@ print(r.returncode)
 # ── (h) fail-closed sur policy Drive PERMISSIVE — non-zonesOnly (revue sécu P0) ──
 # La garantie de session ne doit PAS tomber quand la policy Drive du compte est
 # ouverte : une session limitée (gmail:read) ne peut pas écrire dans Drive.
-CAP_OPEN="$TMP/gwsa-caps-open"
+CAP_OPEN="$TMP/mag-caps-open"
 mkdir -p "$CAP_OPEN/alpha"
 echo '{"gmail":{"read":true},"drive":{"read":true,"create":true,"update":true,"zonesOnly":false}}' \
   > "$CAP_OPEN/alpha/policy.json"
@@ -3085,7 +3085,7 @@ print('legacy', rc(['drive','files','create','--json','{\"parents\":[\"F123\"]}'
   || fail "capacités session : FAIL-OPEN sur Drive non-zonesOnly ($out_cap_h)"
 
 # ── (i) fail-closed sur policy Drive « mode:open » (revue sécu P0) ──
-CAP_MOPEN="$TMP/gwsa-caps-mopen"
+CAP_MOPEN="$TMP/mag-caps-mopen"
 mkdir -p "$CAP_MOPEN/alpha"
 echo '{"gmail":{"read":true},"drive":{"mode":"open"}}' > "$CAP_MOPEN/alpha/policy.json"
 out_cap_i="$(GWSA_ROOT="$CAP_MOPEN" PYTHONPATH="$(pwd)" "$PY" -c "
@@ -3115,7 +3115,7 @@ print('zoneA', rc('zoneA')); print('zoneB', rc('zoneB'))
   || fail "capacités session : zone de session cassée par une capacité fine ($out_cap_j)"
 
 # ── (d) octroi de capacité sans élicitation signée → refus ──
-CAP_UNSIGNED="$TMP/gwsa-caps-unsigned"
+CAP_UNSIGNED="$TMP/mag-caps-unsigned"
 mkdir -p "$CAP_UNSIGNED/alpha"
 cp "$CAP_ROOT/alpha/policy.json" "$CAP_UNSIGNED/alpha/policy.json"
 sid_uc="$(GWSA_ROOT="$CAP_UNSIGNED" PYTHONPATH="$(pwd)" "$PY" -c 'from gateway.sessions import create_session; print(create_session(client="t").session_id)')"
@@ -3125,7 +3125,7 @@ GWSA_ROOT="$CAP_UNSIGNED" "$GWSA" session grant-capability "$sid_uc" alpha gmail
   && pass "capacités session : octroi sans élicitation signée (pas d'enrôlement) → refus" \
   || fail "capacités session : octroi non signé accepté à tort"
 
-# ── octroi SIGNÉ (mock) : gwsa session grant-capability écrit bien la capacité ──
+# ── octroi SIGNÉ (mock) : mag session grant-capability écrit bien la capacité ──
 gc_ok=0
 GWSA_ROOT="$CAP_UNSIGNED" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
 GWSA_ROOT="$CAP_UNSIGNED" GWSA_ELICITATION_MOCK=1 \
@@ -3135,7 +3135,7 @@ from gateway.sessions import session_has_capability
 print(session_has_capability('$sid_uc', 'alpha', 'gmail', 'read'))
 ")"
 [[ "$gc_ok" == 0 && "$has_cap" == "True" ]] \
-  && pass "capacités session : gwsa session grant-capability (signé, mock) octroie la capacité" \
+  && pass "capacités session : mag session grant-capability (signé, mock) octroie la capacité" \
   || fail "capacités session : grant-capability signé ($gc_ok has_cap=$has_cap)"
 
 # ── (e) service/opération non déclarés dans les capacités de session → refus ──
@@ -3151,7 +3151,7 @@ print(r.returncode)
   || fail "capacités session : opération non déclarée acceptée à tort ($out_cap_e)"
 
 # ── (f) sans manifeste projet : policy ∩ session (pas de plafond manifeste) ──
-NOMANI_REPO="$TMP/gwsa-caps-nomanifest-repo"
+NOMANI_REPO="$TMP/mag-caps-nomanifest-repo"
 mkdir -p "$NOMANI_REPO"
 git -C "$NOMANI_REPO" init -q
 out_cap_f="$(GWSA_ROOT="$CAP_ROOT" GWSA_GIT_ROOT="$NOMANI_REPO" PYTHONPATH="$(pwd)" "$PY" -c "
@@ -3164,8 +3164,8 @@ print(r.returncode)
   || fail "manifeste absent : refus à tort ($out_cap_f)"
 
 # ── (g) manifeste altéré après confiance → refus (anti-downgrade, S-07) ──
-ANTIDOWN_ROOT="$TMP/gwsa-antidowngrade-root"
-ANTIDOWN_REPO="$TMP/gwsa-antidowngrade-repo"
+ANTIDOWN_ROOT="$TMP/mag-antidowngrade-root"
+ANTIDOWN_REPO="$TMP/mag-antidowngrade-repo"
 mkdir -p "$ANTIDOWN_REPO"
 git -C "$ANTIDOWN_REPO" init -q
 git -C "$ANTIDOWN_REPO" config user.email t@t.com
@@ -3188,7 +3188,7 @@ r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_ROOT/alpha'
 print(r.returncode)
 ")"
 # Altération : le fichier manifeste change de contenu sans re-signature.
-printf '{"schema":1,"project_id":"tampered","capabilities":{}}' > "$ANTIDOWN_REPO/.gwsa/manifest.json"
+printf '{"schema":1,"project_id":"tampered","capabilities":{}}' > "$ANTIDOWN_REPO/.mag/manifest.json"
 after_tamper="$(GWSA_ROOT="$ANTIDOWN_ROOT" GWSA_GIT_ROOT="$ANTIDOWN_REPO" PYTHONPATH="$(pwd)" "$PY" -c "
 import subprocess, sys
 r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_ROOT/alpha','gmail','messages','list'])
@@ -3203,7 +3203,7 @@ section "droits par session — P1 sécu (fiche 0076, session nue = deny-all)"
 # Profil déverrouillé (poste), policy permissive gmail/calendar/drive — le
 # verrou GLOBAL du profil ne doit jamais se substituer aux octrois de LA
 # session (revue Codex P1 sur PR #110).
-P1_ROOT="$TMP/gwsa-p1-nudeny"
+P1_ROOT="$TMP/mag-p1-nudeny"
 mkdir -p "$P1_ROOT/alpha"
 echo '{"gmail":{"read":true,"send":true},"calendar":{"read":true},"drive":{"read":true,"create":true,"zonesOnly":true,"writeFolders":["zoneA"]}}' \
   > "$P1_ROOT/alpha/policy.json"
@@ -3254,9 +3254,9 @@ print('legacy_gmail', call('', ['gmail', 'users', 'messages', 'list']))
 
 section "droits par session — lot 3 (fiche 0076, session list + sous-agents + bootstrap + audit)"
 
-# ── (a) gwsa session list : ≥2 sessions actives, configs DISTINCTES (capacités,
+# ── (a) mag session list : ≥2 sessions actives, configs DISTINCTES (capacités,
 # unlocks, TTL restant, parent/delegated) ──
-L3_ROOT="$TMP/gwsa-lot3-list"
+L3_ROOT="$TMP/mag-lot3-list"
 mkdir -p "$L3_ROOT"
 out_list_cfg="$(GWSA_ROOT="$L3_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
 import json
@@ -3276,10 +3276,10 @@ assert r1['ttl_seconds_left'] > 0 and r2['ttl_seconds_left'] > 0, (r1, r2)
 print('ok')
 ")"
 [[ "$out_list_cfg" == "ok" ]] \
-  && pass "gwsa session list : ≥2 sessions, configs distinctes (capacités/unlocks/TTL)" \
-  || fail "gwsa session list : configs non distinctes ($out_list_cfg)"
+  && pass "mag session list : ≥2 sessions, configs distinctes (capacités/unlocks/TTL)" \
+  || fail "mag session list : configs non distinctes ($out_list_cfg)"
 
-# ── (a-bis) gwsa session show affiche aussi les capacités fines (lot 2) ──
+# ── (a-bis) mag session show affiche aussi les capacités fines (lot 2) ──
 sid_show3="$(GWSA_ROOT="$L3_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
 from gateway.sessions import create_session, session_grant_capability
 s = create_session(client='show3')
@@ -3288,8 +3288,8 @@ print(s.session_id)
 ")"
 out_show3="$(GWSA_ROOT="$L3_ROOT" "$GWSA" session show "$sid_show3" 2>&1)"
 [[ "$out_show3" == *'"service": "drive"'* && "$out_show3" == *'"operation": "read"'* ]] \
-  && pass "gwsa session show : affiche les capacités fines (lot 2)" \
-  || fail "gwsa session show : capacités fines absentes ($out_show3)"
+  && pass "mag session show : affiche les capacités fines (lot 2)" \
+  || fail "mag session show : capacités fines absentes ($out_show3)"
 
 # ── (b) sous-agent : héritage ⊆ parent, jamais plus ──
 out_inherit="$(GWSA_ROOT="$L3_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
@@ -3361,7 +3361,7 @@ print(child.delegated, len(child.capabilities))
   || fail "sous-agents : création d'enfant ($out_child_create)"
 
 # ── (d) revoke-descendants : purge les descendants, PAS la racine ──
-L3_REVOKE="$TMP/gwsa-lot3-revoke"
+L3_REVOKE="$TMP/mag-lot3-revoke"
 mkdir -p "$L3_REVOKE"
 touch "$L3_REVOKE/.strong-auth" 2>/dev/null || true
 read root_id child_id grandchild_id <<< "$(GWSA_ROOT="$L3_REVOKE" PYTHONPATH="$(pwd)" "$PY" -c "
@@ -3381,8 +3381,8 @@ print(get_session('$root_id') is not None, get_session('$child_id') is None, get
   && pass "sous-agents : revoke-descendants purge toute la descendance, PAS la racine" \
   || fail "sous-agents : revoke-descendants ($out_after_revoke)"
 
-# ── (e) bootstrap : gwsa session open crée une session racine SIGNÉE + imprime le jeton ──
-L3_OPEN="$TMP/gwsa-lot3-open"
+# ── (e) bootstrap : mag session open crée une session racine SIGNÉE + imprime le jeton ──
+L3_OPEN="$TMP/mag-lot3-open"
 mkdir -p "$L3_OPEN"
 GWSA_ROOT="$L3_OPEN" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
 sid_opened="$(GWSA_ROOT="$L3_OPEN" GWSA_ELICITATION_MOCK=1 "$GWSA" session open test-client 2>/dev/null)"
@@ -3392,27 +3392,27 @@ s = get_session('$sid_opened')
 print(s is not None, s.client if s else None, s.capabilities if s else None, s.delegated if s else None)
 ")"
 [[ -n "$sid_opened" && "$out_opened_state" == "True test-client [] False" ]] \
-  && pass "gwsa session open : crée une session racine signée, zéro capacité, jeton imprimé" \
-  || fail "gwsa session open : session ($sid_opened → $out_opened_state)"
+  && pass "mag session open : crée une session racine signée, zéro capacité, jeton imprimé" \
+  || fail "mag session open : session ($sid_opened → $out_opened_state)"
 
-# ── (e-bis) gwsa session open SANS enrôlement → refus ──
-L3_OPEN_UNENROLLED="$TMP/gwsa-lot3-open-unenrolled"
+# ── (e-bis) mag session open SANS enrôlement → refus ──
+L3_OPEN_UNENROLLED="$TMP/mag-lot3-open-unenrolled"
 mkdir -p "$L3_OPEN_UNENROLLED"
 GWSA_ROOT="$L3_OPEN_UNENROLLED" "$GWSA" session open test-client >/dev/null 2>&1
 open_unenrolled_rc=$?
 [[ "$open_unenrolled_rc" != 0 ]] \
-  && pass "gwsa session open : refus sans enrôlement (pas de session sans geste signé)" \
-  || fail "gwsa session open : accepté sans enrôlement à tort"
+  && pass "mag session open : refus sans enrôlement (pas de session sans geste signé)" \
+  || fail "mag session open : accepté sans enrôlement à tort"
 
 # ── (f) bootstrap sans jeton : access_request ne peut QUE pointer vers la création,
 # jamais un accès aux données ──
 out_bootstrap_ar="$(PYTHONPATH="$(pwd)" GWSA_ROOT="$L3_OPEN" "$PY" -c "
 import gateway.api as api
 r = api.access_request(alias='alpha', kind='session_unlock', session='')
-print(r.get('kind'), 'gma session open' in r.get('suggested_command', ''))
+print(r.get('kind'), 'mag session open' in r.get('suggested_command', ''))
 ")"
 [[ "$out_bootstrap_ar" == "session_open True" ]] \
-  && pass "bootstrap sans jeton : access_request sans session pointe vers « gma session open »" \
+  && pass "bootstrap sans jeton : access_request sans session pointe vers « mag session open »" \
   || fail "bootstrap sans jeton : access_request ($out_bootstrap_ar)"
 
 out_bootstrap_data="$(PYTHONPATH="$(pwd)" GWSA_ROOT="$L3_OPEN" "$PY" -c "
@@ -3428,7 +3428,7 @@ except api.GatewayError as e:
   || fail "bootstrap sans jeton : accès donnée accepté sans jeton à tort ($out_bootstrap_data)"
 
 # ── (g) audit : un appel RÉUSSI journalise session_id + service + opération + ressource ──
-L3_AUDIT="$TMP/gwsa-lot3-audit"
+L3_AUDIT="$TMP/mag-lot3-audit"
 mkdir -p "$L3_AUDIT/alpha"
 out_audit="$(GWSA_ROOT="$L3_AUDIT" PYTHONPATH="$(pwd)" "$PY" -c "
 import json
@@ -3871,11 +3871,11 @@ else
 fi
 
 if grep -qE 'PRODUCT_SLUG *= *"[A-Za-z0-9._-]+"' gateway/config.py \
-  && grep -q 'SYS_SWIFTC="/usr/bin/swiftc"' bin/gwsa \
-  && grep -q 'ensure_sign_bin' bin/gwsa \
-  && grep -qE '^[[:space:]]*"\$SYS_SWIFTC"' bin/gwsa \
-  && ! grep -qE '^[[:space:]]*command -v swiftc' bin/gwsa \
-  && ! grep -qE '^[[:space:]]*swiftc ' bin/gwsa; then
+  && grep -q 'SYS_SWIFTC="/usr/bin/swiftc"' bin/mag \
+  && grep -q 'ensure_sign_bin' bin/mag \
+  && grep -qE '^[[:space:]]*"\$SYS_SWIFTC"' bin/mag \
+  && ! grep -qE '^[[:space:]]*command -v swiftc' bin/mag \
+  && ! grep -qE '^[[:space:]]*swiftc ' bin/mag; then
   pass "touchid : PRODUCT_SLUG + swiftc en chemin absolu (SYS_SWIFTC)"
 else
   fail "touchid : PRODUCT_SLUG / SYS_SWIFTC / ensure_sign_bin manquant (ou swiftc via PATH)"
@@ -3900,7 +3900,7 @@ out_add="$("$GWSA" add newacct 2>&1)"; rc_add=$?
 rm -f "$GWSA_ROOT/.strong-auth"
 if [[ "$rc_add" -eq 3 ]] \
   && echo "$out_add" | grep -q 'email requis quand strongauth'; then
-  pass "touchid : gwsa add sans email refusé sous strongauth (exit 3)"
+  pass "touchid : mag add sans email refusé sous strongauth (exit 3)"
 else
   fail "touchid : add sans email sous strongauth — rc=$rc_add out=$(echo "$out_add" | head -c 160)"
 fi
@@ -3911,7 +3911,7 @@ if grep -q 'GWSA_TIMEOUT_AUTH_MS = 120000' admin/server.js \
   && grep -q 'authGwsaResult' admin/server.js \
   && grep -q 'server.on("error"' admin/server.js \
   && grep -q 'connexion perdue avec l'\''admin' admin/index.html \
-  && grep -q 'pidfile fantôme' bin/gwsa; then
+  && grep -q 'pidfile fantôme' bin/mag; then
   pass "admin : timeout Touch ID 120s + listen error + message Failed to fetch"
 else
   fail "admin : garde-fous Touch ID / Failed to fetch manquants"
@@ -3975,9 +3975,9 @@ else
 fi
 if [[ -n "$AF_PID" ]]; then kill "$AF_PID" 2>/dev/null || true; wait "$AF_PID" 2>/dev/null || true; fi
 
-# --- gwsa dev test — déploiement + admin + marqueur PR ----------------------
+# --- mag dev test — déploiement + admin + marqueur PR ----------------------
 
-section "gwsa dev test — déployer, redémarrer l'admin, vérifier afSearchHits"
+section "mag dev test — déployer, redémarrer l'admin, vérifier afSearchHits"
 
 DEVTEST_DEP="$TMP/devdeploy"
 DEVTEST_ROOT="$TMP/devgwsa"
@@ -3985,18 +3985,18 @@ DEVTEST_ROOT="$TMP/devgwsa"
 DEVTEST_PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
 mkdir -p "$DEVTEST_ROOT"
 
-if "$GWSA" dev test --help 2>&1 | grep -q 'gwsa dev test'; then
+if "$GWSA" dev test --help 2>&1 | grep -q 'mag dev test'; then
   pass "dev test --help : usage affiché"
 else
   fail "dev test --help : usage manquant"
 fi
 
-if grep -q 'cmd_dev_test' bin/gwsa \
-  && grep -q 'afSearchHits' bin/gwsa \
-  && grep -q 'GWSA_ADMIN_NO_OPEN' bin/gwsa; then
+if grep -q 'cmd_dev_test' bin/mag \
+  && grep -q 'afSearchHits' bin/mag \
+  && grep -q 'GWSA_ADMIN_NO_OPEN' bin/mag; then
   pass "dev test : implémentation + marqueur afSearchHits + no-open admin"
 else
-  fail "dev test : marqueurs d'implémentation manquants dans gwsa"
+  fail "dev test : marqueurs d'implémentation manquants dans mag"
 fi
 
 if command -v node >/dev/null 2>&1; then
@@ -4013,7 +4013,7 @@ if command -v node >/dev/null 2>&1; then
     && echo "$out" | grep -q "http://127.0.0.1:$DEVTEST_PORT" \
     && echo "$out" | grep -q 'Marqueur PR  : oui' \
     && echo "$out" | grep -q 'afSearchHits' \
-    && echo "$out" | grep -q './bin/gwsa dev test'; then
+    && echo "$out" | grep -q './bin/mag dev test'; then
     pass "dev test : déploiement + admin + marqueur afSearchHits (hermétique)"
   else
     fail "dev test : résumé incomplet — $(echo "$out" | tail -20 | tr '\n' ' ')"
@@ -4032,7 +4032,7 @@ else
   printf '  \033[33m⊘\033[0m dev test hermétique : node absent — ignoré\n'
 fi
 
-section "gwsa dev — deploy isolé, use, list, status, remove (hermétique)"
+section "mag dev — deploy isolé, use, list, status, remove (hermétique)"
 # HOME factice : DEV_PROD_ROOT / DEV_ISOLATED_ROOT vivent sous ~/.config/…
 # (jamais le vrai $HOME). client_secret.json = fixture OAuth, pas un secret réel.
 
@@ -4155,7 +4155,7 @@ section "approbation par passkey distante (fiche 0078, ADR-0009)"
 # CA6 — enrôlement device-bound : refuse BE (backup-eligible) armé et PIN,
 # accepte device-bound + biométrie. Refusé À L'ENROLEMENT, pas seulement à
 # la vérification (ADR-0009 §3).
-RA6="$TMP/gwsa-remote-approval-ca6"
+RA6="$TMP/mag-remote-approval-ca6"
 out_ca6="$(GWSA_ROOT="$RA6" "$PY" -c "
 import sys; sys.path.insert(0, 'tests')
 import tempfile
@@ -4200,7 +4200,7 @@ print(sorted(data.keys()), perm)
 # CA1 — nonce/signature valide et fraîche → exécuté ; assertion rejouée
 # (même signature 2×) → refusée. CA2 — WYSIWYS exact dérivé du payload signé.
 # CA7 — assertion signée pour session_id=A présentée pour la session B → refus.
-out_core="$(GWSA_ROOT="$TMP/gwsa-remote-approval-core" "$PY" -c "
+out_core="$(GWSA_ROOT="$TMP/mag-remote-approval-core" "$PY" -c "
 import sys; sys.path.insert(0, 'tests')
 import tempfile
 from pathlib import Path
@@ -4280,7 +4280,7 @@ echo "$out_core" | grep -q "CROSS_SESSION:refused" \
 # CA3 — refus explicite | nonce expiré | signature invalide → AUCUNE mutation
 # (fail-closed) : on vérifie qu'aucun de ces trois chemins ne renvoie un
 # payload exécutable, et qu'une session témoin reste totalement inchangée.
-out_ca3="$(GWSA_ROOT="$TMP/gwsa-remote-approval-ca3" "$PY" -c "
+out_ca3="$(GWSA_ROOT="$TMP/mag-remote-approval-ca3" "$PY" -c "
 import sys; sys.path.insert(0, 'tests')
 import tempfile
 from pathlib import Path
@@ -4329,9 +4329,9 @@ print(' '.join(out))
   && pass "remote_approval : refus explicite | nonce expiré | signature invalide → aucune exécution (CA3, fail-closed)" \
   || fail "remote_approval : fail-closed CA3 incomplet ($out_ca3)"
 
-# CA5 — devant le Mac, gma unlock SANS --remote reste inchangé (Touch ID mock,
+# CA5 — devant le Mac, mag unlock SANS --remote reste inchangé (Touch ID mock,
 # chemin existant) : non-régression du chemin run_elicitation_gate.
-RA5="$TMP/gwsa-remote-approval-ca5"
+RA5="$TMP/mag-remote-approval-ca5"
 mkdir -p "$RA5/prof5"
 echo '{"defaults":{"services":{"gmail":"read"}}}' > "$RA5/prof5/policy.json"
 touch "$RA5/prof5/.locked"
@@ -4339,13 +4339,13 @@ touch "$RA5/.strong-auth"
 GWSA_ROOT="$RA5" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
 out_ca5="$(GWSA_ROOT="$RA5" GWSA_ELICITATION_MOCK=1 "$GWSA" unlock prof5 15 2>&1)"
 [[ -f "$RA5/prof5/.unlock-until" ]] \
-  && pass "gma unlock (sans --remote) sous .strong-auth : chemin Touch ID inchangé (CA5, non-régression)" \
-  || fail "gma unlock sans --remote : chemin Touch ID cassé ($out_ca5)"
+  && pass "mag unlock (sans --remote) sous .strong-auth : chemin Touch ID inchangé (CA5, non-régression)" \
+  || fail "mag unlock sans --remote : chemin Touch ID cassé ($out_ca5)"
 
 # --remote sans enrôlement téléphone → refus distinct (fail-closed), preuve
 # que le câblage --remote emprunte bien le frère `require_remote_approval`
 # (message « approbation distante », pas « élicitation signée »).
-RA5B="$TMP/gwsa-remote-approval-ca5b"
+RA5B="$TMP/mag-remote-approval-ca5b"
 mkdir -p "$RA5B/prof5b"
 echo '{"defaults":{"services":{"gmail":"read"}}}' > "$RA5B/prof5b/policy.json"
 sid5b="$(GWSA_ROOT="$RA5B" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1; "$PY" -c "
@@ -4357,8 +4357,8 @@ print(create_session(client='ca5b').session_id)
 ")"
 out_ca5b="$(GWSA_ROOT="$RA5B" "$GWSA" session unlock "$sid5b" prof5b 10 --remote 2>&1)"
 echo "$out_ca5b" | grep -q "approbation distante" \
-  && pass "gma session unlock --remote : emprunte le chemin frère require_remote_approval (fail-closed sans enrôlement)" \
-  || fail "gma session unlock --remote : chemin inattendu ($out_ca5b)"
+  && pass "mag session unlock --remote : emprunte le chemin frère require_remote_approval (fail-closed sans enrôlement)" \
+  || fail "mag session unlock --remote : chemin inattendu ($out_ca5b)"
 
 # --- Fix Codex P1 (PR #113) : échange en deux temps, réellement hors-process ---
 #
@@ -4370,7 +4370,7 @@ echo "$out_ca5b" | grep -q "approbation distante" \
 # Python partagé entre eux — contrairement à l'ancien `InMemoryChannel`
 # in-process) pour prouver que l'échange fonctionne réellement.
 
-RA_OOP="$TMP/gwsa-remote-approval-oop"
+RA_OOP="$TMP/mag-remote-approval-oop"
 mkdir -p "$RA_OOP"
 "$PY" -c "
 import sys; sys.path.insert(0, 'tests')
@@ -4446,16 +4446,16 @@ trav_rc=$?
   && pass "remote_approval CLI : challenge_id de traversée (../) refusé (Codex P2, PR #113)" \
   || fail "remote_approval CLI : traversée de challenge_id non refusée ($trav_out, rc=$trav_rc)"
 
-# --- gwsa --remote : exécute avec le payload signé, pas les variables shell ---
+# --- mag --remote : exécute avec le payload signé, pas les variables shell ---
 #
 # Nit de revue (PR #113) : `require_remote_approval` doit exécuter avec le
 # payload SIGNÉ renvoyé par `verify`, jamais avec ses variables shell
 # pré-signature. On le prouve avec un aller-retour RÉEL de bout en bout via
-# `gwsa session unlock … --remote` — GWSA_REMOTE_SIGNER joue le rôle du
+# `mag session unlock … --remote` — GWSA_REMOTE_SIGNER joue le rôle du
 # téléphone : un PROCESSUS SÉPARÉ qui ne reçoit l'envelope QUE lorsqu'il est
 # publié (stdin), preuve que l'échange marche vraiment hors-process, pas
 # seulement au niveau du CLI nu.
-RA_E2E="$TMP/gwsa-remote-approval-e2e"
+RA_E2E="$TMP/mag-remote-approval-e2e"
 mkdir -p "$RA_E2E/prof-e2e"
 echo '{"defaults":{"services":{"gmail":"read"}}}' > "$RA_E2E/prof-e2e/policy.json"
 touch "$RA_E2E/prof-e2e/.locked"
@@ -4500,8 +4500,8 @@ from gateway.sessions import is_session_unlocked
 print(is_session_unlocked('$sid_e2e', 'prof-e2e'))
 ")"
 [[ "$unlocked_e2e" == "True" ]] \
-  && pass "gwsa session unlock --remote : échange deux-temps réel (téléphone hors-process) exécute effectivement le déverrouillage (nit, PR #113)" \
-  || fail "gwsa session unlock --remote : déverrouillage non exécuté ($out_e2e)"
+  && pass "mag session unlock --remote : échange deux-temps réel (téléphone hors-process) exécute effectivement le déverrouillage (nit, PR #113)" \
+  || fail "mag session unlock --remote : déverrouillage non exécuté ($out_e2e)"
 
 # --- Bilan ------------------------------------------------------------------
 

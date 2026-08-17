@@ -3,7 +3,7 @@ sequenceDiagram
     actor Toi
     participant LLM as LLM (Desktop/Code)
     participant MCP as MCP + gateway
-    participant GWSA as gwsa (terminal)
+    participant GWSA as mag (terminal)
     participant Google
 
     Toi->>LLM: « lis mes derniers mails (perso) »
@@ -11,7 +11,7 @@ sequenceDiagram
     MCP-->>LLM: refuse — profil verrouillé
     LLM->>MCP: access_request unlock
     MCP-->>LLM: commande suggérée (rien d'exécuté)
-    LLM-->>Toi: propose « gwsa unlock perso 30 »
+    LLM-->>Toi: propose « mag unlock perso 30 »
     Toi->>GWSA: exécute (Touch ID si strongauth)
     LLM->>MCP: redemande la lecture
     MCP->>Google: lit via gws (policy OK)

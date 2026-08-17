@@ -11,7 +11,7 @@ moi-même chaque commande d'élicitation (unlock, grant), donne-moi les liens
 à vérifier au fur et à mesure, et ne nettoie qu'après mon accord.
 ```
 
-- Remplacer `<alias1>` / `<alias2>` par 2 alias de `gwsa list`.
+- Remplacer `<alias1>` / `<alias2>` par 2 alias de `mag list`.
 - Si les alias ne sont pas précisés, le LLM doit les demander avant tout.
 - Prérequis : un dossier **`ZZ-TESTS`** à la racine du Drive de chacun des
   2 comptes (créé par l'humain, interface web — voir PROTOCOLE.md).

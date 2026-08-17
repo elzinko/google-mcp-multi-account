@@ -1,6 +1,6 @@
 ---
 id: 0001
-title: Élicitation signée — faire monter `gwsa strongauth` de la présence à la signature
+title: Élicitation signée — faire monter `mag strongauth` de la présence à la signature
 type: feature
 priority: P3
 version:
@@ -14,8 +14,8 @@ updated: 2026-07-28
 
 ## Contexte / Problème
 
-`gwsa strongauth` est livré (2026-07-19) : `scripts/touchid.swift` +
-`require_strong_auth()`, appelé avant `gwsa unlock` et `gwsa grant`. C'est un
+`mag strongauth` est livré (2026-07-19) : `scripts/touchid.swift` +
+`require_strong_auth()`, appelé avant `mag unlock` et `mag grant`. C'est un
 **presence check** — `LAContext.evaluatePolicy(.deviceOwnerAuthentication)`, exit 0/1.
 
 Ce qu'il garantit : au moment du déverrouillage ou de l'autorisation d'une zone Drive,
@@ -29,7 +29,7 @@ Ce qu'il ne garantit **pas** — deux trous distincts, à ne pas confondre :
    appelant, qui reste juge de ce qu'il en fait. Il ne reste aucune trace vérifiable
    après coup.
 2. **Le contrôle vit dans le wrapper.** Tout l'édifice (verrous, policy, zones) est
-   appliqué par `bin/gwsa`. Un agent disposant du shell peut appeler `gws` nu avec
+   appliqué par `bin/mag`. Un agent disposant du shell peut appeler `gws` nu avec
    `GOOGLE_WORKSPACE_CLI_CONFIG_DIR=…` et **tout contourner**, Touch ID compris. Limite
    assumée et documentée (README, § policy), mais **l'élicitation signée ne la corrige
    pas** — c'est un problème orthogonal, peut-être plus pressant.
@@ -56,7 +56,7 @@ Périmètre pressenti **ici** : les deux points d'élicitation existants, `unloc
 ## ⛔ Dépendance whatsapp-group-mcp#0007
 
 **État constaté le 2026-07-28** : fiche 0007 toujours `idea` (non shipped). Le user a
-autorisé l'implémentation du **chemin macOS / gwsa** dans ce repo sans attendre 0007
+autorisé l'implémentation du **chemin macOS / mag** dans ce repo sans attendre 0007
 (transport WhatsApp reste bloqué côté l'autre projet). Conception alignée sur les 4
 décisions de 0007 ; ADR local : [ADR-0005](../docs/adr/ADR-0005-elicitation-signee-v2.md).
 
@@ -99,7 +99,7 @@ décisions de 0007 ; ADR local : [ADR-0005](../docs/adr/ADR-0005-elicitation-sig
    déclenche la signature et renvoie l'assertion. NB : la révision MCP 2026-07-28 remplace
    l'élicitation par les Multi Round-Trip Requests / SEP-2322 — cibler ça pour ne pas bâtir
    sur une API en fin de vie.)*
-4. **Où vit la vérification ?** `gwsa` est du bash ; `scripts/policy-check.py` montre que
+4. **Où vit la vérification ?** `mag` est du bash ; `scripts/policy-check.py` montre que
    Python 3 est déjà dans la boucle. Vérifier une signature ECDSA en Python vs déléguer au
    helper Swift lui-même (mode `verify`) — à trancher.
 5. **Et le trou n°2 ?** Le contournement par `gws` nu mérite-t-il sa propre fiche ? Sans
@@ -107,7 +107,7 @@ décisions de 0007 ; ADR local : [ADR-0005](../docs/adr/ADR-0005-elicitation-sig
 
 ## Critères d'acceptation
 
-- [x] `gwsa unlock` / `grant` / `session unlock` / `session grant` exigent une
+- [x] `mag unlock` / `grant` / `session unlock` / `session grant` exigent une
       **signature fraîche** liée à l'action quand `strongauth on` (payload canonique +
       nonce ; plus de simple booléen `touchid.swift`)
 - [x] Rejeu refusé (nonce) ; payload modifié = signature invalide
@@ -115,15 +115,15 @@ décisions de 0007 ; ADR local : [ADR-0005](../docs/adr/ADR-0005-elicitation-sig
       `usage.jsonl` decision `elicitation`)
 - [x] Repli documenté fail closed (ADR-0005) ; pas d'accord silencieux
 - [x] Décision mutualisation : copie locale, extraction différée (ADR-0005)
-- [x] Admin web : même flux signé sur unlock/grant (aujourd'hui délègue à `gwsa` — OK si strongauth+enroll) ; panneau **Sessions** pour unlock/grant session-scopés
+- [x] Admin web : même flux signé sur unlock/grant (aujourd'hui délègue à `mag` — OK si strongauth+enroll) ; panneau **Sessions** pour unlock/grant session-scopés
 - [ ] Enrôlement Secure Enclave validé **en conditions réelles** (doigt, pas seulement mock CI)
 - [ ] Retour d'expérience croisé avec whatsapp-group-mcp#0007 une fois shipped
 
 ## Notes
 
 - **État de l'art interne (2026-07-28)** : `gateway/elicitation.py`,
-  `scripts/elicitation-sign.swift` (enroll + sign P-256), `gwsa elicitation enroll`,
-  `require_signed_elicitation` dans `bin/gwsa`. `touchid.swift` conservé mais non
+  `scripts/elicitation-sign.swift` (enroll + sign P-256), `mag elicitation enroll`,
+  `require_signed_elicitation` dans `bin/mag`. `touchid.swift` conservé mais non
   utilisé quand strongauth est activé.
 - **Verdict déjà acquis (2026-07-19)** : pas de « plugin Claude Desktop ». Desktop
   consomme des serveurs MCP ; l'« extension » `.mcpb`/`.dxt` n'est qu'un emballage

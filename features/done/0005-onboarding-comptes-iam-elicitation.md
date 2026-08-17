@@ -23,9 +23,9 @@ compte doit recevoir `roles/serviceusage.serviceUsageConsumer` — un geste
 gcloud que rien ne documentait ni ne vérifiait.
 
 Leçon générale : « connecter un compte » n'est pas un geste mais une
-**chaîne** — projet GCP → test user (si app en Testing) → `gwsa add` →
+**chaîne** — projet GCP → test user (si app en Testing) → `mag add` →
 **rôle IAM** → policy/verrou. Les maillons par-compte vivent dans 3 surfaces
-(console web, gwsa, gcloud) et l'invariant « tout compte connecté peut
+(console web, mag, gcloud) et l'invariant « tout compte connecté peut
 appeler l'API » n'était contrôlé nulle part. Quiconque reprend le projet
 retombera dans le trou.
 
@@ -39,9 +39,9 @@ script propose, l'humain exécute — même philosophie que unlock/grant) :
    servir deux fois : affichage pour l'écran *test users* (geste console
    non automatisable) et bindings IAM `serviceUsageConsumer` via gcloud.
 2. **`provision-gcp.sh status`** : détecter la **dérive** — comparer les
-   emails des profils connectés (`gwsa list`) aux membres de l'IAM policy du
+   emails des profils connectés (`mag list`) aux membres de l'IAM policy du
    projet, signaler chaque compte sans rôle avec la commande exacte.
-3. **`gwsa add`** : après connexion réussie, sonde API légère ; si
+3. **`mag add`** : après connexion réussie, sonde API légère ; si
    `403 …use project` → afficher la commande gcloud exacte (ne jamais
    l'exécuter).
 4. **Docs** : fait le 2026-07-22 — `docs/setup-oauth.md` §7 intègre l'étape
@@ -57,11 +57,11 @@ liste n'est élicitée qu'au moment des gestes.
 
 - [x] `provision-gcp.sh status` liste les comptes connectés **sans** rôle
       `serviceUsageConsumer` et affiche la commande de remédiation par compte.
-- [x] `gwsa add` détecte le 403-projet après connexion et affiche la
+- [x] `mag add` détecte le 403-projet après connexion et affiche la
       commande gcloud exacte, sans l'exécuter.
 - [x] Un LLM guidant l'init (Claude Desktop/Code) peut dérouler toute la
       chaîne en ne demandant à l'humain que : les adresses, et l'exécution
-      des commandes proposées (via `status` + la sonde de `gwsa add`).
+      des commandes proposées (via `status` + la sonde de `mag add`).
 - [x] `scripts/test.sh` : le message de remédiation 403 est couvert par un
       cas hermétique (sortie simulée de gws). Suite 69/69.
 

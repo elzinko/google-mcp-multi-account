@@ -30,10 +30,10 @@ Ce que l'audit a établi, point par point :
 
 | Affirmation | Réalité |
 |---|---|
-| Clé maître dans le Trousseau macOS (`bin/gwsa`) | **Faux.** Aucun appel `security`/keychain dans le repo. C'est `gws` qui gère la clé, via le crate Rust `keyring` (Secret Service/libsecret sur Linux) **et** un backend `file` prévu pour le headless. |
-| Symlink `/opt/homebrew/bin/gwsa` codé en dur | **Faux.** L'occurrence en `bin/gwsa:39` est un commentaire ; `resolve_repo_dir` suit le symlink. Le README utilise déjà `$(brew --prefix)`. |
+| Clé maître dans le Trousseau macOS (`bin/mag`) | **Faux.** Aucun appel `security`/keychain dans le repo. C'est `gws` qui gère la clé, via le crate Rust `keyring` (Secret Service/libsecret sur Linux) **et** un backend `file` prévu pour le headless. |
+| Symlink `/opt/homebrew/bin/mag` codé en dur | **Faux.** L'occurrence en `bin/mag:39` est un commentaire ; `resolve_repo_dir` suit le symlink. Le README utilise déjà `$(brew --prefix)`. |
 | Présence humaine via Touch ID | Vrai mais **opt-in** : `require_strong_auth` sort si `$GWSA_ROOT/.strong-auth` n'existe pas. Par défaut, aucune dépendance Swift. |
-| `stat -f %m`, `open` | Vrai, mais **hors chemin nominal** : `provision-gcp.sh` (setup one-shot) et un `open` déjà en `\|\| true` dans `gwsa admin`. |
+| `stat -f %m`, `open` | Vrai, mais **hors chemin nominal** : `provision-gcp.sh` (setup one-shot) et un `open` déjà en `\|\| true` dans `mag admin`. |
 | Seuls `test.sh` et `install-claude-desktop.sh` portables | **Sous-estimé.** Tout `gateway/` (~1 750 lignes, le serveur MCP) est portable — que du `subprocess`. |
 
 **Le chemin nominal — client LLM → MCP → `gateway/` → `gws` — est donc déjà
@@ -59,7 +59,7 @@ mince » décrite à la capture : c'est de la doc à corriger, une install sans
 
 Dans le périmètre :
 - **Install sans Homebrew** : documenter le chemin `gws` par tarball Linux
-  (releases officielles) + le symlink `gwsa` résolu via PATH, sans `brew --prefix`.
+  (releases officielles) + le symlink `mag` résolu via PATH, sans `brew --prefix`.
 - **Backend de clé** : documenter `GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file`
   comme le mode headless/conteneur, **avec sa conséquence de sécurité** (la clé
   descend du keyring OS vers un fichier local `.encryption_key`).
@@ -73,19 +73,19 @@ Dans le périmètre :
 
 **Hors périmètre** (reste macOS, documenté comme tel) :
 - `provision-gcp.sh` — `stat -f %m`, `open`, surveillance `~/Downloads`.
-- `gwsa admin` — ouverture navigateur (dégrade déjà en `|| true`).
+- `mag admin` — ouverture navigateur (dégrade déjà en `|| true`).
 - Équivalent Linux de la présence humaine (polkit/PAM) — fiche séparée si besoin.
 - Packaging/release installable → relève de [[0020]], pas d'ici.
 
 ## Critères d'acceptation
 
-- [ ] Un conteneur Linux nu (Docker) exécute `gwsa list` et démarre `bin/google-mcp`,
+- [ ] Un conteneur Linux nu (Docker) exécute `mag list` et démarre `bin/google-mcp`,
       qui répond à `profiles_list` — sans macOS, sans `brew`, sans Swift.
-- [ ] Aucun BSD-isme ni binaire macOS-only sur le chemin nominal (`bin/gwsa` +
+- [ ] Aucun BSD-isme ni binaire macOS-only sur le chemin nominal (`bin/mag` +
       `gateway/`) : vérifié par le smoke, pas par relecture.
 - [ ] `GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file` est documenté comme le mode
       Linux/headless, avec l'écart de sécurité explicité.
-- [ ] `gwsa strongauth on` hors macOS échoue avec un message explicite (pas de
+- [ ] `mag strongauth on` hors macOS échoue avec un message explicite (pas de
       trace), et la doc dit que c'est macOS-only.
 - [ ] Le README n'annonce plus le Trousseau comme requis, et sépare chemin nominal
       (macOS + Linux) et outillage de setup (macOS).

@@ -1,4 +1,4 @@
-"""Chemins et constantes partagés (alignés sur bin/gwsa)."""
+"""Chemins et constantes partagés (alignés sur bin/mag)."""
 from __future__ import annotations
 
 import os
@@ -24,7 +24,7 @@ SYS_PYTHON = "/usr/bin/python3"
 # Réutilisé partout dans le code (jamais ré-écrit en dur) :
 #   • basename du binaire de signature → nom affiché dans le dialogue Touch ID ;
 #   • à garder aligné avec le nom du serveur MCP (docs/mcp-setup.md).
-# bin/gwsa et scripts/test.sh le lisent via cette constante (import Python).
+# bin/mag et scripts/test.sh le lisent via cette constante (import Python).
 # Rebrand (ex. « googlez ») = changer CETTE SEULE LIGNE.
 PRODUCT_SLUG = "google-multi-account"
 

@@ -45,7 +45,7 @@ proposent des directions, pas un design figé.
 ```mermaid
 flowchart TB
   subgraph humain [Humain]
-    H[Touch ID / admin / gwsa]
+    H[Touch ID / admin / mag]
   end
 
   subgraph clients [Clients LLM]
@@ -58,7 +58,7 @@ flowchart TB
     MCP[bin/google-mcp]
     GW[gateway/]
     BRK[broker 127.0.0.1:4878]
-    GWSA[bin/gwsa]
+    GWSA[bin/mag]
     POL[policy-check.py]
     ADM[admin 127.0.0.1:4877]
   end
@@ -87,11 +87,11 @@ flowchart TB
 | Composant | Rôle | Toujours démarré ? |
 |-----------|------|-------------------|
 | `gws` | CLI Google Workspace ; lit les tokens chiffrés | Non — invoqué à la demande |
-| `gwsa` | Wrapper multi-comptes : lock, grant, policy, puis `gws` | Non — par commande |
+| `mag` | Wrapper multi-comptes : lock, grant, policy, puis `gws` | Non — par commande |
 | `bin/google-mcp` | Serveur MCP stdio ; tools curatés | Lancé par le client LLM |
 | `broker` | Seul exécuteur `gws` pour le MCP ; re-vérifie lock + policy | Auto-start au 1er tool MCP |
-| `admin` | Cockpit humain (unlock, grants, policy, journal) | **Non** — `gwsa admin` à la demande |
-| `policy-check.py` | Default-deny avant chaque appel `gws` (via gwsa ou broker) | Non — subprocess |
+| `admin` | Cockpit humain (unlock, grants, policy, journal) | **Non** — `mag admin` à la demande |
+| `policy-check.py` | Default-deny avant chaque appel `gws` (via mag ou broker) | Non — subprocess |
 
 ### 1.2 Où vivent les secrets et les droits
 
@@ -118,12 +118,12 @@ partagés entre toutes les conversations et tous les clients sur ce poste.
 
 | Levier | Commande / geste | Fichier | Portée | Expiration par défaut |
 |--------|------------------|---------|--------|----------------------|
-| **Verrou** | `gwsa lock <alias>` | `.locked` | Compte entier (lecture + écriture) | — |
-| **Déverrouillage** | `gwsa unlock <alias> [min]` | `.unlock-until` | Compte entier | **60 min**, puis reverrouillage |
-| **Déverrouillage permanent** | `gwsa unlock <alias> off` | supprime `.locked` | Compte entier | Jamais (jusqu'à `lock`) |
-| **Zone Drive temporaire** | `gwsa grant <alias> "<dossier>" [h]` | `session-grants.json` | Écriture sous ce dossier | **8 h** (1–168 h) |
-| **Zone Drive permanente** | `gwsa policy <alias> allow "<dossier>"` | `policy.json` | Écriture sous ce dossier | Jamais (jusqu'à `revoke`) |
-| **Policy services** | admin / `gwsa policy` | `policy.json` | Gmail, Calendar, etc. | Jamais |
+| **Verrou** | `mag lock <alias>` | `.locked` | Compte entier (lecture + écriture) | — |
+| **Déverrouillage** | `mag unlock <alias> [min]` | `.unlock-until` | Compte entier | **60 min**, puis reverrouillage |
+| **Déverrouillage permanent** | `mag unlock <alias> off` | supprime `.locked` | Compte entier | Jamais (jusqu'à `lock`) |
+| **Zone Drive temporaire** | `mag grant <alias> "<dossier>" [h]` | `session-grants.json` | Écriture sous ce dossier | **8 h** (1–168 h) |
+| **Zone Drive permanente** | `mag policy <alias> allow "<dossier>"` | `policy.json` | Écriture sous ce dossier | Jamais (jusqu'à `revoke`) |
+| **Policy services** | admin / `mag policy` | `policy.json` | Gmail, Calendar, etc. | Jamais |
 
 **Ce qui ne déclenche aucune expiration** : fermer une discussion, fermer
 Claude Desktop, ouvrir une nouvelle conversation, lancer un second client LLM.
@@ -164,7 +164,7 @@ Légende :
   (Drive `zonesOnly`, zones vides, Gmail lecture + brouillons sans envoi), profils
   **non verrouillés** sauf mention contraire.
 - **Session LLM** = une conversation Claude Desktop, un chat Cursor, ou une
-  session Claude Code — **sans identifiant technique** côté gwsa aujourd'hui.
+  session Claude Code — **sans identifiant technique** côté mag aujourd'hui.
 
 ### 2.1 Accès au compte (verrou / déverrouillage)
 
@@ -180,7 +180,7 @@ Fonctionnalité: Verrou profil — accès global au compte
 
   Scénario: ACT-02 — Déverrouillage temporaire partagé entre sessions
     Étant donné que le profil "mw" est verrouillé
-    Et que l'humain exécute "gwsa unlock mw 60"
+    Et que l'humain exécute "mag unlock mw 60"
     Quand la session LLM A appelle gmail_list sur "mw"
     Et que la session LLM B (autre conversation, même poste) appelle gmail_list sur "mw"
     Alors les deux appels sont autorisés
@@ -194,9 +194,9 @@ Fonctionnalité: Verrou profil — accès global au compte
 
   Scénario: ACT-04 — unlock off retire le verrou définitivement
     Étant donné que "mw" est verrouillé
-    Quand l'humain exécute "gwsa unlock mw off"
+    Quand l'humain exécute "mag unlock mw off"
     Alors toutes les sessions futures sur ce poste accèdent à "mw" sans unlock
-    Jusqu'à un prochain "gwsa lock mw"
+    Jusqu'à un prochain "mag lock mw"
 ```
 
 ### 2.2 Zones Drive (grants temporaires et policy)
@@ -205,7 +205,7 @@ Fonctionnalité: Verrou profil — accès global au compte
 Fonctionnalité: Zones d'écriture Drive
 
   Scénario: ACT-05 — Grant temporaire partagé entre sessions parallèles
-    Étant donné que l'humain a exécuté 'gwsa grant mw "Compta 2026" 8'
+    Étant donné que l'humain a exécuté 'mag grant mw "Compta 2026" 8'
     Quand la session LLM A appelle drive_create sous ce dossier
     Et que la session LLM B appelle drive_create sous le même dossier
     Alors les deux appels sont autorisés immédiatement
@@ -230,7 +230,7 @@ Fonctionnalité: Zones d'écriture Drive
     Alors le grant est toujours actif (temps restant ≈ durée initiale − 10 min)
 
   Scénario: ACT-09 — Zone permanente (policy) sans expiration horaire
-    Étant donné que l'humain a exécuté 'gwsa policy mw allow "LLM"'
+    Étant donné que l'humain a exécuté 'mag policy mw allow "LLM"'
     Quand une session LLM appelle drive_create sous "LLM"
     Alors l'appel est autorisé
     Et cela reste vrai des jours plus tard, toutes sessions confondues
@@ -251,7 +251,7 @@ Fonctionnalité: Identification client (audit seulement)
 
   Scénario: ACT-11 — GWSA_CLIENT est falsifiable
     Étant donné un agent avec shell qui exporte GWSA_CLIENT=innocent
-    Quand il appelle gwsa ou le broker avec ce client
+    Quand il appelle mag ou le broker avec ce client
     Alors le journal affiche "innocent"
     Sans que cela change les droits réels
 ```
@@ -287,13 +287,13 @@ Fonctionnalité: access_request — propose, n'exécute pas
   Scénario: ACT-15 — Le LLM ne peut pas unlock via MCP
     Étant donné "mw" verrouillé
     Quand le LLM appelle access_request kind=unlock
-    Alors la réponse contient la commande "gwsa unlock mw …"
+    Alors la réponse contient la commande "mag unlock mw …"
     Et le profil reste verrouillé tant que l'humain n'exécute pas la commande
 
   Scénario: ACT-16 — Le LLM ne peut pas grant via MCP
     Étant donné aucune zone d'écriture active
     Quand le LLM appelle access_request kind=grant
-    Alors la réponse contient "gwsa grant …"
+    Alors la réponse contient "mag grant …"
     Et session-grants.json est inchangé tant que l'humain n'agit pas
 ```
 
@@ -344,7 +344,7 @@ Fonctionnalité: access_request — propose, n'exécute pas
 |----|--------|-------|
 | **M-01** | Identifiant de **session LLM** stable côté broker | Le MCP n'expose pas aujourd'hui de session id au broker |
 | **M-02** | Registre **session → capacités** (éphémère) | Distinct de `session-grants.json` global |
-| **M-03** | Manifeste **`.gwsa/`** signé dans le dépôt | Capacités projet versionnées |
+| **M-03** | Manifeste **`.mag/`** signé dans le dépôt | Capacités projet versionnées |
 | **M-04** | Vérification **signature humaine** avant activation manifeste | Dépend [0001](0001-elicitation-signee-strongauth-v2.md) |
 | **M-05** | `access_request kind=session_grant` et/ou `project_grant` | Élicitation explicite par scope |
 | **M-06** | Révocation **fin de session** (client MCP déconnecté) | Nécessite signal de vie ou TTL |
@@ -367,7 +367,7 @@ précise comment la **couche session** doit se comporter.
 | P6 | **Héritage descendant, pas d'élargissement** | Un sous-agent bénéficie des capacités **déjà accordées** à la session parent (intersection : jamais plus que le parent). |
 | P7 | **Gestion des droits réservée au parent** (et à l'humain) | Seul le parent (ou l'humain via élicitation) peut demander / obtenir un élargissement (`access_request`, grant session). Un sous-agent **ne déclenche pas** d'élargissement autonome. |
 | P8 | **Révocation cascade** | Quand le parent reprend la main (sous-agent bloqué, annulé ou terminé), le parent peut **retirer les droits effectifs de tous les descendants** d'un geste — sans attendre l'expiration TTL. |
-| P9 | **Même projet git** | Sous-agents héritent du `project_id` / `git_root` du parent (même périmètre manifeste `.gwsa/`). |
+| P9 | **Même projet git** | Sous-agents héritent du `project_id` / `git_root` du parent (même périmètre manifeste `.mag/`). |
 
 #### État actuel
 
@@ -463,7 +463,7 @@ flowchart LR
     SB[Session B]
     RA["registre session A"]
     RB["registre session B"]
-    PROJ[".gwsa/ manifeste signé\n(partagé via git)"]
+    PROJ[".mag/ manifeste signé\n(partagé via git)"]
     SA --> RA
     SB --> RB
     RA --> PROJ
@@ -484,8 +484,8 @@ flowchart TB
   LLM -->|chemin supporté| MCP[MCP + broker + policy]
   LLM -->|contournement 1| GWSNU["gws nu +\nGOOGLE_WORKSPACE_CLI_CONFIG_DIR"]
   LLM -->|contournement 2| EDIT["Édition directe\nsession-grants.json / .unlock-until"]
-  LLM -->|contournement 3| GWSA["gwsa grant / unlock\n(si shell autorisé)"]
-  LLM -->|contournement 4| FORGE["Faux manifeste .gwsa/\n(sans signature valide)"]
+  LLM -->|contournement 3| GWSA["mag grant / unlock\n(si shell autorisé)"]
+  LLM -->|contournement 4| FORGE["Faux manifeste .mag/\n(sans signature valide)"]
 
   MCP -->|bloque| OK[Accès filtré]
   GWSNU -->|bypass total| FULL[Accès complet credentials]
@@ -501,10 +501,10 @@ flowchart TB
 | S-01 | `gws` nu + `GOOGLE_WORKSPACE_CLI_CONFIG_DIR` | Shell + lecture `credentials.enc` + Trousseau déverrouillé | Bypass lock, policy, zones, journal | **Non** | Restreindre shell agent ; MCP seul pour données | [0003](0003-vault-credentials-hors-perimetre-agent.md) vault |
 | S-02 | Éditer `session-grants.json` | Shell + écriture `~/.config/gws-accounts/` | Ajout zones sans humain | **Non** | Permissions filesystem ; strongauth n'empêche pas l'édition | Vault + fichiers hors portée agent ; permissions macOS |
 | S-03 | Éditer `.unlock-until` | Idem | Déverrouillage sans Touch ID | **Non** | Idem | Idem |
-| S-04 | `gwsa grant` / `unlock` en shell | Shell autorisé, strongauth off | Élargissement droits **poste entier** | Partiel (Touch ID si strongauth) | `gwsa strongauth on` | Élicitation signée [0001](0001-elicitation-signee-strongauth-v2.md) |
+| S-04 | `mag grant` / `unlock` en shell | Shell autorisé, strongauth off | Élargissement droits **poste entier** | Partiel (Touch ID si strongauth) | `mag strongauth on` | Élicitation signée [0001](0001-elicitation-signee-strongauth-v2.md) |
 | S-05 | Tool MCP `access_request` | — | N'exécute rien | **Oui** | By design | — |
 | S-06 | Falsifier `GWSA_CLIENT` | Shell ou env MCP | Journal trompeur seulement | N/A (pas un bypass droits) | — | Identité session non spoofable (M-01) |
-| S-07 | Commit manifeste `.gwsa/` non signé | Accès git write | Auto-attribution si pas de vérif | N/A (feature absente) | — | Signature + clé publique hors repo (M-04) |
+| S-07 | Commit manifeste `.mag/` non signé | Accès git write | Auto-attribution si pas de vérif | N/A (feature absente) | — | Signature + clé publique hors repo (M-04) |
 | S-08 | Rejeu manifeste volé sur fork | Lecture repo public | Droits sur mauvais remote | N/A | — | `project_id` lié au remote attendu |
 
 ### 4.3 Conséquence pour la « couche session »
@@ -550,8 +550,8 @@ flowchart TB
   end
 
   subgraph projet [Couche 2 — Projet git versionné]
-    MAN[.gwsa/manifest.json]
-    SIG[.gwsa/manifest.sig]
+    MAN[.mag/manifest.json]
+    SIG[.mag/manifest.sig]
   end
 
   subgraph poste [Couche 3 — Plancher poste / compte]
@@ -572,7 +572,7 @@ flowchart TB
 | Couche | Rôle | Durée de vie | Stockage |
 |--------|------|--------------|----------|
 | **3 — Compte** | Plancher global (pas d'envoi mail, services autorisés) | Permanent | `~/.config/gws-accounts/<alias>/policy.json` |
-| **2 — Projet** | « Ce repo a besoin de ces zones / comptes » | Versionné git ; expiration dans manifeste | `.gwsa/` dans le dépôt |
+| **2 — Projet** | « Ce repo a besoin de ces zones / comptes » | Versionné git ; expiration dans manifeste | `.mag/` dans le dépôt |
 | **1 — Session** | « Cette conversation a obtenu unlock + zones **pour ce projet** » | **Fin de session** ou TTL court | Registre broker local éphémère (M-02) |
 
 **Réponse à la tension poste vs session** : l'humain signe le **plafond projet**
@@ -597,12 +597,12 @@ stateDiagram-v2
 | Nouvelle conversation MCP | Vide — repart de zéro | **Inchangé** (legacy) ou déprécié |
 | Humain accorde zone en session | Entrée registre session | Ne plus écrire dans session-grants global (C-02) |
 | Fermeture client MCP | Registre session supprimé | Inchangé |
-| Merge manifeste `.gwsa/` | Sessions existantes : re-vérif | Manifeste git mis à jour |
+| Merge manifeste `.mag/` | Sessions existantes : re-vérif | Manifeste git mis à jour |
 
 ### 5.3 Manifeste projet (couche 2 — inchangé dans l'esprit)
 
 ```
-.gwsa/
+.mag/
   manifest.json      # périmètre max du projet (lisible, diff PR)
   manifest.sig       # signature humaine (Secure Enclave / fiche 0001)
 ```
@@ -633,7 +633,7 @@ Exemple indicatif :
 | Unité d'accès | Compte (poste) | Session × projet × compte |
 | Nouvelle conversation | Hérite grants 8 h | Repart de zéro (C-02) |
 | Sessions parallèles | Droits partagés | Isolées (C-01) |
-| Worktree / merge | Rien dans git | Manifeste `.gwsa/` (C-05) |
+| Worktree / merge | Rien dans git | Manifeste `.mag/` (C-05) |
 | Autre machine | Tout à refaire | Manifeste + trust local (C-06) |
 | Auto-attribution agent | Possible via FS (S-02) | Sig requise pour couche 2 ; session via élicitation |
 | Contournement `gws` nu | Oui (S-01) | Toujours oui sans vault |
@@ -645,10 +645,10 @@ Exemple indicatif :
 | **A — session_id MCP** | Le broker reçoit un id à l'`initialize` MCP | Propre, explicite | Nécessite évolution protocole / broker |
 | **B — TTL par process MCP** | PID ou inode du process `google-mcp` | Simple | Fragile si restart |
 | **C — Jeton session éphémère** | Humain colle un code en début de chat | Pas de changement MCP | UX lourde |
-| **D — Déprécier session-grants global** | Plus d'écriture poste-wide pour grants | Résout C-02 | Breaking change admin / `gwsa grant` |
+| **D — Déprécier session-grants global** | Plus d'écriture poste-wide pour grants | Résout C-02 | Breaking change admin / `mag grant` |
 
 **Recommandation provisoire** : option **A + D** — registre broker par `session_id`,
-et `gwsa grant` devient `gwsa session grant <session_id> …` ou passe par l'admin
+et `mag grant` devient `mag session grant <session_id> …` ou passe par l'admin
 avec session visible.
 
 ---
@@ -666,7 +666,7 @@ Phasage suggéré :
 | Phase | Contenu | Résout |
 |-------|---------|--------|
 | **A** | Registre session broker + fin de session + déprécation grant global | C-01, C-02, C-03, M-01, M-02, M-06 |
-| **B** | Manifeste `.gwsa/` signé + intersection 3 couches | C-04, C-05, C-06, M-03, M-04, M-07 |
+| **B** | Manifeste `.mag/` signé + intersection 3 couches | C-04, C-05, C-06, M-03, M-04, M-07 |
 | **C** | Admin UI sessions + vault + élicitation signée | M-05, M-08, S-01…S-03 |
 
 ---
@@ -678,7 +678,7 @@ Phasage suggéré :
 > ⚠️ **Certains critères ci-dessous sont remplacés par [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md) / fiche [0076](0076-droits-par-session-phase-a.md).** L'identité ne vient plus de la connexion MCP (« 1 `session_id` par process/conversation », l. 676 & 680) mais d'un **geste de consentement signé, jeton porté dans l'appel** ; et le cycle de vie est **découplé de la connexion** (plus de « purge à la déconnexion », l. 681) — TTL + révocation explicite.
 
 - [ ] Chaque process MCP reçoit un `session_id` stable transmis au broker.
-- [ ] `gwsa grant` n'écrit plus dans `session-grants.json` global par défaut ;
+- [ ] `mag grant` n'écrit plus dans `session-grants.json` global par défaut ;
       écrit dans le registre **session** (réf. C-02).
 - [ ] Session B ne voit pas les capacités accordées à session A (test BDD C-01).
 - [ ] Nouvelle conversation MCP = nouveau `session_id` = aucune capacité (C-02).
@@ -691,7 +691,7 @@ Phasage suggéré :
 
 ### Phase B — Projet git
 
-- [ ] `.gwsa/manifest.json` + `.gwsa/manifest.sig` ; draft gitignoré.
+- [ ] `.mag/manifest.json` + `.mag/manifest.sig` ; draft gitignoré.
 - [ ] Droits effectifs = intersection couche 3 ∩ 2 ∩ 1 (M-07).
 - [ ] Manifeste invalide / expiré / non signé → ignoré (fail closed).
 - [ ] `project_id` stable worktrees inclus (ACT-13 → comportement manifeste).
@@ -710,7 +710,7 @@ Phasage suggéré :
 1. **Fin de session** : déconnexion MCP suffit-elle, ou TTL max (ex. 2 h) même
    si le client reste ouvert ?
 2. **Legacy `session-grants.json`** : migration, coexistence, ou coupure nette ?
-3. **`gwsa unlock`** : reste poste-wide ou devient session-scoped aussi (C-01) ?
+3. **`mag unlock`** : reste poste-wide ou devient session-scoped aussi (C-01) ?
 4. **`project_id`** : hash `remote.origin.url` vs autre ?
 5. **Hors dépôt git** : comportement couche 2 absente → session seule sur plancher compte ?
 6. **Priorité vault vs session** : Phase A sans vault apporte-t-elle assez de valeur ?
@@ -733,6 +733,6 @@ Phasage suggéré :
 
 | Phase | Fait en code | Reste |
 |-------|--------------|-------|
-| **A — session** | `session_id` MCP, registre `.sessions/`, `gwsa session unlock\|grant\|show\|revoke-descendants`, isolation + héritage enfant, purge TTL / `close_session`, journal `session_id`, `gwsa grant` global déprécié (warn + legacy) / routage `GWSA_SESSION_ID` → registre session, **`gwsa unlock` idem**, **purge registre à la fin du stdio MCP** (`close_session` + descendants) | détection déconnexion HTTP broker (si autre transport) ; TTL session si client reste ouvert sans activité |
-| **B — projet** | lecture/écriture `.gwsa/manifest.json`, **`gwsa project show\|init\|sign`**, intersection Drive + **services** (policy-check), **`access_request kind=project_grant`** | draft gitignoré ; threat-model |
-| **C — durcissement** | vault credentials → `.vault/<alias>/` ; **élicitation signée** unlock/grant/session + `gwsa elicitation enroll` (mock CI) ; manifeste `project sign` crypto si strongauth ; **admin UI sessions** | validation Touch ID réelle documentée ; threat-model à jour |
+| **A — session** | `session_id` MCP, registre `.sessions/`, `mag session unlock\|grant\|show\|revoke-descendants`, isolation + héritage enfant, purge TTL / `close_session`, journal `session_id`, `mag grant` global déprécié (warn + legacy) / routage `GWSA_SESSION_ID` → registre session, **`mag unlock` idem**, **purge registre à la fin du stdio MCP** (`close_session` + descendants) | détection déconnexion HTTP broker (si autre transport) ; TTL session si client reste ouvert sans activité |
+| **B — projet** | lecture/écriture `.mag/manifest.json`, **`mag project show\|init\|sign`**, intersection Drive + **services** (policy-check), **`access_request kind=project_grant`** | draft gitignoré ; threat-model |
+| **C — durcissement** | vault credentials → `.vault/<alias>/` ; **élicitation signée** unlock/grant/session + `mag elicitation enroll` (mock CI) ; manifeste `project sign` crypto si strongauth ; **admin UI sessions** | validation Touch ID réelle documentée ; threat-model à jour |

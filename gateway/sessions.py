@@ -1,7 +1,7 @@
 """Registre des sessions LLM — capacités éphémères par conversation (fiche 0040).
 
 Chaque session MCP reçoit un identifiant à l'initialize. Les unlock et zones
-Drive accordés via « gwsa session … » ne profitent qu'à cette session (et à ses
+Drive accordés via « mag session … » ne profitent qu'à cette session (et à ses
 sous-sessions déclarées), pas aux autres conversations du poste.
 """
 from __future__ import annotations
@@ -306,7 +306,7 @@ def session_grant_drive(
         if proj.manifest_valid and proj.manifest:
             if not grant_allowed_by_manifest(proj.manifest, alias, fid):
                 raise GatewayError(
-                    f"zone « {fid} » hors périmètre manifeste projet (.gwsa/manifest.json)",
+                    f"zone « {fid} » hors périmètre manifeste projet (.mag/manifest.json)",
                     code="policy",
                 )
     zones = [z for z in state.drive_zones.get(alias, []) if z.id != fid]

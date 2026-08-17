@@ -35,7 +35,7 @@ Une commande, sans rien cloner :
 curl -fsSL https://raw.githubusercontent.com/elzinko/google-mcp-multi-account/main/install.sh | bash
 ```
 
-Vous obtenez la commande **`gma`** dans votre terminal (c'est *votre* poste de
+Vous obtenez la commande **`mag`** dans votre terminal (c'est *votre* poste de
 pilotage : connecter des comptes, verrouiller, autoriser) et le serveur prêt à être
 branché. L'installeur affiche à la fin ce qu'il reste à faire côté Google.
 
@@ -43,7 +43,7 @@ branché. L'installeur affiche à la fin ce qu'il reste à faire côté Google.
 
 Google impose deux gestes manuels dans sa console : créer un **identifiant OAuth**
 et **publier** l'application. C'est gratuit, rien n'est hébergé — juste une carte
-d'identité qui autorise `gma` à se connecter à *vos* comptes.
+d'identité qui autorise `mag` à se connecter à *vos* comptes.
 
 Le guide détaillé, pas à pas : **[OAuth / Google Cloud](setup-oauth.md)** (~10 min).
 À la fin, vous avez un fichier `client_secret.json` en place.
@@ -54,17 +54,17 @@ Chaque compte se connecte par le **navigateur** — vous choisissez le compte, G
 demande votre accord. Aucun mot de passe ne transite par l'outil.
 
 ```bash
-gma add perso vous@gmail.com     # « perso » = un nom court ; l'email désigne le compte
+mag add perso vous@gmail.com     # « perso » = un nom court ; l'email désigne le compte
 ```
 
-Répétez pour chaque compte (`gma add asso vous@asso.org`, etc.). Vérifiez :
+Répétez pour chaque compte (`mag add asso vous@asso.org`, etc.). Vérifiez :
 
 ```bash
-gma list                          # vos comptes et leur état
+mag list                          # vos comptes et leur état
 ```
 
 !!! tip "Email ou alias ?"
-    Partout, vous pouvez désigner un compte par son **email** (`gma lock
+    Partout, vous pouvez désigner un compte par son **email** (`mag lock
     vous@gmail.com`) — le plus clair. Le petit alias (`perso`) reste un **raccourci**
     optionnel si l'email est long à taper.
 
@@ -73,9 +73,9 @@ gma list                          # vos comptes et leur état
 Une commande relie le serveur à votre assistant :
 
 ```bash
-gma wire desktop      # Claude Desktop
-gma wire code         # Claude Code (le CLI « claude »)
-gma wire all          # les deux
+mag wire desktop      # Claude Desktop
+mag wire code         # Claude Code (le CLI « claude »)
+mag wire all          # les deux
 ```
 
 Puis **redémarrez le client**. (Pour Cursor et le détail par client, voir [Configurer un client LLM](configurer-client.md).)
@@ -95,14 +95,14 @@ S'il bute sur un **verrou** 🔒, c'est normal : un compte peut être verrouill�
 sur demande). L'assistant vous propose alors la commande — à vous de l'exécuter :
 
 ```bash
-gma unlock vous@gmail.com 30      # déverrouillé 30 min, reverrouillage automatique
+mag unlock vous@gmail.com 30      # déverrouillé 30 min, reverrouillage automatique
 ```
 
 C'est tout le principe : **l'assistant propose, vous disposez.**
 
 ## Et ensuite ?
 
-- **[Utiliser au quotidien](usage.md)** — la CLI `gma`, l'interface admin, Touch ID.
+- **[Utiliser au quotidien](usage.md)** — la CLI `mag`, l'interface admin, Touch ID.
 - **[Modèle de policy](policies.md)** — ce que chaque compte a le droit de faire (par défaut : lecture, brouillons, zéro envoi).
 - **[Sécurité](threat-model.md)** — ce que le projet garantit, et ce qu'il ne garantit *pas*.
 - Un souci pendant l'install ? **[Configurer un client LLM](configurer-client.md)** (config manuelle par client) et **[Installer & mettre à jour](mcp-setup.md)** (plusieurs versions, dépannage).

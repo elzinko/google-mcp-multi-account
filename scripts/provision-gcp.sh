@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# provision-gcp.sh — provisionne le projet Google Cloud nécessaire à gws/gwsa.
+# provision-gcp.sh — provisionne le projet Google Cloud nécessaire à gws/mag.
 #
 # Le « projet » GCP créé ici est un simple conteneur administratif OAuth :
 # rien n'est déployé, aucune facturation, 0 €. Tout le reste tourne en local.
@@ -161,14 +161,14 @@ if [[ "$MODE" == "status" ]]; then
       any_profile=1
       case "$state" in
         ok)      ok "$alias_name ($pemail) : accès projet OK" ;;
-        unknown) warn "$alias_name : email indéterminé (token expiré ? → gma add $alias_name)" ;;
+        unknown) warn "$alias_name : email indéterminé (token expiré ? → mag add $alias_name)" ;;
         missing)
           missing=$((missing + 1))
           warn "$alias_name ($pemail) : SANS rôle serviceUsageConsumer → 403 au 1er appel"
           echo "     gcloud projects add-iam-policy-binding $PROJECT_ID --member=user:$pemail --role=$ROLE_SUC" ;;
       esac
     done < <(iam_profile_states "$PROJECT_ID")
-    [[ -n "$any_profile" ]] || echo "  (aucun compte connecté — gma add <alias>)"
+    [[ -n "$any_profile" ]] || echo "  (aucun compte connecté — mag add <alias>)"
     [[ "$missing" -gt 0 ]] && echo && echo "→ Tout accorder d'un coup : ${B}./scripts/provision-gcp.sh sync-iam${N}"
   fi
   exit 0
@@ -191,7 +191,7 @@ if [[ "$MODE" == "sync-iam" ]]; then
   while IFS=$'\t' read -r alias_name pemail state; do
     case "$state" in
       ok)      already=$((already + 1)); ok "$alias_name ($pemail) : déjà OK" ;;
-      unknown) warn "$alias_name : email indéterminé — ignoré (gma add $alias_name)" ;;
+      unknown) warn "$alias_name : email indéterminé — ignoré (mag add $alias_name)" ;;
       missing)
         if [[ -n "$CONFIRM_YES" ]] || { is_tty && confirm "Accorder le rôle à $alias_name ($pemail) ?"; }; then
           if gcloud projects add-iam-policy-binding "$PROJECT_ID" \
@@ -368,6 +368,6 @@ ok "projet : $PROJECT_ID (propriétaire : $ACCOUNT)"
 ok "état persisté : $STATE_FILE"
 echo
 echo "${B}Prochaine étape — connecter tes comptes :${N}"
-echo "   gma add perso     # navigateur → choisir le compte → accepter"
-echo "   gma add <alias>   # répéter pour chaque compte"
-echo "   gma list"
+echo "   mag add perso     # navigateur → choisir le compte → accepter"
+echo "   mag add <alias>   # répéter pour chaque compte"
+echo "   mag list"

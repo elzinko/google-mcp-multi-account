@@ -29,7 +29,7 @@ Fiches liées : 0036 (clarté des cartes), 0037 (sémantique de la suppression e
 L'admin web local est **une seule page** HTML/CSS/JS vanilla (aucun framework,
 aucun routeur, aucun build), servie par `admin/server.js` en **Node stdlib pur
 (zéro dépendance)**. Les données arrivent en JSON (`GET /api/profiles`), les
-actions partent en `POST /api/<alias>/<action>` vers `bin/gwsa`.
+actions partent en `POST /api/<alias>/<action>` vers `bin/mag`.
 
 On veut passer d'une simple liste de cartes à :
 (a) une vue d'**ensemble** (tous les comptes, résumés) ;

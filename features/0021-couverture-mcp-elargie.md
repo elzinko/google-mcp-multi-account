@@ -15,7 +15,7 @@ created: 2026-07-24
 
 Le README pitch 6 services. La réalité MCP : **9 tools dont 3 méta**. Gmail
 (lecture + brouillon) et Drive (lecture + création) seulement. **Zéro tool MCP**
-pour Calendar, Docs, Sheets, Tasks — accessibles uniquement via le shell `gwsa`,
+pour Calendar, Docs, Sheets, Tasks — accessibles uniquement via le shell `mag`,
 donc **pas depuis Claude Desktop** (pourtant cible du script d'install 0013).
 
 En face, les serveurs MCP Google concurrents exposent des dizaines à des centaines

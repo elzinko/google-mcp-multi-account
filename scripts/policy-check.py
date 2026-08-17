@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Contrôleur de policy par service pour gwsa.
+"""Contrôleur de policy par service pour mag.
 
-Appelé par bin/gwsa (et la gateway MCP) avant TOUTE commande quand le profil
+Appelé par bin/mag (et la gateway MCP) avant TOUTE commande quand le profil
 possède un policy.json. Default-deny : un service absent du policy.json est
 refusé (sauf passthrough auth/schema). Un service présent = fail closed :
 seules les catégories explicitement autorisées passent.
@@ -24,10 +24,10 @@ policy.json (dans ~/.config/gws-accounts/<alias>/) :
 Drive, modèle par zones : lecture partout ; en zonesOnly, écritures uniquement
 sous les dossiers autorisés (sous-dossiers compris, remontée des parents via
 l'API). Zones = writeFolders (permanentes, policy) ∪ session-grants.json
-(temporaires, accordées par l'utilisateur via `gwsa grant`, expiration auto).
+(temporaires, accordées par l'utilisateur via `mag grant`, expiration auto).
 Par défaut (zonesOnly sans zones) : aucune écriture possible.
 
-Sortie : exit 0 = autorisé (gwsa exécute), exit 4 = refusé (message stderr).
+Sortie : exit 0 = autorisé (mag exécute), exit 4 = refusé (message stderr).
 Les refus sont journalisés dans ~/.config/gws-accounts/usage.jsonl.
 """
 import datetime
@@ -98,9 +98,9 @@ def deny(profile_dir, args, service, msg):
     alias = os.path.basename(os.path.abspath(profile_dir))
     log_usage(profile_dir, "refus", args, msg)
     sys.stderr.write(
-        "gwsa : ✗ policy %s — %s\n"
+        "mag : ✗ policy %s — %s\n"
         "       Élicitation : demander à l'utilisateur d'élargir la policy\n"
-        "       (« gwsa policy %s show » pour voir, interface admin pour modifier).\n"
+        "       (« mag policy %s show » pour voir, interface admin pour modifier).\n"
         % (service, msg, alias)
     )
     sys.exit(4)
@@ -214,15 +214,15 @@ def zone_hint(alias):
     if sid:
         return (
             "aucune zone d'écriture active pour cette session — demander à l'utilisateur "
-            "« gwsa session grant %s %s \"<dossier>\" [heures] » ou access_request "
+            "« mag session grant %s %s \"<dossier>\" [heures] » ou access_request "
             "kind=session_grant (zone limitée à cette conversation)"
             % (sid, alias)
         )
     return (
         "aucune zone d'écriture active — demander une autorisation temporaire "
-        "(« gwsa session grant <session_id> %s \"<dossier>\" » via MCP, ou legacy "
-        "« gwsa grant %s \"<dossier>\" » partagé poste entier, déprécié) ou permanente "
-        "(« gwsa policy %s allow <dossier> » / interface admin)"
+        "(« mag session grant <session_id> %s \"<dossier>\" » via MCP, ou legacy "
+        "« mag grant %s \"<dossier>\" » partagé poste entier, déprécié) ou permanente "
+        "(« mag policy %s allow <dossier> » / interface admin)"
         % (alias, alias, alias)
     )
 
@@ -349,12 +349,12 @@ def check_drive(profile_dir, drive_raw, args, pos):
         if not parents:
             deny(profile_dir, args, "drive",
                  "files %s sans parent dans --json — préciser \"parents\": "
-                 "[<dossier autorisé>] (zones actives : gwsa grants %s)" % (pos[-1], alias))
+                 "[<dossier autorisé>] (zones actives : mag grants %s)" % (pos[-1], alias))
         for p in parents:
             if not _session_drive_ok(profile_dir, p, cat):
                 deny(profile_dir, args, "drive",
                      "« drive:%s » vers %s hors capacités/zones de session — "
-                     "gma session grant-capability" % (cat, p))
+                     "mag session grant-capability" % (cat, p))
             if not under_allowed(profile_dir, p, zones):
                 deny(profile_dir, args, "drive",
                      "parent/destination %s hors zone d'écriture autorisée" % p)
@@ -367,15 +367,15 @@ def check_drive(profile_dir, drive_raw, args, pos):
     # Option B (fiche 0037) : la RACINE d'une zone est une frontière immuable —
     # jamais corbeillée / renommée / déplacée, même sous delete:true. Seul son
     # CONTENU (les descendants) est modifiable. « Retirer une zone » est un geste
-    # de config (« gwsa grant revoke »), pas une opération Drive.
+    # de config (« mag grant revoke »), pas une opération Drive.
     if fid in zones:
         deny(profile_dir, args, "drive",
              "cible %s = racine d'une zone (frontière immuable) — créer/modifier "
-             "seulement DEDANS ; retirer la zone via « gwsa grant revoke »" % fid)
+             "seulement DEDANS ; retirer la zone via « mag grant revoke »" % fid)
     if not _session_drive_ok(profile_dir, fid, cat):
         deny(profile_dir, args, "drive",
              "« drive:%s » vers %s hors capacités/zones de session — "
-             "gma session grant-capability" % (cat, fid))
+             "mag session grant-capability" % (cat, fid))
     if not under_allowed(profile_dir, fid, zones):
         deny(profile_dir, args, "drive", "cible %s hors zone d'écriture autorisée" % fid)
     # Un déplacement (addParents/removeParents, dans --params OU --json) peut faire
@@ -592,8 +592,8 @@ def main():
         return
     profile_dir, args = sys.argv[1], sys.argv[2:]
     policy_path = os.path.join(profile_dir, "policy.json")
-    # Absence de policy = le checker n'est pas appelé par gwsa (profil legacy).
-    # Les profils créés via `gwsa add` reçoivent une policy prudente automatiquement.
+    # Absence de policy = le checker n'est pas appelé par mag (profil legacy).
+    # Les profils créés via `mag add` reçoivent une policy prudente automatiquement.
     # Un policy.json PRÉSENT et illisible doit refuser — fail closed.
     if not os.path.exists(policy_path):
         return
@@ -603,7 +603,7 @@ def main():
     except Exception:
         log_usage(profile_dir, "refus", args, "policy.json illisible/corrompu")
         sys.stderr.write(
-            "gwsa : ✗ policy — policy.json présent mais illisible (corrompu) : "
+            "mag : ✗ policy — policy.json présent mais illisible (corrompu) : "
             "refus par sécurité. Corriger ou recréer la policy du profil.\n"
         )
         sys.exit(4)
@@ -624,8 +624,8 @@ def main():
         deny(
             profile_dir, args, service,
             "manifeste projet invalide/altéré/supprimé après confiance — refus "
-            "(anti-downgrade) — reconstituer/signer .gwsa/manifest.json "
-            "(« gwsa project sign »)",
+            "(anti-downgrade) — reconstituer/signer .mag/manifest.json "
+            "(« mag project sign »)",
         )
 
     pos = positionals_of(args[1:])
@@ -656,14 +656,14 @@ def main():
         deny(profile_dir, args, service,
              "%s refusé·e par la policy (« %s %s »)"
              % (LABELS_FR.get(cat, cat), " ".join(resources) or service, raw_method))
-    # Intersection couche projet (.gwsa) : plafond services si déclaré
+    # Intersection couche projet (.mag) : plafond services si déclaré
     alias = os.path.basename(os.path.abspath(profile_dir))
     mcap = _manifest_service_cap(alias, service, cat)
     if mcap is False:
         deny(
             profile_dir, args, service,
-            "%s « %s » hors périmètre manifeste projet (.gwsa/manifest.json) — "
-            "éditer le manifeste puis « gwsa project sign », ou access_request "
+            "%s « %s » hors périmètre manifeste projet (.mag/manifest.json) — "
+            "éditer le manifeste puis « mag project sign », ou access_request "
             "kind=project_grant"
             % (LABELS_FR.get(cat, cat), service),
         )

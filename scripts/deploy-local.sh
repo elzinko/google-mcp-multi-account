@@ -94,9 +94,9 @@ point_current_at() { # point_current_at <version> — bascule atomique du symlin
 }
 
 stop_broker() { # recycle le broker du couloir stable, sinon l'ancien code reste servi
-  local gwsa="$CURRENT_LINK/bin/gwsa"
-  [[ -x "$gwsa" ]] || { warn "gwsa introuvable dans la version déployée — broker non recyclé"; return 0; }
-  "$gwsa" broker stop || warn "arrêt du broker en échec — le relancer à la main si besoin"
+  local mag="$CURRENT_LINK/bin/mag"
+  [[ -x "$mag" ]] || { warn "mag introuvable dans la version déployée — broker non recyclé"; return 0; }
+  "$mag" broker stop || warn "arrêt du broker en échec — le relancer à la main si besoin"
 }
 
 # ── --list ───────────────────────────────────────────────────────
@@ -187,7 +187,7 @@ if [[ -d "$TARGET" ]]; then
   # Cible RÉUTILISÉE : valider avant de basculer (revue Codex, cibles réutilisées).
   if [[ "$SOURCE_TYPE" == "github" ]]; then
     # (a) une version legacy (ancien deploy clone) n'a pas d'updater sans clone —
-    #     ne jamais y basculer current/gwsa, sinon « gwsa update » redeviendrait
+    #     ne jamais y basculer current/mag, sinon « mag update » redeviendrait
     #     dépendant d'un clone (P1).
     [[ -f "$TARGET/scripts/lib-github-release.sh" ]] \
       || die "$VERSION déjà déployé mais antérieur à l'update sans clone — current n'est pas basculé dessus (supprime « $TARGET » ou passe par un clone)"
@@ -211,9 +211,9 @@ else
   if [[ "$SOURCE_TYPE" == "github" ]]; then
     gh_download_version "$VERSION" "$tmp" \
       || { rm -rf "$tmp"; die "téléchargement/extraction du tarball $VERSION en échec (GitHub joignable ? tag existant ?)"; }
-    # Garde-fou (revue Codex P1) : ne jamais basculer « current » — donc le gwsa
+    # Garde-fou (revue Codex P1) : ne jamais basculer « current » — donc le mag
     # du PATH — sur une version ANTÉRIEURE à l'update sans clone. Son update.sh
-    # exigerait un clone (.git/.source), et tout « gwsa update » suivant mourrait.
+    # exigerait un clone (.git/.source), et tout « mag update » suivant mourrait.
     [[ -f "$tmp/scripts/lib-github-release.sh" ]] \
       || { rm -rf "$tmp"; die "$VERSION est antérieure à l'update sans clone (aucun updater intégré) — installe-la depuis un clone si tu y tiens"; }
     # Marqueur d'origine : update.sh sait qu'il doit re-tirer depuis GitHub, pas
@@ -227,7 +227,7 @@ else
     # Le clone source, pour que « update.sh » sache où chercher les versions
     # quand il est lancé depuis la copie installée (qui n'a pas de .git).
     printf '%s\n' "$REPO_ROOT" > "$tmp/.source"
-    # Provenance : note aussi le dépôt distant pour qu'un « gwsa update » vise le
+    # Provenance : note aussi le dépôt distant pour qu'un « mag update » vise le
     # BON dépôt si le clone est supprimé (fallback GitHub) — sinon un déploiement
     # depuis un fork retomberait sur upstream (revue Codex). Best-effort.
     _ori="$(clone_github_origin "$REPO_ROOT")"
