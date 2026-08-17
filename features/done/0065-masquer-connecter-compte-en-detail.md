@@ -1,25 +1,24 @@
 ---
-id: 0063
-title: Remplacer « Tout verrouiller » par icône cadenas + modale d'impact
+id: 0065
+title: Masquer « + Connecter un compte » en vue détail
 type: feature
 priority: P1
 version: v0.4.0
 epic: 0060
-status: todo
+status: shipped
 ready:
-pr:
+pr: "#112"
 created: 2026-07-29
 ---
 
 ## Contexte / Problème
 
-Le CTA `Tout verrouiller` prend trop de place et n'explique pas l'impact
-global avant action.
+En vue détail compte, le bouton `+ Connecter un compte` reste visible alors
+qu'un compte est déjà ouvert.
 
 ## Proposition
 
-Bouton icône cadenas compact + modale de validation (impact toutes
-sessions/profils).
+Cacher le CTA quand `VIEW.mode === 'detail'`.
 
 ## Critères d'acceptation
 
@@ -27,6 +26,6 @@ sessions/profils).
 
 ## Notes
 
-- **Issue** : [#63](https://github.com/elzinko/google-mcp-multi-account/issues/63)
+- **Issue** : [#65](https://github.com/elzinko/google-mcp-multi-account/issues/65)
 - **Épic** : [[0060]] · [#59](https://github.com/elzinko/google-mcp-multi-account/issues/59)
 - **Project** : [v0.4.0](https://github.com/users/elzinko/projects/2) · **Milestone** : [v0.4.0](https://github.com/elzinko/google-mcp-multi-account/milestone/1)

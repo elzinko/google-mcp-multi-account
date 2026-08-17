@@ -1,25 +1,25 @@
 ---
-id: 0062
-title: Admin header — réordonner actions + mode Avancé + retirer texte long
+id: 0063
+title: Remplacer « Tout verrouiller » par icône cadenas + modale d'impact
 type: feature
 priority: P1
 version: v0.4.0
 epic: 0060
-status: todo
+status: shipped
 ready:
-pr:
+pr: "#112"
 created: 2026-07-29
 ---
 
 ## Contexte / Problème
 
-Barre d'actions top-level trop chargée (usage et développement mélangés) ;
-texte d'aide principal trop long et redondant.
+Le CTA `Tout verrouiller` prend trop de place et n'explique pas l'impact
+global avant action.
 
 ## Proposition
 
-Séparer usage quotidien / admin avancé (mode Avancé discret) ; supprimer le
-texte explicatif long au-dessus des comptes.
+Bouton icône cadenas compact + modale de validation (impact toutes
+sessions/profils).
 
 ## Critères d'acceptation
 
@@ -27,6 +27,6 @@ texte explicatif long au-dessus des comptes.
 
 ## Notes
 
-- **Issue** : [#62](https://github.com/elzinko/google-mcp-multi-account/issues/62)
+- **Issue** : [#63](https://github.com/elzinko/google-mcp-multi-account/issues/63)
 - **Épic** : [[0060]] · [#59](https://github.com/elzinko/google-mcp-multi-account/issues/59)
 - **Project** : [v0.4.0](https://github.com/users/elzinko/projects/2) · **Milestone** : [v0.4.0](https://github.com/elzinko/google-mcp-multi-account/milestone/1)

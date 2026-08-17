@@ -1,24 +1,23 @@
 ---
-id: 0065
-title: Masquer « + Connecter un compte » en vue détail
+id: 0064
+title: Améliorer le bouton retour « ‹ Comptes » (style + position)
 type: feature
 priority: P1
 version: v0.4.0
 epic: 0060
-status: todo
+status: shipped
 ready:
-pr:
+pr: "#112"
 created: 2026-07-29
 ---
 
 ## Contexte / Problème
 
-En vue détail compte, le bouton `+ Connecter un compte` reste visible alors
-qu'un compte est déjà ouvert.
+Le bouton retour `‹ Comptes` est peu lisible / mal positionné en vue détail.
 
 ## Proposition
 
-Cacher le CTA quand `VIEW.mode === 'detail'`.
+Revoir style et position pour une navigation claire vers la liste des comptes.
 
 ## Critères d'acceptation
 
@@ -26,6 +25,6 @@ Cacher le CTA quand `VIEW.mode === 'detail'`.
 
 ## Notes
 
-- **Issue** : [#65](https://github.com/elzinko/google-mcp-multi-account/issues/65)
+- **Issue** : [#64](https://github.com/elzinko/google-mcp-multi-account/issues/64)
 - **Épic** : [[0060]] · [#59](https://github.com/elzinko/google-mcp-multi-account/issues/59)
 - **Project** : [v0.4.0](https://github.com/users/elzinko/projects/2) · **Milestone** : [v0.4.0](https://github.com/elzinko/google-mcp-multi-account/milestone/1)
