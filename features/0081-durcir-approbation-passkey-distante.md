@@ -48,12 +48,13 @@ par la signature** (non forgeable) — d'où la sévérité **P2**.
 
 ## Critères d'acceptation
 
-- [ ] Le chemin réel `challenge → verify` sérialise **reload + check + persistance** de `sign_count`
-      derrière un **verrou inter-process** ; deux `gwsa … --remote` lancés **en process séparés** sur
-      la même assertion ⇒ **une seule** vérification réussit, l'autre est refusée (`sign_count` non
-      strictement croissant).
-- [ ] Le test qui couvre ce critère s'exécute **multi-process** (process séparés) — **pas** via un
-      simple verrou threads / objet partagé, qui masquerait la fuite inter-process.
+- [ ] **Modélisation de la course** : deux `gwsa … --remote` en **process séparés**, **chacun avec son
+      propre défi frais**, signés depuis des **états d'authentificateur clonés portant le même prochain
+      `sign_count`** (simule une passkey clonée) — vérifiés **concurremment**.
+- [ ] **Invariant** : dans ce scénario, **exactement une** vérification réussit ; l'autre est refusée
+      (son **rechargement frais sous verrou** voit le compteur déjà avancé). Le verrou est
+      **inter-process** (fichier), couvrant reload + check + persistance — **pas** un verrou threads /
+      objet partagé, qui masquerait la fuite inter-process.
 - [ ] `./scripts/test.sh` vert.
 
 ## Notes
@@ -71,6 +72,12 @@ par la signature** (non forgeable) — d'où la sévérité **P2**.
   `NO_MUTATION` par un contrôle positif » — ce contrôle positif **existe déjà** (test E2E hors-process
   dans `scripts/test.sh` : approbation valide → `is_session_unlocked` vrai, câblage `bin/gwsa`), donc
   c'était un doublon.
+- **Piège de test (relevé par Codex, passe 2 de #115)** : réutiliser **une seule** assertion sur deux
+  process ne teste **pas** la course — `verify_assertion` exige `client_data == défi forgé`
+  (`gateway/remote_approval.py:320-322`) et chaque `gwsa … --remote` forge son **propre** défi
+  (`bin/gwsa`, `require_remote_approval`), donc le 2ᵉ process échoue sur la liaison au défi **avant** la
+  comparaison du compteur. D'où le montage exigé : **deux défis distincts + deux signatures d'états
+  clonés au même prochain `sign_count`**.
 - Le vrai canal push / relais aveugle E2E + app mobile + holder natif **reste dans l'épic
   [0077](0077-acces-mobile-souverain.md)** (incrément « relais aveugle » déjà prévu) — hors de cette
   fiche.
