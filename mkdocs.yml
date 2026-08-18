@@ -81,9 +81,10 @@ nav:
   - Configurer:
       - Brancher un client LLM: configurer-client.md
   - Utiliser:
-      - CLI & admin (mag): usage.md
-      - Modèle de policy: policies.md
+      - CLI (mag): usage.md
+      - Admin web: admin.md
   - Sécurité:
+      - Modèle de policy: policies.md
       - Modèle de menace: threat-model.md
       - Critique honnête: critique.md
   - Sous le capot:
