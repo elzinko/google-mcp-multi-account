@@ -4,26 +4,30 @@ from __future__ import annotations
 import os
 import subprocess
 
+from .categorize import (
+    CREATE_METHODS,
+    DELETE_METHODS,
+    READ_METHODS,
+    categorize,
+    drive_files_trash_override,
+    norm,
+    operand_resource,
+)
 from .config import SYS_PYTHON, USAGE_LOGGER, gwsa_root
 
-_READ_METHODS = {
-    "list", "get", "export", "download", "search", "query", "getprofile",
-    "lookup", "generateids", "instances", "freebusy", "colors", "watch",
-    "batchget", "getbatch", "read",
-}
-_CREATE_METHODS = {
-    "create", "insert", "copy", "append", "upload", "import", "add",
-    "quickadd", "batchcreate", "push", "subscribe",
-}
-_UPDATE_METHODS = {
-    "update", "patch", "move", "modify", "batchupdate", "batchmodify",
-    "rename", "setdefault", "set", "renew", "untrash",
-}
-_DELETE_METHODS = {
-    "delete", "remove", "trash", "batchdelete", "emptytrash", "clear",
-    "stop", "revoke",
-}
-_RESOURCE_KEYS = ("fileId", "id", "calendarId", "labelId")
+
+def _fallback_operation(method: str) -> str:
+    """Repli quand `categorize` ne reconnaît pas la méthode (best-effort audit,
+    jamais un refus — contrairement à policy-check.py, l'audit ne bloque rien)."""
+    if method in READ_METHODS:
+        return "read"
+    if method in CREATE_METHODS:
+        return "create"
+    if method in DELETE_METHODS:
+        return "delete"
+    if method == "send" or method.endswith("send"):
+        return "send"
+    return method
 
 
 def infer_call(gws_args: list[str]) -> tuple[str, str, str]:
@@ -31,9 +35,15 @@ def infer_call(gws_args: list[str]) -> tuple[str, str, str]:
 
     Sert l'AUDIT (M-08 / ADR-0007 §Décision 5), pas l'autorisation — le grain
     fin utilisé pour AUTORISER reste `scripts/policy-check.py` (source de
-    vérité). Ici on veut juste que le journal des appels réussis porte le même
-    triplet service × opération × ressource que les capacités de session,
-    sans dupliquer toute la logique de policy.
+    vérité). L'opération réutilise la MÊME catégorisation service-aware que le
+    contrôleur de policy (`gateway.categorize.categorize` : `drafts`, `share`,
+    …) — pas seulement le nom de méthode —, y compris le reclassement
+    « update » → « delete » d'un `drive files update {trashed:true}` (Option A,
+    fiche 0037), pour que le triplet journalisé identifie la capacité qui a
+    réellement autorisé l'appel (fiche 0080, revue Codex PR #110
+    raffinement #3 + revue adverse P2). La ressource vient du même mapping
+    explicite (service, ressource, méthode) → paramètre que `policy-check.py`
+    (raffinement #1 / P0) — jamais d'une priorité générique.
     """
     if not gws_args:
         return "", "", ""
@@ -45,34 +55,10 @@ def infer_call(gws_args: list[str]) -> tuple[str, str, str]:
         positionals.append(a)
     if not positionals:
         return service, "", ""
-    method = positionals[-1].lstrip("+").replace("-", "").replace("_", "").lower()
-    if method in _READ_METHODS:
-        operation = "read"
-    elif method in _CREATE_METHODS:
-        operation = "create"
-    elif method in _UPDATE_METHODS:
-        operation = "update"
-    elif method in _DELETE_METHODS:
-        operation = "delete"
-    elif method == "send" or method.endswith("send"):
-        operation = "send"
-    else:
-        operation = method
-    resource = ""
-    for i, a in enumerate(gws_args):
-        if a == "--params" and i + 1 < len(gws_args):
-            try:
-                import json
-
-                params = json.loads(gws_args[i + 1])
-            except Exception:
-                params = {}
-            if isinstance(params, dict):
-                for key in _RESOURCE_KEYS:
-                    if params.get(key):
-                        resource = str(params[key])
-                        break
-            break
+    resources, raw_method = positionals[:-1], positionals[-1]
+    operation = categorize(service, resources, raw_method) or _fallback_operation(norm(raw_method))
+    operation = drive_files_trash_override(resources, raw_method, operation, gws_args)
+    resource = operand_resource(service, resources, raw_method, gws_args)
     return service, operation, resource
 
 

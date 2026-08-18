@@ -37,6 +37,20 @@ import subprocess
 import sys
 import time
 
+# Catégorisation service-aware (méthode + ressource) partagée avec
+# gateway/usage.py — même triplet pour AUTORISER (ici) et AUDITER (fiche 0080).
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+from gateway.categorize import (  # noqa: E402
+    READ_METHODS,
+    SHARE_RESOURCES,
+    categorize,
+    norm,
+    operand_resource,
+    parse_json_flag,
+)
+
 VALUE_FLAGS = {
     "--params", "--json", "--upload", "--upload-content-type", "--output",
     "--format", "--api-version", "--page-limit", "--page-delay", "--scopes",
@@ -45,25 +59,6 @@ VALUE_FLAGS = {
 SERVICE_ALIASES = {"wf": "workflow", "reports": "admin-reports"}
 # Introspection / auth locale — pas des APIs données ; hors modèle policy.
 PASSTHROUGH_SERVICES = frozenset({"auth", "schema"})
-
-READ_METHODS = {
-    "list", "get", "export", "download", "search", "query", "getprofile",
-    "lookup", "generateids", "instances", "freebusy", "colors", "watch",
-    "batchget", "getbatch", "read",
-}
-CREATE_METHODS = {
-    "create", "insert", "copy", "append", "upload", "import", "add",
-    "quickadd", "batchcreate", "push", "subscribe",
-}
-UPDATE_METHODS = {
-    "update", "patch", "move", "modify", "batchupdate", "batchmodify",
-    "rename", "setdefault", "set", "renew", "untrash",
-}
-DELETE_METHODS = {
-    "delete", "remove", "trash", "batchdelete", "emptytrash", "clear",
-    "stop", "revoke",
-}
-SHARE_RESOURCES = {"permissions", "acl", "members"}
 
 DRIVE_READ_FILES = {"list", "get", "export", "download", "watch", "generateids"}
 
@@ -88,10 +83,6 @@ def log_usage(profile_dir, decision, args, reason=""):
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     except Exception:
         pass
-
-
-def norm(method):
-    return method.lstrip("+").replace("-", "").replace("_", "").lower()
 
 
 def deny(profile_dir, args, service, msg):
@@ -119,26 +110,6 @@ def gws_json(profile_dir, args):
         r = subprocess.run(["gws"] + args, env=env, capture_output=True,
                            text=True, timeout=20)
         return json.loads(r.stdout)
-    except Exception:
-        return {}
-
-
-def flag_value(args, flag):
-    for i, a in enumerate(args):
-        if a == flag and i + 1 < len(args):
-            return args[i + 1]
-        if a.startswith(flag + "="):
-            return a.split("=", 1)[1]
-    return None
-
-
-def parse_json_flag(args, flag):
-    raw = flag_value(args, flag)
-    if raw is None:
-        return {}
-    try:
-        d = json.loads(raw)
-        return d if isinstance(d, dict) else {}
     except Exception:
         return {}
 
@@ -394,40 +365,6 @@ def check_drive(profile_dir, drive_raw, args, pos):
              "sortir le fichier de sa zone ; réancrer explicitement via addParents")
 
 
-def categorize(service, resources, raw_method):
-    """Catégorie d'action, ou None si inconnue (→ fail closed)."""
-    m = norm(raw_method)
-    res = [r.lower() for r in resources]
-
-    if service == "gmail":
-        if m == "send" or m.endswith("send") or m in ("reply", "replyall", "forward"):
-            return "send"
-        if any("settings" in r for r in res):
-            return "settings"
-        if "drafts" in res and m in ("create", "update"):
-            return "drafts"
-        if "labels" in res and m not in READ_METHODS:
-            return "labels"
-        if m in ("triage", "watch"):
-            return "read"
-
-    if res and res[0] in SHARE_RESOURCES and m not in READ_METHODS:
-        return "share"
-    if m in READ_METHODS:
-        return "read"
-    if m in CREATE_METHODS:
-        return "create"
-    if m in UPDATE_METHODS:
-        return "update"
-    if m in DELETE_METHODS:
-        return "delete"
-    if raw_method.startswith("+"):
-        if m in ("agenda", "standupreport", "meetingprep", "weeklydigest"):
-            return "read"
-        return None
-    return None
-
-
 LABELS_FR = {
     "read": "lecture", "create": "création", "update": "modification",
     "delete": "suppression", "send": "envoi", "drafts": "brouillons",
@@ -667,7 +604,15 @@ def main():
             "kind=project_grant"
             % (LABELS_FR.get(cat, cat), service),
         )
-    check_session_caps(profile_dir, args, service, cat)
+    # Ressource propre au service (Gmail labelId, Calendar calendarId, …) —
+    # sans elle, la granularité ressource des capacités de session ne
+    # fonctionnait que sur Drive (fiche 0080, raffinement #1). Dérivée d'un
+    # mapping EXPLICITE (service, ressource, méthode) → paramètre, jamais
+    # d'une priorité générique attaquable par un leurre (P0, revue adverse).
+    check_session_caps(
+        profile_dir, args, service, cat,
+        operand_resource(service, resources, raw_method, args),
+    )
 
 
 if __name__ == "__main__":

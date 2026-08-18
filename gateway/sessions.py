@@ -10,7 +10,7 @@ import json
 import os
 import secrets
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -85,6 +85,16 @@ class SessionState:
     # capacités fines (compte, service, opération, ressource?) — cf. Capability
     capabilities: list[Capability] = field(default_factory=list)
     delegated: bool = False  # True = sous-session (pas d'access_request direct)
+    # True dès qu'une session est créée/enregistrée par CETTE révision (fiche
+    # 0080) : `capabilities` porte déjà le snapshot résolu (racine : le sien ;
+    # enfant : figé à la création). False = fichier de session écrit par une
+    # révision ANTÉRIEURE à 0080 (upgrade in-place, session encore active) —
+    # `capabilities` n'y contenait alors QUE les octrois directs, la
+    # résolution passait par `_ancestor_chain` ; `active_capabilities` bascule
+    # sur ce repli legacy tant que ce marqueur est absent, pour ne pas priver
+    # d'un coup un enfant pré-migration de ses capacités héritées (Codex PR
+    # #118, P2 finding #2).
+    capabilities_snapshot: bool = True
 
     def touch(self) -> None:
         self.last_seen_at = time.time()
@@ -103,6 +113,7 @@ class SessionState:
             },
             "capabilities": [asdict(c) for c in self.capabilities],
             "delegated": self.delegated,
+            "capabilities_snapshot": self.capabilities_snapshot,
         }
 
     @classmethod
@@ -150,6 +161,10 @@ class SessionState:
             drive_zones=dz,
             capabilities=capabilities,
             delegated=bool(data.get("delegated")),
+            # Absent (fichier écrit avant la fiche 0080) → False : repli
+            # legacy `_ancestor_chain` dans `active_capabilities` tant que la
+            # session n'a pas été recréée (Codex PR #118, P2 finding #2).
+            capabilities_snapshot=bool(data.get("capabilities_snapshot", False)),
         )
 
 
@@ -331,7 +346,11 @@ def _ancestor_chain(state: SessionState) -> list[SessionState]:
 
 
 def active_drive_zones(session_id: str, alias: str) -> set[str]:
-    """Zones Drive actives pour (session, alias), avec héritage parent."""
+    """Zones Drive actives pour (session, alias), avec héritage parent LIVE :
+    contrairement aux capacités fines (`active_capabilities`, figées à la
+    création d'une sous-session — fiche 0080), une zone accordée au parent
+    après coup reste visible à un enfant déjà créé. Trou préexistant, non
+    couvert ici, suivi par la fiche 0085."""
     state = get_session(session_id)
     if state is None:
         return set()
@@ -345,6 +364,10 @@ def active_drive_zones(session_id: str, alias: str) -> set[str]:
 
 
 def is_session_unlocked(session_id: str, alias: str) -> bool:
+    """Déverrouillage actif pour (session, alias), avec héritage parent LIVE :
+    même remarque que `active_drive_zones` — un `session unlock` accordé au
+    parent après coup reste visible à un enfant déjà créé (préexistant, hors
+    périmètre fiche 0080, suivi par la fiche 0085)."""
     state = get_session(session_id)
     if state is None:
         return False
@@ -406,13 +429,38 @@ def session_grant_capability(
 
 
 def active_capabilities(session_id: str, account: str, service: str = "") -> list[Capability]:
-    """Capacités actives pour (session, compte[, service]), avec héritage parent."""
+    """Capacités actives pour (session, compte[, service]).
+
+    Ne consulte QUE les capacités propres à `session_id` — jamais celles,
+    live, d'un ancêtre. Une session racine ne porte que les siennes (aucun
+    parent). Une sous-session déléguée reçoit un INSTANTANÉ des capacités
+    actives de son parent au moment de sa création (`create_child_session`) ;
+    elle ne peut plus en recevoir directement ensuite (`session_grant_capability`
+    le refuse). Sa propre liste EST donc déjà l'héritage résolu — la parcourir
+    en direct (au lieu de remonter la chaîne à chaque appel) fige les
+    capacités déléguées à la création : un octroi accordé au parent APRÈS coup
+    ne s'expose plus passivement à un enfant déjà créé (fiche 0080, revue
+    Codex PR #110 raffinement #2).
+
+    Repli LEGACY (Codex PR #118, P2 finding #2) : une sous-session ÉCRITE
+    AVANT la fiche 0080 (upgrade in-place, encore active) n'a pas
+    `capabilities_snapshot` — son `capabilities` local ne contenait alors QUE
+    ses octrois directs (elle n'en reçoit jamais), pas l'héritage. Pour ne
+    pas la priver d'un coup de ses capacités parent au redémarrage du broker,
+    elle retombe sur l'ancienne résolution par chaîne d'ancêtres tant qu'elle
+    n'a pas été recréée (une nouvelle sous-session porte toujours le
+    marqueur, donc ce repli ne s'applique jamais à une session neuve)."""
     state = get_session(session_id)
     if state is None:
         return []
+    chain = (
+        _ancestor_chain(state)
+        if state.delegated and not state.capabilities_snapshot
+        else [state]
+    )
     now = time.time()
     out: list[Capability] = []
-    for s in _ancestor_chain(state):
+    for s in chain:
         for cap in s.capabilities:
             if cap.account != account:
                 continue
@@ -441,7 +489,29 @@ def session_has_capability(
 
 
 def create_child_session(parent_id: str, client: str = "mcp") -> SessionState:
-    return create_session(parent_id=parent_id, client=client, delegated=True)
+    """Crée une sous-session ; les CAPACITÉS FINES du parent (`Capability`,
+    service × opération × ressource) sont FIGÉES au moment T (snapshot).
+
+    Le payload signé qui enrôle une sous-session ne nomme que le parent, pas
+    ses octrois futurs — copier les capacités actives du parent une bonne
+    fois ici (plutôt que de les résoudre en direct à chaque appel) évite
+    qu'un octroi de capacité accordé au parent après cette création ne
+    s'expose passivement à l'enfant (fiche 0080, revue Codex PR #110
+    raffinement #2).
+
+    NE COUVRE QUE les capacités fines. `unlocks` (session unlock) et
+    `drive_zones` (session grant Drive legacy) restent, eux, hérités en
+    DIRECT de la chaîne d'ancêtres (`is_session_unlocked`,
+    `active_drive_zones`) — un déverrouillage ou une zone accordés au parent
+    après la création d'un enfant lui restent donc passivement visibles.
+    Trou PRÉEXISTANT (non introduit par la fiche 0080), hors périmètre ici,
+    délibérément laissé en l'état et suivi par la fiche 0085."""
+    parent = require_session(parent_id)
+    child = create_session(parent_id=parent_id, client=client, delegated=True)
+    now = time.time()
+    child.capabilities = [replace(c) for c in parent.capabilities if c.active(now)]
+    _save(child)
+    return child
 
 
 def revoke_descendants(session_id: str) -> int:
