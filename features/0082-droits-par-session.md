@@ -16,10 +16,10 @@ created: 2026-08-17
 **Épic parapluie** de l'axe « droits par session » : donner à **chaque conversation
 LLM son propre périmètre d'accès** Google (compte × service × opération × ressource),
 isolé des autres sessions du poste, signé et expirant. **Aucun travail propre** — il
-coordonne ses enfants et n'est **jamais tirable**. État : l'analyse
-([0045](0045-capacites-projet-signees.md)) et la Phase A desktop
-([0076](done/0076-droits-par-session-phase-a.md), livrée #108/#110) sont faites ;
-reste le durcissement ([0080](0080-durcir-capacites-fines-session.md)).
+coordonne ses enfants et n'est **jamais tirable**. État : la Phase A desktop
+([0076](done/0076-droits-par-session-phase-a.md), livrée #108/#110) est faite ;
+restent l'analyse ([0045](0045-capacites-projet-signees.md), en cours) et le
+durcissement ([0080](0080-durcir-capacites-fines-session.md)).
 
 ## Contexte / Problème
 
@@ -60,8 +60,8 @@ Enfants :
 - [ ] Les fiches de l'axe (0045, 0076, 0080) portent `epic: 0082` — chaîne `epic:`
       cohérente (ADR-0017).
 - [ ] `regen` n'émet **plus** de warning d'intégrité sur cet axe.
-- [ ] Épic sans critère de livraison propre : clos quand son enfant actionnable (0080)
-      est livré.
+- [ ] Épic sans critère de livraison propre : clos quand ses enfants actionnables
+      (0045, 0080) sont livrés ou archivés (0076 déjà livré).
 
 ## Comment vérifier
 
