@@ -4,7 +4,7 @@ title: Durcir la couche capacités fines de session (suite revue Codex #110)
 type: feature
 priority: P1
 version:
-epic: 0076
+epic: 0082
 status: todo
 ready:
 pr:
