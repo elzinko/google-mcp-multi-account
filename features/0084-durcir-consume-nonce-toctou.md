@@ -1,5 +1,5 @@
 ---
-id: 0082
+id: 0084
 title: Durcir consume_nonce contre une course TOCTOU inter-process (anti-rejeu partagé)
 type: bug
 priority: P2

@@ -4,7 +4,7 @@ title: Droits par session (Phase A desktop) — identité par consentement, jeto
 type: feature
 priority: P2
 version:
-epic: 0045
+epic: 0082
 status: shipped
 ready: 2026-08-16
 pr: "#108, #110"

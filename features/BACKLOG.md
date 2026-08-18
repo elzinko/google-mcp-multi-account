@@ -30,7 +30,7 @@
 | 0067 | Admin branding — corriger le titre de page | feature | P1 | v0.4.0 | 0060 | ✅ shipped | #112 |
 | 0074 | Durcir la v1 — punch-list de lancement (doc, tests, hygiène) | feature | P1 | v1.0 |  | 🟠 in-progress |  |
 | 0078 | Approbation par passkey depuis le téléphone (archi actuelle, Mac holder) | feature | P1 |  | 0077 | ✅ shipped | #113 |
-| 0080 | Durcir la couche capacités fines de session (suite revue Codex #110) | feature | P1 |  | 0076 | 🔴 todo |  |
+| 0080 | Durcir la couche capacités fines de session (suite revue Codex #110) | feature | P1 |  | 0082 | 🔴 todo |  |
 | 0002 | Durcir le modèle de policy — décisions « default-deny » soulevées par l'audit | feature | P2 |  |  | ✅ shipped | #12 |
 | 0007 | Provisioning GCP idempotent/déclaratif — durcir provision-gcp.sh ou passer à Terraform | feature | P2 |  |  | ✅ shipped | #10 |
 | 0008 | Connexion dynamique d'un nouveau compte via élicitation forte (access_request kind=add_account) | feature | P2 |  |  | ✅ shipped | #7 |
@@ -46,7 +46,7 @@
 | 0040 | Le déploiement branche Claude Desktop mais pas Claude Code (CLI) — généraliser | feature | P2 |  |  | ✅ shipped | #43 |
 | 0041 | Clarifier l'écart policy admin ↔ surface MCP (Drive copie, contenu, modification) | bug | P2 |  |  | ✅ shipped | #52 |
 | 0044 | Sous strongauth, le dialogue Touch ID nomme « swift-frontend » au lieu du produit | bug | P2 |  |  | ✅ shipped | #74 |
-| 0045 | Droits par session et par projet git — état des lieux, écarts, pistes | feature | P2 |  |  | 🟠 in-progress |  |
+| 0045 | Droits par session et par projet git — état des lieux, écarts, pistes | feature | P2 |  | 0082 | 🟠 in-progress |  |
 | 0046 | CLI locale pour déployer des sandboxes temporaires (branche / worktree) | feature | P2 |  |  | 🟠 in-progress |  |
 | 0047 | Au moment d'autoriser un accès, nommer le compte (email) — pas seulement l'alias | feature | P2 |  |  | ✅ shipped | #75 |
 | 0068 | Accessibilité — focus-visible + reduced-motion (cadenas/modales/boutons) | feature | P2 | v0.4.0 | 0060 | ✅ shipped | #112 |
@@ -54,10 +54,10 @@
 | 0070 | README — quickstart + usage par persona + permissions + contribution | feature | P2 | v0.4.0 | 0060 | 🔴 todo |  |
 | 0071 | GitHub metadata — description, homepage, topics + badges | chore | P2 | v0.4.0 | 0060 | ✅ shipped |  |
 | 0072 | Site de doc en ligne (MkDocs Material + landing) déployé sur Vercel | feature | P2 |  | 0017 | ✅ shipped | #79 |
-| 0076 | Droits par session (Phase A desktop) — identité par consentement, jeton porté, config fine | feature | P2 |  | 0045 | ✅ shipped | #108, #110 |
+| 0076 | Droits par session (Phase A desktop) — identité par consentement, jeton porté, config fine | feature | P2 |  | 0082 | ✅ shipped | #108, #110 |
 | 0081 | Durcir updater/deploy — rollback à travers le renommage mag & liens PATH cassés | bug | P2 |  |  | 🔴 todo |  |
-| 0082 | Durcir consume_nonce contre une course TOCTOU inter-process (anti-rejeu partagé) | bug | P2 |  |  | 🔴 todo |  |
 | 0083 | Durcir la couche d'approbation passkey distante (suite revue Codex #113) | feature | P2 |  | 0077 | 🔴 todo |  |
+| 0084 | Durcir consume_nonce contre une course TOCTOU inter-process (anti-rejeu partagé) | bug | P2 |  |  | 🔴 todo |  |
 | 0001 | Élicitation signée — faire monter `mag strongauth` de la présence à la signature | feature | P3 |  |  | 🟠 in-progress |  |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)
@@ -66,6 +66,7 @@
 |---|-------|------|------|---------|------|--------|----|
 | 0060 | Admin UX/UI refresh + docs/README + GitHub metadata | epic | P1 | v0.4.0 |  | 🔴 todo |  |
 | 0077 | Accès mobile souverain — approbation passkey + holder natif | epic | P1 |  |  | 🔴 todo |  |
+| 0082 | Droits par session — isolation & capacités fines par conversation | epic | P1 |  |  | 🟠 in-progress |  |
 | 0017 | Généraliser le projet à d'autres utilisateurs que l'auteur | epic | P2 |  |  | 💡 idea |  |
 
 ## 💡 Idées (non groomées)

@@ -70,7 +70,7 @@ point d'entrée CLI réel) comme dans tout autre point de vérification** (`run_
 - **Fiche sœur** de [0080](0080-durcir-capacites-fines-session.md) (« durcir … suite revue Codex #110 »
   sur la couche *session*) : même patron « durcissements différés d'une revue Codex ». Le TOCTOU est
   de la **même classe** que le TOCTOU `consume_nonce` — désormais suivi par sa propre fiche
-  [0082](0082-durcir-consume-nonce-toctou.md) (anti-rejeu partagé Touch ID + passkey) — à traiter d'un
+  [0084](0084-durcir-consume-nonce-toctou.md) (anti-rejeu partagé Touch ID + passkey) — à traiter d'un
   même geste de verrouillage inter-process si les deux sont tirés ensemble.
 - **Écarté après vérification (revue Codex #115)** : un second item « renforcer le test CA3
   `NO_MUTATION` par un contrôle positif » — ce contrôle positif **existe déjà** (test E2E hors-process
