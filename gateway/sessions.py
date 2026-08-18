@@ -85,6 +85,16 @@ class SessionState:
     # capacités fines (compte, service, opération, ressource?) — cf. Capability
     capabilities: list[Capability] = field(default_factory=list)
     delegated: bool = False  # True = sous-session (pas d'access_request direct)
+    # True dès qu'une session est créée/enregistrée par CETTE révision (fiche
+    # 0080) : `capabilities` porte déjà le snapshot résolu (racine : le sien ;
+    # enfant : figé à la création). False = fichier de session écrit par une
+    # révision ANTÉRIEURE à 0080 (upgrade in-place, session encore active) —
+    # `capabilities` n'y contenait alors QUE les octrois directs, la
+    # résolution passait par `_ancestor_chain` ; `active_capabilities` bascule
+    # sur ce repli legacy tant que ce marqueur est absent, pour ne pas priver
+    # d'un coup un enfant pré-migration de ses capacités héritées (Codex PR
+    # #118, P2 finding #2).
+    capabilities_snapshot: bool = True
 
     def touch(self) -> None:
         self.last_seen_at = time.time()
@@ -103,6 +113,7 @@ class SessionState:
             },
             "capabilities": [asdict(c) for c in self.capabilities],
             "delegated": self.delegated,
+            "capabilities_snapshot": self.capabilities_snapshot,
         }
 
     @classmethod
@@ -150,6 +161,10 @@ class SessionState:
             drive_zones=dz,
             capabilities=capabilities,
             delegated=bool(data.get("delegated")),
+            # Absent (fichier écrit avant la fiche 0080) → False : repli
+            # legacy `_ancestor_chain` dans `active_capabilities` tant que la
+            # session n'a pas été recréée (Codex PR #118, P2 finding #2).
+            capabilities_snapshot=bool(data.get("capabilities_snapshot", False)),
         )
 
 
@@ -425,19 +440,34 @@ def active_capabilities(session_id: str, account: str, service: str = "") -> lis
     en direct (au lieu de remonter la chaîne à chaque appel) fige les
     capacités déléguées à la création : un octroi accordé au parent APRÈS coup
     ne s'expose plus passivement à un enfant déjà créé (fiche 0080, revue
-    Codex PR #110 raffinement #2)."""
+    Codex PR #110 raffinement #2).
+
+    Repli LEGACY (Codex PR #118, P2 finding #2) : une sous-session ÉCRITE
+    AVANT la fiche 0080 (upgrade in-place, encore active) n'a pas
+    `capabilities_snapshot` — son `capabilities` local ne contenait alors QUE
+    ses octrois directs (elle n'en reçoit jamais), pas l'héritage. Pour ne
+    pas la priver d'un coup de ses capacités parent au redémarrage du broker,
+    elle retombe sur l'ancienne résolution par chaîne d'ancêtres tant qu'elle
+    n'a pas été recréée (une nouvelle sous-session porte toujours le
+    marqueur, donc ce repli ne s'applique jamais à une session neuve)."""
     state = get_session(session_id)
     if state is None:
         return []
+    chain = (
+        _ancestor_chain(state)
+        if state.delegated and not state.capabilities_snapshot
+        else [state]
+    )
     now = time.time()
     out: list[Capability] = []
-    for cap in state.capabilities:
-        if cap.account != account:
-            continue
-        if service and cap.service != service:
-            continue
-        if cap.active(now):
-            out.append(cap)
+    for s in chain:
+        for cap in s.capabilities:
+            if cap.account != account:
+                continue
+            if service and cap.service != service:
+                continue
+            if cap.active(now):
+                out.append(cap)
     return out
 
 
