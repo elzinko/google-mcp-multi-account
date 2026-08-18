@@ -3654,6 +3654,180 @@ print(session_has_capability(child.session_id, 'alpha', 'tasks', 'read'))
   && pass "P2 finding #2 : sous-session pré-snapshot (upgrade in-place) garde ses capacités héritées (repli legacy)" \
   || fail "P2 finding #2 : sous-session pré-snapshot a perdu ses capacités héritées ($out_legacy_migration)"
 
+# ── fiche 0085 : unlock + zones Drive figés à la création de la sous-session
+# (même patron que le snapshot des capacités, fiche 0080) ──
+L3_0085="$TMP/mag-0085-snapshot"
+mkdir -p "$L3_0085"
+
+# ── (1) unlock accordé au parent APRÈS la création d'un enfant ne s'expose
+# pas passivement à l'enfant déjà créé ──
+out_0085_unlock="$(GWSA_ROOT="$L3_0085" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, create_child_session, session_unlock, is_session_unlocked
+root = create_session(client='0085-unlock-root')
+child = create_child_session(root.session_id)
+session_unlock(root.session_id, 'alpha', 30)
+print(is_session_unlocked(child.session_id, 'alpha'), is_session_unlocked(root.session_id, 'alpha'))
+")"
+[[ "$out_0085_unlock" == "False True" ]] \
+  && pass "fiche 0085 : unlock figé à la création — unlock ultérieur du parent n'élargit pas l'enfant" \
+  || fail "fiche 0085 : unlock NON figé — fuite passive vers l'enfant ($out_0085_unlock)"
+
+# ── (1-bis) le snapshot capture bien l'unlock déjà actif AVANT la création ──
+out_0085_unlock_before="$(GWSA_ROOT="$L3_0085" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, create_child_session, session_unlock, is_session_unlocked
+root = create_session(client='0085-unlock-root2')
+session_unlock(root.session_id, 'alpha', 30)
+child = create_child_session(root.session_id)
+print(is_session_unlocked(child.session_id, 'alpha'))
+")"
+[[ "$out_0085_unlock_before" == "True" ]] \
+  && pass "fiche 0085 : le snapshot capture l'unlock déjà actif au moment de la création" \
+  || fail "fiche 0085 : snapshot d'unlock manquant à la création ($out_0085_unlock_before)"
+
+# ── (2) zone Drive accordée au parent APRÈS la création d'un enfant ne
+# s'expose pas passivement à l'enfant déjà créé ──
+out_0085_zone="$(GWSA_ROOT="$L3_0085" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, create_child_session, session_grant_drive, active_drive_zones
+root = create_session(client='0085-zone-root')
+child = create_child_session(root.session_id)
+session_grant_drive(root.session_id, 'alpha', 'FOLDERX123456789012')
+print('FOLDERX123456789012' in active_drive_zones(child.session_id, 'alpha'),
+      'FOLDERX123456789012' in active_drive_zones(root.session_id, 'alpha'))
+")"
+[[ "$out_0085_zone" == "False True" ]] \
+  && pass "fiche 0085 : zone Drive figée à la création — grant ultérieur du parent n'élargit pas l'enfant" \
+  || fail "fiche 0085 : zone Drive NON figée — fuite passive vers l'enfant ($out_0085_zone)"
+
+# ── (2-bis) le snapshot capture bien la zone Drive déjà active AVANT la création ──
+out_0085_zone_before="$(GWSA_ROOT="$L3_0085" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, create_child_session, session_grant_drive, active_drive_zones
+root = create_session(client='0085-zone-root2')
+session_grant_drive(root.session_id, 'alpha', 'FOLDERY123456789012')
+child = create_child_session(root.session_id)
+print('FOLDERY123456789012' in active_drive_zones(child.session_id, 'alpha'))
+")"
+[[ "$out_0085_zone_before" == "True" ]] \
+  && pass "fiche 0085 : le snapshot capture la zone Drive déjà active au moment de la création" \
+  || fail "fiche 0085 : snapshot de zone Drive manquant à la création ($out_0085_zone_before)"
+
+# ── (3) sous-session pré-snapshot (legacy, upgrade in-place, sans marqueur
+# capabilities_snapshot) garde son héritage LIVE pour unlock + zones Drive
+# (même repli legacy que les capacités fines) ──
+out_0085_legacy="$(GWSA_ROOT="$L3_0085" PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from gateway.sessions import (
+    create_session, create_child_session, session_unlock, session_grant_drive,
+    is_session_unlocked, active_drive_zones, _path,
+)
+root = create_session(client='0085-legacy-root')
+child = create_child_session(root.session_id)
+# Réécrit le fichier de l'enfant comme le faisait l'ANCIENNE révision (pré-0085) :
+# pas de marqueur, unlocks/drive_zones locaux vides.
+p = _path(child.session_id)
+data = json.loads(p.read_text())
+data['unlocks'] = {}
+data['drive_zones'] = {}
+data.pop('capabilities_snapshot', None)
+data.pop('grants_snapshot', None)
+p.write_text(json.dumps(data))
+# Octroi au parent APRÈS l'écriture du fichier legacy : une session non
+# marquée retombe sur la résolution live (comme pour les capacités) donc DOIT
+# le voir.
+session_unlock(root.session_id, 'alpha', 30)
+session_grant_drive(root.session_id, 'alpha', 'FOLDERZ123456789012')
+print(is_session_unlocked(child.session_id, 'alpha'),
+      'FOLDERZ123456789012' in active_drive_zones(child.session_id, 'alpha'))
+")"
+[[ "$out_0085_legacy" == "True True" ]] \
+  && pass "fiche 0085 : sous-session pré-snapshot garde l'héritage live (unlock + zones Drive, repli legacy)" \
+  || fail "fiche 0085 : sous-session pré-snapshot a perdu son héritage live ($out_0085_legacy)"
+
+# ── (4) non-régression : la révocation/nettoyage côté parent reste correcte
+# (une session révoquée reste invisible, snapshot ou pas) ──
+out_0085_revoke="$(GWSA_ROOT="$L3_0085" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, create_child_session, session_unlock, close_session, get_session
+root = create_session(client='0085-revoke-root')
+session_unlock(root.session_id, 'alpha', 30)
+child = create_child_session(root.session_id)
+close_session(root.session_id)
+print(get_session(root.session_id) is None, get_session(child.session_id) is None)
+")"
+[[ "$out_0085_revoke" == "True True" ]] \
+  && pass "fiche 0085 : non-régression — fermer le parent purge aussi l'enfant snapshotté" \
+  || fail "fiche 0085 : non-régression revoke ($out_0085_revoke)"
+
+# ── (5) petit-enfant d'un parent LEGACY (upgrade in-place) : le snapshot du
+# petit-fils doit se construire depuis l'état EFFECTIF résolu du parent (via
+# son repli legacy), pas sa seule liste locale brute — sinon il perd tout
+# (finding #2, Codex PR #118, étendu à unlock/zones par la fiche 0085) ──
+out_0085_grandchild="$(GWSA_ROOT="$L3_0085" PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from gateway.sessions import (
+    create_session, create_child_session, session_unlock, session_grant_drive,
+    is_session_unlocked, active_drive_zones, _path,
+)
+root = create_session(client='0085-gc-root')
+session_unlock(root.session_id, 'beta', 30)
+session_grant_drive(root.session_id, 'beta', 'FOLDERW123456789012')
+mid = create_child_session(root.session_id)
+# mid devient legacy (upgrade in-place) : marqueur absent, locaux vides — mais
+# mid GARDE l'accès live à root via le repli legacy (test 3 ci-dessus).
+p = _path(mid.session_id)
+data = json.loads(p.read_text())
+data['unlocks'] = {}
+data['drive_zones'] = {}
+data.pop('capabilities_snapshot', None)
+data.pop('grants_snapshot', None)
+p.write_text(json.dumps(data))
+grandchild = create_child_session(mid.session_id)
+print(is_session_unlocked(grandchild.session_id, 'beta'),
+      'FOLDERW123456789012' in active_drive_zones(grandchild.session_id, 'beta'))
+")"
+[[ "$out_0085_grandchild" == "True True" ]] \
+  && pass "fiche 0085 : petit-enfant d'un parent legacy hérite via l'état effectif résolu (pas la liste locale brute)" \
+  || fail "fiche 0085 : petit-enfant d'un parent legacy a perdu l'héritage ($out_0085_grandchild)"
+
+# ── (6, Codex PR #119 finding P1) : un fichier de sous-session au format
+# 0080 (marqueur capabilities_snapshot présent, marqueur grants_snapshot
+# 0085 ABSENT, unlocks/drive_zones locaux vides — parce qu'à l'époque 0080
+# ces deux grains n'étaient jamais figés, seulement les capacités) doit
+# CONTINUER à voir en LIVE l'unlock + la zone Drive de son parent après
+# l'upgrade vers 0085 — seules ses capacités suivent, elles, le snapshot ──
+out_0085_format0080="$(GWSA_ROOT="$L3_0085" PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from gateway.sessions import (
+    create_session, create_child_session, session_unlock, session_grant_drive,
+    session_grant_capability, is_session_unlocked, active_drive_zones,
+    session_has_capability, _path,
+)
+root = create_session(client='0085-fmt0080-root')
+session_grant_capability(root.session_id, 'alpha', 'gmail', 'read', hours=1)
+child = create_child_session(root.session_id)
+# Réécrit le fichier de l'enfant comme le faisait la révision 0080 :
+# capabilities_snapshot=True (les capacités, elles, étaient déjà figées),
+# mais AUCUN marqueur 0085 (grants_snapshot) et unlocks/drive_zones locaux
+# vides — l'ancien create_child_session ne figeait pas ces deux grains.
+p = _path(child.session_id)
+data = json.loads(p.read_text())
+data['unlocks'] = {}
+data['drive_zones'] = {}
+data.pop('grants_snapshot', None)
+p.write_text(json.dumps(data))
+# Octrois au parent APRÈS l'écriture du fichier 0080 :
+session_unlock(root.session_id, 'alpha', 30)
+session_grant_drive(root.session_id, 'alpha', 'FOLDERV123456789012')
+session_grant_capability(root.session_id, 'alpha', 'drive', 'read', hours=1)
+print(
+    is_session_unlocked(child.session_id, 'alpha'),
+    'FOLDERV123456789012' in active_drive_zones(child.session_id, 'alpha'),
+    session_has_capability(child.session_id, 'alpha', 'gmail', 'read'),
+    session_has_capability(child.session_id, 'alpha', 'drive', 'read'),
+)
+")"
+[[ "$out_0085_format0080" == "True True True False" ]] \
+  && pass "fiche 0085 (Codex P1) : sous-session format 0080 garde unlock/zones EN LIVE, capacités restent figées au snapshot" \
+  || fail "fiche 0085 (Codex P1) : marqueur réutilisé à tort — régression sur unlock/zones d'une session 0080 ($out_0085_format0080)"
+
 # ── (3) audit : la catégorie journalisée suit l'autorisation (drafts/share…) ──
 L3_AUDIT_CAT="$TMP/mag-0080-audit-cat"
 mkdir -p "$L3_AUDIT_CAT/alpha"
