@@ -9,8 +9,9 @@ from .categorize import (
     DELETE_METHODS,
     READ_METHODS,
     categorize,
+    drive_files_trash_override,
     norm,
-    resource_from_params,
+    operand_resource,
 )
 from .config import SYS_PYTHON, USAGE_LOGGER, gwsa_root
 
@@ -36,9 +37,13 @@ def infer_call(gws_args: list[str]) -> tuple[str, str, str]:
     fin utilisé pour AUTORISER reste `scripts/policy-check.py` (source de
     vérité). L'opération réutilise la MÊME catégorisation service-aware que le
     contrôleur de policy (`gateway.categorize.categorize` : `drafts`, `share`,
-    …) — pas seulement le nom de méthode — pour que le triplet journalisé
-    identifie la capacité qui a réellement autorisé l'appel (fiche 0080,
-    revue Codex PR #110 raffinement #3).
+    …) — pas seulement le nom de méthode —, y compris le reclassement
+    « update » → « delete » d'un `drive files update {trashed:true}` (Option A,
+    fiche 0037), pour que le triplet journalisé identifie la capacité qui a
+    réellement autorisé l'appel (fiche 0080, revue Codex PR #110
+    raffinement #3 + revue adverse P2). La ressource vient du même mapping
+    explicite (service, ressource, méthode) → paramètre que `policy-check.py`
+    (raffinement #1 / P0) — jamais d'une priorité générique.
     """
     if not gws_args:
         return "", "", ""
@@ -52,7 +57,8 @@ def infer_call(gws_args: list[str]) -> tuple[str, str, str]:
         return service, "", ""
     resources, raw_method = positionals[:-1], positionals[-1]
     operation = categorize(service, resources, raw_method) or _fallback_operation(norm(raw_method))
-    resource = resource_from_params(gws_args)
+    operation = drive_files_trash_override(resources, raw_method, operation, gws_args)
+    resource = operand_resource(service, resources, raw_method, gws_args)
     return service, operation, resource
 
 
