@@ -29,3 +29,20 @@
   padding-top: 0;
   border-top: none;
 }
+
+/* Cartes de la page d'accueil (grid cards, ex. index.md) : rendre toute la
+   carte cliquable, pas seulement le titre. Le lien du titre reste le seul
+   <a> réel — inchangé, donc toujours lisible et toujours ce que le lecteur
+   d'écran annonce. Le <li> devient la référence de positionnement ; un
+   pseudo-élément ::after (vide, invisible) s'étend sur tout le <li> via
+   inset: 0 et capte le clic n'importe où sur la carte. Aucun JS. */
+.grid.cards > ul > li {
+  position: relative;
+}
+
+.grid.cards > ul > li a:first-of-type::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+}

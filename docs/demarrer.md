@@ -102,7 +102,8 @@ C'est tout le principe : **l'assistant propose, vous disposez.**
 
 ## Et ensuite ?
 
-- **[Utiliser au quotidien](usage.md)** — la CLI `mag`, l'interface admin, Touch ID.
+- **[Utiliser au quotidien](usage.md)** — la CLI `mag`, Touch ID.
+- **[Interface d'administration](admin.md)** — piloter comptes, verrous et policies depuis le navigateur.
 - **[Modèle de policy](policies.md)** — ce que chaque compte a le droit de faire (par défaut : lecture, brouillons, zéro envoi).
 - **[Sécurité](threat-model.md)** — ce que le projet garantit, et ce qu'il ne garantit *pas*.
 - Un souci pendant l'install ? **[Configurer un client LLM](configurer-client.md)** (config manuelle par client) et **[Installer & mettre à jour](mcp-setup.md)** (plusieurs versions, dépannage).
