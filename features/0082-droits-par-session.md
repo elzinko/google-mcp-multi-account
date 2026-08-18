@@ -67,7 +67,7 @@ Enfants :
 
 - `/ezk-backlog regen` (script `regen-backlog.sh`) ne signale **aucun** warning
   d'intégrité sur cet axe (plus de `epic: … introuvable ou non-epic` pour 0076/0080).
-- Dans `features/README.md` (section « 🧭 Épics »), l'épic **0082** apparaît ;
+- Dans `features/BACKLOG.md` (section « 🧭 Épics »), l'épic **0082** apparaît ;
   0045/0076/0080 affichent `0082` en colonne Épic.
 
 ## Notes
