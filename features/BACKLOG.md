@@ -60,6 +60,7 @@
 | 0083 | Durcir la couche d'approbation passkey distante (suite revue Codex #113) | feature | P2 |  | 0077 | 🔴 todo |  |
 | 0084 | Durcir consume_nonce contre une course TOCTOU inter-process (anti-rejeu partagé) | bug | P2 |  |  | 🔴 todo |  |
 | 0086 | Raffinements audit + migration de la couche capacités de session (suite revue PR #118) | bug | P2 |  | 0082 | 🔴 todo |  |
+| 0087 | install.sh — brancher les clients LLM en opt-in (pas opt-out) | feature | P2 |  |  | 🔴 todo |  |
 | 0001 | Élicitation signée — faire monter `mag strongauth` de la présence à la signature | feature | P3 |  |  | 🟠 in-progress |  |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)
