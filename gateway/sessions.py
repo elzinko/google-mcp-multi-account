@@ -10,7 +10,7 @@ import json
 import os
 import secrets
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -406,20 +406,30 @@ def session_grant_capability(
 
 
 def active_capabilities(session_id: str, account: str, service: str = "") -> list[Capability]:
-    """Capacités actives pour (session, compte[, service]), avec héritage parent."""
+    """Capacités actives pour (session, compte[, service]).
+
+    Ne consulte QUE les capacités propres à `session_id` — jamais celles,
+    live, d'un ancêtre. Une session racine ne porte que les siennes (aucun
+    parent). Une sous-session déléguée reçoit un INSTANTANÉ des capacités
+    actives de son parent au moment de sa création (`create_child_session`) ;
+    elle ne peut plus en recevoir directement ensuite (`session_grant_capability`
+    le refuse). Sa propre liste EST donc déjà l'héritage résolu — la parcourir
+    en direct (au lieu de remonter la chaîne à chaque appel) fige les
+    capacités déléguées à la création : un octroi accordé au parent APRÈS coup
+    ne s'expose plus passivement à un enfant déjà créé (fiche 0080, revue
+    Codex PR #110 raffinement #2)."""
     state = get_session(session_id)
     if state is None:
         return []
     now = time.time()
     out: list[Capability] = []
-    for s in _ancestor_chain(state):
-        for cap in s.capabilities:
-            if cap.account != account:
-                continue
-            if service and cap.service != service:
-                continue
-            if cap.active(now):
-                out.append(cap)
+    for cap in state.capabilities:
+        if cap.account != account:
+            continue
+        if service and cap.service != service:
+            continue
+        if cap.active(now):
+            out.append(cap)
     return out
 
 
@@ -441,7 +451,19 @@ def session_has_capability(
 
 
 def create_child_session(parent_id: str, client: str = "mcp") -> SessionState:
-    return create_session(parent_id=parent_id, client=client, delegated=True)
+    """Crée une sous-session, capacités du parent FIGÉES au moment T (snapshot).
+
+    Le payload signé qui enrôle une sous-session ne nomme que le parent, pas
+    ses octrois futurs — copier les capacités actives du parent une bonne
+    fois ici (plutôt que de les résoudre en direct à chaque appel) évite
+    qu'un octroi accordé au parent après cette création ne s'expose
+    passivement à l'enfant (fiche 0080, revue Codex PR #110 raffinement #2)."""
+    parent = require_session(parent_id)
+    child = create_session(parent_id=parent_id, client=client, delegated=True)
+    now = time.time()
+    child.capabilities = [replace(c) for c in parent.capabilities if c.active(now)]
+    _save(child)
+    return child
 
 
 def revoke_descendants(session_id: str) -> int:
