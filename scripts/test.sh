@@ -3453,6 +3453,101 @@ print(e.get('decision'), e.get('session_id') == s.session_id, e.get('service'), 
   && pass "audit : appel réussi journalise session_id + service + opération (pas seulement les refus)" \
   || fail "audit : appel réussi mal journalisé ($out_audit)"
 
+section "droits par session — fiche 0080 (raffinements revue Codex #110)"
+
+# ── (1) ressource pour les services non-Drive : Calendar ──
+CAP_NONDRIVE="$TMP/mag-0080-nondrive"
+mkdir -p "$CAP_NONDRIVE/alpha"
+echo '{"calendar":{"read":true},"gmail":{"read":true}}' > "$CAP_NONDRIVE/alpha/policy.json"
+out_res_cal="$(GWSA_ROOT="$CAP_NONDRIVE" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'calendar','operation':'read','resource':'cal123'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+def rc(cal_id):
+    r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_NONDRIVE/alpha',
+                         'calendar','events','list','--params', json.dumps({'calendarId': cal_id})], env=env)
+    return r.returncode
+print('own', rc('cal123'))
+print('other', rc('cal999'))
+")"
+[[ "$out_res_cal" == *"own 0"* && "$out_res_cal" == *"other 4"* ]] \
+  && pass "capacités session : calendar:read:cal123 autorise cet agenda, refuse un autre" \
+  || fail "capacités session : granularité ressource Calendar cassée ($out_res_cal)"
+
+# ── (1) ressource pour les services non-Drive : Gmail label ──
+out_res_gmail="$(GWSA_ROOT="$CAP_NONDRIVE" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'gmail','operation':'read','resource':'LABEL_A'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+def rc(label_id):
+    r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_NONDRIVE/alpha',
+                         'gmail','users','messages','list','--params', json.dumps({'labelId': label_id})], env=env)
+    return r.returncode
+print('own', rc('LABEL_A'))
+print('other', rc('LABEL_B'))
+")"
+[[ "$out_res_gmail" == *"own 0"* && "$out_res_gmail" == *"other 4"* ]] \
+  && pass "capacités session : gmail:read:LABEL_A autorise ce libellé, refuse un autre" \
+  || fail "capacités session : granularité ressource Gmail cassée ($out_res_gmail)"
+
+# ── (2) capacités déléguées figées à la création (snapshot) ──
+L3_SNAPSHOT="$TMP/mag-0080-snapshot"
+mkdir -p "$L3_SNAPSHOT"
+out_snapshot="$(GWSA_ROOT="$L3_SNAPSHOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import (
+    create_session, create_child_session, session_grant_capability,
+    session_has_capability,
+)
+root = create_session(client='snap-root')
+child = create_child_session(root.session_id)
+# octroi au PARENT après la création de l'enfant : ne doit PAS s'exposer à
+# l'enfant déjà créé (le payload signé de l'enfant ne nommait que le parent
+# au moment T, pas ses octrois futurs).
+session_grant_capability(root.session_id, 'alpha', 'drive', 'read', hours=1)
+print(session_has_capability(child.session_id, 'alpha', 'drive', 'read'),
+      session_has_capability(root.session_id, 'alpha', 'drive', 'read'))
+")"
+[[ "$out_snapshot" == "False True" ]] \
+  && pass "sous-agents : capacités figées à la création — octroi ultérieur au parent n'élargit pas l'enfant" \
+  || fail "sous-agents : capacités NON figées — fuite passive vers l'enfant ($out_snapshot)"
+
+# ── (2-bis) le snapshot capture bien ce que le parent possédait AVANT la création ──
+out_snapshot_before="$(GWSA_ROOT="$L3_SNAPSHOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import (
+    create_session, create_child_session, session_grant_capability,
+    session_has_capability,
+)
+root = create_session(client='snap-root2')
+session_grant_capability(root.session_id, 'alpha', 'gmail', 'read', hours=1)
+child = create_child_session(root.session_id)
+print(session_has_capability(child.session_id, 'alpha', 'gmail', 'read'))
+")"
+[[ "$out_snapshot_before" == "True" ]] \
+  && pass "sous-agents : le snapshot capture les capacités déjà accordées au moment de la création" \
+  || fail "sous-agents : snapshot manquant à la création ($out_snapshot_before)"
+
+# ── (3) audit : la catégorie journalisée suit l'autorisation (drafts/share…) ──
+L3_AUDIT_CAT="$TMP/mag-0080-audit-cat"
+mkdir -p "$L3_AUDIT_CAT/alpha"
+out_audit_cat="$(GWSA_ROOT="$L3_AUDIT_CAT" PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from pathlib import Path
+import gateway.broker_server as bs
+from gateway.sessions import create_session
+
+s = create_session(client='audit-cat')
+bs.run_gws_local = lambda *a, **k: {'ok': True}
+log = Path('$L3_AUDIT_CAT') / 'usage.jsonl'
+log.unlink(missing_ok=True)
+bs.handle_exec('alpha', ['gmail', 'users', 'drafts', 'create', '--json', '{}'], 'audit-client', session_id=s.session_id)
+bs.handle_exec('alpha', ['drive', 'permissions', 'create', '--params', '{\"fileId\":\"f1\"}'], 'audit-client', session_id=s.session_id)
+entries = [json.loads(x) for x in log.read_text().splitlines()]
+print(entries[-2].get('operation'), entries[-1].get('operation'))
+")"
+[[ "$out_audit_cat" == "drafts share" ]] \
+  && pass "audit : catégorie service-aware (gmail drafts, drive share) — pas juste « create »" \
+  || fail "audit : catégorie d'audit non alignée sur l'autorisation ($out_audit_cat)"
+
 section "sandbox remove (fiche 0041)"
 SB_DEP="$TMP/sandbox-remove"
 mkdir -p "$SB_DEP/test-sb"
