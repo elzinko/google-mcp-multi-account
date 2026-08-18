@@ -52,8 +52,9 @@ Puis, pour **utiliser** le serveur (pas besoin de cloner le dépôt) :
 curl -fsSL https://raw.githubusercontent.com/elzinko/google-mcp-multi-account/main/install.sh | bash
 ```
 
-Ça télécharge la dernière version, la met sur ton poste, branche tes clients, et
-affiche à la fin le **setup Google** restant (un projet OAuth, ~10 min — voir
+Ça télécharge la dernière version, la met sur ton poste, branche Claude
+Desktop et Claude Code (Cursor : à brancher à la main), et affiche à la fin
+le **setup Google** restant (un projet OAuth, ~10 min — voir
 [OAuth / Google Cloud](setup-oauth.md)). Aucun compte ne se connecte tant qu'il
 n'est pas fait — mais `setup_status` tourne déjà pour te guider.
 
