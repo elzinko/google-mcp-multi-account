@@ -3455,7 +3455,7 @@ print(e.get('decision'), e.get('session_id') == s.session_id, e.get('service'), 
 
 section "droits par session — fiche 0080 (raffinements revue Codex #110)"
 
-# ── (1) ressource pour les services non-Drive : Calendar ──
+# ── (1) ressource pour les services non-Drive : Calendar, VRAI paramètre (calendarId) ──
 CAP_NONDRIVE="$TMP/mag-0080-nondrive"
 mkdir -p "$CAP_NONDRIVE/alpha"
 echo '{"calendar":{"read":true},"gmail":{"read":true}}' > "$CAP_NONDRIVE/alpha/policy.json"
@@ -3474,21 +3474,88 @@ print('other', rc('cal999'))
   && pass "capacités session : calendar:read:cal123 autorise cet agenda, refuse un autre" \
   || fail "capacités session : granularité ressource Calendar cassée ($out_res_cal)"
 
-# ── (1) ressource pour les services non-Drive : Gmail label ──
+# ── (1) ressource pour les services non-Drive : Gmail, VRAI paramètre (labelIds, pluriel) ──
 out_res_gmail="$(GWSA_ROOT="$CAP_NONDRIVE" PYTHONPATH="$(pwd)" "$PY" -c "
 import json, subprocess, sys
 caps = json.dumps([{'service':'gmail','operation':'read','resource':'LABEL_A'}])
 env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
 def rc(label_id):
     r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_NONDRIVE/alpha',
-                         'gmail','users','messages','list','--params', json.dumps({'labelId': label_id})], env=env)
+                         'gmail','users','messages','list','--params',
+                         json.dumps({'labelIds': [label_id]})], env=env)
     return r.returncode
 print('own', rc('LABEL_A'))
 print('other', rc('LABEL_B'))
 ")"
 [[ "$out_res_gmail" == *"own 0"* && "$out_res_gmail" == *"other 4"* ]] \
-  && pass "capacités session : gmail:read:LABEL_A autorise ce libellé, refuse un autre" \
+  && pass "capacités session : gmail:read:LABEL_A autorise ce libellé (labelIds), refuse un autre" \
   || fail "capacités session : granularité ressource Gmail cassée ($out_res_gmail)"
+
+# ── (1-P0) leurre : un « id » quelconque dans --params NE DOIT PAS usurper
+# le paramètre opérant réel (labelId/calendarId) — revue adverse post-#110.
+# gmail:read:LABEL_A ; appel ciblant en réalité LABEL_VICTIME (via le
+# paramètre historiquement mal priorisé « labelId » singulier, absent du
+# mapping) + un « id » = LABEL_A glissé en leurre → doit être REFUSÉ (aucun
+# opérande fiable dérivable pour « messages list » hors labelIds pluriel).
+out_res_decoy_gmail="$(GWSA_ROOT="$CAP_NONDRIVE" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'gmail','operation':'read','resource':'LABEL_A'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_NONDRIVE/alpha',
+                     'gmail','users','messages','list','--params',
+                     json.dumps({'labelId': 'LABEL_VICTIME', 'id': 'LABEL_A'})], env=env)
+print(r.returncode)
+")"
+[[ "$out_res_decoy_gmail" == "4" ]] \
+  && pass "P0 sécu : leurre --params (id=capacité accordée, labelId=cible réelle) refusé" \
+  || fail "P0 sécu : leurre gmail accepté à tort — fail-open ($out_res_decoy_gmail)"
+
+# ── (1-P0) même leurre côté Calendar : calendarId réel ≠ id leurré ──
+out_res_decoy_cal="$(GWSA_ROOT="$CAP_NONDRIVE" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'calendar','operation':'read','resource':'cal123'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_NONDRIVE/alpha',
+                     'calendar','events','get','--params',
+                     json.dumps({'calendarId': 'cal999', 'id': 'cal123'})], env=env)
+print(r.returncode)
+")"
+[[ "$out_res_decoy_cal" == "4" ]] \
+  && pass "P0 sécu : leurre --params calendar (id=capacité accordée, calendarId=cible réelle) refusé" \
+  || fail "P0 sécu : leurre calendar accepté à tort — fail-open ($out_res_decoy_cal)"
+
+# ── (1-P0) calendar events get : le VRAI paramètre calendarId reste utilisable ──
+out_res_cal_get="$(GWSA_ROOT="$CAP_NONDRIVE" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'calendar','operation':'read','resource':'cal123'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_NONDRIVE/alpha',
+                     'calendar','events','get','--params',
+                     json.dumps({'calendarId': 'cal123', 'eventId': 'evt1'})], env=env)
+print(r.returncode)
+")"
+[[ "$out_res_cal_get" == "0" ]] \
+  && pass "P0 sécu : calendar events get avec le vrai calendarId (pas eventId) reste autorisé" \
+  || fail "P0 sécu : calendar events get sur-refusé à tort ($out_res_cal_get)"
+
+# ── (1-P0) ops porteuses d'un « id » ambigu sans mapping (messages get,
+# attachments get) : opérande non identifiable → fail-closed pour une
+# capacité SCOPÉE, même si le « id » présent coïncide avec la ressource
+# accordée (ce n'est pas un labelId, juste un homonyme de valeur) ──
+out_res_ambiguous="$(GWSA_ROOT="$CAP_NONDRIVE" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'gmail','operation':'read','resource':'LABEL_A'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+def rc(args):
+    r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_NONDRIVE/alpha'] + args, env=env)
+    return r.returncode
+print('messages_get', rc(['gmail','users','messages','get','--params', json.dumps({'id':'LABEL_A'})]))
+print('attachments_get', rc(['gmail','users','messages','attachments','get','--params',
+                              json.dumps({'userId':'me','messageId':'m','id':'LABEL_A'})]))
+")"
+[[ "$out_res_ambiguous" == *"messages_get 4"* && "$out_res_ambiguous" == *"attachments_get 4"* ]] \
+  && pass "P0 sécu : messages/attachments get sans opérande fiable → fail-closed sous capacité scopée" \
+  || fail "P0 sécu : opérande ambigu accepté à tort ($out_res_ambiguous)"
 
 # ── (2) capacités déléguées figées à la création (snapshot) ──
 L3_SNAPSHOT="$TMP/mag-0080-snapshot"
@@ -3547,6 +3614,19 @@ print(entries[-2].get('operation'), entries[-1].get('operation'))
 [[ "$out_audit_cat" == "drafts share" ]] \
   && pass "audit : catégorie service-aware (gmail drafts, drive share) — pas juste « create »" \
   || fail "audit : catégorie d'audit non alignée sur l'autorisation ($out_audit_cat)"
+
+# ── (P2) audit : drive files update {trashed:true} → « delete » (Option A,
+# fiche 0037), pas « update » — même reclassement que policy-check.py ──
+out_audit_trash="$(PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.usage import infer_call
+print(infer_call(['drive', 'files', 'update', '--params', '{\"fileId\":\"f1\"}',
+                   '--json', '{\"trashed\": true}'])[1])
+print(infer_call(['drive', 'files', 'update', '--params', '{\"fileId\":\"f1\"}',
+                   '--json', '{\"trashed\": false}'])[1])
+")"
+[[ "$out_audit_trash" == $'delete\nupdate' ]] \
+  && pass "audit : drive files update {trashed:true} journalisé « delete », {false} reste « update »" \
+  || fail "audit : trashed→delete non répercuté côté audit ($out_audit_trash)"
 
 section "sandbox remove (fiche 0041)"
 SB_DEP="$TMP/sandbox-remove"

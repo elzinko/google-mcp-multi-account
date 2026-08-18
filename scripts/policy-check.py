@@ -47,7 +47,7 @@ from gateway.categorize import (  # noqa: E402
     SHARE_RESOURCES,
     categorize,
     norm,
-    resource_from_params,
+    operand_resource,
 )
 
 VALUE_FLAGS = {
@@ -625,8 +625,13 @@ def main():
         )
     # Ressource propre au service (Gmail labelId, Calendar calendarId, …) —
     # sans elle, la granularité ressource des capacités de session ne
-    # fonctionnait que sur Drive (fiche 0080, raffinement #1).
-    check_session_caps(profile_dir, args, service, cat, resource_from_params(args))
+    # fonctionnait que sur Drive (fiche 0080, raffinement #1). Dérivée d'un
+    # mapping EXPLICITE (service, ressource, méthode) → paramètre, jamais
+    # d'une priorité générique attaquable par un leurre (P0, revue adverse).
+    check_session_caps(
+        profile_dir, args, service, cat,
+        operand_resource(service, resources, raw_method, args),
+    )
 
 
 if __name__ == "__main__":
