@@ -331,7 +331,11 @@ def _ancestor_chain(state: SessionState) -> list[SessionState]:
 
 
 def active_drive_zones(session_id: str, alias: str) -> set[str]:
-    """Zones Drive actives pour (session, alias), avec héritage parent."""
+    """Zones Drive actives pour (session, alias), avec héritage parent LIVE :
+    contrairement aux capacités fines (`active_capabilities`, figées à la
+    création d'une sous-session — fiche 0080), une zone accordée au parent
+    après coup reste visible à un enfant déjà créé. Trou préexistant, non
+    couvert ici, suivi par la fiche 0085."""
     state = get_session(session_id)
     if state is None:
         return set()
@@ -345,6 +349,10 @@ def active_drive_zones(session_id: str, alias: str) -> set[str]:
 
 
 def is_session_unlocked(session_id: str, alias: str) -> bool:
+    """Déverrouillage actif pour (session, alias), avec héritage parent LIVE :
+    même remarque que `active_drive_zones` — un `session unlock` accordé au
+    parent après coup reste visible à un enfant déjà créé (préexistant, hors
+    périmètre fiche 0080, suivi par la fiche 0085)."""
     state = get_session(session_id)
     if state is None:
         return False
@@ -451,13 +459,23 @@ def session_has_capability(
 
 
 def create_child_session(parent_id: str, client: str = "mcp") -> SessionState:
-    """Crée une sous-session, capacités du parent FIGÉES au moment T (snapshot).
+    """Crée une sous-session ; les CAPACITÉS FINES du parent (`Capability`,
+    service × opération × ressource) sont FIGÉES au moment T (snapshot).
 
     Le payload signé qui enrôle une sous-session ne nomme que le parent, pas
     ses octrois futurs — copier les capacités actives du parent une bonne
     fois ici (plutôt que de les résoudre en direct à chaque appel) évite
-    qu'un octroi accordé au parent après cette création ne s'expose
-    passivement à l'enfant (fiche 0080, revue Codex PR #110 raffinement #2)."""
+    qu'un octroi de capacité accordé au parent après cette création ne
+    s'expose passivement à l'enfant (fiche 0080, revue Codex PR #110
+    raffinement #2).
+
+    NE COUVRE QUE les capacités fines. `unlocks` (session unlock) et
+    `drive_zones` (session grant Drive legacy) restent, eux, hérités en
+    DIRECT de la chaîne d'ancêtres (`is_session_unlocked`,
+    `active_drive_zones`) — un déverrouillage ou une zone accordés au parent
+    après la création d'un enfant lui restent donc passivement visibles.
+    Trou PRÉEXISTANT (non introduit par la fiche 0080), hors périmètre ici,
+    délibérément laissé en l'état et suivi par la fiche 0085."""
     parent = require_session(parent_id)
     child = create_session(parent_id=parent_id, client=client, delegated=True)
     now = time.time()
