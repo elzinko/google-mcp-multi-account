@@ -23,11 +23,15 @@ reste le durcissement ([0080](0080-durcir-capacites-fines-session.md)).
 
 ## Contexte / Problème
 
-Les autorisations d'accès aux comptes Google sont aujourd'hui **globales au poste** :
-un `unlock` de compte ou un `grant` de zone Drive profite à **toutes** les
-conversations LLM ouvertes en parallèle. L'intention produit est l'inverse — **repartir
-de zéro à chaque conversation**, avec des droits propres, fins, signés et révocables,
-sans que l'agent puisse s'auto-attribuer des droits.
+**Avant la Phase A** ([0076](done/0076-droits-par-session-phase-a.md), livrée #108/#110),
+les autorisations d'accès aux comptes Google étaient **globales au poste** : un `unlock`
+de compte ou un `grant` de zone Drive profitait à **toutes** les conversations LLM
+ouvertes en parallèle. La Phase A a **inversé** ce défaut — chaque conversation **repart
+de zéro**, avec des capacités propres, fines, signées et révocables, sans que l'agent
+puisse s'auto-attribuer des droits (cf. `SECURITY.md`, `docs/policies.md`). Un `unlock`
+de compte hérité peut rester machine-wide, mais il ne donne plus à une conversation
+l'accès aux **données** sans ses propres capacités de session. Reste à **durcir** cette
+couche ([0080](0080-durcir-capacites-fines-session.md)).
 
 Cet axe rassemblait ses fiches par une chaîne `epic:` feature→feature (0080→0076→0045),
 seul thème multi-fiches du backlog sans épic ombrelle — d'où deux warnings d'intégrité
