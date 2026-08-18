@@ -85,16 +85,28 @@ class SessionState:
     # capacités fines (compte, service, opération, ressource?) — cf. Capability
     capabilities: list[Capability] = field(default_factory=list)
     delegated: bool = False  # True = sous-session (pas d'access_request direct)
-    # True dès qu'une session est créée/enregistrée par CETTE révision (fiche
-    # 0080, étendu par la fiche 0085) : `capabilities`, `unlocks` et
-    # `drive_zones` portent déjà l'état résolu (racine : le sien ; enfant :
-    # figé à la création). False = fichier de session écrit par une révision
-    # ANTÉRIEURE (upgrade in-place, session encore active) — ces champs n'y
-    # contenaient alors QUE les octrois directs, la résolution passait par
-    # `_ancestor_chain` ; `_resolution_chain` bascule sur ce repli legacy tant
-    # que ce marqueur est absent, pour ne pas priver d'un coup une session
-    # pré-migration de son héritage (Codex PR #118, P2 finding #2).
+    # True dès qu'une session est créée/enregistrée par la révision 0080 (ou
+    # plus récente) : `capabilities` porte déjà l'état résolu (racine : le
+    # sien ; enfant : figé à la création). False = fichier écrit AVANT 0080
+    # (upgrade in-place, session encore active) — `capabilities` n'y
+    # contenait alors QUE les octrois directs, la résolution passait par
+    # `_ancestor_chain` ; `_capabilities_resolution_chain` bascule sur ce
+    # repli legacy tant que ce marqueur est absent (Codex PR #118, P2 finding
+    # #2). NE COUVRE QUE les capacités fines — cf. `grants_snapshot` pour
+    # unlock + zones Drive.
     capabilities_snapshot: bool = True
+    # True dès qu'une session est créée/enregistrée par la révision 0085 (ou
+    # plus récente) : `unlocks` et `drive_zones` portent déjà l'état résolu.
+    # False = fichier écrit AVANT 0085 (upgrade in-place) — que le fichier
+    # date de 0080 (capabilities_snapshot=True mais unlock/zones ENCORE
+    # hérités en direct à l'époque) ou d'avant, `unlocks`/`drive_zones` n'y
+    # contiennent QUE les octrois directs et doivent rester résolus en LIVE
+    # via `_ancestor_chain` (`_grants_resolution_chain`) — marqueur DISTINCT
+    # de `capabilities_snapshot` à dessein : les deux grains n'ont pas été
+    # figés à la même révision, un même marqueur pour les deux aurait fait
+    # perdre son unlock/accès Drive à toute session écrite par 0080 dès la
+    # mise à jour vers 0085 (revue Codex PR #119, finding P1).
+    grants_snapshot: bool = True
 
     def touch(self) -> None:
         self.last_seen_at = time.time()
@@ -114,6 +126,7 @@ class SessionState:
             "capabilities": [asdict(c) for c in self.capabilities],
             "delegated": self.delegated,
             "capabilities_snapshot": self.capabilities_snapshot,
+            "grants_snapshot": self.grants_snapshot,
         }
 
     @classmethod
@@ -165,6 +178,12 @@ class SessionState:
             # legacy `_ancestor_chain` dans `active_capabilities` tant que la
             # session n'a pas été recréée (Codex PR #118, P2 finding #2).
             capabilities_snapshot=bool(data.get("capabilities_snapshot", False)),
+            # Absent (fichier écrit avant la fiche 0085 — y compris un fichier
+            # 0080 dont `capabilities_snapshot` vaut déjà True) → False :
+            # repli legacy sur `_ancestor_chain` pour unlock/zones Drive
+            # (Codex PR #119, finding P1 — marqueur distinct de
+            # `capabilities_snapshot`, cf. commentaire du champ).
+            grants_snapshot=bool(data.get("grants_snapshot", False)),
         )
 
 
@@ -345,20 +364,42 @@ def _ancestor_chain(state: SessionState) -> list[SessionState]:
     return chain
 
 
-def _resolution_chain(state: SessionState) -> list[SessionState]:
-    """Chaîne de sessions à consulter pour résoudre l'état HÉRITÉ (capacités
-    fines, unlock, zones Drive) d'une session.
+def _capabilities_resolution_chain(state: SessionState) -> list[SessionState]:
+    """Chaîne de sessions à consulter pour résoudre les CAPACITÉS FINES
+    héritées d'une session (grain versionné par `capabilities_snapshot`,
+    fiche 0080).
 
     Une session non déléguée (racine), ou déléguée et marquée
-    `capabilities_snapshot` (fiche 0080/0085), porte déjà l'état résolu dans
-    ses propres champs locaux — figé au moment de sa création par
-    `create_child_session` — donc UNIQUEMENT elle-même. Une sous-session
-    déléguée NON marquée (fichier écrit par une révision antérieure à 0080,
-    upgrade in-place, encore active) retombe sur le repli legacy : remonter
-    la chaîne d'ancêtres en direct, comme avant la fiche 0080."""
+    `capabilities_snapshot`, porte déjà l'état résolu dans ses propres champs
+    locaux — figé au moment de sa création par `create_child_session` — donc
+    UNIQUEMENT elle-même. Une sous-session déléguée NON marquée (fichier
+    écrit par une révision antérieure à 0080, upgrade in-place, encore
+    active) retombe sur le repli legacy : remonter la chaîne d'ancêtres en
+    direct, comme avant la fiche 0080."""
     return (
         _ancestor_chain(state)
         if state.delegated and not state.capabilities_snapshot
+        else [state]
+    )
+
+
+def _grants_resolution_chain(state: SessionState) -> list[SessionState]:
+    """Chaîne de sessions à consulter pour résoudre UNLOCK + ZONES DRIVE
+    hérités d'une session (grain versionné par `grants_snapshot`, fiche
+    0085 — DISTINCT de `capabilities_snapshot` : un fichier écrit par la
+    révision 0080 a `capabilities_snapshot=True` mais `grants_snapshot=False`,
+    unlock/zones y étaient encore résolus en live, cf. commentaire du champ
+    sur `SessionState`, Codex PR #119 finding P1).
+
+    Une session non déléguée (racine), ou déléguée et marquée
+    `grants_snapshot`, porte déjà l'état résolu localement — figé à la
+    création par `create_child_session` — donc UNIQUEMENT elle-même. Une
+    sous-session déléguée NON marquée (fichier écrit avant 0085, qu'il date
+    de 0080 ou d'avant) retombe sur le repli legacy : remonter la chaîne
+    d'ancêtres en direct."""
+    return (
+        _ancestor_chain(state)
+        if state.delegated and not state.grants_snapshot
         else [state]
     )
 
@@ -370,14 +411,15 @@ def _effective_capabilities(state: SessionState) -> list[Capability]:
     `create_child_session` : un enfant doit hériter de l'état EFFECTIF de son
     parent, pas de sa seule liste locale brute (sinon un petit-enfant d'un
     parent legacy perd tout — Codex PR #118, P2 finding #2)."""
-    return [cap for s in _resolution_chain(state) for cap in s.capabilities]
+    return [cap for s in _capabilities_resolution_chain(state) for cap in s.capabilities]
 
 
 def _effective_unlocks(state: SessionState) -> dict[str, float]:
     """Unlocks résolus d'une session (alias → timestamp d'expiration), même
-    principe que `_effective_capabilities` (fiche 0085)."""
+    principe que `_effective_capabilities` mais versionnés par
+    `grants_snapshot` (fiche 0085, Codex PR #119 finding P1)."""
     out: dict[str, float] = {}
-    for s in _resolution_chain(state):
+    for s in _grants_resolution_chain(state):
         for alias, until in s.unlocks.items():
             out[alias] = max(out.get(alias, 0.0), until)
     return out
@@ -385,9 +427,9 @@ def _effective_unlocks(state: SessionState) -> dict[str, float]:
 
 def _effective_drive_zones(state: SessionState) -> dict[str, list[DriveZone]]:
     """Zones Drive résolues d'une session (alias → zones), même principe que
-    `_effective_capabilities` (fiche 0085)."""
+    `_effective_unlocks` (grain `grants_snapshot`, fiche 0085)."""
     out: dict[str, list[DriveZone]] = {}
-    for s in _resolution_chain(state):
+    for s in _grants_resolution_chain(state):
         for alias, zones in s.drive_zones.items():
             out.setdefault(alias, []).extend(zones)
     return out
@@ -396,11 +438,12 @@ def _effective_drive_zones(state: SessionState) -> dict[str, list[DriveZone]]:
 def active_drive_zones(session_id: str, alias: str) -> set[str]:
     """Zones Drive actives pour (session, alias).
 
-    Une sous-session marquée (snapshot pris à la création par
-    `create_child_session`, fiche 0085) ne consulte QUE son propre état : une
-    zone accordée au parent après coup ne s'expose plus passivement à
-    l'enfant déjà créé. Une session non déléguée, ou une sous-session legacy
-    non marquée, retombe sur la résolution live via `_resolution_chain`."""
+    Une sous-session marquée `grants_snapshot` (snapshot pris à la création
+    par `create_child_session`, fiche 0085) ne consulte QUE son propre état :
+    une zone accordée au parent après coup ne s'expose plus passivement à
+    l'enfant déjà créé. Une session non déléguée, ou une sous-session non
+    marquée `grants_snapshot` (fichier 0080 ou pré-0080), retombe sur la
+    résolution live via `_grants_resolution_chain`."""
     state = get_session(session_id)
     if state is None:
         return set()
