@@ -49,6 +49,13 @@ persistance — pas l'objet enrôlement chargé *avant* le verrou — **dans `cl
 point d'entrée CLI réel) comme dans tout autre point de vérification** (`run_remote_approval_gate`). Le
 `sign_count` reste **authentifié par la signature** (non forgeable) — d'où la sévérité **P2**.
 
+**Tout écrivain de `phone.json` doit prendre ce même verrou** — pas seulement les points de
+vérification. `enroll_phone` (`gateway/remote_approval.py:195` → `_save_enrollment` l.222) réécrit
+l'enrôlement : un `enroll_phone` concurrent d'une vérification peut remplacer `phone.json` **après** le
+rechargement verrouillé du vérifieur mais **avant** sa persistance (l.345) — le vérifieur écraserait
+alors le **nouvel** enrôlement avec l'**ancien** identifiant + compteur. La sérialisation porte donc sur
+le **fichier** (tous les writers : vérification *et* enrôlement), pas sur un chemin d'entrée.
+
 ## Critères d'acceptation
 
 - [ ] **Modélisation de la course** : deux `gwsa … --remote` en **process séparés**, **chacun avec son
@@ -58,6 +65,10 @@ point d'entrée CLI réel) comme dans tout autre point de vérification** (`run_
       (son **rechargement frais sous verrou** voit le compteur déjà avancé). Le verrou est
       **inter-process** (fichier), couvrant reload + check + persistance — **pas** un verrou threads /
       objet partagé, qui masquerait la fuite inter-process.
+- [ ] **Interleaving enrôlement ↔ vérification** : un `enroll_phone` qui remplace `phone.json`
+      pendant la fenêtre verrouillée d'un vérifieur **ne peut ni être écrasé** par la persistance du
+      vérifieur, **ni corrompre** le compteur — `enroll_phone` prend le **même** verrou fichier (reload
+      + write sous verrou) que la vérification.
 - [ ] `./scripts/test.sh` vert.
 
 ## Notes
