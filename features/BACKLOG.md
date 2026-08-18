@@ -30,7 +30,7 @@
 | 0067 | Admin branding — corriger le titre de page | feature | P1 | v0.4.0 | 0060 | ✅ shipped | #112 |
 | 0074 | Durcir la v1 — punch-list de lancement (doc, tests, hygiène) | feature | P1 | v1.0 |  | 🟠 in-progress |  |
 | 0078 | Approbation par passkey depuis le téléphone (archi actuelle, Mac holder) | feature | P1 |  | 0077 | ✅ shipped | #113 |
-| 0080 | Durcir la couche capacités fines de session (suite revue Codex #110) | feature | P1 |  | 0082 | 🔴 todo |  |
+| 0080 | Durcir la couche capacités fines de session (suite revue Codex #110) | feature | P1 |  | 0082 | ✅ shipped | #118 |
 | 0085 | Figer unlock de compte + zones Drive à la création d'une sous-session (isolation complète) | bug | P1 |  | 0082 | 🔴 todo |  |
 | 0002 | Durcir le modèle de policy — décisions « default-deny » soulevées par l'audit | feature | P2 |  |  | ✅ shipped | #12 |
 | 0007 | Provisioning GCP idempotent/déclaratif — durcir provision-gcp.sh ou passer à Terraform | feature | P2 |  |  | ✅ shipped | #10 |
@@ -88,4 +88,4 @@
 | 0028 | Ménage des versions déployées (+ CHANGELOG et releases GitHub) | chore | P3 |  |  | 💡 idea |  |
 | 0034 | Mettre à jour le protocole du test manuel drive-2-comptes (limites périmées + nouvelles phases) | chore | P3 |  |  | 💡 idea |  |
 
-> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0020, 0022, 0023, 0024, 0025, 0027, 0029, 0030, 0031, 0032, 0036, 0037, 0040, 0041, 0043, 0044, 0047, 0059, 0061, 0062, 0063, 0064, 0065, 0066, 0067, 0068, 0069, 0071, 0072, 0076, 0078.
+> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0020, 0022, 0023, 0024, 0025, 0027, 0029, 0030, 0031, 0032, 0036, 0037, 0040, 0041, 0043, 0044, 0047, 0059, 0061, 0062, 0063, 0064, 0065, 0066, 0067, 0068, 0069, 0071, 0072, 0076, 0078, 0080.
