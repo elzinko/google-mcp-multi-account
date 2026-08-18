@@ -7,8 +7,8 @@ Modèle de policy (qui a le droit de quoi) : [policies.md](policies.md).
 
 ## En ligne de commande (`mag`)
 
-**Aide en ligne** : `mag help` (liste les sous-commandes) ; `mag
-<sous-commande> --help` pour le détail.
+**Aide en ligne** : `mag help` liste les sous-commandes. Certains dispatchers
+imbriqués détaillent leurs options avec `--help` (ex. `mag sandbox --help`).
 
 Le wrapper isole chaque compte via `GOOGLE_WORKSPACE_CLI_CONFIG_DIR`. On désigne
 un compte par son **adresse email** (le plus clair) et on appelle
