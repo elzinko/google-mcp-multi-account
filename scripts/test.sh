@@ -3728,6 +3728,7 @@ data = json.loads(p.read_text())
 data['unlocks'] = {}
 data['drive_zones'] = {}
 data.pop('capabilities_snapshot', None)
+data.pop('grants_snapshot', None)
 p.write_text(json.dumps(data))
 # Octroi au parent APRÈS l'écriture du fichier legacy : une session non
 # marquée retombe sur la résolution live (comme pour les capacités) donc DOIT
@@ -3776,6 +3777,7 @@ data = json.loads(p.read_text())
 data['unlocks'] = {}
 data['drive_zones'] = {}
 data.pop('capabilities_snapshot', None)
+data.pop('grants_snapshot', None)
 p.write_text(json.dumps(data))
 grandchild = create_child_session(mid.session_id)
 print(is_session_unlocked(grandchild.session_id, 'beta'),
@@ -3784,6 +3786,47 @@ print(is_session_unlocked(grandchild.session_id, 'beta'),
 [[ "$out_0085_grandchild" == "True True" ]] \
   && pass "fiche 0085 : petit-enfant d'un parent legacy hérite via l'état effectif résolu (pas la liste locale brute)" \
   || fail "fiche 0085 : petit-enfant d'un parent legacy a perdu l'héritage ($out_0085_grandchild)"
+
+# ── (6, Codex PR #119 finding P1) : un fichier de sous-session au format
+# 0080 (marqueur capabilities_snapshot présent, marqueur grants_snapshot
+# 0085 ABSENT, unlocks/drive_zones locaux vides — parce qu'à l'époque 0080
+# ces deux grains n'étaient jamais figés, seulement les capacités) doit
+# CONTINUER à voir en LIVE l'unlock + la zone Drive de son parent après
+# l'upgrade vers 0085 — seules ses capacités suivent, elles, le snapshot ──
+out_0085_format0080="$(GWSA_ROOT="$L3_0085" PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from gateway.sessions import (
+    create_session, create_child_session, session_unlock, session_grant_drive,
+    session_grant_capability, is_session_unlocked, active_drive_zones,
+    session_has_capability, _path,
+)
+root = create_session(client='0085-fmt0080-root')
+session_grant_capability(root.session_id, 'alpha', 'gmail', 'read', hours=1)
+child = create_child_session(root.session_id)
+# Réécrit le fichier de l'enfant comme le faisait la révision 0080 :
+# capabilities_snapshot=True (les capacités, elles, étaient déjà figées),
+# mais AUCUN marqueur 0085 (grants_snapshot) et unlocks/drive_zones locaux
+# vides — l'ancien create_child_session ne figeait pas ces deux grains.
+p = _path(child.session_id)
+data = json.loads(p.read_text())
+data['unlocks'] = {}
+data['drive_zones'] = {}
+data.pop('grants_snapshot', None)
+p.write_text(json.dumps(data))
+# Octrois au parent APRÈS l'écriture du fichier 0080 :
+session_unlock(root.session_id, 'alpha', 30)
+session_grant_drive(root.session_id, 'alpha', 'FOLDERV123456789012')
+session_grant_capability(root.session_id, 'alpha', 'drive', 'read', hours=1)
+print(
+    is_session_unlocked(child.session_id, 'alpha'),
+    'FOLDERV123456789012' in active_drive_zones(child.session_id, 'alpha'),
+    session_has_capability(child.session_id, 'alpha', 'gmail', 'read'),
+    session_has_capability(child.session_id, 'alpha', 'drive', 'read'),
+)
+")"
+[[ "$out_0085_format0080" == "True True True False" ]] \
+  && pass "fiche 0085 (Codex P1) : sous-session format 0080 garde unlock/zones EN LIVE, capacités restent figées au snapshot" \
+  || fail "fiche 0085 (Codex P1) : marqueur réutilisé à tort — régression sur unlock/zones d'une session 0080 ($out_0085_format0080)"
 
 # ── (3) audit : la catégorie journalisée suit l'autorisation (drafts/share…) ──
 L3_AUDIT_CAT="$TMP/mag-0080-audit-cat"
