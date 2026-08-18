@@ -7,6 +7,9 @@ Modèle de policy (qui a le droit de quoi) : [policies.md](policies.md).
 
 ## En ligne de commande (`mag`)
 
+**Aide en ligne** : `mag help` (liste les sous-commandes) ; `mag
+<sous-commande> --help` pour le détail.
+
 Le wrapper isole chaque compte via `GOOGLE_WORKSPACE_CLI_CONFIG_DIR`. On désigne
 un compte par son **adresse email** (le plus clair) et on appelle
 `mag <email> <commande gws…>` (jamais `gws` nu) :
