@@ -31,6 +31,7 @@
 | 0074 | Durcir la v1 — punch-list de lancement (doc, tests, hygiène) | feature | P1 | v1.0 |  | 🟠 in-progress |  |
 | 0078 | Approbation par passkey depuis le téléphone (archi actuelle, Mac holder) | feature | P1 |  | 0077 | ✅ shipped | #113 |
 | 0080 | Durcir la couche capacités fines de session (suite revue Codex #110) | feature | P1 |  | 0082 | 🔴 todo |  |
+| 0085 | Figer unlock de compte + zones Drive à la création d'une sous-session (isolation complète) | bug | P1 |  | 0082 | 🔴 todo |  |
 | 0002 | Durcir le modèle de policy — décisions « default-deny » soulevées par l'audit | feature | P2 |  |  | ✅ shipped | #12 |
 | 0007 | Provisioning GCP idempotent/déclaratif — durcir provision-gcp.sh ou passer à Terraform | feature | P2 |  |  | ✅ shipped | #10 |
 | 0008 | Connexion dynamique d'un nouveau compte via élicitation forte (access_request kind=add_account) | feature | P2 |  |  | ✅ shipped | #7 |
