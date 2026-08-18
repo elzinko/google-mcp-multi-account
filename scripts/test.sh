@@ -3458,7 +3458,7 @@ section "droits par session — fiche 0080 (raffinements revue Codex #110)"
 # ── (1) ressource pour les services non-Drive : Calendar, VRAI paramètre (calendarId) ──
 CAP_NONDRIVE="$TMP/mag-0080-nondrive"
 mkdir -p "$CAP_NONDRIVE/alpha"
-echo '{"calendar":{"read":true},"gmail":{"read":true}}' > "$CAP_NONDRIVE/alpha/policy.json"
+echo '{"calendar":{"read":true,"create":true},"gmail":{"read":true}}' > "$CAP_NONDRIVE/alpha/policy.json"
 out_res_cal="$(GWSA_ROOT="$CAP_NONDRIVE" PYTHONPATH="$(pwd)" "$PY" -c "
 import json, subprocess, sys
 caps = json.dumps([{'service':'calendar','operation':'read','resource':'cal123'}])
@@ -3557,6 +3557,39 @@ print('attachments_get', rc(['gmail','users','messages','attachments','get','--p
   && pass "P0 sécu : messages/attachments get sans opérande fiable → fail-closed sous capacité scopée" \
   || fail "P0 sécu : opérande ambigu accepté à tort ($out_res_ambiguous)"
 
+# ── (P2 finding #3, Codex PR #118) : forme --flag=valeur (pas seulement
+# --flag valeur séparé) doit être reconnue par operand_resource — sinon une
+# capacité scopée VALIDE se voyait refusée à tort (fail-closed par accident,
+# pas une faille, mais une régression fonctionnelle). ──
+out_res_eqform="$(GWSA_ROOT="$CAP_NONDRIVE" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'gmail','operation':'read','resource':'LABEL_A'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_NONDRIVE/alpha',
+                     'gmail','users','messages','list',
+                     '--params=' + json.dumps({'labelIds': ['LABEL_A']})], env=env)
+print(r.returncode)
+")"
+[[ "$out_res_eqform" == "0" ]] \
+  && pass "P2 finding #3 : forme --params=<json> (avec =) reconnue, capacité scopée valide autorisée" \
+  || fail "P2 finding #3 : forme --params=<json> refusée à tort ($out_res_eqform)"
+
+# ── (P2 finding #4, Codex PR #118) : calendar events import portait
+# calendarId mais était absent du mapping → une cap calendar:create:cal123
+# refusait à tort un import dans cet agenda. ──
+out_res_import="$(GWSA_ROOT="$CAP_NONDRIVE" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'calendar','operation':'create','resource':'cal123'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_NONDRIVE/alpha',
+                     'calendar','events','import',
+                     '--params=' + json.dumps({'calendarId': 'cal123'})], env=env)
+print(r.returncode)
+")"
+[[ "$out_res_import" == "0" ]] \
+  && pass "P2 finding #4 : calendar:create:cal123 autorise events import dans cet agenda" \
+  || fail "P2 finding #4 : events import refusé à tort — mapping calendarId manquant ($out_res_import)"
+
 # ── (2) capacités déléguées figées à la création (snapshot) ──
 L3_SNAPSHOT="$TMP/mag-0080-snapshot"
 mkdir -p "$L3_SNAPSHOT"
@@ -3593,6 +3626,34 @@ print(session_has_capability(child.session_id, 'alpha', 'gmail', 'read'))
   && pass "sous-agents : le snapshot capture les capacités déjà accordées au moment de la création" \
   || fail "sous-agents : snapshot manquant à la création ($out_snapshot_before)"
 
+# ── (2-ter, P2 finding #2, Codex PR #118) : une sous-session ÉCRITE PAR
+# L'ANCIENNE révision (upgrade in-place, fichier JSON sans le marqueur
+# capabilities_snapshot, capabilities locales vides comme le faisait l'ancien
+# create_child_session) doit continuer à voir les capacités actives de son
+# parent via le repli legacy (_ancestor_chain) — pas les perdre d'un coup. ──
+out_legacy_migration="$(GWSA_ROOT="$L3_SNAPSHOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from gateway.sessions import (
+    create_session, create_child_session, session_grant_capability,
+    session_has_capability, _path,
+)
+root = create_session(client='legacy-root')
+session_grant_capability(root.session_id, 'alpha', 'tasks', 'read', hours=1)
+child = create_child_session(root.session_id)
+# Réécrit le fichier de l'enfant comme le faisait l'ANCIENNE révision : pas de
+# marqueur, capabilities locales vides (l'ancien create_child_session ne
+# stockait que parent_id, jamais de snapshot).
+p = _path(child.session_id)
+data = json.loads(p.read_text())
+data['capabilities'] = []
+data.pop('capabilities_snapshot', None)
+p.write_text(json.dumps(data))
+print(session_has_capability(child.session_id, 'alpha', 'tasks', 'read'))
+")"
+[[ "$out_legacy_migration" == "True" ]] \
+  && pass "P2 finding #2 : sous-session pré-snapshot (upgrade in-place) garde ses capacités héritées (repli legacy)" \
+  || fail "P2 finding #2 : sous-session pré-snapshot a perdu ses capacités héritées ($out_legacy_migration)"
+
 # ── (3) audit : la catégorie journalisée suit l'autorisation (drafts/share…) ──
 L3_AUDIT_CAT="$TMP/mag-0080-audit-cat"
 mkdir -p "$L3_AUDIT_CAT/alpha"
@@ -3627,6 +3688,22 @@ print(infer_call(['drive', 'files', 'update', '--params', '{\"fileId\":\"f1\"}',
 [[ "$out_audit_trash" == $'delete\nupdate' ]] \
   && pass "audit : drive files update {trashed:true} journalisé « delete », {false} reste « update »" \
   || fail "audit : trashed→delete non répercuté côté audit ($out_audit_trash)"
+
+# ── (P2 finding #1, Codex PR #118) : un « drive files copy » réussi doit
+# être audité sur le PARENT DE DESTINATION (ce que check_drive autorise
+# réellement, via --json.parents), pas le fileId SOURCE (--params) — sinon
+# le triplet journalisé n'identifie pas la capacité qui a autorisé l'appel. ──
+out_audit_copy="$(PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.usage import infer_call
+service, operation, resource = infer_call([
+    'drive', 'files', 'copy', '--params', '{\"fileId\":\"SRC123\"}',
+    '--json', '{\"parents\":[\"ZONE456\"]}',
+])
+print(resource)
+")"
+[[ "$out_audit_copy" == "ZONE456" ]] \
+  && pass "audit : drive files copy journalise le parent de DESTINATION (ZONE456), pas le fileId source" \
+  || fail "audit : drive files copy journalise encore la source, pas ce qui a autorisé ($out_audit_copy)"
 
 section "sandbox remove (fiche 0041)"
 SB_DEP="$TMP/sandbox-remove"

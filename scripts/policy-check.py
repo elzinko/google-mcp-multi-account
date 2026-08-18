@@ -48,6 +48,7 @@ from gateway.categorize import (  # noqa: E402
     categorize,
     norm,
     operand_resource,
+    parse_json_flag,
 )
 
 VALUE_FLAGS = {
@@ -109,26 +110,6 @@ def gws_json(profile_dir, args):
         r = subprocess.run(["gws"] + args, env=env, capture_output=True,
                            text=True, timeout=20)
         return json.loads(r.stdout)
-    except Exception:
-        return {}
-
-
-def flag_value(args, flag):
-    for i, a in enumerate(args):
-        if a == flag and i + 1 < len(args):
-            return args[i + 1]
-        if a.startswith(flag + "="):
-            return a.split("=", 1)[1]
-    return None
-
-
-def parse_json_flag(args, flag):
-    raw = flag_value(args, flag)
-    if raw is None:
-        return {}
-    try:
-        d = json.loads(raw)
-        return d if isinstance(d, dict) else {}
     except Exception:
         return {}
 

@@ -98,6 +98,11 @@ _OPERAND_PARAM: dict[tuple[str, str, str], tuple[str, str]] = {
     # l'API porte réellement cet identifiant sont couvertes. « messages get »/
     # « attachments get » n'y figurent PAS à dessein : le message ciblé ne
     # révèle pas son libellé dans --params, l'opérande n'y est pas fiable.
+    # Revue de complétude (Codex PR #118, P2 finding #4) : « messages modify »/
+    # « batchModify » portent AUSSI des labelIds (addLabelIds/removeLabelIds,
+    # dans le corps --json) mais sont délibérément EXCLUS — deux listes de
+    # libellés distinctes dans le même appel (ajout ET retrait) rendent
+    # l'opérande ambigu pour une capacité à ressource unique ; fail closed.
     ("gmail", "messages", "list"): ("labelIds", "array"),
     ("gmail", "messages", "watch"): ("labelIds", "array"),
     ("gmail", "labels", "get"): ("id", "scalar"),
@@ -106,14 +111,23 @@ _OPERAND_PARAM: dict[tuple[str, str, str], tuple[str, str]] = {
     ("gmail", "labels", "delete"): ("id", "scalar"),
     # Calendar : la capacité scope un AGENDA (calendarId) — jamais eventId,
     # qui identifie un sous-objet DANS l'agenda, pas l'agenda lui-même.
+    # Revue de complétude (Codex PR #118, P2 finding #4) : toutes les
+    # méthodes `events` qui portent calendarId de façon NON ambiguë sont
+    # listées ici. `move` est délibérément EXCLU : l'API Calendar y porte
+    # DEUX agendas (calendarId source ET destination) — mapper l'un des deux
+    # laisserait une capacité scopée sur l'agenda source autoriser un
+    # déplacement vers n'importe quelle destination (ou l'inverse) ; fail
+    # closed le temps d'un mapping à deux ressources (hors périmètre 0080).
     ("calendar", "events", "list"): ("calendarId", "scalar"),
     ("calendar", "events", "get"): ("calendarId", "scalar"),
     ("calendar", "events", "insert"): ("calendarId", "scalar"),
+    ("calendar", "events", "import"): ("calendarId", "scalar"),
     ("calendar", "events", "update"): ("calendarId", "scalar"),
     ("calendar", "events", "patch"): ("calendarId", "scalar"),
     ("calendar", "events", "delete"): ("calendarId", "scalar"),
     ("calendar", "events", "instances"): ("calendarId", "scalar"),
     ("calendar", "events", "quickadd"): ("calendarId", "scalar"),
+    ("calendar", "events", "watch"): ("calendarId", "scalar"),
     # Drive : audit uniquement (l'autorisation Drive a son propre chemin,
     # `scripts/policy-check.py::check_drive`, qui lit fileId directement —
     # ce mapping ne sert qu'à `gateway/usage.py::infer_call`).
@@ -121,11 +135,19 @@ _OPERAND_PARAM: dict[tuple[str, str, str], tuple[str, str]] = {
     ("drive", "files", "export"): ("fileId", "scalar"),
     ("drive", "files", "download"): ("fileId", "scalar"),
     ("drive", "files", "watch"): ("fileId", "scalar"),
-    ("drive", "files", "copy"): ("fileId", "scalar"),
     ("drive", "files", "update"): ("fileId", "scalar"),
     ("drive", "files", "delete"): ("fileId", "scalar"),
     ("drive", "files", "trash"): ("fileId", "scalar"),
     ("drive", "files", "untrash"): ("fileId", "scalar"),
+    # `create`/`copy` sont autorisés par `check_drive` contre le PARENT DE
+    # DESTINATION (--json.parents), jamais un fileId source (Codex PR #118,
+    # P2 finding #1 : l'audit journalisait le fileId source d'un `copy`, pas
+    # la ressource qui avait réellement autorisé l'appel) — lu depuis --json,
+    # pas --params, avec la même règle "un seul élément" que les tableaux
+    # Gmail/Calendar (0/plusieurs parents = ambigu pour un log à une seule
+    # ressource → "").
+    ("drive", "files", "create"): ("parents", "json-array"),
+    ("drive", "files", "copy"): ("parents", "json-array"),
     ("drive", "permissions", "list"): ("fileId", "scalar"),
     ("drive", "permissions", "get"): ("fileId", "scalar"),
     ("drive", "permissions", "create"): ("fileId", "scalar"),
@@ -134,15 +156,29 @@ _OPERAND_PARAM: dict[tuple[str, str, str], tuple[str, str]] = {
 }
 
 
-def _params_from_args(args: list[str], flag: str) -> dict:
+def flag_value(args: list[str], flag: str) -> str | None:
+    """Valeur brute d'un flag CLI, formes séparée (`--params {...}`) ET
+    `--flag=valeur` — les deux sont acceptées par gws/mag. Un helper qui ne
+    reconnaît que la forme séparée fait passer à tort une capacité scopée
+    pour non couverte dès que l'appelant utilise `--params={...}` (revue
+    Codex PR #118, P2 finding #3)."""
     for i, a in enumerate(args):
         if a == flag and i + 1 < len(args):
-            try:
-                parsed = json.loads(args[i + 1])
-            except Exception:
-                return {}
-            return parsed if isinstance(parsed, dict) else {}
-    return {}
+            return args[i + 1]
+        if a.startswith(flag + "="):
+            return a.split("=", 1)[1]
+    return None
+
+
+def parse_json_flag(args: list[str], flag: str) -> dict:
+    raw = flag_value(args, flag)
+    if raw is None:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
 
 
 def _operand_entry(service: str, resources: list[str], raw_method: str):
@@ -160,12 +196,22 @@ def operand_resource(
     """Ressource opérante réelle pour (service, resources, méthode), dérivée
     du paramètre EXPLICITEMENT mappé à ce triplet — jamais d'une priorité
     générique. "" si non mappé, absent, ou ambigu (fail-closed pour une
-    capacité scopée sur une ressource — cf. `_OPERAND_PARAM` ci-dessus)."""
+    capacité scopée sur une ressource — cf. `_OPERAND_PARAM` ci-dessus).
+
+    `mode` : "scalar"/"array" lisent --params (Gmail/Calendar) ; "json-array"
+    lit --json (Drive `files create`/`copy`, dont la seule ressource qui
+    AUTORISE est le parent de destination dans le corps de la requête, pas
+    --params)."""
     entry = _operand_entry(service, resources, raw_method)
     if entry is None:
         return ""
     key, mode = entry
-    params = _params_from_args(args, "--params")
+    if mode == "json-array":
+        val = parse_json_flag(args, "--json").get(key)
+        if isinstance(val, list) and len(val) == 1 and val[0]:
+            return str(val[0])
+        return ""
+    params = parse_json_flag(args, "--params")
     val = params.get(key)
     if mode == "array":
         if isinstance(val, list) and len(val) == 1 and val[0]:
@@ -189,8 +235,8 @@ def drive_files_trash_override(
         return operation
     if norm(raw_method) not in UPDATE_METHODS:
         return operation
-    body = _params_from_args(args, "--json")
-    params = _params_from_args(args, "--params")
+    body = parse_json_flag(args, "--json")
+    params = parse_json_flag(args, "--params")
     if body.get("trashed") is True or params.get("trashed") is True:
         return "delete"
     return operation
