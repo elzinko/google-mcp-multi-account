@@ -6,6 +6,7 @@ En tests / CI (Linux) : GWSA_ELICITATION_MOCK=1 + clé HMAC dans .elicitation/mo
 from __future__ import annotations
 
 import base64
+import fcntl
 import hashlib
 import hmac
 import json
@@ -13,6 +14,7 @@ import os
 import secrets
 import subprocess
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -51,6 +53,28 @@ def elicitation_dir() -> Path:
     return d
 
 
+@contextmanager
+def _file_lock(path: Path):
+    """Verrou inter-process POSIX (`flock`) générique sur un lockfile dédié.
+
+    Réutilisé par `consume_nonce` (anti-rejeu, fiche 0084) et par la
+    vérification du sign_count passkey (fiche 0083) : les deux protègent un
+    cycle read-modify-write (reload → check → save) contre une course
+    TOCTOU entre process concurrents (Touch ID local + approbation distante
+    passkey empruntent le même chemin `consume_nonce`).
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(path), os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+
+
 def public_key_path() -> Path:
     return elicitation_dir() / PUBLIC_KEY_NAME
 
@@ -76,6 +100,29 @@ def receipts_path() -> Path:
 
 def nonces_path() -> Path:
     return elicitation_dir() / NONCES_NAME
+
+
+def nonces_lock_path() -> Path:
+    """Lockfile dédié, co-localisé avec le store de nonces (fiche 0084)."""
+    return nonces_path().with_suffix(".lock")
+
+
+_TEST_RACE_DELAY_ENV = "GWSA_ELICITATION_TEST_RACE_DELAY_MS"
+
+
+def _test_race_delay() -> None:
+    """Hook de test (fiche 0084) : injecte un délai déterministe entre la
+    vérification et la sauvegarde du nonce, pour rendre une course TOCTOU
+    reproductible de façon fiable en test hermétique multi-process. Inactif
+    tant que la variable d'env n'est pas positionnée (jamais en production).
+    """
+    raw = os.environ.get(_TEST_RACE_DELAY_ENV, "").strip()
+    if not raw:
+        return
+    try:
+        time.sleep(float(raw) / 1000.0)
+    except ValueError:
+        pass
 
 
 def is_mock_mode() -> bool:
@@ -204,11 +251,18 @@ def consume_nonce(nonce: str, *, expires_at: int) -> None:
         raise ElicitationError("nonce manquant")
     if int(time.time()) > int(expires_at):
         raise ElicitationError("défi expiré — relancer la commande")
-    nonces = _load_nonces()
-    if nonce in nonces:
-        raise ElicitationError("rejeu refusé (nonce déjà consommé)")
-    nonces[nonce] = float(expires_at)
-    _save_nonces(nonces)
+    # Verrou inter-process (fiche 0084) : reload → check → save doivent être
+    # atomiques face à deux process concurrents (Touch ID local + approbation
+    # passkey distante brûlent leur nonce par ce même chemin). Le rechargement
+    # DOIT se faire sous le verrou — jamais réutiliser un état chargé avant
+    # l'acquisition, sous peine de revalider la course qu'on cherche à fermer.
+    with _file_lock(nonces_lock_path()):
+        nonces = _load_nonces()
+        if nonce in nonces:
+            raise ElicitationError("rejeu refusé (nonce déjà consommé)")
+        _test_race_delay()
+        nonces[nonce] = float(expires_at)
+        _save_nonces(nonces)
 
 
 def sign_mock(payload: dict[str, Any]) -> str:

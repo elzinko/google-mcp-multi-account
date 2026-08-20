@@ -5,11 +5,19 @@ type: bug
 priority: P2
 version:
 epic:
-status: todo
-ready:
+status: in-progress
+ready: 2026-08-20
 pr:
 created: 2026-08-17
 ---
+
+## En clair
+
+L'anti-rejeu de l'élicitation signée avait une **faille de course** : deux process concurrents
+(le Touch ID local **et** l'approbation passkey distante brûlent leur nonce par le même chemin)
+pouvaient consommer le **même** nonce en même temps — un rejeu d'approbation signée passait.
+On sérialise désormais `consume_nonce` derrière un **verrou inter-process** (`fcntl.flock`), avec
+**rechargement frais sous le verrou** : un seul consommateur gagne, l'autre voit « rejeu refusé ».
 
 ## Contexte / Problème
 
@@ -41,11 +49,20 @@ partagée**, un seul verrou couvre les deux chemins (Touch ID + passkey).
 
 ## Critères d'acceptation
 
-- [ ] Deux `consume_nonce` **concurrents en process séparés** sur le **même nonce** ⇒ **un seul**
+- [x] Deux `consume_nonce` **concurrents en process séparés** sur le **même nonce** ⇒ **un seul**
       réussit, l'autre lève « rejeu refusé (nonce déjà consommé) » — testé **multi-process**.
-- [ ] Le verrou est **inter-process** (fichier), couvrant reload + check + save du registre — **pas**
+- [x] Le verrou est **inter-process** (fichier), couvrant reload + check + save du registre — **pas**
       un verrou threads / objet partagé, qui masquerait la fuite inter-process.
-- [ ] `./scripts/test.sh` vert.
+- [x] `./scripts/test.sh` vert.
+
+## Comment vérifier
+
+- Suite : `./scripts/test.sh` — assertion **« consume_nonce : course multi-process — exactement un
+  gagnant, l'autre voit le rejeu »** (section « fiche 0084 »), suite verte à **388/0**.
+- Le test lance **2 vrais sous-process `python3`** sur le même nonce (barrière de départ + hook de
+  fenêtre `GWSA_ELICITATION_TEST_RACE_DELAY_MS`) ⇒ exactement **1 `ok` + 1 rejeu**. Sans le verrou
+  (retiré temporairement) : **2 `ok`** (RED prouvé).
+- Non-régression : les tests `remote_approval`/passkey qui partagent `consume_nonce` restent verts.
 
 ## Notes
 
@@ -56,3 +73,28 @@ partagée**, un seul verrou couvre les deux chemins (Touch ID + passkey).
   signée) / [ADR-0009](../docs/adr/ADR-0009-approbation-passkey-distante.md) (§ « une seule colonne
   anti-rejeu »). Recoupe [0001](0001-elicitation-signee-strongauth-v2.md) (élicitation signée).
 - Découle de la revue Codex de la PR #115 (finding P2 répondu en fil).
+
+## Grooming (PO — 2026-08-20)
+
+Tirée **avant** le head P1 0019 (docs anglaises) — skip **assumé et journalisé** (choix humain,
+comme 0087). Cible **vérifiée** : `consume_nonce` / `_load_nonces` / `_save_nonces` présents
+(`gateway/elicitation.py:176-211`) ; **aucun** verrou inter-process existant dans `gateway/` → à
+introduire (greenfield). Fiche sœur 0083 encore active → pas de helper à réutiliser (on en produit
+un réutilisable pour elle).
+
+**Périmètre tranché (DoR) :**
+
+- **Verrou** = `fcntl.flock` (LOCK_EX) sur un lockfile dédié dans `GWSA_ROOT` (à côté du store de
+  nonces). Enveloppe **reload → check → save** de `consume_nonce`, avec **rechargement frais SOUS le
+  verrou** (jamais l'état chargé avant). POSIX → macOS + CI Linux.
+- **Helper réutilisable** : un petit `with _file_lock(path):` (context manager) — 0083 le réutilisera.
+  Un **seul** verrou partagé couvre Touch ID + passkey (colonne anti-rejeu unique).
+- **Test** = **multi-process** hermétique : deux sous-process `python3` appellent `consume_nonce` sur
+  le **même** nonce en concurrence ⇒ **un seul** réussit, l'autre lève « rejeu refusé ». Vrai
+  inter-process (pas des threads / un objet partagé).
+- **Non-régression** = `./scripts/test.sh` vert.
+- **Hors périmètre** : 0083 (sign_count) reste une fiche séparée (per-feature) — juste rendue triviale
+  par le helper. Ne pas élargir `consume_nonce` au-delà de l'atomicité.
+
+DoR : problème cité & vérifié · valeur (intégrité anti-rejeu signé) · critères testables multi-process
+· mécanisme tranché · aucune dépendance externe → **prêt à tamponner**.
