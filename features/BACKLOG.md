@@ -60,7 +60,7 @@
 | 0083 | Durcir la couche d'approbation passkey distante (suite revue Codex #113) | feature | P2 |  | 0077 | 🔴 todo |  |
 | 0084 | Durcir consume_nonce contre une course TOCTOU inter-process (anti-rejeu partagé) | bug | P2 |  |  | 🔴 todo |  |
 | 0086 | Raffinements audit + migration de la couche capacités de session (suite revue PR #118) | bug | P2 |  | 0082 | 🔴 todo |  |
-| 0087 | install.sh — brancher les clients LLM en opt-in (pas opt-out) | feature | P2 |  |  | 🔴 todo |  |
+| 0087 | install.sh — brancher les clients LLM en opt-in (pas opt-out) | feature | P2 |  |  | ✅ shipped | #123 |
 | 0001 | Élicitation signée — faire monter `mag strongauth` de la présence à la signature | feature | P3 |  |  | 🟠 in-progress |  |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)
@@ -89,4 +89,4 @@
 | 0028 | Ménage des versions déployées (+ CHANGELOG et releases GitHub) | chore | P3 |  |  | 💡 idea |  |
 | 0034 | Mettre à jour le protocole du test manuel drive-2-comptes (limites périmées + nouvelles phases) | chore | P3 |  |  | 💡 idea |  |
 
-> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0020, 0022, 0023, 0024, 0025, 0027, 0029, 0030, 0031, 0032, 0036, 0037, 0040, 0041, 0043, 0044, 0047, 0059, 0061, 0062, 0063, 0064, 0065, 0066, 0067, 0068, 0069, 0071, 0072, 0076, 0078, 0080, 0085.
+> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0020, 0022, 0023, 0024, 0025, 0027, 0029, 0030, 0031, 0032, 0036, 0037, 0040, 0041, 0043, 0044, 0047, 0059, 0061, 0062, 0063, 0064, 0065, 0066, 0067, 0068, 0069, 0071, 0072, 0076, 0078, 0080, 0085, 0087.
