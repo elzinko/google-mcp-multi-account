@@ -163,7 +163,7 @@ if [[ -n "$WIRE" ]]; then
       "$DESK" >/dev/null 2>&1 && ok "Claude Desktop branché" || warn "branchement Desktop à faire : $DESK"
     fi
   fi
-  if command -v claude >/dev/null 2>&1 && [[ -x "$CODE" ]]; then
+  if command -v "${CLAUDE_BIN:-claude}" >/dev/null 2>&1 && [[ -x "$CODE" ]]; then
     "$CODE" >/dev/null 2>&1 && ok "Claude Code (CLI) branché" || warn "branchement Claude Code à faire : $CODE"
   fi
 else
