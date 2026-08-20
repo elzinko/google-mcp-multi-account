@@ -189,5 +189,5 @@ le domaine ne connaît jamais le transport concret — DIP).*
 - [ADR-0005](ADR-0005-elicitation-signee-v2.md) — élicitation signée (payload + nonce + reçu, réutilisés).
 - [ADR-0007](ADR-0007-droits-par-session.md) — droits par session (`session_id`, couche #110).
 - [ADR-0008](ADR-0008-acces-mobile-passkey-holder-natif.md) — direction mobile ; cette fiche = phase 1.
-- Fiche `features/0078-approbation-passkey-archi-actuelle.md` (7 critères d'acceptation).
+- Fiche `features/done/0078-approbation-passkey-archi-actuelle.md` (7 critères d'acceptation).
 - Code : `gateway/elicitation.py`, `gateway/sessions.py`, `scripts/elicitation-cli.py`, `bin/mag`.

@@ -87,7 +87,7 @@ Depuis la Phase 2 A, `gws` n'est plus lancé un peu partout : un **broker** loca
 ([`bin/google-broker`](https://github.com/elzinko/google-mcp-multi-account/blob/main/bin/google-broker),
 démarré tout seul, écoute sur `127.0.0.1:4878`) est le **seul** à l'exécuter pour
 accéder aux données. La gateway ne fait plus que lui parler. Les identifiants restent
-sous `~/.config/gws-accounts/` (le vault dédié est prévu — [fiche 0003](https://github.com/elzinko/google-mcp-multi-account/blob/main/features/0003-vault-credentials-hors-perimetre-agent.md)).
+sous `~/.config/gws-accounts/` (le vault dédié est prévu — fiche `features/0003-vault-credentials-hors-perimetre-agent.md`).
 
 ### Deux noms à ne pas confondre : le dépôt et le connecteur { #noms-depot-connecteur }
 
@@ -255,8 +255,8 @@ l'édition de `~/.config/gws-accounts/` — les données ne passent **que** par 
 | **1** | **Déployée** | MCP + gateway + default-deny + docs |
 | **2 A** | **Déployée** | Broker loopback : `gws` uniquement dans le broker |
 | **Droits/session** | **En cours** — [ADR-0007](adr/ADR-0007-droits-par-session.md) | Jeton signé porté par appel, capacités fines par conversation, isolation, audit |
-| **2.1** | Prévue — [fiche 0003](https://github.com/elzinko/google-mcp-multi-account/blob/main/features/0003-vault-credentials-hors-perimetre-agent.md) | Vault des identifiants hors de portée de l'agent |
-| **3** | Idée — [fiche 0001](https://github.com/elzinko/google-mcp-multi-account/blob/main/features/0001-elicitation-signee-strongauth-v2.md) | Élicitation signée par la Secure Enclave |
+| **2.1** | Prévue — fiche `features/0003-vault-credentials-hors-perimetre-agent.md` | Vault des identifiants hors de portée de l'agent |
+| **3** | Idée — fiche `features/0001-elicitation-signee-strongauth-v2.md` | Élicitation signée par la Secure Enclave |
 
 ## Pour aller vite
 

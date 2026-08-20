@@ -73,7 +73,7 @@ Forces en présence :
 
 ## Références
 
-- Fiches : [0045](../../features/0045-capacites-projet-signees.md), [0076](../../features/0076-droits-par-session-phase-a.md), [0001](../../features/0001-elicitation-signee-strongauth-v2.md), [0003](../../features/0003-vault-credentials-hors-perimetre-agent.md)
+- Fiches (dans le dépôt) : `features/0045-capacites-projet-signees.md`, `features/done/0076-droits-par-session-phase-a.md`, `features/0001-elicitation-signee-strongauth-v2.md`, `features/0003-vault-credentials-hors-perimetre-agent.md`
 - ADR : [ADR-0005](ADR-0005-elicitation-signee-v2.md) (élicitation signée réutilisée) ; ADR-0008 *accès mobile souverain* (PR #109) porte les phases B/C.
 - Code : `gateway/sessions.py`, `gateway/context.py`, `gateway/broker_server.py`, `gateway/mcp_server.py`
 - Menace : `docs/threat-model.md`, `SECURITY.md`

@@ -61,12 +61,12 @@ retrait d'une entrée → **[Configurer un client LLM](configurer-client.md)**.
 
 **Policy admin ≠ surface MCP.** Cocher une case dans l'admin autorise les
 méthodes API correspondantes via `mag` ; le MCP en expose un sous-ensemble.
-Depuis les fiches [0043](https://github.com/elzinko/google-mcp-multi-account/blob/main/features/0043-lire-copier-televerser-drive-et-pj-gmail.md)
+Depuis la fiche `features/done/0043-lire-copier-televerser-drive-et-pj-gmail.md`
 et ce lot (update + partage), lecture de contenu, copie, téléversement,
 modification et partage y sont. Le **transfert de propriété** est hors périmètre
 (PR dédiée non prête). Calendar / Keep peuvent encore figurer dans la policy sans
 tool MCP (élargissement : fiche
-[0021](https://github.com/elzinko/google-mcp-multi-account/blob/main/features/0021-couverture-mcp-elargie.md)). Et par design, **aucun
+`features/0021-couverture-mcp-elargie.md`)). Et par design, **aucun
 tool** n'envoie de mail, ne supprime, ni ne transfère de propriété.
 
 Chaque appel traverse la gateway (verrou + policy default-deny) puis le
@@ -178,7 +178,7 @@ Pour une **branche / PR jetable** (sans toucher `current` ni l'entrée stable
 `mag sandbox wire` après coup). Unwire sélectif :
 `mag sandbox wire --remove desktop` (répertoire conservé) ;
 nucléaire : `mag sandbox remove <id>`. Détail : `mag sandbox --help` et fiche
-[0046](https://github.com/elzinko/google-mcp-multi-account/blob/main/features/0046-sandbox-deploy-cli.md).
+`features/0046-sandbox-deploy-cli.md`.
 
 Trois règles, sinon le nom de l'entrée ment sur la version qui répond :
 
