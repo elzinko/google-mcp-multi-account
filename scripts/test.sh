@@ -2180,7 +2180,7 @@ grep -q "^github:" "$GHDEP/v0.1.0/.origin" 2>/dev/null && [[ ! -e "$GHDEP/v0.1.0
   || fail "--github : marqueurs d'origine incohérents"
 
 # install.sh : premier install SANS aucun clone (résout le dernier tag via GitHub)
-ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/mag" GWSA_SKIP_WIRE=1 GWSA_ALLOW_NO_GWS=1 \
+ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/mag" GWSA_ALLOW_NO_GWS=1 \
   bash install.sh >/dev/null 2>&1; rc=$?
 [[ "$rc" -eq 0 && "$(basename "$(readlink "$GHDEP/current")")" == "v1.0.0" ]] \
   && pass "install.sh : sans clone, installe la dernière version (v1.0.0) et bascule current" \
@@ -2193,6 +2193,49 @@ ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/mag" GWSA_SKIP_WIRE=1 GWSA
 [[ -e "$GHDEP/current/.origin" && ! -e "$GHDEP/current/.source" ]] \
   && pass "install.sh : copie marquée github, prête pour un update sans clone" \
   || fail "install.sh : marqueurs d'origine incohérents"
+
+# --- fiche 0087 : branchement des clients LLM en OPT-IN ----------------------
+# Défaut (ni --wire ni GWSA_WIRE) : install.sh n'écrit AUCUN config client — il
+# imprime seulement le geste (doctrine « l'agent propose, tu exécutes »). Opt-in
+# explicite (--wire / GWSA_WIRE=1) branche Desktop (+ Code si `claude` présent).
+# Hermétique : Desktop → GWSA_DESKTOP_CONFIG (tmp) ; Code → CLAUDE_BIN neutralisé.
+OI_FAKE_CLAUDE="$TMP/optin-fakeclaude"
+printf '#!/bin/sh\nexit 0\n' > "$OI_FAKE_CLAUDE"; chmod +x "$OI_FAKE_CLAUDE"
+
+OI_DESK="$TMP/optin-desktop.json"; rm -f "$OI_DESK"
+out_oi="$(ghenv GWSA_DEPLOY_ROOT="$TMP/optin1" GWSA_CLI_LINK="$TMP/optin1/mag" \
+  GWSA_DESKTOP_CONFIG="$OI_DESK" CLAUDE_BIN="$OI_FAKE_CLAUDE" GWSA_ALLOW_NO_GWS=1 \
+  bash install.sh 2>&1)"; rc=$?
+if [[ "$rc" -eq 0 && ! -e "$OI_DESK" ]]; then
+  pass "install.sh : défaut ⇒ AUCUNE mutation de config client (opt-in, fiche 0087)"
+else
+  fail "install.sh : défaut a muté un config client (devrait être opt-in)"
+fi
+if [[ "$out_oi" == *"mag wire desktop"* ]]; then
+  pass "install.sh : défaut ⇒ imprime le geste de branchement (mag wire)"
+else
+  fail "install.sh : défaut n'imprime pas le geste de branchement"
+fi
+
+OI_DESK2="$TMP/optin-desktop2.json"; rm -f "$OI_DESK2"
+ghenv GWSA_DEPLOY_ROOT="$TMP/optin2" GWSA_CLI_LINK="$TMP/optin2/mag" \
+  GWSA_DESKTOP_CONFIG="$OI_DESK2" CLAUDE_BIN="$OI_FAKE_CLAUDE" GWSA_ALLOW_NO_GWS=1 \
+  bash install.sh --wire >/dev/null 2>&1; rc=$?
+if [[ "$rc" -eq 0 && -f "$OI_DESK2" ]] && grep -q "google-multi-account" "$OI_DESK2" 2>/dev/null; then
+  pass "install.sh --wire : opt-in ⇒ branche Desktop (config écrit)"
+else
+  fail "install.sh --wire : opt-in n'a pas branché Desktop"
+fi
+
+OI_DESK3="$TMP/optin-desktop3.json"; rm -f "$OI_DESK3"
+ghenv GWSA_DEPLOY_ROOT="$TMP/optin3" GWSA_CLI_LINK="$TMP/optin3/mag" \
+  GWSA_DESKTOP_CONFIG="$OI_DESK3" CLAUDE_BIN="$OI_FAKE_CLAUDE" GWSA_WIRE=1 GWSA_ALLOW_NO_GWS=1 \
+  bash install.sh >/dev/null 2>&1; rc=$?
+if [[ "$rc" -eq 0 && -f "$OI_DESK3" ]] && grep -q "google-multi-account" "$OI_DESK3" 2>/dev/null; then
+  pass "install.sh : GWSA_WIRE=1 ⇒ opt-in par env (branche Desktop)"
+else
+  fail "install.sh : GWSA_WIRE=1 n'a pas branché"
+fi
 
 # update --check depuis la copie installée SANS clone : lit GitHub, se dit à jour
 out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/mag" \
@@ -2255,7 +2298,7 @@ ghenv GWSA_DEPLOY_ROOT="$LEG2" "$REL/scripts/deploy-local.sh" --github v0.5.0 >/
 
 # idem côté install.sh : un dossier legacy du dernier tag déjà présent → refus
 LEG3="$TMP/legacydep3"; mkdir -p "$LEG3/v2.0.0/scripts"
-ghenv GWSA_DEPLOY_ROOT="$LEG3" GWSA_CLI_LINK="$LEG3/mag" GWSA_SKIP_WIRE=1 GWSA_ALLOW_NO_GWS=1 \
+ghenv GWSA_DEPLOY_ROOT="$LEG3" GWSA_CLI_LINK="$LEG3/mag" GWSA_ALLOW_NO_GWS=1 \
   bash install.sh >/dev/null 2>&1; rc=$?
 [[ "$rc" -ne 0 && ! -e "$LEG3/current" ]] \
   && pass "install.sh : cible legacy pré-existante refusée (current pas basculé)" \
@@ -2284,7 +2327,7 @@ ghenv GWSA_DEPLOY_ROOT="$LEG4" "$REL/scripts/deploy-local.sh" --github v0.7.0 >/
 # « git rev-parse » remontait jusqu'à ce .git → mode clone → « aucune version ».
 GA="$TMP/git-ancestor"; mkdir -p "$GA"; git -C "$GA" init -q >/dev/null 2>&1
 GADEP="$GA/.local/share/google-mcp"
-ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/mag" GWSA_SKIP_WIRE=1 GWSA_ALLOW_NO_GWS=1 bash install.sh >/dev/null 2>&1
+ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/mag" GWSA_ALLOW_NO_GWS=1 bash install.sh >/dev/null 2>&1
 out_u="$(ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/mag" \
          "$GADEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
 [[ "$rc" -eq 0 && "$out_u" == *"GitHub"* && "$out_u" != *"aucune version"* ]] \
@@ -2319,7 +2362,7 @@ git -C "$BRK" add -A >/dev/null 2>&1; git -C "$BRK" commit -qm x >/dev/null 2>&1
 git -C "$BRK" archive --format=tar.gz --prefix="pkg-3.0.0/" v3.0.0 > "$GHTB/v3.0.0.tar.gz"
 printf '[{"name":"v3.0.0"},{"name":"v2.0.0"},{"name":"v1.0.0"},{"name":"v0.1.0"}]\n' > "$GHTAGS"
 rm -f "$TMP/broker-stop.log"
-ghenv GWSA_DEPLOY_ROOT="$TMP/brokerdep" GWSA_CLI_LINK="$TMP/brokerdep/mag" GWSA_SKIP_WIRE=1 GWSA_ALLOW_NO_GWS=1 \
+ghenv GWSA_DEPLOY_ROOT="$TMP/brokerdep" GWSA_CLI_LINK="$TMP/brokerdep/mag" GWSA_ALLOW_NO_GWS=1 \
   bash install.sh >/dev/null 2>&1
 [[ -f "$TMP/broker-stop.log" ]] \
   && pass "install.sh : recycle le broker après bascule current (broker stop appelé)" \

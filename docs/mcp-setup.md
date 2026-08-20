@@ -17,7 +17,9 @@ curl -fsSL https://raw.githubusercontent.com/elzinko/google-mcp-multi-account/ma
 ```
 
 Ça télécharge la dernière version publiée, la fige dans
-`~/.local/share/google-mcp/`, met `mag` sur le PATH et branche les clients.
+`~/.local/share/google-mcp/` et met `mag` sur le PATH. **Aucun client LLM n'est
+branché par défaut** : l'install imprime le geste (`mag wire …`, voir [plus bas](#brancher-un-client-llm)) ;
+ajoute `--wire` (ou `GWSA_WIRE=1`) pour brancher pendant l'install.
 Reste le setup Google (OAuth/GCP), un **préalable** affiché à la fin — voir
 [Prérequis — OAuth / Google Cloud](setup-oauth.md).
 
