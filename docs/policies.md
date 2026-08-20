@@ -86,5 +86,5 @@ mag session list                                    # sessions actives + leur co
 Détail de conception : [ADR-0007](adr/ADR-0007-droits-par-session.md).
 
 Durcissements de ce modèle déjà tranchés : voir la fiche backlog
-[0002](https://github.com/elzinko/google-mcp-multi-account/blob/main/features/done/0002-durcir-modele-policy-default-deny.md) (default-deny
+`features/done/0002-durcir-modele-policy-default-deny.md` (default-deny
 vérifié et testé) et [threat-model.md](threat-model.md).

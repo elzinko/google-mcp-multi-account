@@ -24,7 +24,7 @@ Pour voir tourner l'interface admin sur votre code :
 ## Comment le travail s'organise
 
 - **Le backlog vit dans le dépôt.** Chaque idée, bug ou feature est une fiche
-  markdown dans [`features/`](https://github.com/elzinko/google-mcp-multi-account/tree/main/features)
+  markdown dans `features/`
   (une par sujet ; le front-matter porte le statut). C'est là qu'on voit *ce qui
   reste à faire* et *ce qui est livré* (`features/done/`).
 - **Une PR par sujet.** On part d'une branche, on garde la PR focalisée.
