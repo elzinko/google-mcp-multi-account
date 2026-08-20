@@ -3076,6 +3076,93 @@ GWSA_ROOT="$ELIC_ROOT" GWSA_SESSION_ID="$sid_e" GWSA_ELICITATION_MOCK=1 \
   && pass "elicitation : mag session unlock avec strongauth+mock" \
   || fail "elicitation : mag session unlock strongauth"
 
+section "consume_nonce : verrou inter-process anti-TOCTOU (fiche 0084)"
+# consume_nonce fait reload → check → save sans atomicité inter-process avant
+# le correctif de la fiche 0084 : deux process concurrents peuvent tous deux
+# voir « nonce absent », passer le check et sauver → même nonce accepté deux
+# fois (rejeu d'une approbation signée). On le prouve avec 2 VRAIS sous-process
+# python3 (pas des threads, pas un objet partagé) synchronisés par une barrière
+# de démarrage, et on force la fenêtre de course avec le hook de test
+# GWSA_ELICITATION_TEST_RACE_DELAY_MS (sleep entre check et save, inactif hors
+# test — cf. gateway/elicitation.py::_test_race_delay).
+NONCE_RACE_ROOT="$TMP/mag-nonce-race"
+mkdir -p "$NONCE_RACE_ROOT"
+RACE_NONCE="racecondition0084"
+RACE_EXP=$(( $(date +%s) + 300 ))
+
+nonce_race_worker() {
+  # $1 = mon fichier « prêt », $2 = fichier « prêt » de l'autre, $3 = résultat
+  local my_ready="$1" other_ready="$2" out="$3"
+  GWSA_ROOT="$ELIC_ROOT" GWSA_ELICITATION_MOCK=1 GWSA_ELICITATION_TEST_RACE_DELAY_MS=150 \
+    "$PY" -c "
+import time
+from pathlib import Path
+Path('$my_ready').write_text('1')
+while not Path('$other_ready').is_file():
+    time.sleep(0.005)
+from gateway.elicitation import consume_nonce, ElicitationError
+try:
+    consume_nonce('$RACE_NONCE', expires_at=$RACE_EXP)
+    Path('$out').write_text('ok')
+except ElicitationError as e:
+    Path('$out').write_text('replay:' + str(e))
+except Exception as e:
+    Path('$out').write_text('error:' + str(e))
+"
+}
+
+NR1="$NONCE_RACE_ROOT/ready1"; NR2="$NONCE_RACE_ROOT/ready2"
+NO1="$NONCE_RACE_ROOT/out1"; NO2="$NONCE_RACE_ROOT/out2"
+rm -f "$NR1" "$NR2" "$NO1" "$NO2" "$ELIC_ROOT/.elicitation/nonces.json" "$ELIC_ROOT/.elicitation/nonces.lock"
+nonce_race_worker "$NR1" "$NR2" "$NO1" &
+NRPID1=$!
+nonce_race_worker "$NR2" "$NR1" "$NO2" &
+NRPID2=$!
+wait "$NRPID1" "$NRPID2"
+
+nr_o1=$(cat "$NO1" 2>/dev/null)
+nr_o2=$(cat "$NO2" 2>/dev/null)
+nr_ok=0; nr_replay=0
+[[ "$nr_o1" == "ok" ]] && nr_ok=$((nr_ok + 1))
+[[ "$nr_o2" == "ok" ]] && nr_ok=$((nr_ok + 1))
+[[ "$nr_o1" == replay:* ]] && nr_replay=$((nr_replay + 1))
+[[ "$nr_o2" == replay:* ]] && nr_replay=$((nr_replay + 1))
+if [[ $nr_ok -eq 1 && $nr_replay -eq 1 ]]; then
+  pass "consume_nonce : course multi-process — exactement un gagnant, l'autre voit le rejeu"
+else
+  fail "consume_nonce : TOCTOU — ok=$nr_ok replay=$nr_replay (out1=$nr_o1 out2=$nr_o2)"
+fi
+
+# Ré-vérification de l'expiration SOUS le verrou (revue Codex PR #125) : si
+# l'attente d'acquisition du verrou franchit expires_at, un défi expiré ne doit
+# PAS être consommé. On tient le verrou de l'extérieur au-delà du TTL pendant
+# qu'un thread appelle consume_nonce ; il doit ressortir « défi expiré ».
+exp_out="$(GWSA_ROOT="$ELIC_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c "
+import fcntl, os, time, threading
+from gateway.elicitation import consume_nonce, ElicitationError, nonces_lock_path
+lp = nonces_lock_path(); lp.parent.mkdir(parents=True, exist_ok=True)
+fd = os.open(str(lp), os.O_CREAT | os.O_RDWR, 0o600)
+fcntl.flock(fd, fcntl.LOCK_EX)          # on tient le verrou
+exp = int(time.time()) + 1              # TTL court : 1 s
+res = {}
+def w():
+    try:
+        consume_nonce('expiry-under-lock', expires_at=exp)
+        res['r'] = 'ok'
+    except ElicitationError as e:
+        res['r'] = 'expired' if 'expiré' in str(e) else 'other:' + str(e)
+t = threading.Thread(target=w); t.start()
+time.sleep(2)                           # on tient le verrou au-delà du TTL
+fcntl.flock(fd, fcntl.LOCK_UN); os.close(fd)
+t.join(5)
+print(res.get('r', 'timeout'))
+")"
+if [[ "$exp_out" == "expired" ]]; then
+  pass "consume_nonce : expiration re-vérifiée SOUS le verrou (défi expiré pendant l'attente refusé)"
+else
+  fail "consume_nonce : défi expiré pendant l'attente du verrou consommé (out=$exp_out)"
+fi
+
 section "droits par session — lot 2 (fiche 0076, capacités fines)"
 
 # ── (a) capacité gmail:read autorise la lecture, pas gmail:send ni drive:write ──
