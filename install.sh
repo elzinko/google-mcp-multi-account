@@ -1,22 +1,13 @@
 #!/usr/bin/env bash
 # install.sh — installer google-multi-account SANS cloner le dépôt (fiche 0020).
 #
-#   curl -fsSL https://raw.githubusercontent.com/elzinko/google-mcp-multi-account/main/install.sh | bash
-#
-# Ce que ça fait : télécharge la dernière version publiée depuis GitHub, la fige
-# dans ~/.local/share/google-mcp/<tag>/, pose « current » dessus, met « mag » (+ alias « gma »/« gwsa »)
-# sur le PATH, montre le geste pour brancher Desktop/Code (opt-in), puis OAuth/GCP
-# restantes — jamais exécutées à ta place (doctrine CLAUDE.md).
-#
 # Autonome par nature (lancé par « curl | bash », sans clone) : il duplique la
 # logique minimale de scripts/lib-github-release.sh — garder les deux alignés.
 #
-# Surcharges (tests / cas particuliers) :
-#   GWSA_REPO / GWSA_TAGS_URL / GWSA_TARBALL_BASE  (idem lib-github-release.sh)
-#   GWSA_DEPLOY_ROOT   où figer les versions (défaut ~/.local/share/google-mcp)
-#   GWSA_CLI_LINK      lien « mag » sur le PATH (défaut : brew, sinon ~/.local/bin)
-#   GWSA_WIRE=1|--wire branche Desktop/Code (défaut : imprime seulement le geste)
-#   GWSA_ALLOW_NO_GWS=1  ne bloque pas si « gws » manque (CI / l'installer après)
+# L'aide (« -h/--help ») vit dans usage() via une heredoc, PAS relue depuis
+# « $0 » : sous « curl … | bash », le script est lu sur stdin → « $0 » vaut
+# « bash » (pas un fichier), et relire l'en-tête donnerait une aide vide
+# (bug hors-diff repéré en revue 0087 — fiche 0088).
 set -euo pipefail
 
 REPO="${GWSA_REPO:-elzinko/google-mcp-multi-account}"
@@ -33,11 +24,37 @@ ok()   { echo "${G}✓${N} $*"; }
 warn() { echo "${Y}⚠${N} $*"; }
 die()  { echo "${R}✗ $*${N}" >&2; exit 1; }
 
+# Aide portée par le script (heredoc), robuste au lancement « curl … | bash »
+# (script lu sur stdin, « $0 » = « bash ») : ne JAMAIS la relire depuis « $0 ».
+usage() {
+  cat <<'EOF'
+install.sh — installer google-multi-account SANS cloner le dépôt (fiche 0020).
+
+  curl -fsSL https://raw.githubusercontent.com/elzinko/google-mcp-multi-account/main/install.sh | bash
+
+Ce que ça fait : télécharge la dernière version publiée depuis GitHub, la fige
+dans ~/.local/share/google-mcp/<tag>/, pose « current » dessus, met « mag » (+ alias « gma »/« gwsa »)
+sur le PATH, montre le geste pour brancher Desktop/Code (opt-in), puis OAuth/GCP
+restantes — jamais exécutées à ta place (doctrine CLAUDE.md).
+
+Arguments :
+  -h, --help   affiche cette aide
+  --wire       branche Claude Desktop/Code (opt-in ; défaut : imprime le geste)
+
+Surcharges (tests / cas particuliers) :
+  GWSA_REPO / GWSA_TAGS_URL / GWSA_TARBALL_BASE  (idem lib-github-release.sh)
+  GWSA_DEPLOY_ROOT   où figer les versions (défaut ~/.local/share/google-mcp)
+  GWSA_CLI_LINK      lien « mag » sur le PATH (défaut : brew, sinon ~/.local/bin)
+  GWSA_WIRE=1|--wire branche Desktop/Code (défaut : imprime seulement le geste)
+  GWSA_ALLOW_NO_GWS=1  ne bloque pas si « gws » manque (CI / l'installer après)
+EOF
+}
+
 # Arguments : --help (aide) · --wire (opt-in : brancher les clients). GWSA_WIRE=1 ≡ --wire.
 WIRE="${GWSA_WIRE:-}"
 for _arg in "$@"; do
   case "$_arg" in
-    -h|--help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) usage; exit 0 ;;
     --wire)    WIRE=1 ;;
     *) die "argument inconnu : $_arg (voir --help)" ;;
   esac

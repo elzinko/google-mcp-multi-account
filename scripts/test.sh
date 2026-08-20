@@ -64,7 +64,7 @@ section "Syntaxe des scripts — avec le bash DU SYSTÈME (macOS = 3.2)"
 # local, avec /bin/bash et pas le bash du PATH.
 SYS_BASH="/bin/bash"
 [[ -x "$SYS_BASH" ]] || SYS_BASH="$(command -v bash)"
-for f in bin/mag scripts/*.sh; do
+for f in install.sh bin/mag scripts/*.sh; do
   if "$SYS_BASH" -n "$f" 2>/dev/null; then
     PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m %s : syntaxe valide (%s)\n' "$f" "$("$SYS_BASH" --version | head -1 | sed 's/.*version \([0-9.]*\).*/\1/')"
   else
@@ -72,6 +72,26 @@ for f in bin/mag scripts/*.sh; do
     "$SYS_BASH" -n "$f" 2>&1 | head -3 | sed 's/^/      /'
   fi
 done
+
+section "install.sh — aide (-h/--help) robuste au lancement « curl | bash » (fiche 0088)"
+# Bug hors-diff repéré en revue de la 0087 : la branche --help lisait l'en-tête
+# du script via « sed … "$0" ». Or « curl …/install.sh | bash -s -- --help »
+# lit le script sur stdin → « $0 » = « bash » (pas un fichier) → aide VIDE.
+# L'aide doit donc être portée par le script (usage() heredoc), robuste quel que
+# soit le lancement. On vérifie les deux voies : fichier ET stdin (le cas cassé).
+HELP_MARK="installer google-multi-account"
+# (a) lancement fichier (clone / copie déployée) : « $0 » est un chemin valide.
+if bash install.sh --help 2>/dev/null | grep -qF "$HELP_MARK"; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m %s\n' "install.sh --help (fichier) : aide non vide"
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m %s\n' "install.sh --help (fichier) : aide vide ou sans repère « $HELP_MARK »"
+fi
+# (b) lancement « curl | bash » simulé : script sur stdin, « $0 » ≠ fichier (LE bug).
+if printf '%s' "$(cat install.sh)" | bash -s -- --help 2>/dev/null | grep -qF "$HELP_MARK"; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m %s\n' "install.sh --help (stdin, « curl | bash ») : aide non vide"
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m %s\n' "install.sh --help (stdin, « curl | bash ») : aide vide → régression du bug 0088"
+fi
 
 section "Policy par service — préréglage prudent (Gmail sans envoi, Drive lecture seule)"
 policy <<'EOF'
