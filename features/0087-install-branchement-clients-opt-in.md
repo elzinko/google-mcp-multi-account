@@ -5,8 +5,8 @@ type: feature
 priority: P2
 version:
 epic:
-status: todo
-ready:
+status: in-progress
+ready: 2026-08-20
 pr:
 created: 2026-08-18
 ---
@@ -51,3 +51,24 @@ Inverser le flag : `GWSA_SKIP_WIRE` (opt-out) → `GWSA_WIRE=1` / `--wire` (opt-
   wording a été corrigé côté doc (Desktop+Code, Cursor à la main) ; **cette fiche** traite le
   **changement de comportement** de l'installeur.
 - Infra `GWSA_*` à préserver (cf. renommage `mag`). Axe install/deploy, hors épic droits-par-session.
+
+## Grooming (PO — 2026-08-20)
+
+Tirée **avant** le head P1 0019 (docs anglaises) : 0019 dépend de l'épic 0017 (idée) et
+exige des arbitrages produit. Skip **assumé et journalisé** (choix humain au checkpoint
+« aucune fiche ready »).
+
+**Périmètre tranché (DoR) :**
+
+- **Défaut = aucune mutation** de config client. `install.sh` **imprime** le geste de
+  branchement de chaque client (doctrine « l'agent propose, tu exécutes »).
+- **Opt-in POC** = flag/env explicite `--wire` / `GWSA_WIRE=1` → branche Desktop + Code.
+  Déterministe → **testable en hermétique**. Retire/inverse `GWSA_SKIP_WIRE`.
+- **Opt-in polish** = prompt TTY (« Brancher X ? [o/N] ») **avec repli print-only** si
+  non-interactif / piped — `curl | sh` et la CI ne mutent **jamais**.
+- **Docs** = README + doc install listent les **3** clients (Desktop & Code branchables ;
+  Cursor = snippet manuel) et leur geste.
+- **Non-régression** = `./scripts/test.sh` vert + test « défaut ⇒ 0 mutation, opt-in ⇒ mutation ».
+- Préserver le nommage `GWSA_*` ; mettre à jour tout call-site / doc référençant `GWSA_SKIP_WIRE`.
+
+DoR : problème clair · périmètre tranché · critères testables · harnais identifié → **prêt à tamponner**.

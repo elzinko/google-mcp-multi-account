@@ -41,7 +41,7 @@ brew install googleworkspace-cli
 curl -fsSL https://raw.githubusercontent.com/elzinko/google-mcp-multi-account/main/install.sh | bash
 ```
 
-This puts the latest release on your machine, `mag` on your PATH, and wires your Claude clients.
+This puts the latest release on your machine and `mag` on your PATH. By default it **wires no client** — it prints the command to connect each one (`mag wire desktop` / `mag wire code`, Cursor manual); pass `--wire` to connect them during install.
 
 **2. Google setup** (~10 min, once) — an OAuth project in Google Cloud: [docs/setup-oauth.md](docs/setup-oauth.md). No account connects and no Google data flows until it's done — `setup_status` still runs to guide you.
 

@@ -12,6 +12,11 @@ mag wire all          # les deux — « --print » pour un dry-run
 `mag wire` résout le chemin absolu, **fusionne** l'entrée `google-multi-account` sans
 écraser tes autres serveurs MCP, et fait un backup. Puis **redémarre le client**.
 
+!!! info "L'installeur ne branche rien par défaut"
+    `install.sh` **ne touche aucune config client** : il pose le serveur puis **affiche**
+    ces commandes — à toi de les lancer (doctrine « tu tiens chaque porte »). Pour tout
+    brancher pendant l'install : `curl … | bash -s -- --wire` (ou `GWSA_WIRE=1`).
+
 !!! note "Pourquoi deux noms ?"
     Le **dépôt** s'appelle `google-mcp-multi-account`, mais le **connecteur** déclaré
     sous `mcpServers` s'appelle `google-multi-account` (sans `mcp`) — convention MCP,

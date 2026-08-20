@@ -5,7 +5,7 @@
 #
 # Ce que ça fait : télécharge la dernière version publiée depuis GitHub, la fige
 # dans ~/.local/share/google-mcp/<tag>/, pose « current » dessus, met « mag » (+ alias « gma »/« gwsa »)
-# sur le PATH, branche Claude Desktop + Code, puis AFFICHE les étapes OAuth/GCP
+# sur le PATH, montre le geste pour brancher Desktop/Code (opt-in), puis OAuth/GCP
 # restantes — jamais exécutées à ta place (doctrine CLAUDE.md).
 #
 # Autonome par nature (lancé par « curl | bash », sans clone) : il duplique la
@@ -15,7 +15,7 @@
 #   GWSA_REPO / GWSA_TAGS_URL / GWSA_TARBALL_BASE  (idem lib-github-release.sh)
 #   GWSA_DEPLOY_ROOT   où figer les versions (défaut ~/.local/share/google-mcp)
 #   GWSA_CLI_LINK      lien « mag » sur le PATH (défaut : brew, sinon ~/.local/bin)
-#   GWSA_SKIP_WIRE=1   installe le serveur sans brancher Desktop/Code
+#   GWSA_WIRE=1|--wire branche Desktop/Code (défaut : imprime seulement le geste)
 #   GWSA_ALLOW_NO_GWS=1  ne bloque pas si « gws » manque (CI / l'installer après)
 set -euo pipefail
 
@@ -33,7 +33,15 @@ ok()   { echo "${G}✓${N} $*"; }
 warn() { echo "${Y}⚠${N} $*"; }
 die()  { echo "${R}✗ $*${N}" >&2; exit 1; }
 
-[[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
+# Arguments : --help (aide) · --wire (opt-in : brancher les clients). GWSA_WIRE=1 ≡ --wire.
+WIRE="${GWSA_WIRE:-}"
+for _arg in "$@"; do
+  case "$_arg" in
+    -h|--help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --wire)    WIRE=1 ;;
+    *) die "argument inconnu : $_arg (voir --help)" ;;
+  esac
+done
 
 # ── prérequis ────────────────────────────────────────────────────
 step "Prérequis"
@@ -139,11 +147,14 @@ case ":$PATH:" in
   *) warn "« $(dirname "$link") » n'est pas dans ton PATH — ajoute-le pour utiliser « mag »";;
 esac
 
-# ── brancher les clients LLM ─────────────────────────────────────
-if [[ -z "${GWSA_SKIP_WIRE:-}" ]]; then
-  step "Branchement des clients"
-  DESK="$CURRENT_LINK/scripts/install-claude-desktop.sh"
-  CODE="$CURRENT_LINK/scripts/install-claude-code.sh"
+# ── brancher les clients LLM (OPT-IN — fiche 0087) ───────────────
+# Par défaut, on NE MUTE AUCUN config client : l'agent propose, l'humain exécute
+# (doctrine CLAUDE.md, comme OAuth/IAM). On imprime le geste des 3 clients. Opt-in
+# explicite (--wire / GWSA_WIRE=1) pour brancher Desktop + Code à ta place.
+step "Brancher les clients LLM"
+DESK="$CURRENT_LINK/scripts/install-claude-desktop.sh"
+CODE="$CURRENT_LINK/scripts/install-claude-code.sh"
+if [[ -n "$WIRE" ]]; then
   if [[ -x "$DESK" ]]; then
     if [[ -n "${GWSA_DESKTOP_CONFIG:-}" ]]; then
       "$DESK" --config "$GWSA_DESKTOP_CONFIG" >/dev/null 2>&1 \
@@ -155,6 +166,14 @@ if [[ -z "${GWSA_SKIP_WIRE:-}" ]]; then
   if command -v claude >/dev/null 2>&1 && [[ -x "$CODE" ]]; then
     "$CODE" >/dev/null 2>&1 && ok "Claude Code (CLI) branché" || warn "branchement Claude Code à faire : $CODE"
   fi
+else
+  ok "Aucun client branché (par défaut) — c'est toi qui tiens chaque porte."
+  echo "  Brancher un client (« mag » est sur le PATH) :"
+  echo "    • Claude Desktop : mag wire desktop"
+  echo "    • Claude Code    : mag wire code      (les deux d'un coup : mag wire all)"
+  echo "    • Cursor         : à la main — voir docs/configurer-client.md"
+  echo "  Détail des 3 clients : docs/configurer-client.md"
+  echo "  Ou brancher pendant l'install : relance avec ${B}--wire${N} (ou ${B}GWSA_WIRE=1${N})."
 fi
 
 # ── ce qui reste à l'humain : le setup Google ────────────────────
