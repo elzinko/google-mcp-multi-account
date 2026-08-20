@@ -5,9 +5,9 @@ type: bug
 priority: P2
 version:
 epic:
-status: in-progress
+status: shipped
 ready: 2026-08-20
-pr:
+pr: "#124"
 created: 2026-08-20
 ---
 
