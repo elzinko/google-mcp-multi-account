@@ -15,8 +15,8 @@ Drive, chaque nouveau compte reste un **geste humain**.
 - :material-shield-lock: **[Sécurité d'abord](threat-model.md)**
   Default-deny, verrous par profil, écritures Drive zonées, zéro envoi de mail.
 
-- :material-tools: **[CLI & admin](usage.md)**
-  `mag` : profils, verrous, zones Drive, Touch ID, interface web locale.
+- :material-tools: **[CLI (mag)](usage.md)**
+  `mag` : profils, verrous, zones Drive, Touch ID.
 
 - :material-sitemap: **[Sous le capot](architecture.md)**
   MCP, gateway, broker loopback, wrapper — qui parle à qui.
@@ -81,7 +81,8 @@ mag update
 |---|---|
 | Brancher un client, connaître les tools exposés | [Installer & mettre à jour](mcp-setup.md) |
 | Faire le setup OAuth / Google Cloud, les rôles IAM | [OAuth / Google Cloud](setup-oauth.md) |
-| Piloter `mag` (profils, verrous, zones, admin) | [CLI & admin](usage.md) |
+| Piloter `mag` (profils, verrous, zones Drive) | [CLI (mag)](usage.md) |
+| Piloter l'admin web (comptes, verrous, policies) | [Admin web](admin.md) |
 | Comprendre le modèle de policy (default-deny, zones) | [Modèle de policy](policies.md) |
 | Voir les garanties de sécurité, phase par phase | [Modèle de menace](threat-model.md) |
 | Un regard honnête (forces, limites, concurrence) | [Critique](critique.md) |

@@ -116,7 +116,8 @@ Product / MCP server `google-multi-account` (source of truth: `gateway/config.py
 |---|---|
 | Connect a client (Desktop, Code, Cursor); tools exposed | [docs/mcp-setup.md](docs/mcp-setup.md) |
 | OAuth / GCP setup, IAM roles | [docs/setup-oauth.md](docs/setup-oauth.md) |
-| CLI & web admin (`mag`, locks, Touch ID) | [docs/usage.md](docs/usage.md) |
+| CLI (`mag`, locks, Touch ID) | [docs/usage.md](docs/usage.md) |
+| Web admin (local webapp) | [docs/admin.md](docs/admin.md) |
 | Policy model (default-deny, Drive zones, grants) | [docs/policies.md](docs/policies.md) |
 
 ## License
