@@ -257,6 +257,11 @@ def consume_nonce(nonce: str, *, expires_at: int) -> None:
     # DOIT se faire sous le verrou — jamais réutiliser un état chargé avant
     # l'acquisition, sous peine de revalider la course qu'on cherche à fermer.
     with _file_lock(nonces_lock_path()):
+        # Ré-vérifier l'expiration SOUS le verrou (revue Codex PR #125) : l'attente
+        # d'acquisition du verrou peut franchir expires_at ; sans ce re-check, un
+        # défi expiré PENDANT l'attente serait consommé. Temps frais, sous le verrou.
+        if int(time.time()) > int(expires_at):
+            raise ElicitationError("défi expiré — relancer la commande")
         nonces = _load_nonces()
         if nonce in nonces:
             raise ElicitationError("rejeu refusé (nonce déjà consommé)")

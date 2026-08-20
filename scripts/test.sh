@@ -3133,6 +3133,36 @@ else
   fail "consume_nonce : TOCTOU — ok=$nr_ok replay=$nr_replay (out1=$nr_o1 out2=$nr_o2)"
 fi
 
+# Ré-vérification de l'expiration SOUS le verrou (revue Codex PR #125) : si
+# l'attente d'acquisition du verrou franchit expires_at, un défi expiré ne doit
+# PAS être consommé. On tient le verrou de l'extérieur au-delà du TTL pendant
+# qu'un thread appelle consume_nonce ; il doit ressortir « défi expiré ».
+exp_out="$(GWSA_ROOT="$ELIC_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c "
+import fcntl, os, time, threading
+from gateway.elicitation import consume_nonce, ElicitationError, nonces_lock_path
+lp = nonces_lock_path(); lp.parent.mkdir(parents=True, exist_ok=True)
+fd = os.open(str(lp), os.O_CREAT | os.O_RDWR, 0o600)
+fcntl.flock(fd, fcntl.LOCK_EX)          # on tient le verrou
+exp = int(time.time()) + 1              # TTL court : 1 s
+res = {}
+def w():
+    try:
+        consume_nonce('expiry-under-lock', expires_at=exp)
+        res['r'] = 'ok'
+    except ElicitationError as e:
+        res['r'] = 'expired' if 'expiré' in str(e) else 'other:' + str(e)
+t = threading.Thread(target=w); t.start()
+time.sleep(2)                           # on tient le verrou au-delà du TTL
+fcntl.flock(fd, fcntl.LOCK_UN); os.close(fd)
+t.join(5)
+print(res.get('r', 'timeout'))
+")"
+if [[ "$exp_out" == "expired" ]]; then
+  pass "consume_nonce : expiration re-vérifiée SOUS le verrou (défi expiré pendant l'attente refusé)"
+else
+  fail "consume_nonce : défi expiré pendant l'attente du verrou consommé (out=$exp_out)"
+fi
+
 section "droits par session — lot 2 (fiche 0076, capacités fines)"
 
 # ── (a) capacité gmail:read autorise la lecture, pas gmail:send ni drive:write ──

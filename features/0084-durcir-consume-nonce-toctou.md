@@ -58,10 +58,12 @@ partagée**, un seul verrou couvre les deux chemins (Touch ID + passkey).
 ## Comment vérifier
 
 - Suite : `./scripts/test.sh` — assertion **« consume_nonce : course multi-process — exactement un
-  gagnant, l'autre voit le rejeu »** (section « fiche 0084 »), suite verte à **388/0**.
+  gagnant, l'autre voit le rejeu »** (section « fiche 0084 »), suite verte à **389/0**.
 - Le test lance **2 vrais sous-process `python3`** sur le même nonce (barrière de départ + hook de
   fenêtre `GWSA_ELICITATION_TEST_RACE_DELAY_MS`) ⇒ exactement **1 `ok` + 1 rejeu**. Sans le verrou
   (retiré temporairement) : **2 `ok`** (RED prouvé).
+- **Expiration re-vérifiée SOUS le verrou** (revue Codex #125) : test « défi expiré pendant l'attente
+  du verrou refusé » — l'attente d'acquisition du verrou pouvait franchir `expires_at`.
 - Non-régression : les tests `remote_approval`/passkey qui partagent `consume_nonce` restent verts.
 
 ## Notes
