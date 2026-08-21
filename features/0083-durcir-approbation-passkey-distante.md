@@ -5,11 +5,20 @@ type: feature
 priority: P2
 version:
 epic: 0077
-status: todo
-ready:
+status: in-progress
+ready: 2026-08-21
 pr:
 created: 2026-08-17
 ---
+
+## En clair
+
+On approuve une action sensible depuis son téléphone (passkey). Un **compteur** doit monter à chaque
+usage, pour empêcher qu'une passkey **copiée** rejoue un vieil accord. Mais deux vérifications lancées
+**au même instant** pouvaient lire le même vieux compteur et **accepter les deux** — une passkey copiée
+serait passée une fois. On pose un **verrou** (le même qu'en 0084, extrait en module partagé) autour de
+« lire le compteur → vérifier → écrire » : la 1ʳᵉ vérif monte le compteur, la 2ᵉ le voit monté et refuse.
+Le verrou couvre aussi le **ré-enregistrement** d'un téléphone (pour éviter qu'il écrase une vérif).
 
 ## Contexte / Problème
 
@@ -58,18 +67,29 @@ le **fichier** (tous les writers : vérification *et* enrôlement), pas sur un c
 
 ## Critères d'acceptation
 
-- [ ] **Modélisation de la course** : deux `gwsa … --remote` en **process séparés**, **chacun avec son
+- [x] **Modélisation de la course** : deux `gwsa … --remote` en **process séparés**, **chacun avec son
       propre défi frais**, signés depuis des **états d'authentificateur clonés portant le même prochain
       `sign_count`** (simule une passkey clonée) — vérifiés **concurremment**.
-- [ ] **Invariant** : dans ce scénario, **exactement une** vérification réussit ; l'autre est refusée
+- [x] **Invariant** : dans ce scénario, **exactement une** vérification réussit ; l'autre est refusée
       (son **rechargement frais sous verrou** voit le compteur déjà avancé). Le verrou est
       **inter-process** (fichier), couvrant reload + check + persistance — **pas** un verrou threads /
       objet partagé, qui masquerait la fuite inter-process.
-- [ ] **Interleaving enrôlement ↔ vérification** : un `enroll_phone` qui remplace `phone.json`
+- [x] **Interleaving enrôlement ↔ vérification** : un `enroll_phone` qui remplace `phone.json`
       pendant la fenêtre verrouillée d'un vérifieur **ne peut ni être écrasé** par la persistance du
       vérifieur, **ni corrompre** le compteur — `enroll_phone` prend le **même** verrou fichier (reload
       + write sous verrou) que la vérification.
-- [ ] `./scripts/test.sh` vert.
+- [x] `./scripts/test.sh` vert.
+
+## Comment vérifier
+
+- Suite : `./scripts/test.sh` — section « remote_approval : verrou anti-clonage inter-process sur
+  sign_count (fiche 0083) », **2 tests**, suite verte à **391/0**.
+- **Course de clones** : 2 vérifs concurrentes (2 défis frais distincts + 2 signatures d'états clonés au
+  **même** compteur) ⇒ **exactement 1 accepté, 1 refusé** (le refusé, son reload frais sous verrou voit
+  le compteur avancé). Sans le verrou : les deux passent (RED prouvé).
+- **Interleaving** : un ré-enregistrement (`enroll_phone`) pendant la fenêtre verrouillée d'une vérif
+  n'est **ni écrasé ni corrompu** (même verrou).
+- Non-régression : tests 0084 `consume_nonce` + `remote_approval`/passkey existants restent verts.
 
 ## Notes
 
@@ -96,3 +116,29 @@ le **fichier** (tous les writers : vérification *et* enrôlement), pas sur un c
 - Le vrai canal push / relais aveugle E2E + app mobile + holder natif **reste dans l'épic
   [0077](0077-acces-mobile-souverain.md)** (incrément « relais aveugle » déjà prévu) — hors de cette
   fiche.
+
+## Grooming (PO — 2026-08-20)
+
+Fiche sœur de 0084 (livrée #125). Cibles **vérifiées** dans `gateway/remote_approval.py` :
+`close_remote_challenge` (158), `run_remote_approval_gate` (349), `verify_assertion` (309 — check
+l.334, persist l.344), `enroll_phone` (195), `enrollment_path()` (53 → `phone.json`). Le helper
+`_file_lock` est **sur main** (livré en 0084, `gateway/elicitation.py:57`).
+
+**Périmètre tranché (DoR) :**
+
+- **Réutiliser le verrou via extraction** : sortir `_file_lock` de `elicitation.py` vers un module
+  partagé (ex. `gateway/_filelock.py`, `file_lock` public) ; `elicitation.py` l'importe (`consume_nonce`
+  **inchangé**) ; `remote_approval.py` l'importe. Plus propre qu'un import cross-module d'un helper `_`-privé.
+- **Verrouiller TOUS les writers de `phone.json`** : `close_remote_challenge` **et**
+  `run_remote_approval_gate` (les 2 chemins de vérif) rechargent l'enrôlement **frais SOUS le verrou**
+  puis check + persist ; `enroll_phone` prend **le même** verrou (reload + write). Lockfile
+  `enrollment_path().with_suffix('.lock')` (`phone.lock`).
+- **Test (piège de liaison au défi)** : deux `gwsa … --remote` en **process séparés**, **chacun son
+  défi frais**, signés depuis des **états clonés au même prochain `sign_count`** → concurrents ⇒
+  **exactement un** réussit (l'autre refusé — `verify_assertion` renvoie `False`, son reload frais voit
+  le compteur avancé). **Plus** un test **interleaving enroll ↔ vérif**. Vrai inter-process (pas threads).
+- **Non-régression** : `./scripts/test.sh` vert + tests `remote_approval`/passkey existants.
+- **Hors périmètre** (confirmé par la fiche) : vrai canal push / relais aveugle + app mobile = épic 0077.
+
+DoR : problème cité & vérifié · mécanisme tranché (réutilise le verrou 0084) · critères testables
+multi-process · pas de dépendance externe → **prêt à tamponner**.

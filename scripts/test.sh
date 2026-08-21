@@ -5079,6 +5079,189 @@ print(is_session_unlocked('$sid_e2e', 'prof-e2e'))
   && pass "mag session unlock --remote : échange deux-temps réel (téléphone hors-process) exécute effectivement le déverrouillage (nit, PR #113)" \
   || fail "mag session unlock --remote : déverrouillage non exécuté ($out_e2e)"
 
+section "remote_approval : verrou anti-clonage inter-process sur sign_count (fiche 0083)"
+# verify_assertion refuse un sign_count non strictement croissant (anti-clonage,
+# ligne « if sign_count <= enrollment.sign_count »), mais AVANT le correctif
+# l'enrôlement est chargé par l'appelant AVANT verify_assertion — deux
+# `close_remote_challenge` concurrents (deux `gwsa … --remote` en parallèle)
+# chargent le même sign_count périmé, passent tous deux le check, et
+# écrasent tous deux phone.json : une passkey CLONÉE rejouée contourne
+# l'anti-clonage. On le prouve avec 2 VRAIS sous-process python3 (pas des
+# threads), chacun forgeant SON PROPRE défi frais (sinon on ne testerait que
+# la liaison au défi, pas la course, cf. remote_approval.py:320-322) et
+# signant une assertion « état d'authentificateur cloné » portant le MÊME
+# prochain sign_count — synchronisés par une barrière de démarrage, fenêtre
+# de course forcée par le hook de test GWSA_REMOTE_APPROVAL_TEST_RACE_DELAY_MS
+# (sleep juste avant le check anti-clonage, inactif hors test — cf.
+# gateway/remote_approval.py::_test_race_delay, même gabarit que la fiche 0084).
+RA_CLONE="$TMP/mag-remote-approval-clone-race"
+mkdir -p "$RA_CLONE"
+"$PY" -c "
+import sys; sys.path.insert(0, 'tests'); sys.path.insert(0, '.')
+from pathlib import Path
+from testlib.phone_signer import generate_keypair
+import os
+os.environ['GWSA_ROOT'] = '$RA_CLONE'
+from gateway.remote_approval import enroll_phone
+priv, pub = generate_keypair(Path('$RA_CLONE'))
+enroll_phone({'credential_id': 'cred-clone', 'aaguid': 'a', 'public_key': pub, 'uv': 'biometric', 'be': False, 'sign_count': 0})
+Path('$RA_CLONE/priv.pem').write_text(priv.read_text())
+" >/dev/null
+
+clone_race_worker() {
+  # $1 = mon fichier « prêt », $2 = fichier « prêt » de l'autre, $3 = résultat,
+  # $4 = session_id (défi frais et distinct par worker)
+  local my_ready="$1" other_ready="$2" out="$3" sid="$4"
+  GWSA_ROOT="$RA_CLONE" GWSA_REMOTE_APPROVAL_TEST_RACE_DELAY_MS=150 "$PY" -c "
+import sys, time
+sys.path.insert(0, 'tests'); sys.path.insert(0, '.')
+from pathlib import Path
+from testlib.phone_signer import sign_challenge
+from gateway.remote_approval import open_remote_challenge, close_remote_challenge, RemoteApprovalError
+
+envelope, challenge_id = open_remote_challenge(
+    {'action': 'session_unlock', 'alias': 'clone', 'session_id': '$sid', 'minutes': 5}
+)
+# Assertion « authentificateur cloné » : signée par la MÊME clé privée, pour
+# CE défi frais à elle, mais avec le même prochain sign_count que l'autre
+# worker — simule deux clones de la même passkey répondant chacun à leur
+# propre défi.
+assertion = sign_challenge(envelope.payload, Path('$RA_CLONE/priv.pem'), credential_id='cred-clone', sign_count=1)
+
+Path('$my_ready').write_text('1')
+while not Path('$other_ready').is_file():
+    time.sleep(0.005)
+
+try:
+    close_remote_challenge(challenge_id, assertion)
+    Path('$out').write_text('ok')
+except RemoteApprovalError as e:
+    Path('$out').write_text('refused:' + str(e))
+except Exception as e:
+    Path('$out').write_text('error:' + str(e))
+"
+}
+
+CR1="$RA_CLONE/ready1"; CR2="$RA_CLONE/ready2"
+CO1="$RA_CLONE/out1"; CO2="$RA_CLONE/out2"
+clone_race_worker "$CR1" "$CR2" "$CO1" "sidClone-A" &
+CRPID1=$!
+clone_race_worker "$CR2" "$CR1" "$CO2" "sidClone-B" &
+CRPID2=$!
+wait "$CRPID1" "$CRPID2"
+
+cr_o1=$(cat "$CO1" 2>/dev/null)
+cr_o2=$(cat "$CO2" 2>/dev/null)
+cr_ok=0; cr_refused=0
+[[ "$cr_o1" == "ok" ]] && cr_ok=$((cr_ok + 1))
+[[ "$cr_o2" == "ok" ]] && cr_ok=$((cr_ok + 1))
+[[ "$cr_o1" == refused:*invalide* ]] && cr_refused=$((cr_refused + 1))
+[[ "$cr_o2" == refused:*invalide* ]] && cr_refused=$((cr_refused + 1))
+if [[ $cr_ok -eq 1 && $cr_refused -eq 1 ]]; then
+  pass "remote_approval : course de clones (2 défis frais, même sign_count) — exactement un accepté, l'autre refusé (fiche 0083)"
+else
+  fail "remote_approval : anti-clonage TOCTOU — ok=$cr_ok refused=$cr_refused (out1=$cr_o1 out2=$cr_o2)"
+fi
+
+# Interleaving enroll ↔ vérif : un `enroll_phone` pendant la fenêtre
+# verrouillée d'un vérifieur ne doit ni être écrasé (perte silencieuse d'un
+# nouvel enrôlement) ni corrompre le fichier. Avant le correctif, verify
+# charge l'enrôlement AVANT le verrou (ou sans verrou du tout) : un
+# `enroll_phone` concurrent écrit sa nouvelle passkey, puis le vérifieur —
+# qui tient toujours l'ANCIEN objet enrôlement en mémoire — sauvegarde par
+# dessus et efface silencieusement le nouvel enrôlement (`enroll_phone`
+# aurait pourtant renvoyé « ok » à l'appelant). Avec le correctif, les deux
+# opérations sont sérialisées par le même verrou : quel que soit l'ordre,
+# l'enrôlement final est TOUJOURS celui posé par `enroll_phone` (qui
+# remplace intégralement, sans fusion) — jamais un état corrompu ou perdu.
+RA_INTER="$TMP/mag-remote-approval-interleave"
+mkdir -p "$RA_INTER"
+"$PY" -c "
+import sys; sys.path.insert(0, 'tests'); sys.path.insert(0, '.')
+from pathlib import Path
+from testlib.phone_signer import generate_keypair
+import os
+os.environ['GWSA_ROOT'] = '$RA_INTER'
+from gateway.remote_approval import enroll_phone
+priv, pub = generate_keypair(Path('$RA_INTER'))
+enroll_phone({'credential_id': 'cred-interleave', 'aaguid': 'a', 'public_key': pub, 'uv': 'biometric', 'be': False, 'sign_count': 0})
+Path('$RA_INTER/priv.pem').write_text(priv.read_text())
+" >/dev/null
+
+IR1="$RA_INTER/ready1"; IR2="$RA_INTER/ready2"
+IO1="$RA_INTER/out1"; IO2="$RA_INTER/out2"
+
+GWSA_ROOT="$RA_INTER" GWSA_REMOTE_APPROVAL_TEST_RACE_DELAY_MS=300 "$PY" -c "
+import sys, time
+sys.path.insert(0, 'tests'); sys.path.insert(0, '.')
+from pathlib import Path
+from testlib.phone_signer import sign_challenge
+from gateway.remote_approval import open_remote_challenge, close_remote_challenge, RemoteApprovalError
+
+envelope, challenge_id = open_remote_challenge(
+    {'action': 'session_unlock', 'alias': 'orig', 'session_id': 'sidInterleave', 'minutes': 5}
+)
+assertion = sign_challenge(envelope.payload, Path('$RA_INTER/priv.pem'), credential_id='cred-interleave', sign_count=1)
+
+Path('$IR1').write_text('1')
+while not Path('$IR2').is_file():
+    time.sleep(0.005)
+
+try:
+    close_remote_challenge(challenge_id, assertion)
+    Path('$IO1').write_text('ok')
+except RemoteApprovalError as e:
+    Path('$IO1').write_text('refused:' + str(e))
+except Exception as e:
+    Path('$IO1').write_text('error:' + str(e))
+" &
+INTER_VERIFY_PID=$!
+
+"$PY" -c "
+import sys, time
+sys.path.insert(0, 'tests'); sys.path.insert(0, '.')
+from pathlib import Path
+from testlib.phone_signer import generate_keypair
+import os
+os.environ['GWSA_ROOT'] = '$RA_INTER'
+from gateway.remote_approval import enroll_phone
+
+_, pub_new = generate_keypair(Path('$RA_INTER'))
+
+Path('$IR2').write_text('1')
+while not Path('$IR1').is_file():
+    time.sleep(0.005)
+# Fenêtre délibérée : laisse le vérifieur charger son enrôlement AVANT notre
+# écriture, pour forcer le pire ordre d'entrelacement (celui qui perdrait
+# silencieusement l'enrôlement sans le correctif).
+time.sleep(0.05)
+
+enroll_phone({
+    'credential_id': 'cred-B', 'aaguid': 'b', 'public_key': pub_new,
+    'uv': 'biometric', 'be': False, 'sign_count': 0,
+})
+Path('$IO2').write_text('ok')
+" &
+INTER_ENROLL_PID=$!
+
+wait "$INTER_VERIFY_PID" "$INTER_ENROLL_PID"
+
+inter_final="$(GWSA_ROOT="$RA_INTER" "$PY" -c "
+import json, os
+os.environ['GWSA_ROOT'] = '$RA_INTER'
+from gateway.remote_approval import enrollment_path
+data = json.loads(enrollment_path().read_text())
+print(sorted(data.keys()), data.get('credential_id'), data.get('sign_count'))
+")"
+inter_verify_out=$(cat "$IO1" 2>/dev/null)
+inter_enroll_out=$(cat "$IO2" 2>/dev/null)
+if [[ "$inter_enroll_out" == "ok" \
+   && "$inter_final" == "['aaguid', 'credential_id', 'public_key', 'sign_count'] cred-B 0" ]]; then
+  pass "remote_approval : entrelacement enroll ↔ vérif sous verrou — nouvel enrôlement jamais écrasé/corrompu (fiche 0083)"
+else
+  fail "remote_approval : entrelacement enroll ↔ vérif — enrôlement corrompu/écrasé (verify=$inter_verify_out enroll=$inter_enroll_out final=$inter_final)"
+fi
+
 # --- Bilan ------------------------------------------------------------------
 
 printf '\n\033[1mBilan : %d réussis, %d échoués\033[0m\n' "$PASS" "$FAIL"

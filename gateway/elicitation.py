@@ -6,7 +6,6 @@ En tests / CI (Linux) : GWSA_ELICITATION_MOCK=1 + clé HMAC dans .elicitation/mo
 from __future__ import annotations
 
 import base64
-import fcntl
 import hashlib
 import hmac
 import json
@@ -14,10 +13,10 @@ import os
 import secrets
 import subprocess
 import time
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from ._filelock import file_lock
 from .config import PRODUCT_SLUG, REPO_DIR, SYS_PYTHON, gwsa_root
 
 ELICITATION_DIR_NAME = ".elicitation"
@@ -51,28 +50,6 @@ def elicitation_dir() -> Path:
     except OSError:
         pass
     return d
-
-
-@contextmanager
-def _file_lock(path: Path):
-    """Verrou inter-process POSIX (`flock`) générique sur un lockfile dédié.
-
-    Réutilisé par `consume_nonce` (anti-rejeu, fiche 0084) et par la
-    vérification du sign_count passkey (fiche 0083) : les deux protègent un
-    cycle read-modify-write (reload → check → save) contre une course
-    TOCTOU entre process concurrents (Touch ID local + approbation distante
-    passkey empruntent le même chemin `consume_nonce`).
-    """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(path), os.O_CREAT | os.O_RDWR, 0o600)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
-        yield
-    finally:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        finally:
-            os.close(fd)
 
 
 def public_key_path() -> Path:
@@ -256,7 +233,7 @@ def consume_nonce(nonce: str, *, expires_at: int) -> None:
     # passkey distante brûlent leur nonce par ce même chemin). Le rechargement
     # DOIT se faire sous le verrou — jamais réutiliser un état chargé avant
     # l'acquisition, sous peine de revalider la course qu'on cherche à fermer.
-    with _file_lock(nonces_lock_path()):
+    with file_lock(nonces_lock_path()):
         # Ré-vérifier l'expiration SOUS le verrou (revue Codex PR #125) : l'attente
         # d'acquisition du verrou peut franchir expires_at ; sans ce re-check, un
         # défi expiré PENDANT l'attente serait consommé. Temps frais, sous le verrou.
