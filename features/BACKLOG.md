@@ -57,7 +57,7 @@
 | 0072 | Site de doc en ligne (MkDocs Material + landing) déployé sur Vercel | feature | P2 |  | 0017 | ✅ shipped | #79 |
 | 0076 | Droits par session (Phase A desktop) — identité par consentement, jeton porté, config fine | feature | P2 |  | 0082 | ✅ shipped | #108, #110 |
 | 0081 | Durcir updater/deploy — rollback à travers le renommage mag & liens PATH cassés | bug | P2 |  |  | 🔴 todo |  |
-| 0083 | Durcir la couche d'approbation passkey distante (suite revue Codex #113) | feature | P2 |  | 0077 | 🔴 todo |  |
+| 0083 | Durcir la couche d'approbation passkey distante (suite revue Codex #113) | feature | P2 |  | 0077 | ✅ shipped | #126 |
 | 0084 | Durcir consume_nonce contre une course TOCTOU inter-process (anti-rejeu partagé) | bug | P2 |  |  | ✅ shipped | #125 |
 | 0086 | Raffinements audit + migration de la couche capacités de session (suite revue PR #118) | bug | P2 |  | 0082 | 🔴 todo |  |
 | 0087 | install.sh — brancher les clients LLM en opt-in (pas opt-out) | feature | P2 |  |  | ✅ shipped | #123 |
@@ -90,4 +90,4 @@
 | 0028 | Ménage des versions déployées (+ CHANGELOG et releases GitHub) | chore | P3 |  |  | 💡 idea |  |
 | 0034 | Mettre à jour le protocole du test manuel drive-2-comptes (limites périmées + nouvelles phases) | chore | P3 |  |  | 💡 idea |  |
 
-> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0020, 0022, 0023, 0024, 0025, 0027, 0029, 0030, 0031, 0032, 0036, 0037, 0040, 0041, 0043, 0044, 0047, 0059, 0061, 0062, 0063, 0064, 0065, 0066, 0067, 0068, 0069, 0071, 0072, 0076, 0078, 0080, 0084, 0085, 0087, 0088.
+> Livrées (`done/`) : 0002, 0004, 0005, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0020, 0022, 0023, 0024, 0025, 0027, 0029, 0030, 0031, 0032, 0036, 0037, 0040, 0041, 0043, 0044, 0047, 0059, 0061, 0062, 0063, 0064, 0065, 0066, 0067, 0068, 0069, 0071, 0072, 0076, 0078, 0080, 0083, 0084, 0085, 0087, 0088.
