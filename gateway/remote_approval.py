@@ -21,6 +21,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from ._filelock import file_lock
 from .approval_channel import ApprovalChannel
 from .config import gwsa_root
 from .elicitation import (
@@ -33,7 +34,26 @@ from .elicitation import (
 
 REMOTE_APPROVAL_DIR_NAME = ".remote-approval"
 ENROLLMENT_NAME = "phone.json"
+ENROLLMENT_LOCK_NAME = "phone.lock"
 PENDING_DIR_NAME = "pending"
+
+_TEST_RACE_DELAY_ENV = "GWSA_REMOTE_APPROVAL_TEST_RACE_DELAY_MS"
+
+
+def _test_race_delay() -> None:
+    """Hook de test (fiche 0083) : injecte un délai déterministe DANS la
+    section critique (reload → check sign_count → save) pour rendre une
+    course TOCTOU inter-process reproductible de façon fiable en test
+    hermétique multi-process. Inactif tant que la variable d'env n'est pas
+    positionnée (jamais en production) — cf. `elicitation._test_race_delay`,
+    même gabarit (fiche 0084)."""
+    raw = os.environ.get(_TEST_RACE_DELAY_ENV, "").strip()
+    if not raw:
+        return
+    try:
+        time.sleep(float(raw) / 1000.0)
+    except ValueError:
+        pass
 
 
 class RemoteApprovalError(Exception):
@@ -52,6 +72,17 @@ def remote_approval_dir() -> Path:
 
 def enrollment_path() -> Path:
     return remote_approval_dir() / ENROLLMENT_NAME
+
+
+def enrollment_lock_path() -> Path:
+    """Lockfile dédié, co-localisé avec `phone.json` (fiche 0083).
+
+    Protège le cycle reload → check sign_count → save de tous les writers
+    (`enroll_phone`, `close_remote_challenge`, `run_remote_approval_gate`)
+    contre une course TOCTOU inter-process : deux `gwsa … --remote`
+    concurrents ne doivent jamais charger le même `sign_count` périmé et
+    l'écraser tous les deux (anti-clonage passkey contourné)."""
+    return remote_approval_dir() / ENROLLMENT_LOCK_NAME
 
 
 def pending_dir() -> Path:
@@ -162,9 +193,14 @@ def close_remote_challenge(challenge_id: str, assertion: dict[str, Any]) -> dict
     vérification de signature, donc un 2ᵉ `close_remote_challenge` sur le même
     `challenge_id` échoue systématiquement (anti-rejeu, en plus du registre de
     nonce partagé avec le Touch ID).
+
+    Anti-clonage TOCTOU (fiche 0083) : l'enrôlement est rechargé FRAIS SOUS le
+    verrou `enrollment_lock_path()`, juste avant la vérification de signature
+    — jamais l'objet chargé plus haut (avant acquisition), sous peine de
+    revalider la course qu'on cherche à fermer entre deux `close_remote_challenge`
+    concurrents (deux `gwsa … --remote` en parallèle).
     """
-    enrollment = load_enrollment()
-    if enrollment is None:
+    if load_enrollment() is None:
         raise RemoteApprovalError(
             "aucune passkey téléphone enrôlée — exécuter : "
             "scripts/remote-approval-cli.py enroll"
@@ -185,8 +221,15 @@ def close_remote_challenge(challenge_id: str, assertion: dict[str, Any]) -> dict
     except ValueError:
         raise RemoteApprovalError("défi distant corrompu — action refusée") from None
     envelope = ChallengeEnvelope(payload=payload, prompt=prompt_from_payload(payload))
-    if not verify_assertion(envelope, assertion, enrollment):
-        raise RemoteApprovalError("assertion distante invalide — action refusée")
+    with file_lock(enrollment_lock_path()):
+        enrollment = load_enrollment()
+        if enrollment is None:
+            raise RemoteApprovalError(
+                "aucune passkey téléphone enrôlée — exécuter : "
+                "scripts/remote-approval-cli.py enroll"
+            )
+        if not verify_assertion(envelope, assertion, enrollment):
+            raise RemoteApprovalError("assertion distante invalide — action refusée")
     consume_nonce(str(envelope.payload["nonce"]), expires_at=int(envelope.payload["expires_at"]))
     log_receipt(envelope.payload, f"remote-passkey:{enrollment.credential_id}")
     return envelope.payload
@@ -219,7 +262,11 @@ def enroll_phone(registration: dict[str, Any]) -> PhoneEnrollment:
         public_key=public_key,
         sign_count=int(registration.get("sign_count") or 0),
     )
-    _save_enrollment(enrollment)
+    # Même verrou que les vérifieurs (fiche 0083) : un enrôlement pendant la
+    # fenêtre verrouillée d'une vérification concurrente doit attendre — ni
+    # écraser un sign_count en cours de mise à jour, ni être écrasé par elle.
+    with file_lock(enrollment_lock_path()):
+        _save_enrollment(enrollment)
     return enrollment
 
 
@@ -331,6 +378,7 @@ def verify_assertion(
         sign_count = int(auth.get("sign_count"))
     except (TypeError, ValueError):
         return False
+    _test_race_delay()  # hook de test (fiche 0083) — inactif hors test
     if sign_count <= enrollment.sign_count:
         return False  # anti-clonage : sign_count doit strictement croître
     if int(time.time()) > int(envelope.payload.get("expires_at") or 0):
@@ -355,8 +403,7 @@ def run_remote_approval_gate(
     exécuter avec cette valeur, jamais avec la `session_id` annoncée dans
     `fields` (ADR-0009 §5 / CA7 : interdit le rejeu cross-session).
     """
-    enrollment = load_enrollment()
-    if enrollment is None:
+    if load_enrollment() is None:
         raise RemoteApprovalError(
             "aucune passkey téléphone enrôlée — exécuter : "
             "scripts/remote-approval-cli.py enroll"
@@ -368,8 +415,17 @@ def run_remote_approval_gate(
         raise RemoteApprovalError(
             "aucune réponse du téléphone (refus, timeout ou canal indisponible) — action refusée"
         )
-    if not verify_assertion(envelope, assertion, enrollment):
-        raise RemoteApprovalError("assertion distante invalide — action refusée")
+    # Anti-clonage TOCTOU (fiche 0083) : reload FRAIS sous le verrou, jamais
+    # l'objet chargé plus haut — même raisonnement que `close_remote_challenge`.
+    with file_lock(enrollment_lock_path()):
+        enrollment = load_enrollment()
+        if enrollment is None:
+            raise RemoteApprovalError(
+                "aucune passkey téléphone enrôlée — exécuter : "
+                "scripts/remote-approval-cli.py enroll"
+            )
+        if not verify_assertion(envelope, assertion, enrollment):
+            raise RemoteApprovalError("assertion distante invalide — action refusée")
     consume_nonce(str(envelope.payload["nonce"]), expires_at=int(envelope.payload["expires_at"]))
     log_receipt(envelope.payload, f"remote-passkey:{enrollment.credential_id}")
     return envelope.payload
