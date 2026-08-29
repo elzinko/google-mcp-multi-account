@@ -76,7 +76,7 @@ nav:
   - Accueil: index.md
   - Démarrer:
       - Prise en main: demarrer.md
-      - Prérequis — OAuth / Google Cloud: setup-oauth.md
+      - Prérequis: setup-oauth.md
       - Installer & mettre à jour: mcp-setup.md
   - Configurer:
       - Brancher un client LLM: configurer-client.md
