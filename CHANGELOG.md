@@ -1,5 +1,65 @@
 # Journal des versions
 
+## v1.1.0 — 2026-08-29
+
+### Fonctionnalités
+
+- feat(install): brancher les clients LLM en opt-in, pas opt-out (#123)
+- feat(0085): figer unlock + zones Drive à la création d'une sous-session (isolation complète) (#119)
+- feat(0080): durcir la couche capacités fines de session (suite revue Codex #110) (#118)
+- feat(0078): approbation par passkey distante depuis le téléphone (POC holder Mac) (#113)
+- feat(admin): reprise UX refresh admin (épic 0060) — split propre de #84 (#112)
+- feat(0076): droits par session — implémentation Phase A (jeton porté, capacités fines signées)
+
+### Corrections
+
+- fix(remote_approval): verrou partagé inter-process contre le TOCTOU anti-clonage sign_count (#126)
+- fix(elicitation): verrou inter-process sur consume_nonce contre une course TOCTOU (#125)
+- fix(install): aide --help robuste sous « curl | bash » (#124)
+- fix(security): borne la taille des pièces jointes Gmail + doc partage/PJ (fiche 0074) (#107)
+- fix(install): préflight « gws » bloquant + commande copiable (fiche 0074) (#106)
+
+### Documentation
+
+- docs(nav): raccourcir « Prérequis — OAuth / Google Cloud » en « Prérequis »
+- docs: ajoute ALTERNATIVES.md (projets similaires / veille)
+- docs(backlog): fiches 0089-0093 — profil OAuth, statut OAuth, DX updater, bascule gwsa→mag, cohérence nommage
+- docs(backlog): ship 0083 (verrou anti-clonage sign_count) — PR #126 → done/
+- docs: règle d'écriture claire (En clair d'abord)
+- docs(backlog): ship 0084 (verrou consume_nonce TOCTOU) — PR #125 → done/
+- docs: références fiches en chemins locaux, pas d'URL GitHub (fix mkdocs --strict) (#122)
+- docs(backlog): ship 0088 (aide install.sh robuste curl|bash) — PR #124 → done/
+- docs(backlog): ship 0087 (installeur opt-in) — PR #123 → done/
+- docs: aligner README + cartes index sur le split CLI / Admin web (#120) (#121)
+- docs: toilettage du site — nav (policy→Sécurité, CLI/Admin), mag help, cartes cliquables, wording clients (#120)
+- docs(backlog): fiche 0087 — brancher les clients LLM en opt-in dans install.sh
+- docs(backlog): ship 0085 (figer unlock+zones à la création de sous-session) — PR #119 → done/
+- docs(backlog): normaliser pr: de 0080 en guillemets doubles (#118 dans l'index)
+- docs(backlog): ship 0080 (durcir capacités fines de session) — PR #118 → done/
+- docs(backlog): fiche 0086 — raffinements audit + migration capacités session (suite revue #118)
+- docs(backlog): fiche 0085 — figer unlock+zones à la création de sous-session (finding revue 0080)
+- docs(backlog): tampon ready sur 0080 (concurrence ezk-pm) — 1er sprint du build
+- docs(backlog): fiches 0083 (passkey) + 0084 (consume_nonce TOCTOU) + migration Skema v2 (#115)
+- docs(backlog): épic ombrelle 0082 « droits par session » (rattache 0045/0076/0080) (#117)
+- docs(backlog): ship épic 0060 — fiches 0061-0069 → done/ (#112) (#116)
+- docs(backlog): fiche 0078 livrée (shipped, PR #113) → done/
+- docs(sessions): archive session 2026-08-16 droits-par-session-0076
+- docs(backlog): classe la fiche 0076 en done/ (shipped #110)
+- docs(0076): fiche droits par session livrée (shipped, PR #110) (#111)
+- docs(archi): accès mobile souverain — ADR-0008 + comparateur + épic 0077/0078 (#109)
+- docs(0076): droits par session — ADR-0007 + fiche Phase A (#108)
+- docs: unifie l'install par client (page Configurer) + OAuth en préalable + gwsa→gma (#105)
+
+### Autres
+
+- chore: gitignore .vercel/ (artefact CLI Vercel)
+- chore(cli): renommer la commande gma → mag (collision oh-my-zsh) (#114)
+- chore(deps): bump actions/setup-python from 5 to 7 (#104)
+- chore(deps): bump actions/configure-pages from 5 to 6 (#103)
+- chore(deps): bump actions/checkout from 4 to 7 (#102)
+- chore(deps): bump actions/deploy-pages from 4 to 5 (#101)
+- chore(deps): bump actions/upload-pages-artifact from 3 to 5 (#100)
+
 ## v1.0.1 — 2026-08-09
 
 ### Corrections
