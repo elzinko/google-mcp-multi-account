@@ -285,6 +285,23 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
 .sess-meta { font-size:12.5px; color:var(--mut); margin:4px 0 6px; }
 .sess-caps { font-size:13px; margin:4px 0; }
 .sess-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+/* Vue Sessions plein écran (fiche 0094) — page dédiée (plus de place), grille de
+   cartes, indicateur « en direct » quand l'auto-rafraîchissement tourne. */
+body.view-sessions main { max-width:1150px; }
+.page-head { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:2px 0 12px; }
+.page-head h2 { margin:0; font-size:19px; }
+.page-head .spacer { flex:1 1 auto; }
+button.back { color:var(--acc); border-color:color-mix(in srgb,var(--acc) 30%,var(--line)); }
+.live { display:inline-flex; align-items:center; gap:6px; font-size:12.5px;
+  color:var(--ok); background:var(--okbg); border-radius:99px; padding:3px 11px; }
+.live .dot { width:8px; height:8px; border-radius:50%; background:var(--ok);
+  animation:livePulse 1.8s ease-in-out infinite; }
+.live.stale { color:var(--mut); background:var(--bg); border:1px solid var(--line); }
+.live.stale .dot { background:var(--mut); animation:none; }
+@keyframes livePulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.35; transform:scale(.65); } }
+.sess-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:12px; align-items:start; }
+.sess-grid > .note { grid-column:1/-1; }
+.sess-grid .sess-card { margin:0; }
 /* dialogues de confirmation (verrouillage, etc.) */
 @keyframes dlg-in { from { opacity:0; transform:translateY(10px) scale(.97); } to { opacity:1; transform:none; } }
 @keyframes dlg-backdrop-in { from { opacity:0; } to { opacity:1; } }
@@ -375,6 +392,19 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
   <div class="add-account-row">
     <button type="button" id="btnAdd" class="btn-add" onclick="openAdd()">＋ Connecter un compte</button>
   </div>
+  <section id="sessionsPage" hidden>
+    <div class="page-head">
+      <button type="button" class="back" onclick="closeSessions()">← Comptes</button>
+      <h2>Sessions LLM</h2>
+      <span id="sessLive" class="live" title="La liste se met à jour toute seule"><span class="dot" aria-hidden="true"></span>en direct</span>
+      <span class="spacer"></span>
+      <button type="button" class="small" onclick="refreshSessions()">Rafraîchir</button>
+    </div>
+    <p class="note">Chaque conversation MCP a ses propres unlock / zones (registre
+      <span class="mono">.sessions/</span>). Unlock ou grant ici = <b>cette session seulement</b>
+      (élicitation signée si strongauth). Fermer le client MCP purge la session.</p>
+    <div id="sessBody" class="sess-grid">Chargement…</div>
+  </section>
 </main>
 
 <dialog id="dAdd">
@@ -439,16 +469,6 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
     <button class="danger" onclick="doUnlock('off')">Retirer le verrou</button>
   </div>
   <div class="mtop"><button onclick="dUnlock.close()">Annuler</button></div>
-</dialog>
-
-<dialog id="dSessions">
-  <h2>Sessions LLM</h2>
-  <p class="note">Chaque conversation MCP a ses propres unlock / zones (registre
-    <span class="mono">.sessions/</span>). Unlock ou grant ici = <b>cette session seulement</b>
-    (élicitation signée si strongauth). Fermer le client MCP purge la session.</p>
-  <div id="sessBody" style="max-height:55vh;overflow:auto">Chargement…</div>
-  <div class="mtop"><button onclick="refreshSessions()">Rafraîchir</button>
-    <button onclick="dSessions.close()">Fermer</button></div>
 </dialog>
 
 <dialog id="dSessUnlock">
@@ -920,15 +940,24 @@ function capsHtml(key, rules, hasPolicy) {
   }).join("");
 }
 function render() { rerender(); finishLockExpand(); }
-function rerender() { (VIEW.mode === "detail" && byAlias(VIEW.alias)) ? renderDetail(VIEW.alias) : renderList(); }
+function rerender() {
+  // La vue Sessions se pilote seule (openSessions / refreshSessions) ; le poll des
+  // profils ne doit pas la refermer en repassant sur la liste des comptes.
+  if (VIEW.mode === "sessions") return;
+  (VIEW.mode === "detail" && byAlias(VIEW.alias)) ? renderDetail(VIEW.alias) : renderList();
+}
 // Chrome hors #cards à accorder au mode de vue (fiche 0065 : masquer le CTA
 // « + Connecter un compte » en vue détail — un compte est déjà ouvert).
 // Appelé par renderList()/renderDetail() eux-mêmes : toute entrée en vue
 // (clic openDetail, retour, refresh) est couverte, sans dépendre de rerender().
 function syncChrome() {
+  const sessions = VIEW.mode === "sessions";
   const detail = VIEW.mode === "detail";
+  document.body.classList.toggle("view-sessions", sessions);
+  const cards = $("cards"); if (cards) cards.hidden = sessions;
+  const page = $("sessionsPage"); if (page) page.hidden = !sessions;
   const addRow = document.querySelector(".add-account-row");
-  if (addRow) addRow.hidden = detail;
+  if (addRow) addRow.hidden = detail || sessions;
 }
 // Menu overflow « ⋯ » du header (refonte) : les outils avancés (développement,
 // santé du setup) vivent dans un menu déroulant standard, pas un toggle qui
@@ -945,7 +974,12 @@ function closeMore() {
   $("moreBtn").setAttribute("aria-expanded", "false");
 }
 document.addEventListener("click", (e) => { if (!e.target.closest(".hmenu")) closeMore(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMore(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  closeMore();
+  // Échap ferme d'abord une sous-modale ouverte (natif) ; sinon quitte la page Sessions.
+  if (VIEW.mode === "sessions" && !document.querySelector("dialog[open]")) closeSessions();
+});
 function finishLockExpand() {
   const pending = document.querySelectorAll(".lockchip[data-pending-expand]");
   if (!pending.length) return;
@@ -1129,10 +1163,27 @@ function fillAliasSelect(sel) {
     '<option value="' + esc(p.alias) + '">' + esc(p.alias) + (p.email ? " — " + esc(p.email) : "") + "</option>"
   ).join("") || '<option value="">(aucun profil)</option>';
 }
-async function openSessions() {
+let sessTimer = null, SESS_LAST = "";
+function openSessions() {
+  VIEW = { mode: "sessions", alias: null };
+  SESS_LAST = "";
+  syncChrome();
   $("sessBody").innerHTML = "Chargement…";
-  dSessions.showModal();
-  await refreshSessions();
+  refreshSessions();
+  // Auto-rafraîchissement tant que la page Sessions est ouverte (plus de clic manuel).
+  if (sessTimer) clearInterval(sessTimer);
+  sessTimer = setInterval(() => { if (VIEW.mode === "sessions") refreshSessions(); }, 3000);
+}
+function closeSessions() {
+  if (sessTimer) { clearInterval(sessTimer); sessTimer = null; }
+  renderList(); // repasse VIEW en liste des comptes + syncChrome
+}
+function setSessLive(ok) {
+  const el = $("sessLive");
+  if (!el) return;
+  el.classList.toggle("stale", !ok);
+  // Le dernier nœud est le libellé texte (après la pastille .dot).
+  el.lastChild.textContent = ok ? "en direct" : "hors ligne";
 }
 async function refreshSessions() {
   try {
@@ -1140,8 +1191,13 @@ async function refreshSessions() {
       try { PROFILES = (await api("/api/profiles")).profiles; } catch {}
     }
     SESSIONS = (await api("/api/sessions")).sessions || [];
-    renderSessions();
+    // Ne re-rend que si les données ont bougé : évite le saut visuel à chaque poll
+    // (règle no-layout-shift de l'UX admin).
+    const j = JSON.stringify(SESSIONS);
+    if (j !== SESS_LAST) { SESS_LAST = j; renderSessions(); }
+    setSessLive(true);
   } catch (e) {
+    setSessLive(false);
     $("sessBody").innerHTML = '<p class="note">Erreur : ' + esc(e.message) + "</p>";
   }
 }
