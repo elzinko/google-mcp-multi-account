@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>google-multi-account — admin</title>
 <style>
-:root { --bg:#f6f5f0; --card:#fff; --txt:#222; --mut:#71706b; --line:#dedcd3;
+:root { --bg:#f6f5f0; --card:#fff; --txt:#222; --mut:#63625d; --line:#dedcd3;
   --ok:#0f6e56; --okbg:#e1f5ee; --warn:#854f0b; --warnbg:#faeeda;
   --bad:#a32d2d; --badbg:#fcebeb; --acc:#534ab7; --accbg:#eeedfe; }
 /* Échelles design system (fiche 0095, ADR-0010) — neutres au thème : le bloc
@@ -70,7 +70,7 @@ button.hbtn-icon svg { width:16px; height:16px; display:block; }
 .b-ok   { background:var(--okbg);   color:var(--ok); }
 .b-warn { background:var(--warnbg); color:var(--warn); }
 .b-bad  { background:var(--badbg);  color:var(--bad); }
-.b-mut  { background:var(--bg); color:var(--mut); border:1px solid var(--line); }
+.b-mut  { background:color-mix(in srgb, var(--txt) 6%, transparent); color:var(--mut); border:1px solid var(--line); }
 #verBadge { font-family:ui-monospace, monospace; font-size:13px; font-weight:700;
   background:var(--accbg); color:var(--acc); border:1px solid color-mix(in srgb,var(--acc) 35%,transparent); }
 #ctxStrip { display:none; width:100%; padding:8px 22px; font-size:12.5px; border-bottom:1px solid var(--line);
@@ -90,7 +90,7 @@ button.hbtn-icon svg { width:16px; height:16px; display:block; }
   border-color:var(--acc); }
 #dDev { max-width:720px; }
 .devgrid { display:grid; gap:10px; }
-.devcard { border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:var(--bg); }
+.devcard { border:1px solid var(--line); border-radius:var(--r-md); padding:var(--sp-3); background:var(--card); }
 .devcard h3 { margin:0 0 6px; font-size:14px; }
 .devmeta { font-size:12.5px; color:var(--mut); display:grid; gap:2px; }
 .devtabs { margin:10px 0 12px; }
@@ -106,7 +106,7 @@ button.hbtn-icon svg { width:16px; height:16px; display:block; }
 .dev-summary-line { margin:2px 0; }
 .dev-summary-line .lbl { color:var(--mut); font-size:12.5px; min-width:52px; display:inline-block; }
 .sblist { display:grid; gap:8px; }
-.sbcard { border:1px solid var(--line); border-radius:10px; background:var(--bg); cursor:pointer; }
+.sbcard { border:1px solid var(--line); border-radius:var(--r-md); background:var(--card); cursor:pointer; }
 .sbcard:hover { border-color:var(--mut); }
 .sbcard-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 12px; }
 .sbcard-id { font-weight:600; font-size:13px; }
@@ -277,7 +277,9 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
 .drow { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .dmail { font-weight:700; font-size:17px; margin-right:auto; }
 .dbody { padding:15px 16px; }
-.plabel { font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--mut); margin:0 0 10px; }
+.plabel { font-size:var(--fs-caption); font-weight:var(--fw-semibold); letter-spacing:.09em; text-transform:uppercase; color:var(--mut); margin:0 0 10px; }
+.dsec-head { display:flex; align-items:baseline; justify-content:space-between; gap:var(--sp-3); margin-bottom:10px; }
+.dsec-head .plabel { margin:0; }
 .srow { display:grid; grid-template-columns:110px 1fr auto; align-items:center; gap:14px; padding:10px 0; border-top:1px solid var(--line); }
 .srow:first-of-type { border-top:0; }
 .sname { font-size:15px; font-weight:700; color:var(--acc); }
@@ -1127,8 +1129,7 @@ function renderDetail(alias) {
   const svcRow = (s) => {
     const rules = p.policy && p.policy[s.key];
     return '<div class="srow"><span class="sname">' + s.name + '</span><span class="caps">' +
-      capsHtml(s.key, rules, !!p.policy) + "</span>" +
-      '<span class="actions"><button class="small" onclick="openPolicy(\'' + alias + '\')">Configurer…</button></span></div>';
+      capsHtml(s.key, rules, !!p.policy) + "</span></div>";
   };
   const byKey = (k) => SVCDEF.find((s) => s.key === k);
   // Primaire = ce que l'assistant utilise via MCP aujourd'hui (Gmail + Drive).
@@ -1150,7 +1151,8 @@ function renderDetail(alias) {
     '<button class="back" onclick="renderList()" aria-label="Retour à la liste des comptes">' + BACK_ICON + "Comptes</button>" +
     '<div class="drow"><span class="dmail">' + esc(p.email || alias) + "</span>" +
       lockHtml(p) + "</div></div>" +
-    '<div class="dbody"><p class="plabel">Droits par application</p>' + primary + othersHtml +
+    '<div class="dbody"><div class="dsec-head"><p class="plabel">Droits par application</p>' +
+      '<button class="small" onclick="openPolicy(\'' + alias + '\')">Configurer les droits</button></div>' + primary + othersHtml +
     '<div class="danger"><div class="drx">' +
       "<p>Retirer ce compte de l'outil — réversible (reconnexion complète). L'impact s'affiche avant confirmation.</p>" +
       '<button class="danger small" onclick="openDisconnect(\'' + alias + '\')">Déconnecter…</button></div></div></div></div>';
