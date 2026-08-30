@@ -24,7 +24,7 @@
 body { margin:0; font:15px/1.55 -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--txt); }
 header { display:flex; align-items:center; gap:var(--sp-3); flex-wrap:wrap; padding:var(--sp-3) var(--sp-5); border-bottom:1px solid var(--line); }
 /* Barre de navigation (fiche 0103) : identité · navigation · outils. */
-.brand { display:inline-flex; align-items:center; gap:var(--sp-2); }
+.brand { display:inline-flex; align-items:center; gap:var(--sp-2); min-width:0; }
 .nav { display:inline-flex; align-items:center; gap:4px; }
 .tools { display:inline-flex; align-items:center; gap:6px; margin-left:auto; }
 .navbtn { border:1px solid transparent; background:transparent; color:var(--mut);
@@ -32,7 +32,24 @@ header { display:flex; align-items:center; gap:var(--sp-3); flex-wrap:wrap; padd
 .navbtn:hover { color:var(--txt); border-color:transparent; background:color-mix(in srgb, var(--txt) 6%, transparent); }
 .navbtn[aria-current="page"] { background:var(--accbg); color:var(--acc);
   border-color:color-mix(in srgb,var(--acc) 30%,var(--line)); font-weight:var(--fw-semibold); }
-h1 { font-size:19px; font-weight:600; margin:0 auto 0 0; letter-spacing:-.01em; }
+.navmenu.hmenu { display:none; }
+.menu-sep { height:1px; background:var(--line); margin:4px 0; }
+.hmenu-pop button[aria-current="page"] { color:var(--acc); font-weight:var(--fw-semibold); }
+/* App shell responsive (fiche 0104) : hamburger + top-bar mobile (< 640px). */
+@media (max-width:639px){
+  header { padding:var(--sp-3) var(--sp-4); gap:var(--sp-2); }
+  .brand-name { display:none; }
+  .h1-sub { color:var(--txt); font-weight:var(--fw-semibold); }
+  .h1-sub::before { content:"◧ "; color:var(--acc); }
+  #verBadge { display:none; }
+  .nav { display:none; }
+  .tools > .hbtn-icon[aria-label="Documentation"] { display:none; }
+  .tools > .hmenu:not(.navmenu) { display:none; }
+  .navmenu.hmenu { display:inline-flex; }
+  .hbtn-icon { min-width:44px; min-height:44px; }
+}
+h1 { font-size:var(--fs-h2); font-weight:var(--fw-semibold); margin:0; letter-spacing:-.01em;
+  min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .h1-sub { color:var(--mut); font-weight:400; }
 .hmenu { position:relative; display:inline-flex; }
 .hmenu-pop { position:absolute; top:calc(100% + 6px); right:0; z-index:50; min-width:212px;
@@ -71,8 +88,9 @@ button.hbtn-icon svg { width:16px; height:16px; display:block; }
 .b-warn { background:var(--warnbg); color:var(--warn); }
 .b-bad  { background:var(--badbg);  color:var(--bad); }
 .b-mut  { background:color-mix(in srgb, var(--txt) 6%, transparent); color:var(--mut); border:1px solid var(--line); }
-#verBadge { font-family:ui-monospace, monospace; font-size:13px; font-weight:700;
-  background:var(--accbg); color:var(--acc); border:1px solid color-mix(in srgb,var(--acc) 35%,transparent); }
+#verBadge { font-family:ui-monospace, monospace; font-size:var(--fs-caption); font-weight:var(--fw-medium);
+  background:color-mix(in srgb, var(--txt) 6%, transparent); color:var(--mut); border:1px solid var(--line);
+  max-width:22ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #ctxStrip { display:none; width:100%; padding:8px 22px; font-size:12.5px; border-bottom:1px solid var(--line);
   background:color-mix(in srgb,var(--warnbg) 70%,transparent); color:var(--warn); }
 #ctxStrip.show { display:block; }
@@ -427,8 +445,7 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
 <body>
 <header>
   <div class="brand">
-    <h1>google-multi-account <span class="h1-sub">— admin</span></h1>
-    <span id="verBadge" class="badge" title="Version du code servi par cette admin">…</span>
+    <h1><span class="brand-name">google-multi-account</span> <span class="h1-sub">— admin</span></h1>
   </div>
   <nav class="nav" aria-label="Navigation principale">
     <button type="button" class="navbtn" data-view="comptes" onclick="goComptes()">Comptes</button>
@@ -445,6 +462,19 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
         <button role="menuitem" onclick="closeMore();openSetup()">🩺 Santé du setup</button>
       </div>
     </div>
+    <div class="navmenu hmenu">
+      <button class="hbtn-icon" id="burgerBtn" onclick="toggleBurger(event)" aria-haspopup="true" aria-expanded="false" title="Menu" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+      <div class="hmenu-pop" id="burgerPop" role="menu" hidden>
+        <button role="menuitem" data-view="comptes" onclick="closeBurger();goComptes()">Comptes</button>
+        <button role="menuitem" data-view="sessions" onclick="closeBurger();openSessions()">Sessions</button>
+        <button role="menuitem" data-view="journal" onclick="closeBurger();openJournal()">Journal</button>
+        <div class="menu-sep" role="separator"></div>
+        <button role="menuitem" onclick="closeBurger();openDoc()">❓ Documentation</button>
+        <button role="menuitem" onclick="closeBurger();openDev()">🛠 Développement</button>
+        <button role="menuitem" onclick="closeBurger();openSetup()">🩺 Santé du setup</button>
+      </div>
+    </div>
+    <span id="verBadge" class="badge" title="Version du code servi par cette admin">…</span>
   </div>
 </header>
 <div id="ctxStrip" role="status"></div>
@@ -1055,7 +1085,7 @@ function syncChrome() {
 function syncNav() {
   const map = { list: "comptes", detail: "comptes", sessions: "sessions", journal: "journal" };
   const cur = map[VIEW.mode] || "comptes";
-  document.querySelectorAll(".navbtn").forEach((b) => {
+  document.querySelectorAll("[data-view]").forEach((b) => {
     if (b.dataset.view === cur) b.setAttribute("aria-current", "page");
     else b.removeAttribute("aria-current");
   });
@@ -1080,10 +1110,22 @@ function closeMore() {
   $("morePop").hidden = true;
   $("moreBtn").setAttribute("aria-expanded", "false");
 }
-document.addEventListener("click", (e) => { if (!e.target.closest(".hmenu")) closeMore(); });
+// Menu hamburger mobile (fiche 0104) : navigation + outils repliés sous 640px.
+function toggleBurger(e) {
+  if (e) e.stopPropagation();
+  const pop = $("burgerPop"), show = pop.hasAttribute("hidden");
+  pop.hidden = !show;
+  $("burgerBtn").setAttribute("aria-expanded", show ? "true" : "false");
+}
+function closeBurger() {
+  if ($("burgerPop").hidden) return;
+  $("burgerPop").hidden = true;
+  $("burgerBtn").setAttribute("aria-expanded", "false");
+}
+document.addEventListener("click", (e) => { if (!e.target.closest(".hmenu")) { closeMore(); closeBurger(); } });
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
-  closeMore();
+  closeMore(); closeBurger();
   // Échap ferme d'abord une sous-modale ouverte (natif) ; sinon quitte la page en cours.
   if (!document.querySelector("dialog[open]")) {
     if (VIEW.mode === "sessions") closeSessions();
