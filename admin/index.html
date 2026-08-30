@@ -8,6 +8,14 @@
 :root { --bg:#f6f5f0; --card:#fff; --txt:#222; --mut:#71706b; --line:#dedcd3;
   --ok:#0f6e56; --okbg:#e1f5ee; --warn:#854f0b; --warnbg:#faeeda;
   --bad:#a32d2d; --badbg:#fcebeb; --acc:#534ab7; --accbg:#eeedfe; }
+/* Échelles design system (fiche 0095, ADR-0010) — neutres au thème : le bloc
+   sombre ci-dessous ne redéfinit QUE des couleurs. */
+:root {
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px; --sp-8:32px;
+  --fs-caption:12px; --fs-small:13px; --fs-body:15px; --fs-strong:16px; --fs-h2:18px; --fs-h1:20px;
+  --r-xs:6px; --r-sm:8px; --r-md:10px; --r-lg:12px; --r-xl:16px; --r-pill:999px;
+  --fw-medium:500; --fw-semibold:600;
+  --elev-1:0 8px 24px rgba(0,0,0,.16); --elev-2:0 20px 48px rgba(0,0,0,.28); }
 @media (prefers-color-scheme: dark) {
   :root { --bg:#1d1d1b; --card:#2a2a27; --txt:#eceae2; --mut:#a3a199; --line:#44443f;
     --ok:#5dcaa5; --okbg:#0a3b2e; --warn:#fac775; --warnbg:#41310a;
@@ -279,12 +287,16 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
 .danger .drx { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .danger p { margin:0; font-size:12.5px; color:var(--mut); flex:1; min-width:180px; }
 /* Sessions LLM (fiche 0040) */
-.sess-card { border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin:8px 0; background:var(--bg); }
-.sess-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-.sess-id { font-family:ui-monospace,monospace; font-size:12.5px; font-weight:700; }
-.sess-meta { font-size:12.5px; color:var(--mut); margin:4px 0 6px; }
-.sess-caps { font-size:13px; margin:4px 0; }
-.sess-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+/* Carte de session (fiches 0094/0099) : fond carte + tokens + hauteur régulière
+   (flex colonne, actions ancrées en bas → cartes alignées). */
+.sess-card { border:1px solid var(--line); border-radius:var(--r-lg); padding:var(--sp-4);
+  margin:var(--sp-2) 0; background:var(--card); display:flex; flex-direction:column;
+  gap:var(--sp-2); min-height:132px; }
+.sess-head { display:flex; align-items:center; gap:var(--sp-2); flex-wrap:wrap; }
+.sess-id { font-family:ui-monospace,monospace; font-size:var(--fs-small); font-weight:var(--fw-semibold); }
+.sess-meta { font-size:var(--fs-caption); color:var(--mut); }
+.sess-caps { font-size:var(--fs-small); display:flex; flex-wrap:wrap; gap:6px; }
+.sess-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; }
 /* Vue Sessions plein écran (fiche 0094) — page dédiée (plus de place), grille de
    cartes, indicateur « en direct » quand l'auto-rafraîchissement tourne. */
 body.view-sessions main { max-width:1150px; }
@@ -299,9 +311,27 @@ button.back { color:var(--acc); border-color:color-mix(in srgb,var(--acc) 30%,va
 .live.stale { color:var(--mut); background:var(--bg); border:1px solid var(--line); }
 .live.stale .dot { background:var(--mut); animation:none; }
 @keyframes livePulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.35; transform:scale(.65); } }
-.sess-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:12px; align-items:start; }
+.sess-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:12px; align-items:stretch; }
 .sess-grid > .note { grid-column:1/-1; }
-.sess-grid .sess-card { margin:0; }
+.sess-grid .sess-card { margin:0; height:100%; }
+/* Contrôles Sessions (fiche 0099) : tri + bascule liste/vignettes. */
+.sess-controls { display:inline-flex; align-items:center; gap:var(--sp-2); }
+.sess-controls label { font-size:var(--fs-caption); color:var(--mut); }
+.sess-controls select { font:inherit; font-size:var(--fs-small); padding:4px 8px;
+  border:1px solid var(--line); border-radius:var(--r-xs); background:var(--card); color:var(--txt); }
+.viewtoggle { display:inline-flex; border:1px solid var(--line); border-radius:var(--r-sm); overflow:hidden; }
+.viewtoggle button { border:0; border-radius:0; padding:5px 11px; background:var(--card); color:var(--mut); font-size:var(--fs-body); }
+.viewtoggle button[aria-pressed="true"] { background:var(--accbg); color:var(--acc); }
+/* Vue LISTE : rangées denses (id · capacités · actions). */
+.sess-list { display:flex; flex-direction:column; gap:6px; }
+.sess-list > .note { padding:var(--sp-3); }
+.sess-row { display:grid; grid-template-columns:minmax(150px,auto) 1fr auto; align-items:center;
+  gap:var(--sp-3); border:1px solid var(--line); border-radius:var(--r-md);
+  padding:var(--sp-2) var(--sp-3); background:var(--card); }
+.sess-row .sess-head { flex:0 0 auto; }
+.sess-row .sess-caps, .sess-row .sess-actions { margin:0; }
+.sess-row .sess-actions { justify-content:flex-end; }
+@media (max-width:640px) { .sess-row { grid-template-columns:1fr; } .sess-row .sess-actions { justify-content:flex-start; } }
 /* dialogues de confirmation (verrouillage, etc.) */
 @keyframes dlg-in { from { opacity:0; transform:translateY(10px) scale(.97); } to { opacity:1; transform:none; } }
 @keyframes dlg-backdrop-in { from { opacity:0; } to { opacity:1; } }
@@ -398,6 +428,18 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
       <h2>Sessions LLM</h2>
       <span id="sessLive" class="live" title="La liste se met à jour toute seule"><span class="dot" aria-hidden="true"></span>en direct</span>
       <span class="spacer"></span>
+      <span class="sess-controls">
+        <label for="sessSort">Trier</label>
+        <select id="sessSort" onchange="setSessSort(this.value)">
+          <option value="activity">Dernière activité</option>
+          <option value="client">Client</option>
+          <option value="caps">Nombre d'accès</option>
+        </select>
+      </span>
+      <span class="viewtoggle" role="group" aria-label="Affichage">
+        <button type="button" id="sessViewGrid" onclick="setSessLayout('grid')" title="Vignettes" aria-pressed="true" aria-label="Vue vignettes">▦</button>
+        <button type="button" id="sessViewList" onclick="setSessLayout('list')" title="Liste" aria-pressed="false" aria-label="Vue liste">☰</button>
+      </span>
       <button type="button" class="small" onclick="refreshSessions()">Rafraîchir</button>
     </div>
     <p class="note">Chaque conversation MCP a ses propres unlock / zones (registre
@@ -1164,10 +1206,34 @@ function fillAliasSelect(sel) {
   ).join("") || '<option value="">(aucun profil)</option>';
 }
 let sessTimer = null, SESS_LAST = "";
+// Tri + affichage de la page Sessions, mémorisés entre visites (fiche 0099).
+let SESS_SORT = (() => { try { return localStorage.getItem("gwsaSessSort") || "activity"; } catch { return "activity"; } })();
+let SESS_LAYOUT = (() => { try { return localStorage.getItem("gwsaSessLayout") === "list" ? "list" : "grid"; } catch { return "grid"; } })();
+function setSessSort(v) {
+  SESS_SORT = v;
+  try { localStorage.setItem("gwsaSessSort", v); } catch {}
+  renderSessions();
+}
+function setSessLayout(v) {
+  SESS_LAYOUT = v === "list" ? "list" : "grid";
+  try { localStorage.setItem("gwsaSessLayout", SESS_LAYOUT); } catch {}
+  renderSessions();
+}
+function syncSessControls() {
+  const sel = $("sessSort"); if (sel) sel.value = SESS_SORT;
+  const g = $("sessViewGrid"), l = $("sessViewList");
+  if (g) g.setAttribute("aria-pressed", SESS_LAYOUT === "grid" ? "true" : "false");
+  if (l) l.setAttribute("aria-pressed", SESS_LAYOUT === "list" ? "true" : "false");
+}
+function sessCapsCount(s) {
+  return Object.keys(s.unlocks || {}).length +
+    Object.values(s.drive_zones || {}).reduce((n, zs) => n + (Array.isArray(zs) ? zs.length : 0), 0);
+}
 function openSessions() {
   VIEW = { mode: "sessions", alias: null };
   SESS_LAST = "";
   syncChrome();
+  syncSessControls();
   $("sessBody").innerHTML = "Chargement…";
   refreshSessions();
   // Auto-rafraîchissement tant que la page Sessions est ouverte (plus de clic manuel).
@@ -1201,35 +1267,67 @@ async function refreshSessions() {
     $("sessBody").innerHTML = '<p class="note">Erreur : ' + esc(e.message) + "</p>";
   }
 }
+function sortedSessions() {
+  const arr = SESSIONS.slice();
+  if (SESS_SORT === "client") {
+    arr.sort((a, b) => (a.client || "").localeCompare(b.client || "") || (b.last_seen_at || 0) - (a.last_seen_at || 0));
+  } else if (SESS_SORT === "caps") {
+    arr.sort((a, b) => sessCapsCount(b) - sessCapsCount(a) || (b.last_seen_at || 0) - (a.last_seen_at || 0));
+  } else { // activité (défaut)
+    arr.sort((a, b) => (b.last_seen_at || 0) - (a.last_seen_at || 0));
+  }
+  return arr;
+}
+// Fragments d'une session, réutilisés par la vue vignettes ET la vue liste.
+function sessIdHtml(s) {
+  const short = s.session_id.slice(0, 8) + "…" + s.session_id.slice(-4);
+  return '<span class="sess-id" title="' + esc(s.session_id) + '">' + esc(short) + "</span>";
+}
+function sessBadges(s) {
+  return (s.delegated ? '<span class="badge b-mut">sous-session</span> ' : "") +
+    (s.child_count ? '<span class="badge b-warn">' + s.child_count + " enfant(s)</span> " : "") +
+    '<span class="badge b-mut">' + esc(s.client || "mcp") + "</span>";
+}
+function sessCapsHtml(s) {
+  const unlockBits = Object.entries(s.unlocks || {}).map(([a, u]) =>
+    '<span class="chip">🔓 ' + esc(a) + " · " + fmtMins(u.minutes_left) + "</span>").join("");
+  const zoneBits = Object.entries(s.drive_zones || {}).flatMap(([a, zs]) =>
+    zs.map((z) => '<span class="chip">🕐 ' + esc(a) + " / " + esc(z.name || z.id) +
+      " · " + fmtMins(z.minutes_left) + "</span>")).join("");
+  return (unlockBits || zoneBits) ? unlockBits + zoneBits
+    : '<span class="note">aucune capacité accordée</span>';
+}
+function sessActions(s) {
+  return s.delegated
+    ? '<button class="small danger" onclick="doSessClose(\'' + s.session_id + '\')">Purger</button>'
+    : '<button class="small" onclick="openSessUnlock(\'' + s.session_id + '\')">Unlock</button>' +
+      '<button class="small" onclick="openSessGrant(\'' + s.session_id + '\')">Zone Drive</button>' +
+      (s.child_count ? '<button class="small" onclick="doSessRevokeDesc(\'' + s.session_id + '\')">Révoquer enfants</button>' : "") +
+      '<button class="small danger" onclick="doSessClose(\'' + s.session_id + '\')">Purger</button>';
+}
 function renderSessions() {
+  const body = $("sessBody");
+  syncSessControls();
   if (!SESSIONS.length) {
-    $("sessBody").innerHTML = '<p class="note">Aucune session active. Elles apparaissent quand un client MCP (Claude Desktop, Cursor…) démarre <span class="mono">google-mcp</span>.</p>';
+    body.className = "sess-grid";
+    body.innerHTML = '<p class="note">Aucune session active. Elles apparaissent quand un client MCP (Claude Desktop, Cursor…) démarre <span class="mono">google-mcp</span>.</p>';
     return;
   }
-  $("sessBody").innerHTML = SESSIONS.map((s) => {
-    const short = s.session_id.slice(0, 8) + "…" + s.session_id.slice(-4);
-    const unlockBits = Object.entries(s.unlocks || {}).map(([a, u]) =>
-      '<span class="chip">🔓 ' + esc(a) + " · " + fmtMins(u.minutes_left) + "</span>").join("");
-    const zoneBits = Object.entries(s.drive_zones || {}).flatMap(([a, zs]) =>
-      zs.map((z) => '<span class="chip">🕐 ' + esc(a) + " / " + esc(z.name || z.id) +
-        " · " + fmtMins(z.minutes_left) + "</span>")).join("");
-    const badges = (s.delegated ? '<span class="badge b-mut">sous-session</span> ' : "") +
-      (s.child_count ? '<span class="badge b-warn">' + s.child_count + " enfant(s)</span> " : "") +
-      '<span class="badge b-mut">' + esc(s.client || "mcp") + "</span>";
-    const actions = s.delegated
-      ? '<button class="small danger" onclick="doSessClose(\'' + s.session_id + '\')">Purger</button>'
-      : '<button class="small" onclick="openSessUnlock(\'' + s.session_id + '\')">Unlock</button>' +
-        '<button class="small" onclick="openSessGrant(\'' + s.session_id + '\')">Zone Drive</button>' +
-        (s.child_count ? '<button class="small" onclick="doSessRevokeDesc(\'' + s.session_id + '\')">Révoquer enfants</button>' : "") +
-        '<button class="small danger" onclick="doSessClose(\'' + s.session_id + '\')">Purger</button>';
-    return '<div class="sess-card"><div class="sess-head"><span class="sess-id" title="' +
-      esc(s.session_id) + '">' + esc(short) + "</span>" + badges + "</div>" +
-      (s.parent_id ? '<div class="sess-meta">parent <span class="mono">' + esc(s.parent_id.slice(0, 12)) + "…</span></div>" : "") +
-      '<div class="sess-caps">' + (unlockBits || zoneBits
-        ? unlockBits + zoneBits
-        : '<span class="note">aucune capacité accordée</span>') + "</div>" +
-      '<div class="sess-actions">' + actions + "</div></div>";
-  }).join("");
+  const list = sortedSessions();
+  if (SESS_LAYOUT === "list") {
+    body.className = "sess-list";
+    body.innerHTML = list.map((s) =>
+      '<div class="sess-row"><div class="sess-head">' + sessIdHtml(s) + sessBadges(s) + "</div>" +
+      '<div class="sess-caps">' + sessCapsHtml(s) + "</div>" +
+      '<div class="sess-actions">' + sessActions(s) + "</div></div>").join("");
+    return;
+  }
+  body.className = "sess-grid";
+  body.innerHTML = list.map((s) =>
+    '<div class="sess-card"><div class="sess-head">' + sessIdHtml(s) + sessBadges(s) + "</div>" +
+    (s.parent_id ? '<div class="sess-meta">parent <span class="mono">' + esc(s.parent_id.slice(0, 12)) + "…</span></div>" : "") +
+    '<div class="sess-caps">' + sessCapsHtml(s) + "</div>" +
+    '<div class="sess-actions">' + sessActions(s) + "</div></div>").join("");
 }
 function openSessUnlock(sid) {
   sessActionSid = sid;
