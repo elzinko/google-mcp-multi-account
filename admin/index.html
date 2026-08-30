@@ -22,7 +22,16 @@
     --bad:#f09595; --badbg:#4a1616; --acc:#afa9ec; --accbg:#28245c; } }
 * { box-sizing:border-box; }
 body { margin:0; font:15px/1.55 -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--txt); }
-header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:16px 22px; border-bottom:1px solid var(--line); }
+header { display:flex; align-items:center; gap:var(--sp-3); flex-wrap:wrap; padding:var(--sp-3) var(--sp-5); border-bottom:1px solid var(--line); }
+/* Barre de navigation (fiche 0103) : identité · navigation · outils. */
+.brand { display:inline-flex; align-items:center; gap:var(--sp-2); }
+.nav { display:inline-flex; align-items:center; gap:4px; }
+.tools { display:inline-flex; align-items:center; gap:6px; margin-left:auto; }
+.navbtn { border:1px solid transparent; background:transparent; color:var(--mut);
+  padding:6px 12px; border-radius:var(--r-sm); font:inherit; font-size:var(--fs-body); font-weight:var(--fw-medium); }
+.navbtn:hover { color:var(--txt); border-color:transparent; background:color-mix(in srgb, var(--txt) 6%, transparent); }
+.navbtn[aria-current="page"] { background:var(--accbg); color:var(--acc);
+  border-color:color-mix(in srgb,var(--acc) 30%,var(--line)); font-weight:var(--fw-semibold); }
 h1 { font-size:19px; font-weight:600; margin:0 auto 0 0; letter-spacing:-.01em; }
 .h1-sub { color:var(--mut); font-weight:400; }
 .hmenu { position:relative; display:inline-flex; }
@@ -415,17 +424,24 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
 </head>
 <body>
 <header>
-  <h1>google-multi-account <span class="h1-sub">— admin</span></h1>
-  <span id="verBadge" class="badge" title="Version du code servi par cette admin">…</span>
-  <button class="hbtn-icon" onclick="openLockAll()" title="Tout verrouiller — repasse tous les comptes en accès verrouillé" aria-label="Tout verrouiller"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></button>
-  <button onclick="openSessions()">💬 Sessions</button>
-  <button onclick="openJournal()">📓 Journal</button>
-  <button onclick="openDoc()">❓ Doc</button>
-  <div class="hmenu">
-    <button class="hbtn-icon" id="moreBtn" onclick="toggleMore(event)" aria-haspopup="true" aria-expanded="false" title="Plus d'outils" aria-label="Plus d'outils"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
-    <div class="hmenu-pop" id="morePop" role="menu" hidden>
-      <button role="menuitem" onclick="closeMore();openDev()">🛠 Développement</button>
-      <button role="menuitem" onclick="closeMore();openSetup()">🩺 Santé du setup</button>
+  <div class="brand">
+    <h1>google-multi-account <span class="h1-sub">— admin</span></h1>
+    <span id="verBadge" class="badge" title="Version du code servi par cette admin">…</span>
+  </div>
+  <nav class="nav" aria-label="Navigation principale">
+    <button type="button" class="navbtn" data-view="comptes" onclick="goComptes()">Comptes</button>
+    <button type="button" class="navbtn" data-view="sessions" onclick="openSessions()">Sessions</button>
+    <button type="button" class="navbtn" data-view="journal" onclick="openJournal()">Journal</button>
+  </nav>
+  <div class="tools">
+    <button class="hbtn-icon" onclick="openLockAll()" title="Tout verrouiller — repasse tous les comptes en accès verrouillé" aria-label="Tout verrouiller"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></button>
+    <button class="hbtn-icon" onclick="openDoc()" title="Documentation" aria-label="Documentation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></button>
+    <div class="hmenu">
+      <button class="hbtn-icon" id="moreBtn" onclick="toggleMore(event)" aria-haspopup="true" aria-expanded="false" title="Plus d'outils" aria-label="Plus d'outils"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+      <div class="hmenu-pop" id="morePop" role="menu" hidden>
+        <button role="menuitem" onclick="closeMore();openDev()">🛠 Développement</button>
+        <button role="menuitem" onclick="closeMore();openSetup()">🩺 Santé du setup</button>
+      </div>
     </div>
   </div>
 </header>
@@ -1031,7 +1047,23 @@ function syncChrome() {
   const jp = $("journalPage"); if (jp) jp.hidden = !journal;
   const addRow = document.querySelector(".add-account-row");
   if (addRow) addRow.hidden = detail || sessions || journal;
+  syncNav();
 }
+// Marque la page active dans la barre de navigation (fiche 0103).
+function syncNav() {
+  const map = { list: "comptes", detail: "comptes", sessions: "sessions", journal: "journal" };
+  const cur = map[VIEW.mode] || "comptes";
+  document.querySelectorAll(".navbtn").forEach((b) => {
+    if (b.dataset.view === cur) b.setAttribute("aria-current", "page");
+    else b.removeAttribute("aria-current");
+  });
+}
+// Coupe les rafraîchissements des pages Sessions/Journal (une seule à la fois).
+function clearPageTimers() {
+  if (sessTimer) { clearInterval(sessTimer); sessTimer = null; }
+  if (journalTimer) { clearInterval(journalTimer); journalTimer = null; }
+}
+function goComptes() { clearPageTimers(); renderList(); }
 // Menu overflow « ⋯ » du header (refonte) : les outils avancés (développement,
 // santé du setup) vivent dans un menu déroulant standard, pas un toggle qui
 // pousse des boutons. Ferme au clic extérieur / Échap.
@@ -1271,11 +1303,11 @@ function openSessions() {
   $("sessBody").innerHTML = "Chargement…";
   refreshSessions();
   // Auto-rafraîchissement tant que la page Sessions est ouverte (plus de clic manuel).
-  if (sessTimer) clearInterval(sessTimer);
+  clearPageTimers();
   sessTimer = setInterval(() => { if (VIEW.mode === "sessions") refreshSessions(); }, 3000);
 }
 function closeSessions() {
-  if (sessTimer) { clearInterval(sessTimer); sessTimer = null; }
+  clearPageTimers();
   renderList(); // repasse VIEW en liste des comptes + syncChrome
 }
 function setSessLive(ok) {
@@ -1803,11 +1835,11 @@ function openJournal(opts) {
   const dense = $("logTable"); if (dense) dense.classList.toggle("dense", LOG_DENSE);
   const denseBtn = $("logDenseBtn"); if (denseBtn) denseBtn.classList.toggle("active", LOG_DENSE);
   refreshJournal();
-  if (journalTimer) clearInterval(journalTimer);
+  clearPageTimers();
   journalTimer = setInterval(() => { if (VIEW.mode === "journal") refreshJournal(); }, 5000);
 }
 function closeJournal() {
-  if (journalTimer) { clearInterval(journalTimer); journalTimer = null; }
+  clearPageTimers();
   renderList();
 }
 function setJrnLive(ok) {
