@@ -35,19 +35,6 @@ header { display:flex; align-items:center; gap:var(--sp-3); flex-wrap:wrap; padd
 .navmenu.hmenu { display:none; }
 .menu-sep { height:1px; background:var(--line); margin:4px 0; }
 .hmenu-pop button[aria-current="page"] { color:var(--acc); font-weight:var(--fw-semibold); }
-/* App shell responsive (fiche 0104) : hamburger + top-bar mobile (< 640px). */
-@media (max-width:639px){
-  header { padding:var(--sp-3) var(--sp-4); gap:var(--sp-2); }
-  .brand-name { display:none; }
-  .h1-sub { color:var(--txt); font-weight:var(--fw-semibold); }
-  .h1-sub::before { content:"◧ "; color:var(--acc); }
-  #verBadge { display:none; }
-  .nav { display:none; }
-  .tools > .hbtn-icon[aria-label="Documentation"] { display:none; }
-  .tools > .hmenu:not(.navmenu) { display:none; }
-  .navmenu.hmenu { display:inline-flex; }
-  .hbtn-icon { min-width:44px; min-height:44px; }
-}
 h1 { font-size:var(--fs-h2); font-weight:var(--fw-semibold); margin:0; letter-spacing:-.01em;
   min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .h1-sub { color:var(--mut); font-weight:400; }
@@ -439,6 +426,39 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
     transition-duration:.001ms !important;
     scroll-behavior:auto !important;
   }
+}
+/* ===== App shell responsive (fiche 0104) — EN FIN DE CSS pour primer sur les
+   règles de composants (même spécificité, la source la plus tardive gagne). ===== */
+@media (max-width:639px){
+  header { padding:var(--sp-3) var(--sp-4); gap:var(--sp-2); }
+  .brand-name { display:none; }
+  .h1-sub { color:var(--txt); font-weight:var(--fw-semibold); }
+  .h1-sub::before { content:"◧ "; color:var(--acc); }
+  #verBadge { display:none; }
+  .nav { display:none; }
+  .tools > .hbtn-icon[aria-label="Documentation"] { display:none; }
+  .tools > .hmenu:not(.navmenu) { display:none; }
+  .navmenu.hmenu { display:inline-flex; }
+  .hbtn-icon { min-width:44px; min-height:44px; }
+  /* En-têtes de page : titre prend la place, contrôles dessous. */
+  .page-head { gap:var(--sp-2); }
+  .page-head .spacer { display:none; }
+  .page-head h2 { font-size:var(--fs-h2); flex:1 1 auto; }
+  .page-head .back { min-height:40px; }
+  /* Filtres du Journal : une bande qui défile plutôt que 6 lignes empilées. */
+  .filters { flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:2px; }
+  .filters label { flex:0 0 auto; }
+  .filters select, .filters input { min-height:40px; }
+}
+/* Rangées de compte : email complet (jamais tronqué) + CTA pleine largeur. */
+@media (max-width:480px){
+  /* Rangée empilée : email complet au-dessus, contrôle cadenas en dessous. */
+  .prow { grid-template-columns:1fr; gap:var(--sp-2); align-items:start; }
+  .pmail { white-space:normal; overflow:visible; text-overflow:clip; overflow-wrap:anywhere; }
+  .pctrl { justify-self:start; }
+  .pchev { display:none; }
+  .add-account-row { justify-content:stretch; }
+  .add-account-row .btn-add { flex:1; justify-content:center; }
 }
 </style>
 </head>
