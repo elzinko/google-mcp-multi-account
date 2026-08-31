@@ -1876,6 +1876,26 @@ button.ck-keychip { border:0; cursor:pointer; }
 #logTable.dense th, #logTable.dense td { padding:4px 9px; font-size:12px; }
 .ck-jrn-reason { color:var(--muted); font-size:var(--fs-cap); margin-top:2px; }
 .ck-mut { color:var(--muted); }
+/* Lot 5 : modales alignées sur Cockpit (restyle des classes historiques des dialogues) */
+dialog { border:1px solid var(--line); border-radius:var(--r5); background:var(--surface); color:var(--ink);
+  box-shadow:var(--e-pop); font-family:var(--sans); }
+dialog::backdrop { background:rgba(10,14,22,.5); backdrop-filter:blur(2px); }
+dialog h2 { font-family:var(--disp); font-weight:700; font-size:var(--fs-h3); letter-spacing:-.01em; margin:0 0 var(--s3); }
+dialog label { color:var(--muted); font-size:var(--fs-sm); }
+dialog input[type=text], dialog input[type=email], dialog input[type=number], dialog select {
+  background:var(--surface); color:var(--ink); border:1px solid var(--line); border-radius:var(--r2); }
+dialog input:focus, dialog select:focus { border-color:var(--acc); outline:none; box-shadow:0 0 0 3px var(--acc-bg); }
+dialog .note { color:var(--muted); }
+dialog button { border-radius:var(--r2); border:1px solid var(--line-2); background:var(--surface); color:var(--ink); }
+dialog button:hover { border-color:var(--muted); }
+dialog button.primary { background:var(--acc-solid); border-color:var(--acc-solid); color:#fff; }
+dialog button.primary:hover { filter:brightness(.93); border-color:var(--acc-solid); }
+dialog button.small { border-radius:var(--r1); }
+dialog button.danger, dialog button.danger-solid { background:var(--bad); border-color:var(--bad); color:#fff; }
+dialog button.danger:hover, dialog button.danger-solid:hover { filter:brightness(.94); }
+.dlg-policy .tabs { background:var(--sunken); border-radius:var(--r2); padding:3px; gap:2px; display:inline-flex; border:0; }
+.dlg-policy .tabs button { border:0; background:transparent; border-radius:var(--r1); }
+.dlg-policy .tabs button.active { background:var(--surface); box-shadow:var(--e1); color:var(--acc); }
 @media (max-width:520px){ .ck-acct-head { display:none; } .ck-acct-row { grid-template-columns:1fr auto; } .ck-acct-row .ck-row-actions { display:none; } }
 </style>
 </head>
