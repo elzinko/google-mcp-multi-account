@@ -1806,7 +1806,7 @@ body { margin:0; }
 .ck-ver { font-family:var(--mono); font-size:10.5px; color:var(--rail-dim); margin-left:auto; }
 .ck-rail-nav a[aria-current="page"] { background:var(--rail-acc-bg); color:#fff; }
 .ck-rail-nav a[aria-current="page"] svg { color:var(--rail-acc); }
-.ck-bottomnav { display:none; }
+@media (min-width:641px){ .ck-bottomnav { display:none; } }
 .ck-bottomnav a[aria-current="page"] { color:var(--acc); }
 /* la fondation bascule déjà rail↔bottom-nav sous 640px (media .ck-app/.ck-rail/.ck-bottomnav) */
 .add-account-row { display:none; }
