@@ -1862,6 +1862,20 @@ button.ck-keychip { border:0; cursor:pointer; }
 .ck-sess-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; }
 .ck-sess-row .ck-sess-caps, .ck-sess-row .ck-sess-actions { margin:0; }
 .ck-sess-row .ck-sess-actions { justify-content:flex-end; }
+/* Page Journal (lot 4) */
+.ck-filters { display:flex; align-items:center; gap:var(--s3); flex-wrap:wrap; margin:0 0 var(--s4); }
+.ck-filters label { display:inline-flex; align-items:center; gap:6px; font-size:var(--fs-cap); color:var(--muted); }
+.ck-filters select, .ck-filters input { font:inherit; font-size:var(--fs-sm); padding:6px 9px; border:1px solid var(--line); border-radius:var(--r1); background:var(--surface); color:var(--ink); }
+.ck-jrn-count { margin-left:auto; font-family:var(--mono); font-size:var(--fs-cap); color:var(--faint); }
+.ck-logwrap { overflow-x:auto; border:1px solid var(--line); border-radius:var(--r3); box-shadow:var(--e1); background:var(--surface); }
+#logTable { width:100%; border-collapse:collapse; font-size:var(--fs-sm); }
+#logTable th { text-align:left; padding:var(--s2) var(--s3); background:var(--surface-2); color:var(--faint); font-size:11px; text-transform:uppercase; letter-spacing:.06em; font-weight:600; white-space:nowrap; }
+#logTable td { padding:var(--s2) var(--s3); border-top:1px solid var(--line); vertical-align:top; }
+#logTable td.mono, #logTable .mono { font-family:var(--mono); }
+#logTable td.cmd { color:var(--ink); word-break:break-word; }
+#logTable.dense th, #logTable.dense td { padding:4px 9px; font-size:12px; }
+.ck-jrn-reason { color:var(--muted); font-size:var(--fs-cap); margin-top:2px; }
+.ck-mut { color:var(--muted); }
 @media (max-width:520px){ .ck-acct-head { display:none; } .ck-acct-row { grid-template-columns:1fr auto; } .ck-acct-row .ck-row-actions { display:none; } }
 </style>
 </head>
@@ -1918,15 +1932,15 @@ button.ck-keychip { border:0; cursor:pointer; }
     <div id="sessBody" class="ck-sess-grid">Chargement…</div>
   </section>
   <section id="journalPage" hidden>
-    <div class="page-head">
-      <button type="button" class="back" onclick="closeJournal()">← Comptes</button>
+    <div class="ck-page-head">
+      <button type="button" class="ck-btn ck-btn--sm" onclick="closeJournal()">← Comptes</button>
       <h2>Journal des accès</h2>
-      <span id="jrnLive" class="live" title="Le journal se met à jour tout seul"><span class="dot" aria-hidden="true"></span>en direct</span>
-      <span class="spacer"></span>
-      <button type="button" class="small" id="logDenseBtn" onclick="toggleLogDense()">Vue dense</button>
-      <button type="button" class="small" onclick="refreshJournal()">Rafraîchir</button>
+      <span id="jrnLive" class="ck-live" title="Le journal se met à jour tout seul"><span class="ck-live-dot" aria-hidden="true"></span>en direct</span>
+      <span class="ck-ph-spacer"></span>
+      <button type="button" class="ck-btn ck-btn--sm" id="logDenseBtn" onclick="toggleLogDense()">Vue dense</button>
+      <button type="button" class="ck-btn ck-btn--sm" onclick="refreshJournal()">Rafraîchir</button>
     </div>
-    <div class="filters">
+    <div class="ck-filters">
       <label>Compte <select id="fltAlias" onchange="setJrn('alias',this.value)"></select></label>
       <label>Client <select id="fltClient" onchange="setJrn('client',this.value)"></select></label>
       <label>Session <select id="fltSession" onchange="setJrn('session',this.value)"></select></label>
@@ -1935,10 +1949,10 @@ button.ck-keychip { border:0; cursor:pointer; }
           <option value="">toutes</option><option value="ok">ok</option><option value="refus">refus</option>
         </select></label>
       <input type="search" id="fltSearch" placeholder="rechercher (commande, service…)" oninput="setJrn('search',this.value)">
-      <button type="button" class="small" onclick="clearJournalFilters()">Effacer</button>
-      <span id="jrnCount" class="note"></span>
+      <button type="button" class="ck-btn ck-btn--sm" onclick="clearJournalFilters()">Effacer</button>
+      <span id="jrnCount" class="ck-jrn-count"></span>
     </div>
-    <div class="logwrap"><table id="logTable">
+    <div class="ck-logwrap"><table id="logTable">
       <colgroup><col class="c-when"><col class="c-client"><col class="c-acct"><col class="c-sess"><col class="c-cmd"><col class="c-dec"></colgroup>
       <thead><tr><th>Quand</th><th>Client</th><th>Compte</th><th>Session</th><th>Commande</th><th>Décision</th></tr></thead>
       <tbody><tr><td colspan="6">Chargement…</td></tr></tbody></table></div>
@@ -3413,15 +3427,15 @@ function renderJournalTable() {
     const ts = (e.ts || "").replace("T", " ");
     const when = LOG_DENSE ? ts.slice(5, 16) : ts.slice(0, 19);
     const decision = (e.decision === "refus")
-      ? '<span class="badge b-bad">refus</span>'
-      : '<span class="badge b-ok">ok</span>';
+      ? '<span class="ck-pill ck-pill--bad">refus</span>'
+      : '<span class="ck-pill ck-pill--ok">ok</span>';
     const sess = e.session_id
       ? '<span class="mono" title="' + esc(e.session_id) + '">' + esc(e.session_id.slice(0, 6) + "…") + "</span>"
-      : '<span class="note">—</span>';
+      : '<span class="ck-mut">—</span>';
     return '<tr><td class="mono">' + esc(when) + "</td><td>" + esc(e.client || "") +
       '</td><td class="mono">' + esc(e.alias || "") + "</td><td>" + sess +
       '</td><td class="mono cmd">' + esc((e.cmd || "").slice(0, 200)) +
-      "</td><td>" + decision + (e.reason ? '<div class="note">' + esc(e.reason) + "</div>" : "") + "</td></tr>";
+      "</td><td>" + decision + (e.reason ? '<div class="ck-jrn-reason">' + esc(e.reason) + "</div>" : "") + "</td></tr>";
   }).join("");
 }
 function setJrn(field, val) { JRN[field] = val; renderJournalTable(); }
