@@ -1842,6 +1842,26 @@ button.ck-keychip { border:0; cursor:pointer; }
 .ck-svcmore summary { cursor:pointer; color:var(--muted); font-size:var(--fs-sm); padding:var(--s2) 0; }
 .ck-danger-zone { margin-top:var(--s5); align-items:center; justify-content:space-between; gap:var(--s3); }
 .ck-danger-zone span { flex:1; }
+/* Page Sessions (lot 3) */
+.ck-sub { color:var(--muted); font-size:var(--fs-sm); margin:0 0 var(--s4); }
+.ck-ph-spacer { flex:1 1 auto; }
+.ck-ctl { display:inline-flex; align-items:center; gap:6px; font-size:var(--fs-cap); color:var(--muted); }
+.ck-ctl select { font:inherit; font-size:var(--fs-sm); padding:5px 9px; border:1px solid var(--line); border-radius:var(--r1); background:var(--surface); color:var(--ink); }
+.ck-mono { font-family:var(--mono); }
+.ck-sess-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:var(--s3); align-items:stretch; }
+.ck-sess-grid > .ck-empty { grid-column:1/-1; }
+.ck-sess-list { display:flex; flex-direction:column; gap:8px; }
+.ck-sess-card { display:flex; flex-direction:column; gap:var(--s2); min-height:132px; height:100%; }
+.ck-sess-row { display:grid; grid-template-columns:minmax(150px,auto) 1fr auto; align-items:center; gap:var(--s3);
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--r3); padding:var(--s2) var(--s3); }
+.ck-sess-head { display:flex; align-items:center; gap:var(--s2); flex-wrap:wrap; }
+.ck-sess-id { font-family:var(--mono); font-size:var(--fs-sm); font-weight:600; }
+.ck-sess-meta { font-size:var(--fs-cap); color:var(--muted); }
+.ck-sess-caps { display:flex; flex-wrap:wrap; gap:6px; font-size:var(--fs-sm); }
+.ck-sess-empty { color:var(--muted); font-size:var(--fs-sm); }
+.ck-sess-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; }
+.ck-sess-row .ck-sess-caps, .ck-sess-row .ck-sess-actions { margin:0; }
+.ck-sess-row .ck-sess-actions { justify-content:flex-end; }
 @media (max-width:520px){ .ck-acct-head { display:none; } .ck-acct-row { grid-template-columns:1fr auto; } .ck-acct-row .ck-row-actions { display:none; } }
 </style>
 </head>
@@ -1875,12 +1895,12 @@ button.ck-keychip { border:0; cursor:pointer; }
     <button type="button" id="btnAdd" class="btn-add" onclick="openAdd()">＋ Connecter un compte</button>
   </div>
   <section id="sessionsPage" hidden>
-    <div class="page-head">
-      <button type="button" class="back" onclick="closeSessions()">← Comptes</button>
+    <div class="ck-page-head">
+      <button type="button" class="ck-btn ck-btn--sm" onclick="closeSessions()">← Comptes</button>
       <h2>Sessions LLM</h2>
-      <span id="sessLive" class="live" title="La liste se met à jour toute seule"><span class="dot" aria-hidden="true"></span>en direct</span>
-      <span class="spacer"></span>
-      <span class="sess-controls">
+      <span id="sessLive" class="ck-live" title="La liste se met à jour toute seule"><span class="ck-live-dot" aria-hidden="true"></span>en direct</span>
+      <span class="ck-ph-spacer"></span>
+      <span class="ck-ctl">
         <label for="sessSort">Trier</label>
         <select id="sessSort" onchange="setSessSort(this.value)">
           <option value="activity">Dernière activité</option>
@@ -1888,14 +1908,14 @@ button.ck-keychip { border:0; cursor:pointer; }
           <option value="caps">Nombre d'accès</option>
         </select>
       </span>
-      <span class="viewtoggle" role="group" aria-label="Affichage">
+      <span class="ck-viewtoggle" role="group" aria-label="Affichage">
         <button type="button" id="sessViewGrid" onclick="setSessLayout('grid')" title="Vignettes" aria-pressed="true" aria-label="Vue vignettes">▦</button>
         <button type="button" id="sessViewList" onclick="setSessLayout('list')" title="Liste" aria-pressed="false" aria-label="Vue liste">☰</button>
       </span>
-      <button type="button" class="small" onclick="refreshSessions()">Rafraîchir</button>
+      <button type="button" class="ck-btn ck-btn--sm" onclick="refreshSessions()">Rafraîchir</button>
     </div>
-    <p class="note">Les accès donnés ici valent pour <b>cette conversation seulement</b>, et sont temporaires.</p>
-    <div id="sessBody" class="sess-grid">Chargement…</div>
+    <p class="ck-sub">Les accès donnés ici valent pour <b>cette conversation seulement</b>, et sont temporaires.</p>
+    <div id="sessBody" class="ck-sess-grid">Chargement…</div>
   </section>
   <section id="journalPage" hidden>
     <div class="page-head">
@@ -2840,21 +2860,21 @@ function sortedSessions() {
 // Fragments d'une session, réutilisés par la vue vignettes ET la vue liste.
 function sessIdHtml(s) {
   const short = s.session_id.slice(0, 8) + "…" + s.session_id.slice(-4);
-  return '<span class="sess-id" title="' + esc(s.session_id) + '">' + esc(short) + "</span>";
+  return '<span class="ck-sess-id" title="' + esc(s.session_id) + '">' + esc(short) + "</span>";
 }
 function sessBadges(s) {
-  return (s.delegated ? '<span class="badge b-mut">sous-session</span> ' : "") +
-    (s.child_count ? '<span class="badge b-warn">' + s.child_count + " enfant(s)</span> " : "") +
-    '<span class="badge b-mut">' + esc(s.client || "mcp") + "</span>";
+  return (s.delegated ? '<span class="ck-badge ck-badge--neutral">sous-session</span> ' : "") +
+    (s.child_count ? '<span class="ck-badge ck-badge--warn">' + s.child_count + " enfant(s)</span> " : "") +
+    '<span class="ck-badge ck-badge--neutral">' + esc(s.client || "mcp") + "</span>";
 }
 function sessCapsHtml(s) {
   const unlockBits = Object.entries(s.unlocks || {}).map(([a, u]) =>
-    '<span class="chip">🔓 ' + esc(a) + " · " + fmtMins(u.minutes_left) + "</span>").join("");
+    '<span class="ck-chip">🔓 ' + esc(a) + " · " + fmtMins(u.minutes_left) + "</span>").join("");
   const zoneBits = Object.entries(s.drive_zones || {}).flatMap(([a, zs]) =>
-    zs.map((z) => '<span class="chip">🕐 ' + esc(a) + " / " + esc(z.name || z.id) +
+    zs.map((z) => '<span class="ck-chip">🕐 ' + esc(a) + " / " + esc(z.name || z.id) +
       " · " + fmtMins(z.minutes_left) + "</span>")).join("");
   return (unlockBits || zoneBits) ? unlockBits + zoneBits
-    : '<span class="note">aucune capacité accordée</span>';
+    : '<span class="ck-sess-empty">aucune capacité accordée</span>';
 }
 // Icônes trait (style du header) — currentColor, 24×24 viewBox.
 const SESS_ICONS = {
@@ -2865,7 +2885,7 @@ const SESS_ICONS = {
   journal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>',
 };
 function sessIconBtn(icon, label, onclick, danger) {
-  return '<button type="button" class="iconbtn small' + (danger ? " danger" : "") +
+  return '<button type="button" class="ck-iconbtn' + (danger ? " ck-iconbtn--danger" : "") +
     '" title="' + label + '" aria-label="' + label + '" onclick="' + onclick + '">' + SESS_ICONS[icon] + "</button>";
 }
 function sessActions(s) {
@@ -2883,25 +2903,25 @@ function renderSessions() {
   const body = $("sessBody");
   syncSessControls();
   if (!SESSIONS.length) {
-    body.className = "sess-grid";
-    body.innerHTML = '<p class="note">Aucune session active. Elles apparaissent quand un client MCP (Claude Desktop, Cursor…) démarre <span class="mono">google-mcp</span>.</p>';
+    body.className = "ck-sess-grid";
+    body.innerHTML = '<div class="ck-empty" style="grid-column:1/-1"><div class="ck-empty__title">Aucune session active</div><div class="ck-empty__sub">Elles apparaissent quand un client MCP (Claude Desktop, Cursor…) démarre google-mcp.</div></div>';
     return;
   }
   const list = sortedSessions();
   if (SESS_LAYOUT === "list") {
-    body.className = "sess-list";
+    body.className = "ck-sess-list";
     body.innerHTML = list.map((s) =>
-      '<div class="sess-row"><div class="sess-head">' + sessIdHtml(s) + sessBadges(s) + "</div>" +
-      '<div class="sess-caps">' + sessCapsHtml(s) + "</div>" +
-      '<div class="sess-actions">' + sessActions(s) + "</div></div>").join("");
+      '<div class="ck-sess-row"><div class="ck-sess-head">' + sessIdHtml(s) + sessBadges(s) + "</div>" +
+      '<div class="ck-sess-caps">' + sessCapsHtml(s) + "</div>" +
+      '<div class="ck-sess-actions">' + sessActions(s) + "</div></div>").join("");
     return;
   }
-  body.className = "sess-grid";
+  body.className = "ck-sess-grid";
   body.innerHTML = list.map((s) =>
-    '<div class="sess-card"><div class="sess-head">' + sessIdHtml(s) + sessBadges(s) + "</div>" +
-    (s.parent_id ? '<div class="sess-meta">parent <span class="mono">' + esc(s.parent_id.slice(0, 12)) + "…</span></div>" : "") +
-    '<div class="sess-caps">' + sessCapsHtml(s) + "</div>" +
-    '<div class="sess-actions">' + sessActions(s) + "</div></div>").join("");
+    '<div class="ck-card ck-sess-card"><div class="ck-sess-head">' + sessIdHtml(s) + sessBadges(s) + "</div>" +
+    (s.parent_id ? '<div class="ck-sess-meta">parent <span class="ck-mono">' + esc(s.parent_id.slice(0, 12)) + "…</span></div>" : "") +
+    '<div class="ck-sess-caps">' + sessCapsHtml(s) + "</div>" +
+    '<div class="ck-sess-actions">' + sessActions(s) + "</div></div>").join("");
 }
 function openSessUnlock(sid) {
   sessActionSid = sid;
