@@ -1896,6 +1896,11 @@ dialog button.danger:hover, dialog button.danger-solid:hover { filter:brightness
 .dlg-policy .tabs { background:var(--sunken); border-radius:var(--r2); padding:3px; gap:2px; display:inline-flex; border:0; }
 .dlg-policy .tabs button { border:0; background:transparent; border-radius:var(--r1); }
 .dlg-policy .tabs button.active { background:var(--surface); box-shadow:var(--e1); color:var(--acc); }
+/* Retours PO : contenu large (emails longs visibles), 3 tuiles alignées, menu ⋯ du rail vers le haut */
+main.ck-main { max-width:1400px; margin:0; }
+.ck-comptes-tiles { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:var(--s3); margin-bottom:var(--s5); }
+@media (max-width:720px){ .ck-comptes-tiles { grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); } }
+.ck-rail .hmenu-pop { top:auto; bottom:calc(100% + 6px); right:auto; left:0; }
 @media (max-width:520px){ .ck-acct-head { display:none; } .ck-acct-row { grid-template-columns:1fr auto; } .ck-acct-row .ck-row-actions { display:none; } }
 </style>
 </head>
@@ -2645,7 +2650,7 @@ function renderList() {
   const nLock = PROFILES.filter((p) => p.connected && !isOpen(p)).length;
   const head = '<div class="ck-comptes-head"><h2>Comptes</h2>' +
     '<button type="button" class="ck-btn ck-btn--primary" onclick="openAdd()">＋ Connecter</button></div>' +
-    '<div class="ck-statgrid" style="margin-bottom:var(--s5)">' +
+    '<div class="ck-comptes-tiles">' +
       ckStat("Comptes connectés", nConn) + ckStat("Déverrouillés", nOpen) + ckStat("Verrouillés", nLock) +
     "</div>";
   if (!PROFILES.length) {
