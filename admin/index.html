@@ -1825,6 +1825,23 @@ button.ck-keychip { border:0; cursor:pointer; }
 .ck-rail-nav a svg, .ck-rail-tool svg { width:18px; height:18px; flex:none; }
 .ck-bottomnav a svg { width:20px; height:20px; }
 .ck-keychip__ico svg { width:14px; height:14px; }
+/* Vue détail d'un compte (lot 2) */
+.ck-detail-id { display:flex; align-items:center; gap:var(--s3); margin:0 0 var(--s5); }
+.ck-avatar--lg { width:44px; height:44px; border-radius:50%; font-size:17px; }
+.ck-detail-mail { font-family:var(--disp); font-weight:700; font-size:var(--fs-h3); letter-spacing:-.01em; overflow:hidden; text-overflow:ellipsis; }
+.ck-detail-key { margin-left:auto; }
+.ck-sec-head { display:flex; align-items:center; justify-content:space-between; gap:var(--s3); margin:0 0 var(--s4); }
+.ck-sec-label { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--faint); font-weight:600; }
+.ck-svcrow { display:grid; grid-template-columns:96px 1fr; align-items:center; gap:var(--s3); padding:var(--s3) 0; border-top:1px solid var(--line); }
+.ck-svcrow:first-of-type { border-top:0; }
+.ck-svcname { font-weight:600; color:var(--acc); }
+.ck-caps { display:flex; flex-wrap:wrap; gap:6px; }
+.ck-cap__ico svg { width:12px; height:12px; }
+.ck-cap-note { opacity:.7; font-weight:400; }
+.ck-svcmore { margin-top:var(--s3); }
+.ck-svcmore summary { cursor:pointer; color:var(--muted); font-size:var(--fs-sm); padding:var(--s2) 0; }
+.ck-danger-zone { margin-top:var(--s5); align-items:center; justify-content:space-between; gap:var(--s3); }
+.ck-danger-zone span { flex:1; }
 @media (max-width:520px){ .ck-acct-head { display:none; } .ck-acct-row { grid-template-columns:1fr auto; } .ck-acct-row .ck-row-actions { display:none; } }
 </style>
 </head>
@@ -2548,6 +2565,23 @@ function ckKeychip(p) {
     '<span class="ck-keychip__ico">' + CK_LOCK_SHUT + "</span>" +
     '<span class="ck-keychip__label">Verrouillé</span></button>';
 }
+const CK_CAP_OK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+const CK_CAP_NO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+function ckCap(on, label, note) {
+  return '<span class="ck-cap ck-cap--' + (on ? "on" : "off") + '"><span class="ck-cap__ico">' +
+    (on ? CK_CAP_OK : CK_CAP_NO) + "</span>" + label + (note || "") + "</span>";
+}
+function ckCapsHtml(key, rules, hasPolicy) {
+  const def = SVCDEF.find((s) => s.key === key);
+  if (rules == null) return hasPolicy ? def.keys.map(([, lbl]) => ckCap(false, lbl)).join("") : ckCap(true, "tous droits · libre");
+  const r = key === "drive" ? normDrive(rules) : rules;
+  if (!r) return ckCap(true, "tous droits · libre");
+  return def.keys.map(([k, lbl]) => {
+    const on = !!r[k];
+    const note = (key === "drive" && (k === "create" || k === "update") && on && r.zonesOnly) ? ' <span class="ck-cap-note">(zones)</span>' : "";
+    return ckCap(on, lbl, note);
+  }).join("");
+}
 function renderList() {
   VIEW = { mode: "list", alias: null };
   syncChrome();
@@ -2585,8 +2619,8 @@ function renderDetail(alias) {
   syncChrome();
   const svcRow = (s) => {
     const rules = p.policy && p.policy[s.key];
-    return '<div class="srow"><span class="sname">' + s.name + '</span><span class="caps">' +
-      capsHtml(s.key, rules, !!p.policy) + "</span></div>";
+    return '<div class="ck-svcrow"><span class="ck-svcname">' + s.name + '</span><span class="ck-caps">' +
+      ckCapsHtml(s.key, rules, !!p.policy) + "</span></div>";
   };
   const byKey = (k) => SVCDEF.find((s) => s.key === k);
   // Primaire = ce que l'assistant utilise via MCP aujourd'hui (Gmail + Drive).
@@ -2597,22 +2631,22 @@ function renderDetail(alias) {
     ["calendar", "keep"].includes(s.key) ||
     (["docs", "sheets", "tasks"].includes(s.key) && p.policy && p.policy[s.key]));
   const othersHtml = others.length
-    ? '<details class="svc-more"><summary>Autres services <span class="note">— ' +
-        others.map((s) => s.name).join(" · ") + "</span></summary>" +
-        '<p class="note svc-more-note">L\'assistant n\'utilise que <b>Drive</b> et <b>Gmail</b> via le MCP aujourd\'hui ' +
-        "(Agenda, Keep à venir ; le reste en ligne de commande). <b>Docs/Sheets</b> sont des fichiers Drive, mais " +
-        "éditer leur contenu passe par une API distincte — d'où une permission séparée.</p>" +
+    ? '<details class="ck-svcmore"><summary>Autres services — ' +
+        others.map((s) => s.name).join(" · ") + "</summary>" +
         others.map(svcRow).join("") + "</details>"
     : "";
-  $("cards").innerHTML = '<div class="detail"><div class="dhead">' +
-    '<button class="back" onclick="renderList()" aria-label="Retour à la liste des comptes">' + BACK_ICON + "Comptes</button>" +
-    '<div class="drow"><span class="dmail">' + esc(p.email || alias) + "</span>" +
-      lockHtml(p) + "</div></div>" +
-    '<div class="dbody"><div class="dsec-head"><p class="plabel">Droits par application</p>' +
-      '<button class="small" onclick="openPolicy(\'' + alias + '\')">Configurer les droits</button></div>' + primary + othersHtml +
-    '<div class="danger"><div class="drx">' +
-      "<p>Retirer ce compte de l'outil — réversible (reconnexion complète). L'impact s'affiche avant confirmation.</p>" +
-      '<button class="danger small" onclick="openDisconnect(\'' + alias + '\')">Déconnecter…</button></div></div></div></div>';
+  $("cards").innerHTML =
+    '<div class="ck-comptes-head"><button type="button" class="ck-btn ck-btn--sm" onclick="renderList()">← Comptes</button></div>' +
+    '<div class="ck-detail-id">' +
+      '<span class="ck-avatar ck-avatar--lg" style="background:' + ckAvatarColor(p) + '">' + esc((p.email || alias).charAt(0).toUpperCase()) + "</span>" +
+      '<span class="ck-detail-mail">' + esc(p.email || alias) + "</span>" +
+      '<span class="ck-detail-key">' + ckKeychip(p) + "</span></div>" +
+    '<div class="ck-panel"><div class="ck-sec-head"><span class="ck-sec-label">Droits par application</span>' +
+      '<button type="button" class="ck-btn ck-btn--sm" onclick="openPolicy(\'' + alias + '\')">Configurer les droits</button></div>' +
+      primary + othersHtml + "</div>" +
+    '<div class="ck-callout ck-callout--bad ck-danger-zone">' +
+      "<span>Retirer ce compte de l'outil — réversible (reconnexion complète).</span>" +
+      '<button type="button" class="ck-btn ck-btn--quiet-danger ck-btn--sm" onclick="openDisconnect(\'' + alias + '\')">Déconnecter…</button></div>';
 }
 function lockClick(alias) {
   const p = byAlias(alias);
