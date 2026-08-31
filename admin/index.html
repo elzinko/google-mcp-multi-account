@@ -1792,45 +1792,67 @@ svg { display: block; }
   .ck-page-head .ck-spacer{ display:none; }
 }
 
+/* ==== Raccordement Cockpit → admin réel (lot 1/0105) ==== */
+html, body { height:100%; }
+body { margin:0; }
+.ck-app { min-height:100vh; }
+.ck-mark { width:26px; height:26px; border-radius:7px; background:linear-gradient(135deg,var(--acc-solid),#7a4bff);
+  display:grid; place-items:center; color:#fff; font-family:var(--disp); font-weight:800; font-size:15px; flex:none; }
+.ck-rail-brand small { display:block; color:var(--rail-dim); font-size:11px; font-weight:400; }
+.ck-rail-grow { flex:1; }
+.ck-rail-row { display:flex; align-items:center; gap:6px; padding:6px 4px 0; }
+.ck-rail .ck-iconbtn { color:var(--rail-dim); border-color:var(--rail-line); background:transparent; min-width:36px; min-height:36px; }
+.ck-rail .ck-iconbtn:hover { color:var(--rail-ink); background:rgba(255,255,255,.07); }
+.ck-ver { font-family:var(--mono); font-size:10.5px; color:var(--rail-dim); margin-left:auto; }
+.ck-rail-nav a[aria-current="page"] { background:var(--rail-acc-bg); color:#fff; }
+.ck-rail-nav a[aria-current="page"] svg { color:var(--rail-acc); }
+.ck-bottomnav { display:none; }
+.ck-bottomnav a[aria-current="page"] { color:var(--acc); }
+/* la fondation bascule déjà rail↔bottom-nav sous 640px (media .ck-app/.ck-rail/.ck-bottomnav) */
+.add-account-row { display:none; }
+/* la page Comptes Cockpit (rendue par renderList) */
+.ck-comptes-head { display:flex; align-items:center; justify-content:space-between; gap:var(--s4); margin:0 0 var(--s5); flex-wrap:wrap; }
+.ck-comptes-head h2 { font-family:var(--disp); font-weight:700; font-size:var(--fs-h2); margin:0; letter-spacing:-.01em; }
+.ck-acct-panel { background:var(--surface); border:1px solid var(--line); border-radius:var(--r4); box-shadow:var(--e1); overflow:hidden; }
+.ck-acct-head, .ck-acct-row { display:grid; grid-template-columns:1fr auto 40px; align-items:center; gap:var(--s4); padding:var(--s3) var(--s4); }
+.ck-acct-head { background:var(--surface-2); font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--faint); font-weight:600; }
+.ck-acct-row { border-top:1px solid var(--line); cursor:pointer; }
+.ck-acct-row:hover { background:var(--surface-2); }
+.ck-acct-id { display:flex; align-items:center; gap:var(--s3); min-width:0; }
+.ck-acct-mail { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ck-row-actions { display:flex; justify-content:flex-end; }
+button.ck-keychip { border:0; cursor:pointer; }
+.ck-rail-nav a svg, .ck-rail-tool svg { width:18px; height:18px; flex:none; }
+.ck-bottomnav a svg { width:20px; height:20px; }
+.ck-keychip__ico svg { width:14px; height:14px; }
+@media (max-width:520px){ .ck-acct-head { display:none; } .ck-acct-row { grid-template-columns:1fr auto; } .ck-acct-row .ck-row-actions { display:none; } }
 </style>
 </head>
 <body>
-<header>
-  <div class="brand">
-    <h1><span class="brand-name">google-multi-account</span> <span class="h1-sub">— admin</span></h1>
-  </div>
-  <nav class="nav" aria-label="Navigation principale">
-    <button type="button" class="navbtn" data-view="comptes" onclick="goComptes()">Comptes</button>
-    <button type="button" class="navbtn" data-view="sessions" onclick="openSessions()">Sessions</button>
-    <button type="button" class="navbtn" data-view="journal" onclick="openJournal()">Journal</button>
-  </nav>
-  <div class="tools">
-    <button class="hbtn-icon" onclick="openLockAll()" title="Tout verrouiller — repasse tous les comptes en accès verrouillé" aria-label="Tout verrouiller"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></button>
-    <button class="hbtn-icon" onclick="openDoc()" title="Documentation" aria-label="Documentation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></button>
-    <div class="hmenu">
-      <button class="hbtn-icon" id="moreBtn" onclick="toggleMore(event)" aria-haspopup="true" aria-expanded="false" title="Plus d'outils" aria-label="Plus d'outils"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
-      <div class="hmenu-pop" id="morePop" role="menu" hidden>
-        <button role="menuitem" onclick="closeMore();openDev()">🛠 Développement</button>
-        <button role="menuitem" onclick="closeMore();openSetup()">🩺 Santé du setup</button>
+<div class="ck-app">
+  <aside class="ck-rail">
+    <div class="ck-rail-brand"><span class="ck-mark" aria-hidden="true">◧</span><span>multi-account<small>admin local</small></span></div>
+    <nav class="ck-rail-nav" aria-label="Navigation principale">
+      <a href="#" data-view="comptes" onclick="goComptes();return false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>Comptes</a>
+      <a href="#" data-view="sessions" onclick="openSessions();return false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg>Sessions</a>
+      <a href="#" data-view="journal" onclick="openJournal();return false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="8" y1="7" x2="20" y2="7"/><line x1="8" y1="12" x2="20" y2="12"/><line x1="8" y1="17" x2="20" y2="17"/><circle cx="4" cy="7" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="17" r="1"/></svg>Journal</a>
+    </nav>
+    <span class="ck-rail-grow"></span>
+    <button class="ck-rail-tool" onclick="openLockAll()" title="Repasse tous les comptes en accès verrouillé"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Tout verrouiller</button>
+    <div class="ck-rail-row">
+      <button class="ck-iconbtn" onclick="openDoc()" title="Documentation" aria-label="Documentation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></button>
+      <div class="hmenu">
+        <button class="ck-iconbtn" id="moreBtn" onclick="toggleMore(event)" aria-haspopup="true" aria-expanded="false" title="Plus d'outils" aria-label="Plus d'outils"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+        <div class="hmenu-pop" id="morePop" role="menu" hidden>
+          <button role="menuitem" onclick="closeMore();openDev()">🛠 Développement</button>
+          <button role="menuitem" onclick="closeMore();openSetup()">🩺 Santé du setup</button>
+        </div>
       </div>
+      <span id="verBadge" class="ck-ver" title="Version du code servi par cette admin">…</span>
     </div>
-    <div class="navmenu hmenu">
-      <button class="hbtn-icon" id="burgerBtn" onclick="toggleBurger(event)" aria-haspopup="true" aria-expanded="false" title="Menu" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
-      <div class="hmenu-pop" id="burgerPop" role="menu" hidden>
-        <button role="menuitem" data-view="comptes" onclick="closeBurger();goComptes()">Comptes</button>
-        <button role="menuitem" data-view="sessions" onclick="closeBurger();openSessions()">Sessions</button>
-        <button role="menuitem" data-view="journal" onclick="closeBurger();openJournal()">Journal</button>
-        <div class="menu-sep" role="separator"></div>
-        <button role="menuitem" onclick="closeBurger();openDoc()">❓ Documentation</button>
-        <button role="menuitem" onclick="closeBurger();openDev()">🛠 Développement</button>
-        <button role="menuitem" onclick="closeBurger();openSetup()">🩺 Santé du setup</button>
-      </div>
-    </div>
-    <span id="verBadge" class="badge" title="Version du code servi par cette admin">…</span>
-  </div>
-</header>
-<div id="ctxStrip" role="status"></div>
-<main>
+  </aside>
+  <main class="ck-main">
+    <div id="ctxStrip" role="status"></div>
   <div id="cards"></div>
   <div class="add-account-row">
     <button type="button" id="btnAdd" class="btn-add" onclick="openAdd()">＋ Connecter un compte</button>
@@ -1884,7 +1906,13 @@ svg { display: block; }
       <thead><tr><th>Quand</th><th>Client</th><th>Compte</th><th>Session</th><th>Commande</th><th>Décision</th></tr></thead>
       <tbody><tr><td colspan="6">Chargement…</td></tr></tbody></table></div>
   </section>
-</main>
+  </main>
+</div>
+<nav class="ck-bottomnav" aria-label="Navigation">
+  <a href="#" data-view="comptes" onclick="goComptes();return false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>Comptes</a>
+  <a href="#" data-view="sessions" onclick="openSessions();return false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg>Sessions</a>
+  <a href="#" data-view="journal" onclick="openJournal();return false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="8" y1="7" x2="20" y2="7"/><line x1="8" y1="12" x2="20" y2="12"/><line x1="8" y1="17" x2="20" y2="17"/><circle cx="4" cy="7" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="17" r="1"/></svg>Journal</a>
+</nav>
 
 <dialog id="dAdd">
   <h2>Connecter un compte Google</h2>
@@ -2496,23 +2524,58 @@ function finishLockExpand() {
     });
   });
 }
+// --- Écran Comptes en design system Cockpit (fiche 0105, lot 1) ---
+const CK_AV = ["var(--acc)", "var(--ok)", "#c85b2c", "#6a5acd", "#5b6575"];
+function ckAvatarColor(p) {
+  let h = 0; const s = (p.email || p.alias || "?");
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return CK_AV[h % CK_AV.length];
+}
+function ckStat(label, val) {
+  return '<div class="ck-stat"><div class="ck-stat__label">' + label + '</div><div class="ck-stat__val tnum">' + val + "</div></div>";
+}
+const CK_LOCK_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>';
+const CK_LOCK_SHUT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+function ckKeychip(p) {
+  const cell = 'onclick="event.stopPropagation();lockClick(\'' + p.alias + '\')"';
+  if (isOpen(p)) {
+    const t = hasWindow(p) ? ' <span class="ck-keychip__time tnum">' + fmtLeft(p) + "</span>" : "";
+    return '<button type="button" class="ck-keychip ck-keychip--open" ' + cell + ' title="Gérer l\'accès">' +
+      '<span class="ck-keychip__ico">' + CK_LOCK_OPEN + "</span>" +
+      '<span class="ck-keychip__label">Déverrouillé' + t + "</span></button>";
+  }
+  return '<button type="button" class="ck-keychip ck-keychip--shut" ' + cell + ' title="Déverrouiller">' +
+    '<span class="ck-keychip__ico">' + CK_LOCK_SHUT + "</span>" +
+    '<span class="ck-keychip__label">Verrouillé</span></button>';
+}
 function renderList() {
   VIEW = { mode: "list", alias: null };
   syncChrome();
   const el = $("cards");
-  if (!PROFILES.length) { el.innerHTML = '<div class="card">Aucun profil connecté.</div>'; return; }
-  el.innerHTML = PROFILES.map((p) => {
-    const cls = "prow can" + (p.connected ? "" : " off");
-    const lockArea = p.connected
-      ? '<span class="pctrl">' + lockHtml(p) + "</span>"
-      : '<span class="pctrl">' + reconnectBtn(p.alias) + ' <span class="offword">Déconnecté</span></span>';
-    const openAttr = p.connected ? ' onclick="openDetail(\'' + p.alias + '\')"' : "";
-    const chev = p.connected ? "›" : "";
-    return '<div class="' + cls + '"' + openAttr + '>' +
-      '<span class="pmail">' + esc(p.email || p.alias) + "</span>" +
-      lockArea +
-      '<span class="pchev">' + chev + "</span></div>";
+  const nConn = PROFILES.filter((p) => p.connected).length;
+  const nOpen = PROFILES.filter((p) => p.connected && isOpen(p)).length;
+  const nLock = PROFILES.filter((p) => p.connected && !isOpen(p)).length;
+  const head = '<div class="ck-comptes-head"><h2>Comptes</h2>' +
+    '<button type="button" class="ck-btn ck-btn--primary" onclick="openAdd()">＋ Connecter</button></div>' +
+    '<div class="ck-statgrid" style="margin-bottom:var(--s5)">' +
+      ckStat("Comptes connectés", nConn) + ckStat("Déverrouillés", nOpen) + ckStat("Verrouillés", nLock) +
+    "</div>";
+  if (!PROFILES.length) {
+    el.innerHTML = head + '<div class="ck-empty"><div class="ck-empty__title">Aucun compte connecté</div>' +
+      '<div class="ck-empty__sub">Connecte un compte Google pour commencer.</div></div>';
+    return;
+  }
+  const rows = PROFILES.map((p) => {
+    const av = '<span class="ck-avatar" style="background:' + ckAvatarColor(p) + '">' + esc((p.email || p.alias || "?").charAt(0).toUpperCase()) + "</span>";
+    const id = '<div class="ck-acct-id">' + av + '<span class="ck-acct-mail">' + esc(p.email || p.alias) + "</span></div>";
+    const state = p.connected ? ckKeychip(p) : '<span class="offword">Déconnecté</span>';
+    const action = p.connected
+      ? '<button type="button" class="ck-iconbtn" onclick="event.stopPropagation();openDetail(\'' + p.alias + '\')" title="Configurer" aria-label="Configurer ' + esc(p.email || p.alias) + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>'
+      : reconnectBtn(p.alias);
+    const rowClick = p.connected ? ' onclick="openDetail(\'' + p.alias + '\')"' : "";
+    return '<div class="ck-acct-row"' + rowClick + ">" + id + "<div>" + state + '</div><div class="ck-row-actions">' + action + "</div></div>";
   }).join("");
+  el.innerHTML = head + '<div class="ck-acct-panel"><div class="ck-acct-head"><span>Compte</span><span>État</span><span></span></div>' + rows + "</div>";
 }
 function openDetail(alias) { const p = byAlias(alias); if (p && p.connected) renderDetail(alias); }
 function renderDetail(alias) {
