@@ -460,6 +460,1329 @@ dialog.dlg-policy[open] { display:flex; flex-direction:column; }
   .add-account-row { justify-content:stretch; }
   .add-account-row .btn-add { flex:1; justify-content:center; }
 }
+
+/* ============================================================================
+   DESIGN SYSTEM « COCKPIT » (préfixé ck-) — fiche 0105, refonte par écran.
+   Cohabite avec l'ancien CSS ci-dessus sans collision (préfixe ck-).
+   Les écrans sont migrés un par un ; l'ancien CSS partira à la fin.
+   ============================================================================ */
+/* =====================================================================
+   FOUNDATION — Design System « Cockpit / Trousseau »
+   Admin web google-multi-account (outil local, souverain, privé).
+   Direction : console de monitoring cobalt froide + un point de chaleur
+   émeraude sur la sécurité (état déverrouillé = coffre ouvert).
+   Vanilla CSS, zéro dépendance. Thémé clair ET sombre.
+   ---------------------------------------------------------------------
+   Sommaire :
+     1. Reset léger + base body
+     2. Tokens — CLAIR (:root nu)
+     3. Tokens — SOMBRE (@media prefers-color-scheme + [data-theme=dark])
+     4. Tokens d'échelle (neutres au thème)
+     5. Layout console (.ck-app / .ck-rail / .ck-main)
+     6. Navigation mobile (.ck-bottomnav / .ck-burger)
+     7. Cadre maquette (.ck-frame / .ck-frame-bar)
+     8. Boutons (.ck-btn / .ck-iconbtn)
+     9. États : .ck-pill / .ck-badge / .ck-chip
+    10. HÉROS : .ck-keychip (cadenas)
+    11. Droits : .ck-cap
+    12. Cartes compte (.ck-card) + .ck-avatar
+    13. Tuiles chiffre (.ck-stat)
+    14. Table console (.ck-table)
+    15. Contrôle segmenté (.ck-segmented / .ck-viewtoggle)
+    16. Formulaire (.ck-field / .ck-check / .ck-switch / .ck-checkgrid)
+    17. Modale (.ck-modal / .ck-modal-scrim)
+    18. Callout (.ck-callout)
+    19. État vide (.ck-empty)
+    20. En-tête de page (.ck-page-head / .ck-live)
+   ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   1. RESET LÉGER + BASE
+   --------------------------------------------------------------------- */
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: var(--fs-md);
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, p, figure { margin: 0; }
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a { color: var(--acc); text-decoration: none; }
+
+svg { display: block; }
+
+:where(.ck-tnum) { font-variant-numeric: tabular-nums; }
+
+/* ---------------------------------------------------------------------
+   2. TOKENS — CLAIR (:root nu)
+   Le rail (--rail*) reste sombre dans les deux thèmes (chrome constant).
+   --------------------------------------------------------------------- */
+:root {
+  /* Polices — fallbacks systématiques. Chargées par la page hôte. */
+  --disp: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", "Menlo", monospace;
+
+  /* Surfaces & fonds */
+  --bg: #eaeef4;
+  --surface: #ffffff;
+  --surface-2: #f6f8fc;
+  --sunken: #eef1f7;
+
+  /* Encre & lignes */
+  --ink: #101726;
+  --muted: #546072;
+  --faint: #5d6a7a;
+  --line: #e0e5ee;
+  --line-2: #d3dae6;
+
+  /* Accent cobalt */
+  --acc: #3b5bff;
+  --acc-strong: #2f49d6;
+  --acc-solid: #3b5bff;
+  --acc-bg: #e8ecff;
+  --acc-line: #c8d2ff;
+
+  /* Vert émeraude — le point de chaleur « ouvert / déverrouillé » */
+  --ok: #0f7a54;
+  --ok-bg: #e0f2ea;
+  --ok-line: #bfe3d2;
+
+  /* Ambre — attention */
+  --warn: #7c4d05;
+  --warn-bg: #f8eed9;
+  --warn-line: #eeddba;
+
+  /* Rouge — danger / verrouillé */
+  --bad: #c0392b;
+  --bad-bg: #fae8e6;
+  --bad-line: #f2cfca;
+
+  /* Rail (chrome constant, sombre dans les deux thèmes) */
+  --rail: #131a26;
+  --rail-ink: #cfd8e8;
+  --rail-dim: #7a8599;
+  --rail-line: #242e3e;
+  --rail-acc: #8ba0ff;
+  --rail-acc-bg: rgba(59, 91, 255, .18);
+
+  /* Ombres */
+  --e1: 0 1px 2px rgba(16, 23, 38, .06), 0 1px 3px rgba(16, 23, 38, .05);
+  --e2: 0 12px 30px -12px rgba(16, 23, 38, .26), 0 4px 10px -6px rgba(16, 23, 38, .14);
+  --e-pop: 0 18px 44px -16px rgba(16, 23, 38, .34);
+}
+
+/* ---------------------------------------------------------------------
+   3. TOKENS — SOMBRE
+   Deux blocs identiques : le mode système (prefers-color-scheme) SAUF si
+   l'utilisateur a forcé le clair, ET le choix explicite [data-theme=dark].
+   Ne redéfinit QUE des couleurs + ombres.
+   --------------------------------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b0f16;
+    --surface: #141b24;
+    --surface-2: #19212c;
+    --sunken: #10161f;
+
+    --ink: #e7edf6;
+    --muted: #9aa6b7;
+    --faint: #8592a3;
+    --line: #232d3b;
+    --line-2: #2c3745;
+
+    --acc: #7d92ff;
+    --acc-strong: #93a4ff;
+    --acc-solid: #3f5bef;
+    --acc-bg: #1b2440;
+    --acc-line: #2f3d66;
+
+    --ok: #49c491;
+    --ok-bg: #0f352a;
+    --ok-line: #1c5142;
+
+    --warn: #e0a44a;
+    --warn-bg: #382a10;
+    --warn-line: #5a4620;
+
+    --bad: #ef8a8a;
+    --bad-bg: #3a1a1a;
+    --bad-line: #5c2c2c;
+
+    --e1: 0 1px 2px rgba(0, 0, 0, .4);
+    --e2: 0 14px 34px -14px rgba(0, 0, 0, .6), 0 4px 10px -6px rgba(0, 0, 0, .5);
+    --e-pop: 0 20px 48px -16px rgba(0, 0, 0, .7);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0b0f16;
+  --surface: #141b24;
+  --surface-2: #19212c;
+  --sunken: #10161f;
+
+  --ink: #e7edf6;
+  --muted: #9aa6b7;
+  --faint: #8592a3;
+  --line: #232d3b;
+  --line-2: #2c3745;
+
+  --acc: #7d92ff;
+  --acc-strong: #93a4ff;
+  --acc-solid: #3f5bef;
+  --acc-bg: #1b2440;
+  --acc-line: #2f3d66;
+
+  --ok: #49c491;
+  --ok-bg: #0f352a;
+  --ok-line: #1c5142;
+
+  --warn: #e0a44a;
+  --warn-bg: #382a10;
+  --warn-line: #5a4620;
+
+  --bad: #ef8a8a;
+  --bad-bg: #3a1a1a;
+  --bad-line: #5c2c2c;
+
+  --e1: 0 1px 2px rgba(0, 0, 0, .4);
+  --e2: 0 14px 34px -14px rgba(0, 0, 0, .6), 0 4px 10px -6px rgba(0, 0, 0, .5);
+  --e-pop: 0 20px 48px -16px rgba(0, 0, 0, .7);
+}
+
+/* ---------------------------------------------------------------------
+   4. TOKENS D'ÉCHELLE (neutres au thème — définis une seule fois)
+   --------------------------------------------------------------------- */
+:root {
+  /* Espace : 4 / 8 / 12 / 16 / 20 / 24 / 32 / 40 */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 20px;
+  --s6: 24px;
+  --s7: 32px;
+  --s8: 40px;
+  --s9: 48px;
+  --s10: 64px;
+
+  /* Rayons : 6 / 8 / 10 / 12 / 16 */
+  --r1: 6px;
+  --r2: 8px;
+  --r3: 10px;
+  --r4: 12px;
+  --r5: 16px;
+  --pill: 999px;
+
+  /* Encre posée sur un aplat de couleur pleine (accent/ok/bad, rail, avatars).
+     Blanc constant, indépendant du thème → contraste AA garanti sur ces fonds. */
+  --on-solid: #ffffff;
+
+  /* Type */
+  --fs-cap: 12px;
+  --fs-sm: 13px;
+  --fs-md: 15px;
+  --fs-lg: 16px;
+  --fs-h3: 19px;
+  --fs-h2: 23px;
+  --fs-h1: 30px;
+}
+
+/* ---------------------------------------------------------------------
+   5. LAYOUT CONSOLE
+   .ck-app = grid rail 216px + main. Le rail est le chrome constant.
+   --------------------------------------------------------------------- */
+.ck-app {
+  display: grid;
+  grid-template-columns: 216px 1fr;
+  min-height: 100%;
+}
+
+.ck-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s4) var(--s3);
+  background: var(--rail);
+  color: var(--rail-ink);
+  border-right: 1px solid var(--rail-line);
+}
+
+.ck-rail-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s2) var(--s3) var(--s5);
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: var(--fs-lg);
+  color: var(--on-solid);
+  letter-spacing: -.01em;
+}
+.ck-rail-brand svg { color: var(--rail-acc); flex: none; }
+
+.ck-rail-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ck-rail-nav a {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-height: 40px;
+  padding: 0 var(--s3);
+  border-radius: var(--r2);
+  color: var(--rail-dim);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  transition: background .12s ease, color .12s ease;
+}
+.ck-rail-nav a svg { flex: none; color: currentColor; }
+.ck-rail-nav a:hover { color: var(--rail-ink); background: rgba(255, 255, 255, .04); }
+.ck-rail-nav a.ck-on {
+  color: var(--on-solid);
+  background: var(--rail-acc-bg);
+  box-shadow: inset 2px 0 0 var(--rail-acc);
+}
+.ck-rail-nav a:focus-visible {
+  outline: 2px solid var(--rail-acc);
+  outline-offset: 2px;
+}
+
+.ck-rail-tool {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s3);
+  border-radius: var(--r2);
+  border: 1px solid var(--rail-line);
+  color: var(--rail-dim);
+  font-size: var(--fs-cap);
+}
+
+.ck-main {
+  min-width: 0;                 /* autorise le rétrécissement des enfants */
+  padding: var(--s6) var(--s7);
+  background: var(--bg);
+}
+
+/* ---------------------------------------------------------------------
+   6. NAVIGATION MOBILE — barre du bas + hamburger
+   Masquées par défaut ; à révéler par la page hôte en < 720px.
+   --------------------------------------------------------------------- */
+.ck-bottomnav {
+  display: flex;
+  align-items: stretch;
+  background: var(--rail);
+  border-top: 1px solid var(--rail-line);
+}
+.ck-bottomnav a {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 56px;
+  padding: var(--s2) var(--s1);
+  color: var(--rail-dim);
+  font-size: 11px;
+  font-weight: 500;
+}
+.ck-bottomnav a svg { flex: none; }
+.ck-bottomnav a.ck-on { color: var(--on-solid); }
+.ck-bottomnav a.ck-on svg { color: var(--rail-acc); }
+.ck-bottomnav a:focus-visible {
+  outline: 2px solid var(--rail-acc);
+  outline-offset: -2px;
+}
+
+.ck-burger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+.ck-burger:hover { background: var(--surface-2); }
+.ck-burger:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+
+/* ---------------------------------------------------------------------
+   7. CADRE MAQUETTE — « écran » pour la galerie / les previews
+   --------------------------------------------------------------------- */
+.ck-frame {
+  border: 1px solid var(--line);
+  border-radius: var(--r5);
+  background: var(--surface);
+  box-shadow: var(--e2);
+  overflow: hidden;
+}
+.ck-frame-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+}
+.ck-frame-bar .ck-dots {
+  display: inline-flex;
+  gap: var(--s2);
+  flex: none;
+}
+.ck-frame-bar .ck-dots i {
+  width: 11px;
+  height: 11px;
+  border-radius: var(--pill);
+  background: var(--line-2);
+}
+.ck-frame-bar .ck-dots i:nth-child(1) { background: var(--bad); opacity: .8; }
+.ck-frame-bar .ck-dots i:nth-child(2) { background: var(--warn); opacity: .8; }
+.ck-frame-bar .ck-dots i:nth-child(3) { background: var(--ok); opacity: .8; }
+.ck-frame-bar .ck-url {
+  font-family: var(--mono);
+  font-size: var(--fs-cap);
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  padding: 4px var(--s3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Variante barre sombre (chrome type navigateur foncé) */
+.ck-frame-bar--dark {
+  background: var(--rail);
+  border-bottom-color: var(--rail-line);
+}
+.ck-frame-bar--dark .ck-url {
+  color: var(--rail-ink);
+  background: rgba(255, 255, 255, .05);
+  border-color: var(--rail-line);
+}
+
+/* ---------------------------------------------------------------------
+   8. BOUTONS
+   44px de haut au doigt ; ~36px en desktop via .ck-btn--sm et media.
+   --------------------------------------------------------------------- */
+.ck-btn {
+  --_h: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  min-height: var(--_h);
+  padding: 0 var(--s4);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .12s ease, border-color .12s ease, box-shadow .12s ease, transform .04s ease;
+}
+.ck-btn svg { flex: none; }
+.ck-btn:hover { background: var(--surface-2); border-color: var(--muted); }
+.ck-btn:active { transform: translateY(1px); }
+.ck-btn:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+.ck-btn:disabled,
+.ck-btn[aria-disabled="true"] {
+  opacity: .5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.ck-btn--primary {
+  background: var(--acc-solid);
+  border-color: var(--acc-solid);
+  color: var(--on-solid);
+}
+.ck-btn--primary:hover { filter: brightness(.93); }
+
+.ck-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+.ck-btn--ghost:hover { background: var(--surface-2); color: var(--ink); }
+
+/* Danger discret : contour rouge, action réversible/prudente */
+.ck-btn--quiet-danger {
+  background: transparent;
+  border-color: var(--bad-line);
+  color: var(--bad);
+}
+.ck-btn--quiet-danger:hover { background: var(--bad-bg); border-color: var(--bad); }
+
+/* Danger plein : action destructive assumée */
+.ck-btn--danger {
+  background: var(--bad);
+  border-color: var(--bad);
+  color: var(--on-solid);
+}
+.ck-btn--danger:hover { filter: brightness(.94); }
+
+.ck-btn--sm {
+  --_h: 36px;
+  padding: 0 var(--s3);
+  font-size: var(--fs-cap);
+}
+
+/* Bouton-icône carré (icône 16, tooltip natif via title) */
+.ck-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease, border-color .12s ease;
+}
+.ck-iconbtn svg { width: 16px; height: 16px; }
+.ck-iconbtn:hover { background: var(--surface-2); color: var(--ink); border-color: var(--muted); }
+.ck-iconbtn:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+
+/* ---------------------------------------------------------------------
+   9. ÉTATS — pilules, badges, chips
+   Nombres en tabular-nums pour aligner minuteries & compteurs.
+   --------------------------------------------------------------------- */
+.ck-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  height: 26px;
+  padding: 0 var(--s3);
+  border-radius: var(--pill);
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--fs-cap);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ck-pill .ck-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--pill);
+  background: currentColor;
+  flex: none;
+}
+.ck-pill--ok    { color: var(--ok);   background: var(--ok-bg);   border-color: var(--ok-line); }
+.ck-pill--bad   { color: var(--bad);  background: var(--bad-bg);  border-color: var(--bad-line); }
+.ck-pill--warn  { color: var(--warn); background: var(--warn-bg); border-color: var(--warn-line); }
+.ck-pill--neutral { color: var(--muted); background: var(--surface-2); border-color: var(--line-2); }
+
+/* Badge : plus petit, coin sur une carte ou une rangée */
+.ck-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 var(--s2);
+  border-radius: var(--r1);
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .01em;
+}
+.ck-badge--ok      { color: var(--ok);   background: var(--ok-bg);   border-color: var(--ok-line); }
+.ck-badge--warn    { color: var(--warn); background: var(--warn-bg); border-color: var(--warn-line); }
+.ck-badge--neutral { color: var(--muted); background: var(--sunken); border-color: var(--line); }
+
+/* Chip : capacité accordée à une session (accent cobalt) */
+.ck-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 var(--s3);
+  border-radius: var(--pill);
+  background: var(--acc-bg);
+  border: 1px solid var(--acc-line);
+  color: var(--acc-strong);
+  font-size: var(--fs-cap);
+  font-weight: 600;
+  font-family: var(--mono);
+}
+.ck-chip svg { width: 13px; height: 13px; flex: none; }
+
+/* ---------------------------------------------------------------------
+   10. HÉROS — .ck-keychip (le cadenas)
+   Ouvert  = coffre déverrouillé, émeraude, minuterie de session.
+   Fermé   = verrouillé, rouge.
+   Radius --pill, icône SVG au trait.
+   --------------------------------------------------------------------- */
+.ck-keychip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  height: 34px;
+  padding: 0 var(--s4) 0 var(--s3);
+  border-radius: var(--pill);
+  border: 1px solid transparent;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: -.005em;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: var(--e1);
+}
+.ck-keychip__ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--pill);
+  flex: none;
+}
+.ck-keychip__ico svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ck-keychip__label { display: inline-flex; align-items: baseline; gap: 7px; }
+/* Minuterie / méta en mono, tabular */
+.ck-keychip__time {
+  font-family: var(--mono);
+  font-size: var(--fs-cap);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  opacity: .85;
+}
+
+/* Ouvert — émeraude, le point de chaleur du système */
+.ck-keychip--open {
+  background: var(--ok-bg);
+  border-color: var(--ok-line);
+  color: var(--ok);
+}
+.ck-keychip--open .ck-keychip__ico {
+  background: var(--ok);
+  color: var(--surface);
+}
+
+/* Fermé — verrouillé, rouge */
+.ck-keychip--shut {
+  background: var(--bad-bg);
+  border-color: var(--bad-line);
+  color: var(--bad);
+}
+.ck-keychip--shut .ck-keychip__ico {
+  background: var(--bad);
+  color: var(--surface);
+}
+
+/* ---------------------------------------------------------------------
+   11. DROITS — .ck-cap (pilule capacité)
+   Sens JAMAIS porté par la seule couleur : icône ✓ / ✗ obligatoire.
+   --------------------------------------------------------------------- */
+.ck-cap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 var(--s3) 0 var(--s2);
+  border-radius: var(--pill);
+  border: 1px solid var(--line-2);
+  font-size: var(--fs-cap);
+  font-weight: 600;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.ck-cap__ico {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.ck-cap__ico svg { width: 12px; height: 12px; stroke-width: 2.4; }
+.ck-cap--on {
+  color: var(--ok);
+  background: var(--ok-bg);
+  border-color: var(--ok-line);
+}
+.ck-cap--off {
+  color: var(--muted);
+  background: var(--sunken);
+  border-color: var(--line);
+  opacity: .72;
+  text-decoration: line-through;
+  text-decoration-color: var(--faint);
+}
+
+/* ---------------------------------------------------------------------
+   12. CARTES COMPTE — .ck-card (tactile)
+   Avatar rond coloré, email fort, alias mono, keychip en haut à droite,
+   séparateur, rangée de .ck-cap.
+   --------------------------------------------------------------------- */
+.ck-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r4);
+  background: var(--surface);
+  box-shadow: var(--e1);
+  transition: box-shadow .14s ease, border-color .14s ease, transform .06s ease;
+}
+.ck-card:hover {
+  box-shadow: var(--e2);
+  border-color: var(--line-2);
+  transform: translateY(-1px);
+}
+.ck-card__top {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+}
+.ck-card__ident { min-width: 0; flex: 1; }
+.ck-card__email {
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ck-card__alias {
+  font-family: var(--mono);
+  font-size: var(--fs-cap);
+  color: var(--muted);
+}
+.ck-card__key { margin-left: auto; flex: none; }
+.ck-card__sep {
+  height: 1px;
+  background: var(--line);
+  margin: 0 calc(var(--s4) * -1);   /* traverse toute la carte */
+}
+.ck-card__caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+
+/* Avatar rond coloré (initiale) — pour les cartes */
+.ck-avatar-round {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--pill);
+  flex: none;
+  color: var(--on-solid);
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: var(--fs-lg);
+  background: var(--acc);
+}
+
+/* ---------------------------------------------------------------------
+   13. TUILES CHIFFRE — .ck-stat
+   --------------------------------------------------------------------- */
+.ck-stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  padding: var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--surface);
+  box-shadow: var(--e1);
+}
+.ck-stat__label {
+  font-size: var(--fs-cap);
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.ck-stat__val {
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: var(--fs-h1);
+  line-height: 1.05;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+}
+.ck-stat__sub {
+  font-size: var(--fs-cap);
+  color: var(--faint);
+}
+.ck-stat--warn {
+  background: var(--warn-bg);
+  border-color: var(--warn-line);
+}
+.ck-stat--warn .ck-stat__label { color: var(--warn); }
+.ck-stat--warn .ck-stat__val { color: var(--warn); }
+
+/* ---------------------------------------------------------------------
+   14. TABLE CONSOLE — .ck-table (grid)
+   --------------------------------------------------------------------- */
+.ck-table {
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--surface);
+  box-shadow: var(--e1);
+  overflow: hidden;
+}
+.ck-table__head,
+.ck-table__row {
+  display: grid;
+  grid-template-columns: 2.4fr 1fr 1.2fr auto;
+  align-items: center;
+  gap: var(--s4);
+  padding: var(--s3) var(--s4);
+}
+.ck-table__head {
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+}
+.ck-table__row { border-top: 1px solid var(--line); }
+.ck-table__row:first-of-type { border-top: 0; }
+.ck-table__row:hover { background: var(--surface-2); }
+.ck-table__cell {
+  min-width: 0;
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ck-table__cell--mono {
+  font-family: var(--mono);
+  font-size: var(--fs-cap);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.ck-table__id {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-width: 0;
+}
+
+/* Avatar carré arrondi coloré (initiale) — pour les rangées de table */
+.ck-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r2);
+  flex: none;
+  color: var(--on-solid);
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: var(--fs-sm);
+  background: var(--acc);
+}
+
+/* ---------------------------------------------------------------------
+   15. CONTRÔLE SEGMENTÉ + bascule de vue
+   --------------------------------------------------------------------- */
+.ck-segmented {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--sunken);
+}
+.ck-segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 var(--s3);
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--fs-cap);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.ck-segmented button:hover { color: var(--ink); }
+.ck-segmented button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--e1);
+}
+.ck-segmented button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+
+.ck-viewtoggle {
+  display: inline-flex;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  overflow: hidden;
+  background: var(--surface);
+}
+.ck-viewtoggle button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 38px;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.ck-viewtoggle button:first-child { border-left: 0; }
+.ck-viewtoggle button svg { width: 16px; height: 16px; }
+.ck-viewtoggle button:hover { background: var(--surface-2); color: var(--ink); }
+.ck-viewtoggle button[aria-pressed="true"] { background: var(--acc-bg); color: var(--acc-strong); }
+.ck-viewtoggle button:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
+
+/* ---------------------------------------------------------------------
+   16. FORMULAIRE — .ck-field / inputs / .ck-checkgrid / .ck-check / .ck-switch
+   --------------------------------------------------------------------- */
+.ck-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ck-field > label {
+  font-size: var(--fs-cap);
+  font-weight: 600;
+  color: var(--muted);
+}
+.ck-field__hint { font-size: var(--fs-cap); color: var(--faint); }
+
+.ck-field input[type="text"],
+.ck-field input[type="email"],
+.ck-field input[type="search"],
+.ck-field select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 var(--s3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+.ck-field input::placeholder { color: var(--faint); }
+.ck-field input:hover,
+.ck-field select:hover { border-color: var(--muted); }
+.ck-field input:focus-visible,
+.ck-field select:focus-visible {
+  outline: none;
+  border-color: var(--acc);
+  box-shadow: 0 0 0 3px var(--acc-bg);
+}
+.ck-field select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.ck-w3.ck-org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238792a4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--s3) center;
+  padding-right: var(--s8);
+}
+
+/* Grille de cases */
+.ck-checkgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--s3);
+}
+
+/* Case à cocher custom accessible (le vrai input reste focusable) */
+.ck-check {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-height: 44px;
+  padding: 0 var(--s3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--surface);
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  user-select: none;
+}
+.ck-check:hover { background: var(--surface-2); }
+.ck-check input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.ck-check__box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border: 1.5px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--surface);
+  color: var(--on-solid);
+  transition: background .12s ease, border-color .12s ease;
+}
+.ck-check__box svg { width: 13px; height: 13px; opacity: 0; stroke-width: 3; }
+.ck-check input:checked + .ck-check__box {
+  background: var(--acc);
+  border-color: var(--acc);
+}
+.ck-check input:checked + .ck-check__box svg { opacity: 1; }
+.ck-check input:focus-visible + .ck-check__box {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+}
+
+/* Interrupteur on/off */
+.ck-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s3);
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  user-select: none;
+}
+.ck-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.ck-switch__track {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  flex: none;
+  border-radius: var(--pill);
+  background: var(--line-2);
+  border: 1px solid var(--line-2);
+  transition: background .16s ease, border-color .16s ease;
+}
+.ck-switch__track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--pill);
+  background: var(--surface);
+  box-shadow: var(--e1);
+  transition: transform .16s ease;
+}
+.ck-switch input:checked + .ck-switch__track {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+.ck-switch input:checked + .ck-switch__track::after { transform: translateX(18px); }
+.ck-switch input:focus-visible + .ck-switch__track {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------
+   17. MODALE — coquille + backdrop
+   --------------------------------------------------------------------- */
+.ck-modal-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 23, 38, .48);
+  backdrop-filter: blur(2px);
+  display: grid;
+  place-items: center;
+  padding: var(--s5);
+  z-index: 50;
+}
+.ck-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 100%);
+  max-height: min(80vh, 640px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r5);
+  box-shadow: var(--e-pop);
+  overflow: hidden;
+}
+.ck-modal__head {
+  padding: var(--s5) var(--s5) var(--s4);
+  border-bottom: 1px solid var(--line);
+}
+.ck-modal__title {
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: var(--fs-h3);
+  color: var(--ink);
+  letter-spacing: -.01em;
+}
+.ck-modal__subtitle {
+  margin-top: 4px;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+.ck-modal__body {
+  padding: var(--s5);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+}
+.ck-modal__foot {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--s3);
+  padding: var(--s4) var(--s5);
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+/* ---------------------------------------------------------------------
+   18. CALLOUT — bandeau d'information / alerte
+   --------------------------------------------------------------------- */
+.ck-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r3);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: var(--fs-sm);
+}
+.ck-callout__ico { flex: none; margin-top: 1px; color: var(--muted); }
+.ck-callout__ico svg { width: 18px; height: 18px; }
+.ck-callout strong { font-weight: 700; }
+.ck-callout--info {
+  background: var(--acc-bg);
+  border-color: var(--acc-line);
+}
+.ck-callout--info .ck-callout__ico { color: var(--acc-strong); }
+.ck-callout--warn {
+  background: var(--warn-bg);
+  border-color: var(--warn-line);
+}
+.ck-callout--warn .ck-callout__ico { color: var(--warn); }
+.ck-callout--bad {
+  background: var(--bad-bg);
+  border-color: var(--bad-line);
+}
+.ck-callout--bad .ck-callout__ico { color: var(--bad); }
+
+/* ---------------------------------------------------------------------
+   19. ÉTAT VIDE
+   --------------------------------------------------------------------- */
+.ck-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--s3);
+  padding: var(--s9) var(--s6);
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r4);
+  background: var(--surface-2);
+}
+.ck-empty__ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--pill);
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  color: var(--faint);
+}
+.ck-empty__ico svg { width: 26px; height: 26px; }
+.ck-empty__title {
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: var(--fs-h3);
+  color: var(--ink);
+}
+.ck-empty__sub {
+  font-size: var(--fs-sm);
+  color: var(--muted);
+  max-width: 40ch;
+}
+.ck-empty .ck-btn { margin-top: var(--s2); }
+
+/* ---------------------------------------------------------------------
+   20. EN-TÊTE DE PAGE — retour, titre, « en direct », contrôles
+   --------------------------------------------------------------------- */
+.ck-page-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding-bottom: var(--s4);
+  margin-bottom: var(--s5);
+  border-bottom: 1px solid var(--line);
+}
+.ck-page-head__back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+.ck-page-head__back:hover { background: var(--surface-2); color: var(--ink); }
+.ck-page-head__back:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+.ck-page-head h2 {
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: var(--fs-h2);
+  color: var(--ink);
+  letter-spacing: -.02em;
+}
+.ck-page-head .ck-spacer { flex: 1; }
+
+/* Indicateur « en direct » avec point pulsé */
+.ck-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 var(--s3);
+  border-radius: var(--pill);
+  border: 1px solid var(--ok-line);
+  background: var(--ok-bg);
+  color: var(--ok);
+  font-size: var(--fs-cap);
+  font-weight: 600;
+}
+.ck-live-dot {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--pill);
+  background: var(--ok);
+  flex: none;
+}
+.ck-live-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--pill);
+  background: var(--ok);
+  animation: live-pulse 1.8s ease-out infinite;
+}
+@keyframes live-pulse {
+  0%   { transform: scale(1);   opacity: .6; }
+  70%  { transform: scale(2.6); opacity: 0; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+/* Respecte la préférence système : pas d'animation */
+@media (prefers-reduced-motion: reduce) {
+  .ck-live-dot::after { animation: none; }
+}
+
+/* ---------------------------------------------------------------------
+   Utilitaires de galerie (démo uniquement — mise en page des exemples)
+   --------------------------------------------------------------------- */
+.ck-cardgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--s4);
+}
+.ck-statgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--s4);
+}
+.ck-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s3);
+}
+
+/* ============================================================================
+   CORRECTIONS POST-CRITIQUE (panel design) — en fin de feuille pour primer
+   ============================================================================ */
+.ck-screen-title{ font-family:var(--disp); font-weight:700; font-size:var(--fs-h3);
+  color:var(--ink); margin:0 0 var(--s4); letter-spacing:-.01em; }
+.ck-panel{ background:var(--surface); border:1px solid var(--line); border-radius:var(--r4);
+  box-shadow:var(--e1); padding:var(--s5); }
+.ck-iconbtn--danger{ color:var(--bad); border-color:var(--bad-line); }
+.ck-iconbtn--danger:hover{ background:var(--bad-bg); }
+/* Cibles tactiles ≥ 40px (retour accessibilité) */
+.ck-segmented button{ min-height:40px; }
+.ck-viewtoggle button{ min-height:40px; }
+/* Table : défiler plutôt que tronquer sous le contenu */
+.ck-table{ overflow-x:auto; }
+/* En-tête de page empilable */
+.ck-page-head{ flex-wrap:wrap; }
+/* Responsive console : le rail devient barre d'onglets sous 640px */
+@media (max-width:640px){
+  .ck-app{ grid-template-columns:1fr; }
+  .ck-rail{ display:none; }
+  .ck-bottomnav{ display:flex; }
+  .ck-page-head h2{ flex:1 1 100%; }
+  .ck-page-head .ck-spacer{ display:none; }
+}
+
 </style>
 </head>
 <body>
