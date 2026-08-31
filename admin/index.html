@@ -1893,6 +1893,11 @@ dialog button.primary:hover { filter:brightness(.93); border-color:var(--acc-sol
 dialog button.small { border-radius:var(--r1); }
 dialog button.danger, dialog button.danger-solid { background:var(--bad); border-color:var(--bad); color:#fff; }
 dialog button.danger:hover, dialog button.danger-solid:hover { filter:brightness(.94); }
+/* Lot 6 : finitions modales — cases à cocher/radios en accent cobalt, sections lisibles */
+dialog input[type=checkbox], dialog input[type=radio] { accent-color:var(--acc); width:15px; height:15px; }
+.dlg-policy fieldset { border:1px solid var(--line); border-radius:var(--r3); padding:var(--s3) var(--s4); margin:0 0 var(--s3); }
+.dlg-policy legend { color:var(--ink); font-weight:600; font-size:var(--fs-md); padding:0 var(--s2); }
+.dlg-policy .grid label { display:flex; align-items:center; gap:8px; }
 .dlg-policy .tabs { background:var(--sunken); border-radius:var(--r2); padding:3px; gap:2px; display:inline-flex; border:0; }
 .dlg-policy .tabs button { border:0; background:transparent; border-radius:var(--r1); }
 .dlg-policy .tabs button.active { background:var(--surface); box-shadow:var(--e1); color:var(--acc); }
