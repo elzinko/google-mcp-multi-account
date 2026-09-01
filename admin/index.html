@@ -1807,7 +1807,21 @@ body { margin:0; }
 .ck-rail-nav a[aria-current="page"] { background:var(--rail-acc-bg); color:#fff; }
 .ck-rail-nav a[aria-current="page"] svg { color:var(--rail-acc); }
 @media (min-width:641px){ .ck-bottomnav { display:none; } }
+.ck-bottomnav { position:fixed; left:0; right:0; bottom:0; z-index:40; }
+@media (max-width:640px){ .ck-main { padding-bottom:76px; } }
 .ck-bottomnav a[aria-current="page"] { color:var(--acc); }
+/* Barre du haut mobile : outils du rail (verrouiller/doc/dev/setup) accessibles < 640px */
+.ck-mtop { display:none; }
+@media (max-width:640px){
+  .ck-mtop { display:flex; align-items:center; justify-content:space-between; gap:var(--s2);
+    margin:0 0 var(--s4); padding:var(--s2) var(--s3); border-radius:var(--r3);
+    background:var(--rail); color:var(--rail-ink); }
+}
+.ck-mtop-brand { font-family:var(--disp); font-weight:700; font-size:var(--fs-lg); display:inline-flex; align-items:center; gap:8px; color:var(--on-solid); }
+.ck-mtop-brand .ck-mark { width:22px; height:22px; font-size:13px; }
+.ck-mtop-tools { display:inline-flex; gap:6px; }
+.ck-mtop .ck-iconbtn { color:var(--rail-ink); border-color:var(--rail-line); background:transparent; min-width:40px; min-height:40px; }
+.ck-mtop .ck-iconbtn svg { width:18px; height:18px; }
 /* la fondation bascule déjà rail↔bottom-nav sous 640px (media .ck-app/.ck-rail/.ck-bottomnav) */
 .add-account-row { display:none; }
 /* la page Comptes Cockpit (rendue par renderList) */
@@ -1906,7 +1920,7 @@ main.ck-main { max-width:1400px; margin:0; }
 .ck-comptes-tiles { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:var(--s3); margin-bottom:var(--s5); }
 @media (max-width:720px){ .ck-comptes-tiles { grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); } }
 .ck-rail .hmenu-pop { top:auto; bottom:calc(100% + 6px); right:auto; left:0; }
-@media (max-width:520px){ .ck-acct-head { display:none; } .ck-acct-row { grid-template-columns:1fr auto; } .ck-acct-row .ck-row-actions { display:none; } }
+@media (max-width:520px){ .ck-acct-head { display:none; } }
 </style>
 </head>
 <body>
@@ -1933,6 +1947,15 @@ main.ck-main { max-width:1400px; margin:0; }
     </div>
   </aside>
   <main class="ck-main">
+    <header class="ck-mtop">
+      <span class="ck-mtop-brand"><span class="ck-mark" aria-hidden="true">◧</span>admin</span>
+      <span class="ck-mtop-tools">
+        <button class="ck-iconbtn" onclick="openLockAll()" title="Tout verrouiller" aria-label="Tout verrouiller"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></button>
+        <button class="ck-iconbtn" onclick="openDoc()" title="Documentation" aria-label="Documentation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></button>
+        <button class="ck-iconbtn" onclick="openDev()" title="Développement" aria-label="Développement"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.7 2.7-2-2 2.7-2.7z"/></svg></button>
+        <button class="ck-iconbtn" onclick="openSetup()" title="Santé du setup" aria-label="Santé du setup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></button>
+      </span>
+    </header>
     <div id="ctxStrip" role="status"></div>
   <div id="cards"></div>
   <div class="add-account-row">
@@ -2572,21 +2595,10 @@ function closeMore() {
   $("moreBtn").setAttribute("aria-expanded", "false");
 }
 // Menu hamburger mobile (fiche 0104) : navigation + outils repliés sous 640px.
-function toggleBurger(e) {
-  if (e) e.stopPropagation();
-  const pop = $("burgerPop"), show = pop.hasAttribute("hidden");
-  pop.hidden = !show;
-  $("burgerBtn").setAttribute("aria-expanded", show ? "true" : "false");
-}
-function closeBurger() {
-  if ($("burgerPop").hidden) return;
-  $("burgerPop").hidden = true;
-  $("burgerBtn").setAttribute("aria-expanded", "false");
-}
-document.addEventListener("click", (e) => { if (!e.target.closest(".hmenu")) { closeMore(); closeBurger(); } });
+document.addEventListener("click", (e) => { if (!e.target.closest(".hmenu")) closeMore(); });
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
-  closeMore(); closeBurger();
+  closeMore();
   // Échap ferme d'abord une sous-modale ouverte (natif) ; sinon quitte la page en cours.
   if (!document.querySelector("dialog[open]")) {
     if (VIEW.mode === "sessions") closeSessions();
@@ -2887,7 +2899,8 @@ async function refreshSessions() {
     setSessLive(true);
   } catch (e) {
     setSessLive(false);
-    $("sessBody").innerHTML = '<p class="note">Erreur : ' + esc(e.message) + "</p>";
+    SESS_LAST = ""; // forcer un re-rendu quand l'API revient, même si les données n'ont pas changé
+    $("sessBody").innerHTML = '<p class="ck-sess-empty">Erreur : ' + esc(e.message) + "</p>";
   }
 }
 function sortedSessions() {
@@ -3411,7 +3424,7 @@ async function refreshJournal() {
     const j = JSON.stringify(LOG_ENTRIES);
     if (j !== JRN_LAST) { JRN_LAST = j; populateJournalFilters(); renderJournalTable(); }
     setJrnLive(true);
-  } catch (e) { setJrnLive(false); }
+  } catch (e) { setJrnLive(false); JRN_LAST = ""; }
 }
 function jrnDistinct(field) {
   const seen = [];
@@ -3618,7 +3631,7 @@ function renderDevSandboxes(d) {
         + '<div class="mono" style="word-break:break-all">' + esc(s.path) + "</div>"
         + (here
           ? '<p class="note" style="margin-top:8px">Tu consultes cette sandbox — ouvre une autre admin pour la supprimer.</p>'
-          : '<div style="margin-top:10px"><button type="button" class="small" onclick="removeSandbox(\'' + esc(s.id).replace(/'/g, "\\'") + '\')">Supprimer cette sandbox</button></div>')
+          : '<div style="margin-top:10px"><button type="button" class="small" onclick="removeSandbox(\'' + esc(s.id).replace(/[\\']/g, "\\$&") + '\')">Supprimer cette sandbox</button></div>')
         + "</div>" : "")
       + "</div>";
   }).join("") + "</div>";
