@@ -1809,7 +1809,8 @@ body { margin:0; }
 @media (min-width:641px){ .ck-bottomnav { display:none; } }
 .ck-bottomnav { position:fixed; left:0; right:0; bottom:0; z-index:40; }
 @media (max-width:640px){ .ck-main { padding-bottom:76px; } }
-.ck-bottomnav a[aria-current="page"] { color:var(--acc); }
+.ck-bottomnav a[aria-current="page"] { color:var(--on-solid); }
+.ck-bottomnav a[aria-current="page"] svg { color:var(--rail-acc); }
 /* Barre du haut mobile : outils du rail (verrouiller/doc/dev/setup) accessibles < 640px */
 .ck-mtop { display:none; }
 @media (max-width:640px){
@@ -2886,7 +2887,11 @@ function syncSessControls() {
 }
 function sessCapsCount(s) {
   return Object.keys(s.unlocks || {}).length +
-    Object.values(s.drive_zones || {}).reduce((n, zs) => n + (Array.isArray(zs) ? zs.length : 0), 0);
+    Object.values(s.drive_zones || {}).reduce((n, zs) => n + (Array.isArray(zs) ? zs.length : 0), 0) +
+    // Droits fins par service (session_grant_capability). L'API admin ne les expose pas
+    // encore (fiche 0106) ; compté ici pour que le tri « Nombre d'accès » soit juste dès
+    // qu'ils apparaissent, au lieu de reléguer ces sessions au niveau « aucun accès ».
+    (Array.isArray(s.capabilities) ? s.capabilities.length : 0);
 }
 function openSessions() {
   VIEW = { mode: "sessions", alias: null };
