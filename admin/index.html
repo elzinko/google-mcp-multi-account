@@ -2889,7 +2889,7 @@ function sessCapsCount(s) {
   return Object.keys(s.unlocks || {}).length +
     Object.values(s.drive_zones || {}).reduce((n, zs) => n + (Array.isArray(zs) ? zs.length : 0), 0) +
     // Droits fins par service (session_grant_capability). L'API admin ne les expose pas
-    // encore (fiche 0106) ; compté ici pour que le tri « Nombre d'accès » soit juste dès
+    // à ce jour (fiche 0106) ; compté ici pour que le tri « Nombre d'accès » soit juste dès
     // qu'ils apparaissent, au lieu de reléguer ces sessions au niveau « aucun accès ».
     (Array.isArray(s.capabilities) ? s.capabilities.length : 0);
 }
