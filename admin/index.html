@@ -1836,6 +1836,7 @@ body { margin:0; }
 .ck-acct-mail { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ck-row-actions { display:flex; justify-content:flex-end; }
 button.ck-keychip { border:0; cursor:pointer; }
+.ck-keychip:disabled { opacity:.55; cursor:wait; }
 .ck-rail-nav a svg, .ck-rail-tool svg { width:18px; height:18px; flex:none; }
 .ck-bottomnav a svg { width:20px; height:20px; }
 .ck-keychip__ico svg { width:14px; height:14px; }
@@ -2520,6 +2521,11 @@ function lockSetLoading(alias, on) {
     btn.disabled = !!on;
     btn.setAttribute("aria-busy", on ? "true" : "false");
   });
+  // Cadenas-clé Cockpit (page Comptes) : même état occupé pendant la requête (Touch ID compris).
+  document.querySelectorAll('.ck-keychip[data-alias="' + alias + '"]').forEach((chip) => {
+    chip.disabled = !!on;
+    chip.setAttribute("aria-busy", on ? "true" : "false");
+  });
 }
 function reconnectBtn(alias) {
   return '<button class="small" onclick="event.stopPropagation();reconnect(\'' + alias + '\')">Reconnecter</button>';
@@ -2644,7 +2650,7 @@ function ckKeychip(p) {
       '<span class="ck-keychip__ico">' + CK_LOCK_OPEN + "</span>" +
       '<span class="ck-keychip__label">Déverrouillé' + t + "</span></button>";
   }
-  return '<button type="button" class="ck-keychip ck-keychip--shut" ' + cell + ' title="Déverrouiller">' +
+  return '<button type="button" class="ck-keychip ck-keychip--shut" data-alias="' + p.alias + '" ' + cell + ' title="Déverrouiller">' +
     '<span class="ck-keychip__ico">' + CK_LOCK_SHUT + "</span>" +
     '<span class="ck-keychip__label">Verrouillé</span></button>';
 }
@@ -2734,6 +2740,7 @@ function renderDetail(alias) {
 function lockClick(alias) {
   const p = byAlias(alias);
   if (!p || !p.connected) return;
+  if (LOCK_LOADING.has(alias)) return; // requête déjà en cours (Touch ID compris) : pas de double-requête
   if (isOpen(p)) {
     if (hasWindow(p)) openRelock(alias);
     else act(alias, "lock");
