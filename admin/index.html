@@ -2952,6 +2952,7 @@ async function refreshSessions() {
     setSessLive(true);
   } catch (e) {
     setSessLive(false);
+    SESSIONS = []; // vider le cache : un tri/affichage hors ligne ne doit pas ré-afficher des cartes périmées (actions fantômes)
     SESS_LAST = ""; // forcer un re-rendu quand l'API revient, même si les données n'ont pas changé
     $("sessBody").innerHTML = '<p class="ck-sess-empty">Erreur : ' + esc(e.message) + "</p>";
   }
@@ -3479,6 +3480,7 @@ async function refreshJournal() {
     setJrnLive(true);
   } catch (e) {
     setJrnLive(false);
+    LOG_ENTRIES = []; // vider le cache : un filtre/mode dense hors ligne ne doit pas ré-afficher des lignes périmées
     JRN_LAST = ""; // forcer un re-rendu quand l'API revient
     const tb = $("logTable") && $("logTable").querySelector("tbody");
     if (tb) tb.innerHTML = '<tr><td colspan="6">Erreur : ' + esc(e.message) + "</td></tr>";
