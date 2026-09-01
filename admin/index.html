@@ -224,7 +224,12 @@ td.mono, .mono { font-family:ui-monospace, monospace; font-size:12.5px; }
 .docbody a { color:var(--acc); }
 .tabs { display:flex; gap:8px; margin-bottom:10px; }
 #toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--txt);
-  color:var(--bg); padding:9px 16px; border-radius:9px; opacity:0; transition:opacity .25s; pointer-events:none; max-width:80vw; }
+  color:var(--bg); padding:9px 16px; border-radius:9px; opacity:0; transition:opacity .25s; pointer-events:none; max-width:80vw; z-index:60; }
+/* Mobile : passer au-dessus de la barre d'onglets fixe (56px, z-index 40), sinon le toast
+   est peint dessous et le retour d'action devient invisible. */
+@media (max-width:640px){ #toast { bottom:calc(72px + env(safe-area-inset-bottom)); } }
+/* Modale d'accès temporaire : boutons d'ajustement de la durée (−/+ 30 min). */
+.dlg-relock-adjust { display:flex; gap:8px; justify-content:center; margin:2px 0 6px; }
 .mtop { margin-top:14px; display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
 
 /* ── Refonte v11 (fiche 0036) : liste → page de compte ── */
@@ -2045,8 +2050,8 @@ main.ck-main { max-width:1400px; margin:0; }
     <div class="dlg-confirm-head">
       <span class="dlg-confirm-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>
       <div class="dlg-confirm-titles">
-        <h2>Verrouiller l'accès ?</h2>
-        <p class="dlg-confirm-sub">Les assistants ne pourront plus accéder à ce compte jusqu'au prochain déverrouillage.</p>
+        <h2>Gérer l'accès temporaire</h2>
+        <p class="dlg-confirm-sub">Prolonge ou raccourcis la fenêtre, ou verrouille l'accès maintenant.</p>
       </div>
     </div>
     <div class="dlg-account-chip" id="relockAccount">
@@ -2056,9 +2061,13 @@ main.ck-main { max-width:1400px; margin:0; }
         <span class="dlg-account-alias mono" id="relockAlias"></span>
       </span>
     </div>
+    <div class="dlg-relock-adjust">
+      <button type="button" class="ck-btn ck-btn--sm" onclick="relockShorten()">− 30 min</button>
+      <button type="button" class="ck-btn ck-btn--sm" onclick="relockProlong()">+ 30 min</button>
+    </div>
     <div class="dlg-foot">
       <button type="button" onclick="dRelock.close()">Annuler</button>
-      <button type="button" class="danger-solid" id="relockGo" onclick="doRelock()">Verrouiller maintenant</button>
+      <button type="button" class="danger-solid" id="relockGo" onclick="doRelock()" aria-label="Verrouiller l'accès maintenant">Verrouiller maintenant</button>
     </div>
   </div>
 </dialog>
@@ -2775,6 +2784,10 @@ async function doRelock() {
   await act(alias, "lock");
   toast("🔒 Accès verrouillé");
 }
+// Depuis la modale d'accès temporaire : ajuster la fenêtre sans reverrouiller. Même garde
+// anti-double-requête que le cadenas (évite un 2e appel/Touch ID pendant un ajustement).
+function relockProlong() { if (relockTarget && !LOCK_LOADING.has(relockTarget)) prolong(relockTarget); }
+function relockShorten() { if (relockTarget && !LOCK_LOADING.has(relockTarget)) shorten(relockTarget); }
 async function prolong(alias) {
   const p = byAlias(alias);
   if (!p) return;
