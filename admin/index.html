@@ -1920,7 +1920,14 @@ main.ck-main { max-width:1400px; margin:0; }
 .ck-comptes-tiles { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:var(--s3); margin-bottom:var(--s5); }
 @media (max-width:720px){ .ck-comptes-tiles { grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); } }
 .ck-rail .hmenu-pop { top:auto; bottom:calc(100% + 6px); right:auto; left:0; }
-@media (max-width:520px){ .ck-acct-head { display:none; } }
+@media (max-width:520px){
+  .ck-acct-head { display:none; }
+  /* Emails complets au doigt : l'email prend toute la largeur et passe à la ligne
+     (fini l'ellipsis) ; l'état et l'action descendent sur une 2ᵉ ligne. */
+  .ck-acct-row { grid-template-columns:1fr auto; row-gap:var(--s2); }
+  .ck-acct-id { grid-column:1 / -1; }
+  .ck-acct-mail { white-space:normal; overflow:visible; text-overflow:clip; overflow-wrap:anywhere; line-height:1.3; }
+}
 </style>
 </head>
 <body>
@@ -2633,7 +2640,7 @@ function ckKeychip(p) {
   const cell = 'onclick="event.stopPropagation();lockClick(\'' + p.alias + '\')"';
   if (isOpen(p)) {
     const t = hasWindow(p) ? ' <span class="ck-keychip__time tnum">' + fmtLeft(p) + "</span>" : "";
-    return '<button type="button" class="ck-keychip ck-keychip--open" ' + cell + ' title="Gérer l\'accès">' +
+    return '<button type="button" class="ck-keychip ck-keychip--open" data-alias="' + p.alias + '" ' + cell + ' title="Gérer l\'accès">' +
       '<span class="ck-keychip__ico">' + CK_LOCK_OPEN + "</span>" +
       '<span class="ck-keychip__label">Déverrouillé' + t + "</span></button>";
   }
@@ -2792,6 +2799,16 @@ setInterval(() => {
       el.classList.remove("cd-ok", "cd-warn", "cd-crit");
       el.classList.add("cd-" + cdLevelSecs(s));
     }
+  });
+  // Page Comptes (Cockpit) : même horloge pour le cadenas-clé, sinon le rebours reste
+  // figé et n'expire jamais (le poll profils ne re-rend pas si le JSON n'a pas bougé).
+  document.querySelectorAll(".ck-keychip--open[data-alias]").forEach((el) => {
+    const p = byAlias(el.getAttribute("data-alias"));
+    if (!p) return;
+    const t = el.querySelector(".ck-keychip__time");
+    if (!t) return; // ouvert sans fenêtre (déverrouillage permanent) : rien à décompter
+    if (!isOpen(p) || secsLeft(p) <= 0) { expired = true; return; }
+    t.textContent = fmtLeft(p);
   });
   if (expired) rerender();
 }, 1000);
@@ -3433,8 +3450,12 @@ function jrnDistinct(field) {
 }
 function fillFilterSelect(id, values, cur, allLabel, shorten) {
   const sel = $(id); if (!sel) return;
+  // Filtre actif sans entrée dans les logs récents : la valeur manque de `values`. On
+  // l'ajoute quand même, sinon le select retombe sur « tout » en affichant zéro résultat
+  // — un filtre fantôme (actif mais invisible).
+  const opts = (cur && values.indexOf(cur) < 0) ? values.concat([cur]) : values;
   sel.innerHTML = ['<option value="">' + allLabel + "</option>"].concat(
-    values.map((v) => '<option value="' + esc(v) + '"' + (v === cur ? " selected" : "") + ">" +
+    opts.map((v) => '<option value="' + esc(v) + '"' + (v === cur ? " selected" : "") + ">" +
       esc(shorten ? shorten(v) : v) + "</option>")).join("");
   sel.value = cur;
 }
