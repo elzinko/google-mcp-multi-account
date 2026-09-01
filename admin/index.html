@@ -1751,6 +1751,11 @@ svg { display: block; }
 @media (prefers-reduced-motion: reduce) {
   .ck-live-dot::after { animation: none; }
 }
+/* Sonde hors ligne : le badge doit cesser de paraître « en direct » (vert + pulsation),
+   sinon le visuel contredit le texte « hors ligne ». */
+.ck-live.stale { color: var(--muted); background: var(--surface-2); border-color: var(--line); }
+.ck-live.stale .ck-live-dot { background: var(--muted); }
+.ck-live.stale .ck-live-dot::after { animation: none; }
 
 /* ---------------------------------------------------------------------
    Utilitaires de galerie (démo uniquement — mise en page des exemples)
@@ -1883,6 +1888,12 @@ button.ck-keychip { border:0; cursor:pointer; }
 .ck-sess-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; }
 .ck-sess-row .ck-sess-caps, .ck-sess-row .ck-sess-actions { margin:0; }
 .ck-sess-row .ck-sess-actions { justify-content:flex-end; }
+/* Mobile : empiler les colonnes de la ligne de session. Sinon 4 boutons de 40px + les
+   colonnes identité/droits débordent la largeur (~311px sous 640px). */
+@media (max-width:640px){
+  .ck-sess-row { grid-template-columns:1fr; }
+  .ck-sess-row .ck-sess-actions { justify-content:flex-start; }
+}
 /* Page Journal (lot 4) */
 .ck-filters { display:flex; align-items:center; gap:var(--s3); flex-wrap:wrap; margin:0 0 var(--s4); }
 .ck-filters label { display:inline-flex; align-items:center; gap:6px; font-size:var(--fs-cap); color:var(--muted); }
@@ -3466,7 +3477,13 @@ async function refreshJournal() {
     const j = JSON.stringify(LOG_ENTRIES);
     if (j !== JRN_LAST) { JRN_LAST = j; populateJournalFilters(); renderJournalTable(); }
     setJrnLive(true);
-  } catch (e) { setJrnLive(false); JRN_LAST = ""; }
+  } catch (e) {
+    setJrnLive(false);
+    JRN_LAST = ""; // forcer un re-rendu quand l'API revient
+    const tb = $("logTable") && $("logTable").querySelector("tbody");
+    if (tb) tb.innerHTML = '<tr><td colspan="6">Erreur : ' + esc(e.message) + "</td></tr>";
+    const cnt = $("jrnCount"); if (cnt) cnt.textContent = "";
+  }
 }
 function jrnDistinct(field) {
   const seen = [];
