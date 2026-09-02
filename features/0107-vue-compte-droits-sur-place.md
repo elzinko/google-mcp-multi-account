@@ -71,9 +71,18 @@ Supprimer la phrase longue. Un **bouton discret à droite** suffit ; **infobulle
 [`0061`](done/0061-deconnexion-modale-confirmation.md)).
 
 **E. Liste des comptes : vignettes en couleur.**
-Les 3 tuiles d'état passent en couleur porteuse de sens :
-**connectés = bleu**, **déverrouillés = vert**, **verrouillés = rouge**. Réutilise le composant
-`.ck-stat` (`:1240`) en ajoutant des variantes de couleur (aujourd'hui : neutre + `--warn`).
+Les tuiles d'état passent en couleur porteuse de sens :
+**connectés = bleu**, **état ouvert / permissif = vert**, **état fermé / restreint = rouge**.
+Réutilise le composant `.ck-stat` (`:1240`) en ajoutant des variantes de couleur (aujourd'hui :
+neutre + `--warn`).
+
+> **Arbitrage avec la fiche [`0106`](0106-vue-compte-orientee-sessions.md).** 0107 apporte le
+> **système de couleur** ; 0106 décide **ce que comptent** ces vignettes. 0106 juge l'état
+> « verrouillé / déverrouillé » **par compte** trompeur et veut le remplacer par un **compteur de
+> sessions** (en gardant un indicateur « porte d'élicitation » ouverte/fermée). Donc : si 0107
+> passe en premier, il colore les vignettes actuelles ; quand 0106 atterrit, il **redéfinit** leur
+> sens et **réutilise** les mêmes couleurs — rien de jeté. En cas de conflit, **0106 prime sur la
+> sémantique** de l'état compte ; 0107 garde la main sur le visuel et l'édition des droits.
 
 **F. « Connecter un compte » en bas de la liste.**
 Déplacer le CTA « + Connecter » **sous** la liste, à la suite. Compromis assumé : si beaucoup de
@@ -102,7 +111,7 @@ Les trois arbitrages ouverts à la capture sont tranchés.
 - [ ] Activer l'écriture Drive **impose** de choisir au moins une zone (pas de wildcard).
 - [ ] La ligne Drive a un bouton « dossiers » ouvrant la gestion des zones.
 - [ ] Le texte long « Retirer ce compte… » est remplacé par un bouton + infobulle ; la modale de confirmation est conservée.
-- [ ] La liste des comptes montre 3 vignettes colorées : connectés (bleu), déverrouillés (vert), verrouillés (rouge).
+- [ ] La liste des comptes montre des vignettes d'état **colorées** : connecté = bleu, ouvert/permissif = vert, fermé/restreint = rouge. **Ce que comptent** ces vignettes (verrou compte vs compteur de sessions) suit la fiche [`0106`](0106-vue-compte-orientee-sessions.md) ; 0107 n'impose que le code couleur.
 - [ ] Le bouton « Connecter un compte » est **sous** la liste.
 - [ ] Rendu clair ET sombre corrects ; zéro dépendance ajoutée ; `./scripts/test.sh` au vert.
 
