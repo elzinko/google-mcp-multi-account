@@ -18,7 +18,7 @@ Aujourd'hui, pour changer les droits d'un compte, il faut ouvrir la page **Polic
 et à part. On veut l'inverse : **régler les droits directement sur la page du compte**. Chaque **droit**
 (lire Gmail, envoyer, créer dans Drive…) devient une bascule qu'on active ou coupe d'un clic, au
 grain réel de la policy. Vert = autorisé, rouge = coupé (au lieu du texte barré actuel). La ligne Drive gagne un bouton « dossiers » à
-droite, pour choisir les zones d'écriture. Au passage, on nettoie la liste des comptes :
+droite, pour choisir les zones d'écriture permanentes. Au passage, on nettoie la liste des comptes :
 vignettes en couleur, moins de texte, bouton « Connecter » en bas.
 
 Fait suite aux retours de Thomas du 2026-09-03 sur la refonte Cockpit (PR #128). C'est du
@@ -59,13 +59,24 @@ bascule cliquable — vert = autorisée, rouge = coupée. On reste au **grain r�
 activerait des opérations sensibles (envoyer, supprimer) ou en perdrait d'autrement autorisées, en
 douce. La modale Policy disparaît ; un pli « avancé » (édition brute) reste pour les scopes rares.
 
-**B. Bouton « dossiers » sur la ligne Drive.**
-À droite de la ligne Drive, une icône ouvre la gestion des **zones d'écriture** (dossiers).
-Réutilise le sélecteur existant (`openZones` `:2179`, navigateur de dossiers `afPick` `:3360`).
+**B. Bouton « dossiers » sur la ligne Drive — zones PERMANENTES uniquement.**
+À droite de la ligne Drive, une icône ouvre la gestion des **zones permanentes** (la liste
+`writeFolders` de la policy). Réutilise le **navigateur de dossiers** (`afPick` `:3360`) et la route
+**permanente** `/api/profiles/<alias>/drive-folder` (`admin/index.html:3381`).
+
+> **Piège relevé par la revue — ne pas réutiliser la branche « temporaire » du sélecteur.** Son
+> option temporaire poste sur `/api/profiles/<alias>/grant` (`admin/index.html:3384`), qui appelle
+> le `mag grant` **compte-large** (`admin/server.js:821`). La page compte **n'a pas de session** :
+> y émettre un grant « temporaire » l'ouvrirait à **toutes** les sessions — l'inverse du modèle.
+> Donc la page compte édite **le plafond** (zones permanentes) ; les grants **temporaires par
+> session** restent dans la vue **Sessions** (icône dossier d'une session → `/api/sessions/<sid>/grant`,
+> `openSessGrant` `:3055`).
+
 Activer l'écriture met le compte en **mode zones** (`zonesOnly: true`, **jamais** wildcard). La
-liste de zones peut rester **vide** : c'est le **défaut sûr** (`default_policy.py` pose
-`writeFolders: []`) — chaque écriture passe alors par un **grant de session temporaire**. Une liste
-renseignée = zones **permanentes**. On ne **force jamais** une zone permanente pour pouvoir écrire.
+liste `writeFolders` peut rester **vide** : c'est le **défaut sûr** (`default_policy.py` la pose
+vide). L'écriture est alors **refusée au niveau compte** ; chaque session obtient son accès par un
+**grant de session temporaire**, **dans sa propre session** — pas depuis ici. On ne **force jamais**
+une zone permanente pour autant.
 
 **C. Icône pour configurer, pas un libellé.**
 Remplacer le bouton texte « Configurer les droits » par une **icône** (roue crantée ou clé),
@@ -116,8 +127,8 @@ Les trois arbitrages ouverts à la capture sont tranchés.
 ## Critères d'acceptation
 
 - [ ] Sur la page d'un compte, **chaque opération** d'un service courant s'active/coupe d'un clic (grain de `gateway/default_policy.py`), **sans** ouvrir la modale Policy — aucune opération activée ou perdue en douce.
-- [ ] Activer l'écriture Drive met le compte en **mode zones** (`zonesOnly`, jamais wildcard) ; la liste de zones peut être **vide** (→ chaque écriture via un grant de session temporaire, défaut sûr) **ou** renseignée (zones permanentes). Jamais d'obligation de créer une zone permanente.
-- [ ] La ligne Drive a un bouton « dossiers » ouvrant la gestion des zones.
+- [ ] Activer l'écriture Drive pose `zonesOnly` (jamais wildcard) ; `writeFolders` **vide** = défaut sûr (écriture refusée au niveau compte → chaque session demande son grant temporaire dans la vue Sessions) **ou** renseignée (zones permanentes). Jamais d'obligation de créer une zone permanente, et **aucun grant temporaire émis depuis la page compte**.
+- [ ] La ligne Drive a un bouton « dossiers » éditant les **zones permanentes** (`writeFolders`) via `/api/profiles/<alias>/drive-folder` ; il **n'émet aucun grant temporaire** (jamais la branche compte-large `/api/profiles/<alias>/grant`).
 - [ ] Le texte long « Retirer ce compte… » est remplacé par un bouton + infobulle ; la modale de confirmation est conservée.
 - [ ] La liste des comptes montre des vignettes d'état **colorées** : connecté = bleu, ouvert/permissif = vert, fermé/restreint = rouge. **Ce que comptent** ces vignettes (verrou compte vs compteur de sessions) suit la fiche [`0106`](0106-vue-compte-orientee-sessions.md) ; 0107 n'impose que le code couleur.
 - [ ] Le bouton « Connecter un compte » est **sous** la liste.
@@ -127,9 +138,11 @@ Les trois arbitrages ouverts à la capture sont tranchés.
 
 Ouvrir un compte : activer puis couper une **opération** précise (ex. Gmail « envoyer ») et
 vérifier que la policy suit au bon grain (`mag policy <alias> show`). Activer l'écriture Drive
-**sans** créer de zone : vérifier que le mode zones est posé (`zonesOnly`) et que les écritures
-passent par un grant de session temporaire. Revenir à la liste : vérifier les vignettes colorées
-et le bouton « Connecter » en bas. Contrôler en clair et en sombre.
+**sans** créer de zone : vérifier que le mode zones est posé (`zonesOnly`) et qu'**aucun grant
+compte-large** n'est émis — la page compte ne touche que `writeFolders` (permanent). Le grant
+temporaire d'une écriture se fait **dans la vue Sessions** (`/api/sessions/<sid>/grant`). Revenir à
+la liste : vérifier les vignettes colorées et le bouton « Connecter » en bas. Contrôler en clair et
+en sombre.
 
 ## Routage des autres retours PO (2026-09-03)
 
