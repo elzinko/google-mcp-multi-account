@@ -6,8 +6,8 @@ priority: P1
 product: google-mcp-multi-account
 version:
 epic: 0060
-status: idea
-ready:
+status: todo
+ready: 2026-09-03
 pr:
 created: 2026-09-03
 ---
@@ -45,6 +45,10 @@ La page d'un compte (`renderDetail`, `admin/index.html:2725`) affiche les droits
 Sous la fiche, un paragraphe verbeux — « Retirer ce compte de l'outil — réversible (reconnexion
 complète). » (`:2758`) — occupe de la place pour rien.
 
+**Valeur.** On règle les droits **là où on les lit** : un aller-retour en moins, une surface en
+moins à maintenir. La page compte devient le vrai poste de pilotage du plafond d'un compte, et la
+liste dit d'un coup d'œil l'état de chacun (les 3 couleurs).
+
 ## Proposition
 
 **A. Droits éditables sur place (remplace la modale Policy).**
@@ -75,16 +79,22 @@ Les 3 tuiles d'état passent en couleur porteuse de sens :
 Déplacer le CTA « + Connecter » **sous** la liste, à la suite. Compromis assumé : si beaucoup de
 comptes, il faut scroller pour l'atteindre — peu probable dans cet usage perso.
 
-## Points à trancher au grooming
+## Décisions de conception (groomées 2026-09-03)
 
-- **Deux rouges dans la même page ?** Le rouge « service coupé » (policy) et le rouge
-  « verrouillé » (verrou d'élicitation) ne veulent pas dire la même chose. Distinguer les deux
-  sémantiques visuellement, sinon on brouille le message.
-- **Toggles vs JSON.** Tout passer en boutons, ou garder un repli « avancé » vers la policy
-  brute pour les scopes rares (ex. Keep, Workspace) ?
-- **Portée du clic.** Confirmer qu'éditer la policy inline reste bien un geste *admin sur le
-  plafond*, et ne court-circuite pas l'élicitation par session (ça ne devrait pas : plafond ≠
-  octroi).
+Les trois arbitrages ouverts à la capture sont tranchés.
+
+- **Cliquer un service édite la policy — un geste admin sur le plafond.** On reste au **même
+  niveau de confiance** que la modale Policy d'aujourd'hui. Ça **n'accorde rien à une session** :
+  chaque session continue de demander son propre accès (ADR-0007). Donc aucun court-circuit du
+  modèle par session. Le plafond ≠ l'octroi.
+- **Un seul rouge « sécurité », réservé au verrou.** On garde le code couleur demandé : **vert =
+  service autorisé**, **rouge = service coupé**. Mais le rouge du service coupé et le rouge du
+  **compte verrouillé** ne sont jamais le même aplat ni côte à côte. Le verrou garde sa forme
+  propre — **cadenas rouge plein** (`ck-keychip`) ; le service coupé se lit par une **bascule
+  éteinte** (contour rouge, pas aplat plein). Forme et zone différentes : pas de confusion.
+- **Bascules + repli « avancé ».** Les services courants (Gmail, Drive, Calendar, Docs, Sheets,
+  Tasks) passent en **bascules**. Un pli **« avancé »** conserve l'édition brute pour les scopes
+  rares (Keep, spécifiques Workspace). On ne perd **aucune** capacité de la modale Policy actuelle.
 
 ## Critères d'acceptation
 

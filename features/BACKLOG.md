@@ -39,6 +39,7 @@
 | [0099](0099-sessions-pilote-tri-liste-vignettes.md) | Sessions — tranche pilote du design system (cartes régulières + tri + bascule liste/vignettes) | feature | P1 |  | 0060 | google-mcp-multi-account | 🔴 todo |  |
 | [0102](0102-journal-page-monitoring-filtres-par-session.md) | Journal en page dédiée — filtres + journal par session (virage monitoring) | feature | P1 |  | 0060 | google-mcp-multi-account | 🔴 todo |  |
 | [0104](0104-app-shell-responsive-mobile.md) | App shell responsive — navigation et rendu mobile pro (bottom-nav + top-bar) | feature | P1 |  | 0060 | google-mcp-multi-account | 🔴 todo |  |
+| [0107](0107-vue-compte-droits-sur-place.md) | Vue compte — piloter les droits sur place (remplacer la modale Policy) + nettoyer la liste | feature | P1 |  | 0060 | google-mcp-multi-account | 🔴 todo |  |
 | [0002](done/0002-durcir-modele-policy-default-deny.md) | Durcir le modèle de policy — décisions « default-deny » soulevées par l'audit | feature | P2 |  |  |  | ✅ shipped | #12 |
 | [0007](done/0007-provisioning-idempotent-declaratif.md) | Provisioning GCP idempotent/déclaratif — durcir provision-gcp.sh ou passer à Terraform | feature | P2 |  |  |  | ✅ shipped | #10 |
 | [0008](done/0008-connexion-dynamique-compte-elicitation.md) | Connexion dynamique d'un nouveau compte via élicitation forte (access_request kind=add_account) | feature | P2 |  |  |  | ✅ shipped | #7 |
@@ -95,7 +96,6 @@
 | # | Titre | Type | Prio | Version | Épic | Produit | Statut | PR |
 |---|-------|------|------|---------|------|---------|--------|----|
 | [0101](0101-nom-de-session-fourni-par-le-client.md) | Nom lisible de session, fourni par le client MCP | feature | P1 |  | 0082 | google-mcp-multi-account | 💡 idea |  |
-| [0107](0107-vue-compte-droits-sur-place.md) | Vue compte — piloter les droits sur place (remplacer la modale Policy) + nettoyer la liste | feature | P1 |  | 0060 | google-mcp-multi-account | 💡 idea |  |
 | [0006](0006-harnais-test-manuel-hybride.md) | Harnais hybride pour les tests manuels — script pour la mécanique, LLM pour la glu | feature | P2 |  |  |  | 💡 idea |  |
 | [0026](0026-savoir-quelle-version-repond.md) | Savoir quelle version répond — version annoncée par les tools, dérive détectée | feature | P2 |  |  |  | 💡 idea |  |
 | [0035](0035-admin-acces-rapide-et-visu-zones.md) | Accès rapide à l'admin + visualisation des zones (icône barre de menus ?) | feature | P2 |  |  |  | 💡 idea |  |
