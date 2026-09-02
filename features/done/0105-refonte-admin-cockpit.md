@@ -6,9 +6,9 @@ priority: P1
 product: google-mcp-multi-account
 version:
 epic:
-status: in-progress
+status: shipped
 ready:
-pr:
+pr: "#128"
 created: 2026-08-31
 ---
 
