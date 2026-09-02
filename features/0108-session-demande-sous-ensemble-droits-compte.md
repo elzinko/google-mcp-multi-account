@@ -20,15 +20,18 @@ en entier** — tous les services que la policy autorise. Toi, tu veux l'inverse
 choisi **parmi ce que le compte permet en général**. On peut alors vérifier, **session par
 session**, exactement à quoi chacune a touché.
 
-Bonne nouvelle : la **plomberie existe déjà**. Le backend sait accorder un droit fin par session
-(`session_grant_capability`, service × opération × ressource, signé — [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md), fiche [`0076`](done/0076-droits-par-session-phase-a.md) livrée). Ce qui manque, c'est **le
-parcours qui l'utilise** : demander ce sous-ensemble, l'accorder, puis le **montrer**.
+La **primitive existe** : le backend sait accorder un droit fin par session
+(`session_grant_capability`, service × opération × ressource, signé — [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md), fiche [`0076`](done/0076-droits-par-session-phase-a.md) livrée). Mais **elle ne suffit pas** : aujourd'hui, franchir la
+porte d'un compte verrouillé **force** un accès **complet** (joker `*`), pas un sous-ensemble. Il
+manque donc **deux choses** : un **changement de modèle** (séparer « franchir le verrou » de « tout
+ouvrir ») **et** le parcours qui demande, accorde et montre le sous-ensemble.
 
-> **Question ouverte assumée.** Cette fiche est d'abord un **« savoir si c'est possible »**. Le
-> point dur est connu : le protocole MCP ne transmet pas d'identifiant de conversation, et
-> Claude Desktop partage **une** connexion pour tous ses chats (ADR-0007, « branché à vide »).
-> Il faut donc **constater** ce qu'un client réel peut faire porter comme jeton par conversation
-> **avant** de promettre l'enforcement. D'où le statut `idea`.
+> **Questions ouvertes assumées.** Cette fiche est d'abord un **« savoir si c'est possible »**.
+> Deux points durs. **Un** : le protocole MCP ne transmet pas d'identifiant de conversation, et
+> Claude Desktop partage **une** connexion pour tous ses chats (ADR-0007, « branché à vide ») — à
+> **constater** sur un client réel. **Deux** : l'enforcement actuel équivaut « déverrouillé » à
+> « accès complet » (joker `*`), donc le sous-ensemble fin exige un **changement de modèle** (cf.
+> Contexte). D'où le statut `idea`.
 
 **Pas urgent — on peut faire sans pour l'instant.** Mais c'est important. À faire **après** la
 refonte admin (épic [`0060`](0060-admin-ux-ui-refresh.md)) et la fiche [`0107`](0107-vue-compte-droits-sur-place.md).
@@ -49,20 +52,36 @@ entier**. D'où ton impression — juste — qu'« une session a automatiquement
 
 Le modèle voulu est pourtant clair (ADR-0007) : droits effectifs = **policy compte ∩ capacités
 session** (intersection, *fail-closed*). La **policy est le plafond** ; la session ne devrait
-tenir que **son** sous-ensemble demandé. Il manque le **parcours** (demande + octroi + preuve),
-pas le modèle.
+tenir que **son** sous-ensemble demandé.
+
+**Mais l'enforcement actuel court-circuite ce plafond** (revue Codex #129, vérifié dans le code) :
+
+- Sur un profil **verrouillé**, `_require_access` (`gateway/broker_server.py:202`) **refuse** la
+  session tant que `is_session_unlocked()` est faux. Un grant fin `gmail:read` **seul** ne franchit
+  donc pas la porte.
+- Or franchir la porte pose `session_full_access` (`:246`), et `check_policy` y **injecte le joker**
+  `{"service":"*","operation":"*"}` (`:181`) → **tout** ce que la policy du compte autorise.
+
+Résultat : soit la session est verrouillée (aucun accès), soit déverrouillée (**accès complet**). Le
+sous-ensemble fin n'est **pas** enforçable aujourd'hui. Il ne manque donc **pas que le parcours** :
+il faut **séparer** « franchir le verrou du compte » de « recevoir le joker complet ».
 
 ## Proposition (à groomer)
 
 1. **Constat de faisabilité (spike).** Vérifier, sur un client réel (Claude Desktop, Cursor),
    ce qu'on peut faire **porter par conversation** (jeton / paramètre de session). Sans ça, pas
    d'enforcement par session — seulement de l'affichage. Résultat **daté** dans la fiche.
-2. **Demande d'un sous-ensemble.** Une session demande explicitement **service × opération ×
+2. **Changement de modèle (le vrai verrou technique).** Séparer **franchir le verrou** du compte
+   de **recevoir le joker complet**. Concrètement : permettre à une session de **passer
+   `_require_access`** en portant **seulement** ses capacités fines, sans que le déverrouillage ne
+   pose `session_full_access` ni le joker `*` (`broker_server.py:181/202/246`). Sans ça,
+   `gmail:read` seul reste inutilisable. Prévoir un **test « profil verrouillé »**.
+3. **Demande d'un sous-ensemble.** Une session demande explicitement **service × opération ×
    ressource** dans le plafond du compte (pas le compte entier). Réutilise
    `session_grant_capability` + l'élicitation signée. **Default-deny** par session.
-3. **Exposer le parcours** dans l'admin et/ou le flux d'élicitation : voir ce qu'une session a
+4. **Exposer le parcours** dans l'admin et/ou le flux d'élicitation : voir ce qu'une session a
    **demandé** et ce qui lui est **accordé**, et pouvoir le révoquer.
-4. **Preuve par session** : le journal montre, par session, quel service/opération a été touché
+5. **Preuve par session** : le journal montre, par session, quel service/opération a été touché
    (déjà loggé avec `session_id` — voir fiche [`0102`](0102-journal-page-monitoring-filtres-par-session.md)).
 
 ## Relation aux fiches voisines (pas un doublon)
@@ -79,6 +98,7 @@ pas le modèle.
 
 - [ ] Constat daté : ce qu'un client réel peut porter par conversation (jeton/paramètre).
 - [ ] Une session peut demander un **sous-ensemble** de droits (pas le compte entier), dans le plafond de la policy.
+- [ ] **Test profil verrouillé** : sur un compte verrouillé, une session portant `gmail:read` seul **passe** `_require_access` et ne peut lire **que** Gmail — le déverrouillage n'injecte **plus** le joker `*`. (Défend contre le court-circuit du plafond relevé par la revue #129.)
 - [ ] L'octroi passe par l'élicitation signée ; default-deny par session ; pas d'auto-élargissement.
 - [ ] L'admin (ou le flux) montre, par session, le demandé et l'accordé, et permet la révocation.
 - [ ] Le journal permet de vérifier, par session, à quoi elle a accédé.
