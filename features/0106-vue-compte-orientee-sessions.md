@@ -44,6 +44,12 @@ verrouillées. Plus honnête vis-à-vis du modèle par session.
 porte d'élicitation). Option : garder un mini-badge « porte : ouverte / fermée » **en plus**
 du compteur, plutôt que le supprimer.
 
+> **Partage avec la fiche [`0107`](0107-vue-compte-droits-sur-place.md).** 0106 décide **ce que
+> comptent** les vignettes d'état de la liste des comptes (ici : virer le « verrouillé /
+> déverrouillé » trompeur au profit d'un compteur de sessions + porte d'élicitation). 0107 ne
+> décide que leur **couleur** (connecté = bleu, ouvert = vert, fermé = rouge). Les deux composent ;
+> sur la sémantique de l'état compte, **0106 prime**.
+
 **C. Lister les sessions en cours par compte.**
 Dans le détail d'un compte, la liste des sessions qui utilisent ce compte : id court, client,
 activité, état. Réutilise les données de la page Sessions, filtrées par compte.
