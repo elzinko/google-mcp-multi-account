@@ -158,15 +158,15 @@ listé ici pour ne rien perdre au grooming.
 
 **Déjà en backlog (rien à créer) :**
 - Cliquer une ligne de session → page de config de la session : fiche [`0094`](0094-sessions-page-dediee-reactive.md) (page dédiée) + [`0098`](0098-micro-routeur-vues.md) (routeur).
-- Tri + bascule liste/vignettes des sessions : fiche [`0099`](0099-sessions-pilote-tri-liste-vignettes.md).
+- Tri + bascule liste/vignettes des sessions : fiche [`0099`](done/0099-sessions-pilote-tri-liste-vignettes.md).
 - Nom lisible de session (au lieu de l'id) : fiche [`0101`](0101-nom-de-session-fourni-par-le-client.md). Id réservé à la page de session.
 - Sessions par compte + bouton « voir les droits » : fiche [`0106`](0106-vue-compte-orientee-sessions.md).
-- Journal d'accès sous la config d'une session : fiche [`0102`](0102-journal-page-monitoring-filtres-par-session.md) (journal par session).
+- Journal d'accès sous la config d'une session : fiche [`0102`](done/0102-journal-page-monitoring-filtres-par-session.md) (journal par session).
 
 **À replier au grooming des fiches concernées :**
-- **Journal** → fiche [`0102`](0102-journal-page-monitoring-filtres-par-session.md) : pastille de couleur autour du **nom du compte** ; libeller les lignes **sans session** (élicitation / `mag`) au lieu d'un blanc ; **date sur une seule ligne** (colonne trop étroite / police trop grosse) ; **expansion de ligne** (une ligne par entrée, dépliable) façon outil de monitoring, avec **filtres + recherche + par date** et logs au bon format.
-- **Mobile** → fiche [`0104`](0104-app-shell-responsive-mobile.md) : un **compte sur une seule ligne** (en retirant les libellés verrou/déverrou) ; les **3 vignettes sur une seule ligne** ; **retirer le chevron** de droite (la ligne est déjà cliquable).
-- **En-tête** → fiche [`0103`](0103-refonte-barre-navigation-admin.md) : retirer le sous-titre « **admin local** » ; trancher le **nom produit** (« gma » / « multi-account ») ; **version sous le titre**, pas en bas ; la marque `◧` est un **glyphe bouche-trou**, pas un vrai logo (à concevoir : logo + favicon). L'**aide/Doc** doit s'ouvrir en **page plein écran**, pas en petite modale (même patron que Sessions/Journal).
+- **Journal** → fiche [`0102`](done/0102-journal-page-monitoring-filtres-par-session.md) : pastille de couleur autour du **nom du compte** ; libeller les lignes **sans session** (élicitation / `mag`) au lieu d'un blanc ; **date sur une seule ligne** (colonne trop étroite / police trop grosse) ; **expansion de ligne** (une ligne par entrée, dépliable) façon outil de monitoring, avec **filtres + recherche + par date** et logs au bon format.
+- **Mobile** → fiche [`0104`](done/0104-app-shell-responsive-mobile.md) : un **compte sur une seule ligne** (en retirant les libellés verrou/déverrou) ; les **3 vignettes sur une seule ligne** ; **retirer le chevron** de droite (la ligne est déjà cliquable).
+- **En-tête** → fiche [`0103`](done/0103-refonte-barre-navigation-admin.md) : retirer le sous-titre « **admin local** » ; trancher le **nom produit** (« gma » / « multi-account ») ; **version sous le titre**, pas en bas ; la marque `◧` est un **glyphe bouche-trou**, pas un vrai logo (à concevoir : logo + favicon). L'**aide/Doc** doit s'ouvrir en **page plein écran**, pas en petite modale (même patron que Sessions/Journal).
 
 ## Hors périmètre
 

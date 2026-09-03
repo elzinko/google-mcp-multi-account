@@ -36,7 +36,7 @@
 | [0078](done/0078-approbation-passkey-archi-actuelle.md) | Approbation par passkey depuis le téléphone (archi actuelle, Mac holder) | feature | P1 |  | 0077 |  | ✅ shipped | #113 |
 | [0080](done/0080-durcir-capacites-fines-session.md) | Durcir la couche capacités fines de session (suite revue Codex #110) | feature | P1 |  | 0082 |  | ✅ shipped | #118 |
 | [0085](done/0085-figer-unlock-zones-sous-session.md) | Figer unlock de compte + zones Drive à la création d'une sous-session (isolation complète) | bug | P1 |  | 0082 |  | ✅ shipped | #119 |
-| [0097](0097-composants-transverses.md) | Composants transverses — pastille de droit accessible, callout, boutons, coquille modale | feature | P1 |  | 0060 | google-mcp-multi-account | 🔴 todo |  |
+| [0097](0097-composants-transverses.md) | Finir la migration des dialogues et écrans restants vers le design system Cockpit | feature | P1 |  | 0060 | google-mcp-multi-account | 🔴 todo |  |
 | [0098](0098-micro-routeur-vues.md) | Micro-routeur — formaliser les vues (pages vs modales), un seul registre de poll | refactor | P1 |  | 0060 | google-mcp-multi-account | 🔴 todo |  |
 | [0099](done/0099-sessions-pilote-tri-liste-vignettes.md) | Sessions — tranche pilote du design system (cartes régulières + tri + bascule liste/vignettes) | feature | P1 |  | 0060 | google-mcp-multi-account | ✅ shipped | #128 |
 | [0102](done/0102-journal-page-monitoring-filtres-par-session.md) | Journal en page dédiée — filtres + journal par session (virage monitoring) | feature | P1 |  | 0060 | google-mcp-multi-account | ✅ shipped | #128 |
@@ -76,7 +76,6 @@
 | [0091](0091-updater-rollback-ergonomique.md) | Updater — rollback ergonomique : commande revert, messages CLI, help enrichi | feature | P2 |  |  |  | 🔴 todo |  |
 | [0092](0092-bascule-gwsa-mag-path-refresh-terminal.md) | Finaliser la bascule gwsa→mag côté PATH + guider le refresh du terminal | feature | P2 |  |  |  | 🔴 todo |  |
 | [0094](0094-sessions-page-dediee-reactive.md) | Panneau Sessions LLM — page dédiée réactive et plus lisible (au lieu d'une modale) | feature | P2 |  | 0060 | google-mcp-multi-account | 🟠 in-progress |  |
-| [0100](0100-deploiement-ecrans-contraste-aa.md) | Déploiement du design system écran par écran + passe contraste AA | feature | P2 |  | 0060 | google-mcp-multi-account | 🔴 todo |  |
 | [0103](done/0103-refonte-barre-navigation-admin.md) | Refonte de la barre de navigation de l'admin (header/menu standard) | feature | P2 |  | 0060 | google-mcp-multi-account | ✅ shipped | #128 |
 | [0106](0106-vue-compte-orientee-sessions.md) | Vue compte orientée sessions — compteur, liste des sessions et droits par session | feature | P2 |  |  | google-mcp-multi-account | 🔴 todo |  |
 | [0001](0001-elicitation-signee-strongauth-v2.md) | Élicitation signée — faire monter `mag strongauth` de la présence à la signature | feature | P3 |  |  |  | 🟠 in-progress |  |

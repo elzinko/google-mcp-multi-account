@@ -7,7 +7,7 @@ product: google-mcp-multi-account
 version:
 epic: 0060
 status: todo
-ready:
+ready: 2026-09-03
 pr:
 created: 2026-08-30
 ---
@@ -23,10 +23,12 @@ Référence : ADR-0010 (brique 3).
 
 ## Contexte / problème
 
-`VIEW = {mode, alias}` est réassigné *dans* les `render*()` → rendre a l'effet de bord de
-naviguer. Sessions est déjà une exception codée à la main (early-return dans `rerender`,
-timer et diff dédiés). `syncChrome()` bascule `hidden` à la main sur plusieurs conteneurs.
-Ajouter une page oblige à toucher trois endroits.
+`VIEW = {mode, alias}` est réassigné *dans* les `render*()` (`renderList`, `renderDetail`) →
+rendre a l'effet de bord de naviguer. **Trois boucles de poll séparées** tournent en parallèle,
+chacune son `setInterval` : `LAST` (profils), `SESS_LAST` (sessions), `JRN_LAST` (journal) ;
+`rerender` garde un early-return codé à la main pour sessions/journal. Une **amorce partielle**
+existe déjà (`syncChrome` / `syncNav` / `clearPageTimers`) : le refactor s'appuie dessus plutôt
+que de repartir de zéro. Ajouter une page oblige encore à toucher plusieurs endroits.
 
 ## Proposition
 

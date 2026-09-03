@@ -86,7 +86,7 @@ il faut **séparer** « franchir le verrou du compte » de « recevoir le joker 
 4. **Exposer le parcours** dans l'admin et/ou le flux d'élicitation : voir ce qu'une session a
    **demandé** et ce qui lui est **accordé**, et pouvoir le révoquer.
 5. **Preuve par session** : le journal montre, par session, quel service/opération a été touché
-   (déjà loggé avec `session_id` — voir fiche [`0102`](0102-journal-page-monitoring-filtres-par-session.md)).
+   (déjà loggé avec `session_id` — voir fiche [`0102`](done/0102-journal-page-monitoring-filtres-par-session.md)).
 
 ## Relation aux fiches voisines (pas un doublon)
 

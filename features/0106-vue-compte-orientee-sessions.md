@@ -7,7 +7,7 @@ product: google-mcp-multi-account
 version:
 epic:
 status: todo
-ready:
+ready: 2026-09-03
 pr:
 created: 2026-09-01
 ---
@@ -25,7 +25,7 @@ des évolutions **fonctionnelles**, distinctes de la refonte visuelle.
 Références (chemins locaux) : [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md) + fiche
 [`0076`](done/0076-droits-par-session-phase-a.md) (droits propres par conversation), page
 Sessions [`0094`](0094-sessions-page-dediee-reactive.md), page Journal
-[`0102`](0102-journal-page-monitoring-filtres-par-session.md), nom de session
+[`0102`](done/0102-journal-page-monitoring-filtres-par-session.md), nom de session
 [`0101`](0101-nom-de-session-fourni-par-le-client.md).
 
 ## Contexte / problème
@@ -40,9 +40,9 @@ un état du compte, alors que la réalité est « telle session a débloqué, te
 **A. Remplacer l'état binaire par un compteur de sessions (page Comptes).**
 Par compte, un petit indicateur : nombre de sessions actives, dont X déverrouillées / Y
 verrouillées. Plus honnête vis-à-vis du modèle par session.
-→ *Point à trancher au grooming* : le verrou admin global reste une info utile (c'est la
-porte d'élicitation). Option : garder un mini-badge « porte : ouverte / fermée » **en plus**
-du compteur, plutôt que le supprimer.
+→ *Tranché (grooming 2026-09-03)* : on **garde un mini-badge « porte d'élicitation : ouverte /
+fermée »** à côté du compteur de sessions. Le verrou admin global (`mag lock/unlock`) reste une
+info utile ; il devient **secondaire** (petit badge), pas supprimé.
 
 > **Partage avec la fiche [`0107`](0107-vue-compte-droits-sur-place.md).** 0106 décide **ce que
 > comptent** les vignettes d'état de la liste des comptes (ici : virer le « verrouillé /
@@ -63,6 +63,10 @@ Fallback : id court + client.
 Depuis une session (page Sessions et liste par compte), un bouton ouvre le détail de **tous
 les droits accordés à cette session** pour ce compte : scopes, zones Drive, expiration.
 Lecture seule ; réutilise la modale de droits en mode consultation.
+→ *Grain selon l'API (grooming 2026-09-03)* : l'API admin `/api/sessions` n'expose pas encore
+les droits **fins par service** d'une session. E affiche donc ce que l'API donne (scopes, zones
+Drive, expiration) ; le grain par opération suivra l'exposition API. Dépendance notée, **non
+bloquante** pour A / C / D.
 
 ## Critères d'acceptation
 

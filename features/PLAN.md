@@ -6,11 +6,18 @@
 
 ## NOW — la refonte admin d'abord, l'accès fin par session ensuite
 
-**Jalon A — Refonte admin (épic [0060](0060-admin-ux-ui-refresh.md)).** La série Cockpit, en cours.
+**Jalon A — Finir l'admin (épic [0060](0060-admin-ux-ui-refresh.md)).** Série Cockpit : l'essentiel est **livré**, reste le fonctionnel et la dernière migration.
 
 - [0094](0094-sessions-page-dediee-reactive.md) — Sessions en page dédiée réactive · **build** *(in-progress)*
-- [0107](0107-vue-compte-droits-sur-place.md) — Vue compte : droits sur place, au grain par opération · **build** *(ready)*
-- reste de l'épic (0095–0104, 0106) · **à groomer** puis ordonner
+- [0107](0107-vue-compte-droits-sur-place.md) — Vue compte : droits sur place, au grain par opération · **build** *(ready)* — prochain build propre
+- [0098](0098-micro-routeur-vues.md) — Micro-routeur (VIEW + poll unifiés) · **build** *(ready)* — refactor indépendant, quand on veut
+- [0106](0106-vue-compte-orientee-sessions.md) — Vue compte orientée sessions (compteur + liste des sessions) · **build** *(ready)* — après 0107 (même page)
+- [0097](0097-composants-transverses.md) — Finir la migration des dialogues → design system (ex-0097 + ex-0100) · **build** *(ready)* — après 0107 (dialogues subsistants)
+
+> **Rangé au grooming (2026-09-03).** Déjà livrées par Cockpit (#128) : 0095 (tokens), 0099 (sessions
+> pilote), 0102 (journal), 0103 (barre de nav), 0104 (app shell mobile). Fusionnée : ex-0100 → 0097.
+> Restes mineurs capturés en idées : filtre « date » du journal, cibles tactiles 44 px mobile. Base
+> technique prête mais **différée** (décision PO) : 0096 (socle de rendu sûr `html`` ``).
 
 **Jalon B — Accès fin par session — APRÈS le jalon A.**
 
