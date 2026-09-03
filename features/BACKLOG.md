@@ -3,6 +3,8 @@
 > Index auto-généré (`regen-backlog.sh` mega-city, via `/ezk-backlog regen`) — **ne pas éditer à la main**. Source de vérité = le front-matter de chaque fiche.
 > Guide du dossier : [README.md](README.md). Statuts : 💡 idea · 🔴 todo · 🟠 in-progress · ⛔ blocked · ✅ shipped.
 
+> 📋 Séquence décidée (curée, hors index) : [PLAN.md](PLAN.md).
+
 | # | Titre | Type | Prio | Version | Épic | Produit | Statut | PR |
 |---|-------|------|------|---------|------|---------|--------|----|
 | [0023](done/0023-versionner-deployer-mcp-local.md) | Versionner et déployer le MCP en local, découplé du code source de travail | feature | P0 |  |  |  | ✅ shipped | #25 |
