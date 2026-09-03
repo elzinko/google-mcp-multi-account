@@ -61,6 +61,9 @@ tenir que **son** sous-ensemble demandé.
   donc pas la porte.
 - Or franchir la porte pose `session_full_access` (`:246`), et `check_policy` y **injecte le joker**
   `{"service":"*","operation":"*"}` (`:181`) → **tout** ce que la policy du compte autorise.
+- **Second verrou avant le broker** : `gateway/api.py::_run` (`:118`) refuse **aussi** la session
+  sur profil verrouillé tant que `is_session_unlocked()` est faux. Le changement de modèle doit
+  couvrir **les deux portes**, pas seulement le broker.
 
 Résultat : soit la session est verrouillée (aucun accès), soit déverrouillée (**accès complet**). Le
 sous-ensemble fin n'est **pas** enforçable aujourd'hui. Il ne manque donc **pas que le parcours** :
@@ -72,10 +75,11 @@ il faut **séparer** « franchir le verrou du compte » de « recevoir le joker 
    ce qu'on peut faire **porter par conversation** (jeton / paramètre de session). Sans ça, pas
    d'enforcement par session — seulement de l'affichage. Résultat **daté** dans la fiche.
 2. **Changement de modèle (le vrai verrou technique).** Séparer **franchir le verrou** du compte
-   de **recevoir le joker complet**. Concrètement : permettre à une session de **passer
-   `_require_access`** en portant **seulement** ses capacités fines, sans que le déverrouillage ne
-   pose `session_full_access` ni le joker `*` (`broker_server.py:181/202/246`). Sans ça,
-   `gmail:read` seul reste inutilisable. Prévoir un **test « profil verrouillé »**.
+   de **recevoir le joker complet**. Concrètement : permettre à une session de **passer les DEUX
+   portes** (`gateway/api.py:118` **et** `gateway/broker_server.py:202`) en portant **seulement**
+   ses capacités fines, sans que le déverrouillage ne pose `session_full_access` ni le joker `*`
+   (`broker_server.py:181/246`). Sans ça, `gmail:read` seul reste inutilisable. Prévoir un **test
+   « profil verrouillé »** couvrant les deux portes.
 3. **Demande d'un sous-ensemble.** Une session demande explicitement **service × opération ×
    ressource** dans le plafond du compte (pas le compte entier). Réutilise
    `session_grant_capability` + l'élicitation signée. **Default-deny** par session.
@@ -98,7 +102,7 @@ il faut **séparer** « franchir le verrou du compte » de « recevoir le joker 
 
 - [ ] Constat daté : ce qu'un client réel peut porter par conversation (jeton/paramètre).
 - [ ] Une session peut demander un **sous-ensemble** de droits (pas le compte entier), dans le plafond de la policy.
-- [ ] **Test profil verrouillé** : sur un compte verrouillé, une session portant `gmail:read` seul **passe** `_require_access` et ne peut lire **que** Gmail — le déverrouillage n'injecte **plus** le joker `*`. (Défend contre le court-circuit du plafond relevé par la revue #129.)
+- [ ] **Test profil verrouillé** : sur un compte verrouillé, une session portant `gmail:read` seul **passe les deux portes** (`gateway/api.py` **et** `gateway/broker_server.py`) et ne peut lire **que** Gmail — le déverrouillage n'injecte **plus** le joker `*`. (Défend contre le court-circuit du plafond relevé par la revue #129.)
 - [ ] L'octroi passe par l'élicitation signée ; default-deny par session ; pas d'auto-élargissement.
 - [ ] L'admin (ou le flux) montre, par session, le demandé et l'accordé, et permet la révocation.
 - [ ] Le journal permet de vérifier, par session, à quoi elle a accédé.

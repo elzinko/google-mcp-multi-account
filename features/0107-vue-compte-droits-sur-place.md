@@ -61,8 +61,15 @@ douce. La modale Policy disparaît ; un pli « avancé » (édition brute) reste
 
 **B. Bouton « dossiers » sur la ligne Drive — zones PERMANENTES uniquement.**
 À droite de la ligne Drive, une icône ouvre la gestion des **zones permanentes** (la liste
-`writeFolders` de la policy). Réutilise le **navigateur de dossiers** (`afPick` `:3360`) et la route
-**permanente** `/api/profiles/<alias>/drive-folder` (`admin/index.html:3381`).
+`writeFolders` de la policy). Réutilise le **navigateur de dossiers** (`afPick` `:3360`).
+
+> **Mutation zone-seule (piège relevé par la revue).** La route actuelle
+> `/api/profiles/<alias>/drive-folder` n'est **pas** neutre : elle appelle `mag policy … allow`
+> (`admin/server.js:827`), qui **crée le bloc Drive avec `create` et `update` à `true`**
+> (`bin/mag:489`). Sur un compte dont la policy **omet** le bloc Drive (écriture *default-deny*),
+> ajouter une zone **activerait deux opérations en douce** — l'inverse du grain par opération (A).
+> Ajouter/retirer une zone doit donc être une **mutation `writeFolders` pure** qui **préserve** les
+> flags d'opération existants (nouvelle route zone-seule), **pas** `policy allow`.
 
 > **Piège relevé par la revue — ne pas réutiliser la branche « temporaire » du sélecteur.** Son
 > option temporaire poste sur `/api/profiles/<alias>/grant` (`admin/index.html:3384`), qui appelle
@@ -128,7 +135,7 @@ Les trois arbitrages ouverts à la capture sont tranchés.
 
 - [ ] Sur la page d'un compte, **chaque opération** d'un service courant s'active/coupe d'un clic (grain de `gateway/default_policy.py`), **sans** ouvrir la modale Policy — aucune opération activée ou perdue en douce.
 - [ ] Activer l'écriture Drive pose `zonesOnly` (jamais wildcard) ; `writeFolders` **vide** = défaut sûr (écriture refusée au niveau compte → chaque session demande son grant temporaire dans la vue Sessions) **ou** renseignée (zones permanentes). Jamais d'obligation de créer une zone permanente, et **aucun grant temporaire émis depuis la page compte**.
-- [ ] La ligne Drive a un bouton « dossiers » éditant les **zones permanentes** (`writeFolders`) via `/api/profiles/<alias>/drive-folder` ; il **n'émet aucun grant temporaire** (jamais la branche compte-large `/api/profiles/<alias>/grant`).
+- [ ] La ligne Drive a un bouton « dossiers » éditant les **zones permanentes** (`writeFolders`) par une **mutation zone-seule** qui **préserve les flags d'opération** existants (pas `mag policy allow`, qui activerait `create`/`update` en douce) ; il **n'émet aucun grant temporaire** (jamais `/api/profiles/<alias>/grant`).
 - [ ] Le texte long « Retirer ce compte… » est remplacé par un bouton + infobulle ; la modale de confirmation est conservée.
 - [ ] La liste des comptes montre des vignettes d'état **colorées** : connecté = bleu, ouvert/permissif = vert, fermé/restreint = rouge. **Ce que comptent** ces vignettes (verrou compte vs compteur de sessions) suit la fiche [`0106`](0106-vue-compte-orientee-sessions.md) ; 0107 n'impose que le code couleur.
 - [ ] Le bouton « Connecter un compte » est **sous** la liste.
