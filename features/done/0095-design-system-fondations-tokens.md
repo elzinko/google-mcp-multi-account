@@ -6,11 +6,17 @@ priority: P0
 product: google-mcp-multi-account
 version:
 epic: 0060
-status: todo
+status: shipped
 ready:
-pr:
+pr: "#128"
 created: 2026-08-30
 ---
+
+> **Livrée — superseded par #128 (2026-09-03).** La refonte « Cockpit » (épic
+> [`0105`](0105-refonte-admin-cockpit.md), PR #128) a posé le système de tokens
+> (`--sp`/`--fs`/`--r`/`--fw`/`--elev`) et la carte unifiée (`.ck-card`) que cette fiche
+> proposait. Le socle est en place dans `admin/index.html` ; la fiche est marquée livrée à ce
+> titre, sans PR propre.
 
 ## En clair
 
@@ -19,7 +25,7 @@ typo, arrondis, poids, élévation) en variables CSS, et une **carte unique** à
 trois recettes actuelles. Objectif : **aucun changement visuel volontaire**, juste
 remplacer des dizaines de valeurs en dur par des tokens nommés.
 
-Référence : [`docs/design/design-system-admin.md`](../docs/design/design-system-admin.md) §1 et §3, ADR-0010.
+Référence : [`docs/design/design-system-admin.md`](../../docs/design/design-system-admin.md) §1 et §3, ADR-0010.
 
 ## Contexte / problème
 

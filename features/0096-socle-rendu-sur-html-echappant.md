@@ -7,7 +7,7 @@ product: google-mcp-multi-account
 version:
 epic: 0060
 status: todo
-ready:
+ready: 2026-09-03
 pr:
 created: 2026-08-30
 ---
