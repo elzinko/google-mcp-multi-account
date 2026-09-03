@@ -6,11 +6,13 @@ priority: P1
 product: google-mcp-multi-account
 version:
 epic: 0060
-status: todo
+status: shipped
 ready:
-pr:
+pr: "#128"
 created: 2026-08-30
 ---
+
+> **Livrée — superseded par #128 (2026-09-03).** journal en page dédiée (ancienne modale `dLog` supprimée), filtres compte/session/type combinables sans rechargement, clic session → journal filtré. Le filtre « date » reste hors périmètre (capturé à part).
 
 ## En clair
 
@@ -21,7 +23,7 @@ un **lien « journal » sur chaque session** qui ouvre le journal déjà filtré
 C'est le virage assumé : l'admin devient un **outil de monitoring** de ce que font les
 agents, pas seulement un gestionnaire de comptes.
 
-Référence : design system [`docs/design/design-system-admin.md`](../docs/design/design-system-admin.md) (§ bascule liste, callout). Voisin de 0099 (Sessions en page).
+Référence : design system [`docs/design/design-system-admin.md`](../../docs/design/design-system-admin.md) (§ bascule liste, callout). Voisin de 0099 (Sessions en page).
 
 ## Contexte / problème
 

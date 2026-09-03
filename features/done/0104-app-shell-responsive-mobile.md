@@ -6,11 +6,13 @@ priority: P1
 product: google-mcp-multi-account
 version:
 epic: 0060
-status: todo
+status: shipped
 ready:
-pr:
+pr: "#128"
 created: 2026-08-30
 ---
+
+> **Livrée — superseded par #128 (2026-09-03).** app shell responsive (`.ck-bottomnav` + barre haute mobile + rail masqué < 640 px), titre court, emails non tronqués. Les cibles tactiles à 44 px restent hors périmètre (capturé à part).
 
 ## En clair
 

@@ -6,11 +6,13 @@ priority: P1
 product: google-mcp-multi-account
 version:
 epic: 0060
-status: todo
+status: shipped
 ready:
-pr:
+pr: "#128"
 created: 2026-08-30
 ---
+
+> **Livrée — superseded par #128 (2026-09-03).** cartes de session régulières, tri (activité/client/capacités) et bascule liste/vignettes persistés (`.ck-sess-card`, `.ck-viewtoggle`, `localStorage`).
 
 ## En clair
 
@@ -19,7 +21,7 @@ régulière, un **tri** (par client, par dernière activité, par nombre de capa
 **bascule liste / vignettes** façon Finder, avec le choix mémorisé. C'est la tranche qui
 prouve tout le système avant de l'appliquer aux écrans denses.
 
-Référence : [`docs/design/design-system-admin.md`](../docs/design/design-system-admin.md) §3 et §6. Fait suite à la fiche 0094 (page dédiée réactive, livrée).
+Référence : [`docs/design/design-system-admin.md`](../../docs/design/design-system-admin.md) §3 et §6. Fait suite à la fiche 0094 (page dédiée réactive, livrée).
 
 ## Contexte / problème
 

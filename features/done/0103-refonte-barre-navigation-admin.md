@@ -6,11 +6,13 @@ priority: P2
 product: google-mcp-multi-account
 version:
 epic: 0060
-status: todo
+status: shipped
 ready:
-pr:
+pr: "#128"
 created: 2026-08-30
 ---
+
+> **Livrée — superseded par #128 (2026-09-03).** rail de navigation en trois zones (identité / nav / outils), page active marquée (`aria-current`), menu « ⋯ » accessible.
 
 ## En clair
 
@@ -19,7 +21,7 @@ La barre du haut (titre + badge de version + cadenas + Sessions / Journal / Doc 
 navigation d'app, cohérente avec le design system, qui tienne la route quand on ajoute des
 pages (Sessions, Journal…).
 
-Référence : design system [`docs/design/design-system-admin.md`](../docs/design/design-system-admin.md), ADR-0010 (micro-routeur). Complète le composant bouton (fiche 0097).
+Référence : design system [`docs/design/design-system-admin.md`](../../docs/design/design-system-admin.md), ADR-0010 (micro-routeur). Complète le composant bouton (fiche 0097).
 
 ## Contexte / problème
 
