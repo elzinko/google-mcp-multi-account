@@ -6,10 +6,18 @@ priority: P2
 version:
 epic:
 status: todo
-ready:
+ready: 2026-09-04
 pr:
 created: 2026-08-29
 ---
+
+## En clair
+
+Le renommage `gma → mag` est en place ; l'updater pose déjà `mag` dans le PATH. Restent deux
+trous d'**UX** : rien ne dit à l'utilisateur que `gwsa` est déprécié au profit de `mag`, et rien
+ne guide le **refresh du terminal** (le shell garde l'ancien chemin en cache, `mag` peut sembler
+introuvable). On livre la **dépréciation douce** (`gwsa` marche encore + avertissement) et le
+guide de refresh. **Aucun utilisateur cassé.**
 
 ## Contexte / Problème
 
@@ -71,6 +79,13 @@ Cette fiche livre le **1er temps** (dépréciation douce + guide refresh). Le 2e
   guide le refresh (nouveau terminal / `hash -r`).
 - **Given** un rollback vers une version pré-renommage **Then** les commandes restent
   invocables (cohérent avec [[0081]] — repli interne conservé).
+
+## Comment vérifier
+
+Sur une install `gwsa`, release ≥ #114, lancer `update` : `mag` est dans le PATH **et** `gwsa`
+répond toujours, avec un avertissement de dépréciation vers `mag`. Retaper `gwsa <cmd>` : marche
+exactement comme avant (le warning ne bloque ni ne change la sortie). Sur un shell au cache
+obsolète : l'updater détecte le cas et guide le refresh (`hash -r` / nouveau terminal).
 
 ## Notes
 

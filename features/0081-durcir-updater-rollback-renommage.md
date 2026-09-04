@@ -6,10 +6,19 @@ priority: P2
 version:
 epic:
 status: todo
-ready:
+ready: 2026-09-04
 pr:
 created: 2026-08-17
 ---
+
+## En clair
+
+Deux bugs rares mais gênants du **retour en arrière** de l'updater, à travers le renommage
+`gma → mag`. **Un** : si on revient à une version d'**avant** le renommage, les liens PATH
+pointent vers un `mag` qui n'existe pas encore et l'updater n'applique pas son repli → commandes
+cassées. **Deux** : `deploy-local.sh --rollback` change la version mais **ne recible pas** les
+liens PATH. On répare les deux (récupérable sans réinstall). C'est le **socle** du cluster
+updater (les fiches 0091 et 0092 s'appuient sur son helper de re-ciblage partagé).
 
 ## Contexte / Problème
 
@@ -46,6 +55,13 @@ par une simple réinstall (`curl … | sh`), d'où le report hors de la PR de re
 - **Given** une install **When** `deploy-local.sh --rollback <pré-renommage>` **Then** les
   3 liens PATH sont re-ciblés vers le binaire legacy et le broker est recyclé.
 - Test hermétique simulant un lien cassé (cible absente) + un rollback pré-renommage.
+
+## Comment vérifier
+
+Test hermétique : simuler un lien cassé (cible absente) puis `mag update --to <tag pré-renommage>`
+→ `mag`/`gma`/`gwsa` pointent vers `current/bin/gwsa` et restent invocables. Puis
+`deploy-local.sh --rollback <pré-renommage>` → les 3 liens PATH sont reciblés vers le binaire
+legacy et le broker recyclé. Aucune réinstall nécessaire.
 
 ## Notes
 

@@ -21,7 +21,16 @@
 
 **Jalon B — Accès fin par session — APRÈS le jalon A.**
 
-- [0108](0108-session-demande-sous-ensemble-droits-compte.md) — une session demande son sous-ensemble de droits du compte · **groom** puis build
+- [0108](0108-session-demande-sous-ensemble-droits-compte.md) — une session demande son sous-ensemble de droits du compte · **bloqué sur un spike** (identité par conversation d'un client MCP — à constater sur client réel) puis groom + build
+
+## NEXT — robustesse updater (indépendant de l'admin)
+
+**Jalon C — Cluster updater / renommage.** Fiches prêtes (grooming autonome 2026-09-04), à séquencer : **le socle d'abord** (0091 et 0092 réutilisent son helper de re-ciblage).
+
+- [0081](0081-durcir-updater-rollback-renommage.md) — socle : rollback à travers le renommage `gma→mag` (helper de re-ciblage des liens) · **build** *(ready)* — **EN PREMIER**
+- [0091](0091-updater-rollback-ergonomique.md) — `mag revert` + message post-update + `--help` enrichi · **build** *(ready)* — après 0081
+- [0092](0092-bascule-gwsa-mag-path-refresh-terminal.md) — dépréciation douce `gwsa` + guide refresh terminal · **build** *(ready)* — après 0081
+- [0028](0028-menage-des-versions-deployees.md) — ménage des versions déployées · **idée** — dépendance lâche (cible du revert de 0091)
 
 ## Notes
 
