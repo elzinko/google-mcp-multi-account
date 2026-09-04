@@ -6,11 +6,18 @@ priority: P1
 version:
 epic: 0017
 status: todo
-ready:
+ready: 2026-09-04
 pr:
 created: 2026-07-24
 updated: 2026-07-29
 ---
+
+## En clair
+
+Le projet vise une audience internationale (utilisateurs MCP hors FR). Le rebrand #58 a déjà mis
+les surfaces publiques en anglais (landing, README, nom produit). Il **restait une seule décision** :
+la langue des **messages de la CLI `mag`**. **Tranché (PO, 2026-09-04) : anglais.** Cette fiche se
+réduit donc à passer les messages et erreurs de `mag` en anglais, et à le documenter.
 
 ## Contexte / Problème
 
@@ -49,8 +56,9 @@ Périmètre proposé (par couche) :
    affiché (landing, README, connecteur) avec le slug repo /
    `google-multi-account` : trancher le wording public sans **renommer le
    repo** dans cette fiche.
-4. **CLI / messages** — décider FR vs EN vs bilingue ; trancher EN si on vise
-   l’adoption externe (peut être un sous-lot après le site).
+4. **CLI / messages** — **tranché : anglais** (PO, 2026-09-04, cohérent avec l’audience
+   internationale MCP). Passer les messages et erreurs de `mag` en anglais ; peut rester un
+   sous-lot après le site.
 
 Approche technique libre au sprint : rewrite EN one-shot **ou** petite couche
 i18n (attributs `lang`, fichiers `en`/`fr`) — l’essentiel est **EN visible par
@@ -71,9 +79,15 @@ défaut** sur le chemin public.
       setup MCP — livré #58.
 - [x] ~~Docs d’accueil clés en anglais~~ — **abandonné** : le site de doc
       ([[0072]] / #79) est délibérément **FR** (docs.elzinko.fr).
-- [ ] Politique de langue des messages CLI décidée et documentée ← **seul reste**.
+- [ ] Messages et erreurs de `mag` en **anglais** (politique EN tranchée le 2026-09-04, documentée) ← **seul reste réel**.
 - [x] Nom produit affiché sur les surfaces publiques cohérent — livré #58
       (+ note nommage dépôt vs connecteur, commit dc5a341).
+
+## Comment vérifier
+
+Lancer `mag` (commandes et cas d’erreur) : les messages et erreurs s’affichent en **anglais**, et
+la politique de langue (EN pour la CLI) est documentée. Les surfaces déjà livrées #58 (landing,
+README EN) restent intactes.
 
 ## Hors scope
 
