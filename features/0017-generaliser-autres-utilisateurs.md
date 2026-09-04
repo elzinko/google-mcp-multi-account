@@ -41,7 +41,7 @@ travail propre : il coordonne 0018 (cross-platform), 0019 (doc EN), 0020
 - [ ] Un utilisateur **non-auteur**, sur Linux **ou** Intel, en **anglais**, peut
       installer et utiliser le serveur MCP **sans éditer le code** ni un chemin.
 - [ ] Le README n'affirme plus de généricité que le produit ne tient pas.
-- [ ] Enfants livrés : 0018, 0019, 0020 (0021 = confort, hors chemin critique).
+- [ ] Enfants **livrés** : 0020 (install sans clone #78) ; adjacent livré : 0072 (site doc #79). **Ouverts** : 0018 (Linux, P3), 0019 (doc EN, ready), 0021 (couverture MCP, P3, confort hors chemin critique).
 
 ## Notes
 

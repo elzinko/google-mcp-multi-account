@@ -50,12 +50,13 @@ suivent pas :
 
 ## Critères d'acceptation
 
-> **Réconciliation (2026-08-08).** Partiel depuis #48 (cartes admin nettoyées).
-> Reste le balayage des surfaces **hors admin** où « token/jeton » resurgit.
+> **Réconciliation (2026-09-04).** Côté **admin, c'est fait** : cartes nettoyées (#48) puis
+> refonte Cockpit (#128) — « token » n'apparaît plus que comme variable CSS (design tokens).
+> Reste **uniquement** les surfaces **hors admin** (CLAUDE.md, SECURITY.md, docs, sorties CLI).
 
 - [ ] `CLAUDE.md` : remplacer « token expiré » (l. ~57) par « connexion à Google
       expirée — à refaire ».
-- [ ] Modale de déconnexion admin (`admin/index.html`) : retirer « tokens ».
+- [x] Modale de déconnexion admin : « tokens » retiré — refonte Cockpit #128 (côté humain).
 - [ ] `SECURITY.md` : « jeton » → glossaire (verrou / connexion), sans 3ᵉ mot.
 - [ ] Docs (`docs/usage.md`, protocole tests manuels) + sorties `mag` lues par
       l'humain : idem.

@@ -107,7 +107,7 @@
 | [0003](0003-vault-credentials-hors-perimetre-agent.md) | Vault credentials hors périmètre agent (Phase 2.1) | feature | P3 |  |  |  | 💡 idea |  |
 | [0018](0018-cross-platform-hors-macos.md) | Cross-platform — faire tourner le projet hors macOS (Linux, Intel) | feature | P3 |  | 0017 |  | 💡 idea |  |
 | [0021](0021-couverture-mcp-elargie.md) | Élargir la couverture MCP — Calendar, Docs, Sheets, Tasks (et écritures) | feature | P3 |  | 0017 |  | 💡 idea |  |
-| [0028](0028-menage-des-versions-deployees.md) | Ménage des versions déployées (+ CHANGELOG et releases GitHub) | chore | P3 |  |  |  | 💡 idea |  |
+| [0028](0028-menage-des-versions-deployees.md) | Ménage des versions déployées — reste `deploy-local.sh --prune` | chore | P3 |  |  |  | 💡 idea |  |
 | [0034](0034-maj-protocole-test-manuel-drive.md) | Mettre à jour le protocole du test manuel drive-2-comptes (limites périmées + nouvelles phases) | chore | P3 |  |  |  | 💡 idea |  |
 | [0038](0038-creer-dossier-zone-rapidement.md) | Créer un dossier-zone rapidement, geste humain (sans passer par le LLM) | feature | P3 |  | 0017 |  | 💡 idea |  |
 | [20260903155243753](20260903155243753_journal-filtre-date.md) | Journal — filtre par date (la dimension manquante) | feature | P3 |  | 0060 | google-mcp-multi-account | 💡 idea |  |

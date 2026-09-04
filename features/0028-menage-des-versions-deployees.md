@@ -1,6 +1,6 @@
 ---
 id: 0028
-title: Ménage des versions déployées (+ CHANGELOG et releases GitHub)
+title: Ménage des versions déployées — reste `deploy-local.sh --prune`
 type: chore
 priority: P3
 version:
@@ -40,3 +40,7 @@ version sans lire le journal git.
 ## Notes
 
 Confort, pas correctif. À faire après les fiches 0025 et 0026.
+
+- **Rattachée au cluster updater** (PLAN.md, Jalon C) : `--prune` est la dépendance lâche du
+  revert de [[0091]] (la cible du revert peut avoir été purgée). CHANGELOG + releases déjà livrés
+  (réconciliation 2026-08-08).

@@ -36,7 +36,12 @@ en fouillant la config à la main le 2026-07-26.
 
 ## Critères d'acceptation
 
-- [ ] À groomer.
+> **Réconciliation (2026-09-04).** La version circule déjà **côté humain** : badge dans l'admin
+> Cockpit (#128) + `serverInfo` du handshake `initialize`. Résiduel = **surface agent** (sans
+> terminal) + détection de dérive, non faits.
+
+- [ ] `setup_status` annonce sa version et son couloir (chemin binaire, port broker) : l'agent sait à qui il parle, sans terminal.
+- [ ] Une commande de contrôle (`deploy-local.sh --check` ou `mag doctor`) signale la dérive entre l'entrée réellement branchée dans la config du client et `~/.local/share/google-mcp/current`.
 
 ## Notes
 
