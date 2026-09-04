@@ -6,10 +6,17 @@ priority: P2
 version: v0.4.0
 epic: 0060
 status: todo
-ready:
+ready: 2026-09-04
 pr:
 created: 2026-07-29
 ---
+
+## En clair
+
+Le rebrand #58 a déjà refait le gros du README (quickstart, permissions, badges, sécurité).
+Restent **deux manques ciblés** : un usage **par persona** (utilisateur quotidien, admin/PO,
+contributeur) et une vraie section **Contribution** (setup dev, tests, conventions de commit).
+Cette fiche livre juste ces deux ajouts.
 
 ## Contexte / Problème
 
@@ -32,6 +39,13 @@ Restructurer : quickstart 3–5 min, usage par persona, permissions IAM /
 - [ ] Section **Contribution** explicite (setup dev, tests, conventions de
       commit) — au-delà du bloc « Development » actuel.
 - Source des critères : [issue #70](https://github.com/elzinko/google-mcp-multi-account/issues/70).
+
+## Comment vérifier
+
+Ouvrir le README : une section **usage par persona** (les 3 profils) et une section
+**Contribution** (setup dev, `./scripts/test.sh`, conventions de commit) sont présentes,
+au-delà du bloc « Development » actuel. Le quickstart et la posture sécurité (livrés #58)
+restent intacts.
 
 ## Notes
 

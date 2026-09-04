@@ -6,14 +6,23 @@ priority: P2
 version:
 epic: 0082
 status: todo
-ready:
+ready: 2026-09-04
 pr:
 created: 2026-08-18
 ---
 
+## En clair
+
+Trois petits durcissements **internes** de la couche « droits par session », tous
+**fail-closed** (jamais d'ouverture accidentelle). On aligne la catégorie d'un fichier Drive
+envoyé à la corbeille entre l'**autorisation** et le **journal** ; on normalise les services
+versionnés (`calendar:v3` → `calendar`) avant d'inférer la ressource journalisée ; et on
+transmet les capacités **réelles** d'un parent hérité à ses petits-enfants. Suite de la revue
+Codex de la PR #118 ; le gros est déjà livré dans 0080, restent ces 3 raffinements P2.
+
 ## Contexte / Problème
 
-Suite de la revue Codex de la PR #118 ([0080](0080-durcir-capacites-fines-session.md)). Le P0
+Suite de la revue Codex de la PR #118 ([0080](done/0080-durcir-capacites-fines-session.md)). Le P0
 (fail-open sur la dérivation de ressource) et les correctifs principaux (forme `--params={…}`,
 `events import`, audit `copy`→destination, repli legacy des sous-sessions pré-snapshot) sont **livrés
 dans 0080**. Restent **3 raffinements P2** — tous **fail-closed ou audit best-effort, aucun
@@ -50,6 +59,14 @@ remplissant ses critères (372/0, revue adverse GO).
       **effectives** au petit-enfant — testé.
 - [ ] `./scripts/test.sh` vert.
 
+## Comment vérifier
+
+Lancer `./scripts/test.sh` : les 3 tests ajoutés passent. Concrètement : sous policy Drive
+`open`, un `drive files update {trashed:true}` est catégorisé `delete` des **deux** côtés
+(autorisation ET audit) ; un `calendar:v3 events list --params {calendarId:cal123}` journalise
+la vraie ressource (`cal123`, pas `""`) ; un parent hérité qui crée un enfant transmet ses
+capacités **effectives** au petit-enfant.
+
 ## Notes
 
 - **Limites assumées héritées de 0080** (mapping opérande mono-ressource) : `calendar events move`
@@ -58,4 +75,4 @@ remplissant ses critères (372/0, revue adverse GO).
   ici seulement si un usage réel scopé sur ces méthodes apparaît.
 - Révélé par la revue Codex de la PR #118 (findings P2, répondus en fil et résolus). Parent :
   [0082](0082-droits-par-session.md) / [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md).
-  Fiche sœur de [0080](0080-durcir-capacites-fines-session.md) et [0085](0085-figer-unlock-zones-sous-session.md).
+  Fiche sœur de [0080](done/0080-durcir-capacites-fines-session.md) et [0085](done/0085-figer-unlock-zones-sous-session.md).

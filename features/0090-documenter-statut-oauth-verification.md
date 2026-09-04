@@ -11,6 +11,14 @@ pr:
 created: 2026-08-29
 ---
 
+## En clair
+
+Au premier login OAuth, Google affiche deux choses qui **inquiètent** l'utilisateur : un
+avertissement « application non vérifiée », et l'email du **compte développeur** du projet. Les
+deux sont **normaux** ici (chaque personne crée sa propre app OAuth). Cette fiche **documente**
+pourquoi, et outille le passage **Testing → Production** — qui supprime l'expiration des accès
+au bout de 7 jours (la cause des reconnexions `mag add`).
+
 ## Contexte / Problème
 
 Au premier login OAuth, Google affiche deux choses qui inquiètent l'utilisateur :
@@ -60,6 +68,13 @@ Deux sujets connexes, à documenter (et outiller) :
 - La doc explique warning + email dev + vérification (2 niveaux de scopes) + Testing→Production.
 - L'admin affiche une note/infobulle « Pourquoi ce warning ? » liée à la doc.
 - Aucune promesse chiffrée figée dans le code sans source datée.
+
+## Comment vérifier
+
+Lire la doc : elle explique le warning, l'email dev (visible que par soi), les deux niveaux de
+vérification Google, et le passage Testing → Production. Depuis l'admin « Connecter un compte »,
+l'infobulle « Pourquoi ce warning ? » renvoie à cette doc. Aucun chiffre (coût, seuil) n'est figé
+dans le code sans source datée.
 
 ## Notes
 

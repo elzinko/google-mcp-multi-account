@@ -6,10 +6,18 @@ priority: P3
 version:
 epic:
 status: todo
-ready:
+ready: 2026-09-04
 pr:
 created: 2026-08-29
 ---
+
+## En clair
+
+Trois noms cohabitent : la **commande** `mag`, le **produit** `google-multi-account`, le **dépôt**
+`google-mcp-multi-account`. Rien ne dit qu'ils désignent le même outil → l'utilisateur est perdu.
+On relie ces noms par l'**affichage** et la **doc**, **sans rien renommer** — surtout pas le
+serveur MCP `google-multi-account`, dont le nom est la clé de config des clients (le changer
+casserait toutes les installations).
 
 ## Contexte / Problème
 
@@ -41,7 +49,7 @@ Cohérence par le **lien** et la **doc**, pas par un renommage :
   pour que l'utilisateur fasse le pont install ↔ commande.
 - **README / doc** : une phrase de correspondance — « produit **google-multi-account**,
   dépôt **google-mcp-multi-account**, commande **mag** ».
-- **App OAuth** : nommer l'écran de consentement « mag » (geste console, cf. [[0090]]).
+- *(Hors périmètre — vit avec [[0090]] : nommer l'écran de consentement OAuth « mag » est un geste console humain ; le garder hors de 0093 évite d'y réintroduire une action externe.)*
 - **Ne pas** renommer le serveur MCP ni `PRODUCT_SLUG` (source du nom MCP) sans migration
   dédiée, annoncée, majeure.
 
@@ -50,6 +58,12 @@ Cohérence par le **lien** et la **doc**, pas par un renommage :
 - L'admin relie visiblement `mag` et `google-multi-account`.
 - Le README explicite la correspondance produit / dépôt / commande.
 - Le nom du serveur MCP reste `google-multi-account` (aucune régression de config client).
+
+## Comment vérifier
+
+Ouvrir l'admin : `mag` est visiblement relié à `google-multi-account` (près du titre). Lire le
+README : la correspondance produit / dépôt / commande est explicite. Vérifier que le nom du
+serveur MCP reste `google-multi-account` (config des clients inchangée, aucune régression).
 
 ## Notes
 
