@@ -2,7 +2,7 @@
 id: 0006
 title: Harnais hybride pour les tests manuels — script pour la mécanique, LLM pour la glu
 type: feature
-priority: P2
+priority: P3
 version:
 epic:
 status: idea

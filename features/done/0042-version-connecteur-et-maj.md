@@ -5,12 +5,15 @@ type: feature
 priority: P2
 version: V2
 epic:
-status: idea
+status: shipped
 ready:
-pr:
+pr: "#128"
 created: 2026-07-28
 updated: 2026-07-28
 ---
+
+> **Superseded — livrée par #128 / #78 (2026-09-04).** La visibilité de version est là (badge admin Cockpit #128 + `serverInfo` du handshake), et le parcours de mise à jour passe par `mag update --check` + l'install curl sans clone (#78). La cohabitation dogfood (2 connecteurs côte à côte) est repliée dans [[0046]]. Marquée livrée à ce titre — pas de PR propre.
+
 
 ## Contexte / Problème
 

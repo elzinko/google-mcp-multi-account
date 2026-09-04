@@ -2,7 +2,7 @@
 id: 0079
 title: Modèle de soutenabilité — freemium (cœur libre + options payantes)
 type: feature
-priority: P2
+priority: P3
 version:
 epic:
 status: idea
@@ -38,7 +38,7 @@ la sécurité ni la possession des données.
 ## Critères d'acceptation
 
 - [ ] Un cadre décidé : ce qui est **toujours gratuit** vs **payant**, cohérent avec l'éthos.
-- [ ] Compatibilité avec le choix de licence (ADR-0008 : Apache-2.0) vérifiée.
+- [ ] Compatibilité avec la licence effective (**MIT**, `LICENSE` / fiche [[0016]]) vérifiée.
 
 ## Notes
 
@@ -46,4 +46,6 @@ la sécurité ni la possession des données.
   avant d'être tirable.
 - Recoupe le passage open source de l'épic [[0077]] et l'ancienne fiche licence [[0016]]
   (MIT, livrée).
-- Priorité **proposée P2** — à confirmer par le PO.
+- **Décision PO (2026-09-04)** : gardée en idée « un jour peut-être », **basse prio (P3)**, sans
+  engagement. Un modèle économique reste très spéculatif pour un outil 100 % local mono-utilisateur.
+  Capturée pour ne rien perdre, pas un objectif de roadmap.

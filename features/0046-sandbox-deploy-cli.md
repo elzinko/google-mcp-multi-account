@@ -130,6 +130,7 @@ Scenario: stable intact
 - [x] `sandbox deploy --wire` / `sandbox wire` : entrée MCP suffixée (stable intact) ; unwire sélectif via `wire --remove` ; nucléaire à `remove`
 - [ ] `setup_status` / `mag doctor` : dérive config vs déployé (fiche 0026).
 - [x] Tests hermétiques dans `scripts/test.sh`.
+- [ ] Doc dogfood : les **2 connecteurs** (stable + suffixé) côte à côte — comment choisir lequel le LLM utilise, et comment nettoyer (repli de la fiche [[0042]], superseded/livrée #128 le 2026-09-04).
 
 ## Notes
 

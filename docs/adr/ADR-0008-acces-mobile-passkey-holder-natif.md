@@ -48,7 +48,7 @@ Adopter un modèle à **trois rôles découplés**, et refonder la brique de dé
 8. **Décisions complémentaires (actées le 2026-08-15 avec le PO).**
    - **Enrôlement OAuth par appareil** : chaque appareil (Mac, téléphone) détient ses propres jetons dans son coffre — **pas** de synchronisation de secrets entre appareils.
    - **Migration progressive, pas de big-bang** : le holder **Python-macOS** existant est **conservé** et continue de servir ; le holder natif est ajouté **à côté**. L'unification éventuelle du desktop sur Tauri 2 est **différée** (non décidée).
-   - **Licence : Apache-2.0** (clause brevets + adoption large).
+   - **Licence : ~~Apache-2.0~~ → MIT** *(corrigé le 2026-09-04 : la licence effective du dépôt est **MIT** — cf. `LICENSE` et la fiche 0016 livrée. Le choix Apache-2.0 envisagé ici n'a pas été retenu à la livraison open-source.)*
    - **Point de départ = phase 1** : poser l'approbation par passkey sur l'architecture *actuelle* (Mac holder allumé) avant toute refonte native.
 
 ## Options considérées
@@ -163,7 +163,7 @@ Les deux ADR restent **distincts** (questions différentes : *isolation par sess
 - **Deux implémentations du holder** cohabiteront pendant la transition (Python-macOS existant + natif) → risque de divergence de règles de sécurité, à cadrer.
 - **Multi-appareils OAuth** : un même compte Google détenu par le Mac *et* le téléphone impose de choisir entre **enrôlement par appareil** (chaque appareil a ses propres jetons dans son coffre — recommandé) et **synchronisation chiffrée** entre appareils (plus pratique, surface plus grande).
 
-**Tranché le 2026-08-15 (cf. Décision §8)** : enrôlement *par appareil* ; les deux holders cohabitent (migration progressive) ; licence Apache-2.0.
+**Tranché le 2026-08-15 (cf. Décision §8)** : enrôlement *par appareil* ; les deux holders cohabitent (migration progressive) ; licence ~~Apache-2.0~~ → **MIT** (corrigé le 2026-09-04, cf. §8).
 
 **À revisiter plus tard (ADR/fiches enfants)**
 - **Design du relais aveugle** (protocole, découverte, hébergement) — et le cas « Mac allumé » sans relais (LAN direct / tunnel type WireGuard). → ADR enfant.
