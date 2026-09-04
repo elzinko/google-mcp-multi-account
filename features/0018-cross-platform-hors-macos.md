@@ -17,7 +17,8 @@ created: 2026-07-24
 > pas justifié au regard de ses priorités. La fiche est **volontairement laissée
 > complète et à jour** pour qu'un contributeur puisse la prendre telle quelle :
 > le constat technique ci-dessous est vérifié, les dépendances sont constatées,
-> le périmètre est arbitré. Passée en **P3**.
+> le périmètre est arbitré. Passée en **P3** — bonne candidate **« good first issue »** pour un
+> contributeur : constat vérifié, dépendances constatées, périmètre net.
 
 ## Contexte / Problème
 

@@ -101,7 +101,6 @@
 | [0006](0006-harnais-test-manuel-hybride.md) | Harnais hybride pour les tests manuels — script pour la mécanique, LLM pour la glu | feature | P2 |  |  |  | 💡 idea |  |
 | [0026](0026-savoir-quelle-version-repond.md) | Savoir quelle version répond — version annoncée par les tools, dérive détectée | feature | P2 |  |  |  | 💡 idea |  |
 | [0035](0035-admin-acces-rapide-et-visu-zones.md) | Accès rapide à l'admin + visualisation des zones (icône barre de menus ?) | feature | P2 |  |  |  | 💡 idea |  |
-| [0038](0038-creer-dossier-zone-rapidement.md) | Créer un dossier-zone rapidement, geste humain (sans passer par le LLM) | feature | P2 |  |  |  | 💡 idea |  |
 | [0039](0039-harmoniser-vocabulaire-jeton.md) | Bannir « jeton/token » des surfaces utilisateur — un seul vocabulaire (accès / connexion) | chore | P2 |  |  |  | 💡 idea |  |
 | [0042](0042-version-connecteur-et-maj.md) | Version visible dans le connecteur MCP + mise à jour guidée | feature | P2 | V2 |  |  | 💡 idea |  |
 | [0079](0079-modele-soutenabilite-freemium.md) | Modèle de soutenabilité — freemium (cœur libre + options payantes) | feature | P2 |  |  |  | 💡 idea |  |
@@ -110,6 +109,7 @@
 | [0021](0021-couverture-mcp-elargie.md) | Élargir la couverture MCP — Calendar, Docs, Sheets, Tasks (et écritures) | feature | P3 |  | 0017 |  | 💡 idea |  |
 | [0028](0028-menage-des-versions-deployees.md) | Ménage des versions déployées (+ CHANGELOG et releases GitHub) | chore | P3 |  |  |  | 💡 idea |  |
 | [0034](0034-maj-protocole-test-manuel-drive.md) | Mettre à jour le protocole du test manuel drive-2-comptes (limites périmées + nouvelles phases) | chore | P3 |  |  |  | 💡 idea |  |
+| [0038](0038-creer-dossier-zone-rapidement.md) | Créer un dossier-zone rapidement, geste humain (sans passer par le LLM) | feature | P3 |  | 0017 |  | 💡 idea |  |
 | [20260903155243753](20260903155243753_journal-filtre-date.md) | Journal — filtre par date (la dimension manquante) | feature | P3 |  | 0060 | google-mcp-multi-account | 💡 idea |  |
 | [20260903155243879](20260903155243879_mobile-cibles-tactiles-44px.md) | Admin mobile — cibles tactiles à 44 px (barre haute) | bug | P3 |  | 0060 | google-mcp-multi-account | 💡 idea |  |
 

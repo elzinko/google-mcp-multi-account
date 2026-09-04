@@ -11,6 +11,12 @@ pr:
 created: 2026-07-27
 ---
 
+> **Gardée mais parquée (décision PO 2026-09-04).** Utile, mais **pas prioritaire** pour l'instant.
+> **Prérequis** : l'admin doit d'abord pouvoir démarrer **seul** — en app ou en service —
+> indépendamment de `mag admin`. Sans ça, l'icône n'a rien à piloter au repos. Réserve assumée :
+> c'est du natif macOS (barre de menus), que le projet évite ; à revisiter quand le prérequis
+> « admin autonome » existe.
+
 ## Contexte / Problème
 
 Pour voir l'état des accès (profils verrouillés, zones actives), il faut se

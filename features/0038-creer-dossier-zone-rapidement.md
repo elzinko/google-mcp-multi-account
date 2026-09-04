@@ -2,14 +2,24 @@
 id: 0038
 title: Créer un dossier-zone rapidement, geste humain (sans passer par le LLM)
 type: feature
-priority: P2
+priority: P3
 version:
-epic:
+epic: 0017
 status: idea
 ready:
 pr:
 created: 2026-07-27
 ---
+
+> **Parquée → rattachée à l'épic [[0017]] (revue adverse, 2026-09-04).** La seule justification
+> solide — créer un dossier dont on est **propriétaire** — ne mord qu'en **cross-account** (le
+> compte A écrit dans un dossier du compte B), c'est-à-dire précisément 0017. En mono-utilisateur
+> (comptes perso), tu possèdes déjà tes dossiers, et une écriture en éditeur non-propriétaire
+> passe (`writeFolders` = liste d'IDs autorisés, aucun contrôle « owner »). Le « geste fréquent »
+> ci-dessous est **faux** : une zone est un **territoire permanent**, posé une fois au setup.
+> Contournement suffisant aujourd'hui : choisir un dossier existant, ou le créer sur Drive en 5 s.
+> **Reliquat éventuel** : un bouton UX « créer un dossier » dans `dAddFolder`, P3 nice-to-have,
+> sans l'argument propriété.
 
 ## Contexte / Problème
 
