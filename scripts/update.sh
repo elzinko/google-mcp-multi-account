@@ -239,6 +239,22 @@ echo "par l'application, il ne se recharge pas tout seul."
 echo
 echo "Vérifier ensuite : le serveur doit annoncer « $TARGET_VERSION »."
 
+# Guide de refresh terminal (fiche 0092) : le nom canonique en ligne de
+# commande est désormais « mag » (gwsa/gma restent invocables, dépréciés).
+# Le shell garde en cache l'ancien chemin résolu : après une bascule, « mag »
+# peut sembler introuvable tant qu'on n'a pas rafraîchi le shell courant.
+# On n'affiche l'encart QUE si c'est pertinent : « mag » pas encore résolu
+# dans CE shell (celui qui lance update.sh), ou pas encore présent au PATH.
+if ! command -v mag >/dev/null 2>&1; then
+  echo
+  echo "${Y}Le nom canonique en ligne de commande est « mag ».${N}"
+  echo "Ce shell ne le voit pas encore (chemin mis en cache) : ouvre un nouveau"
+  echo "terminal, ou lance « hash -r » dans celui-ci, puis retape « mag »."
+  echo "(Si cet update a été lancé depuis une release pré-#114 — avant le"
+  echo "renommage gma/gwsa → mag —, l'ancien update.sh ne connaît pas « mag » :"
+  echo "relance « mag update » une fois sur une release ≥ #114.)"
+fi
+
 # Rappel de rollback (fiche 0091) : seulement quand une installation a eu lieu
 # pour de vrai (pas le cas « déjà à jour », où rien n'a bougé).
 if [[ -z "${SKIP_INSTALL:-}" ]]; then

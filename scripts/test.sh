@@ -5682,6 +5682,109 @@ else
   fail "remote_approval : entrelacement enroll ↔ vérif — enrôlement corrompu/écrasé (verify=$inter_verify_out enroll=$inter_enroll_out final=$inter_final)"
 fi
 
+section "Dépréciation douce gwsa/gma → mag (fiche 0092)"
+# gwsa/gma restent invocables (rollback interne 0081) mais annoncent mag comme
+# nom canonique. Non-régression n°1 : stdout + rc de « gwsa <cmd> » doivent
+# être STRICTEMENT identiques à « mag <cmd> » — seul stderr peut différer
+# (l'avertissement de dépréciation n'est jamais mêlé à la sortie utile).
+DEPR_ROOT="$TMP/deprecation"
+mkdir -p "$DEPR_ROOT"
+DEPR_TMPDIR="$TMP/deprecation-tmpdir"
+mkdir -p "$DEPR_TMPDIR"
+ln -sfn "$(cd "$(dirname "$GWSA")" && pwd)/mag" "$DEPR_ROOT/gwsa"
+ln -sfn "$(cd "$(dirname "$GWSA")" && pwd)/mag" "$DEPR_ROOT/gma"
+
+# « mag <cmd> » et « gwsa <cmd> » produisent le même comportement UTILE (même
+# code, $SELF s'y substitue déjà avant 0092 dans les messages — ex. « relancer :
+# mag add x » vs « relancer : gwsa add x » — ce n'est pas une régression de
+# cette fiche). Ce que 0092 ne doit JAMAIS faire : mêler l'avertissement de
+# dépréciation à cette sortie utile. On le vérifie en comparant gwsa avec
+# lui-même, avertissement présent (1er appel) vs absent (2e appel, marqueur
+# déjà posé) : stdout et rc doivent être rigoureusement identiques.
+MAG_OUT="$(GWSA_ROOT="$GWSA_ROOT" "$GWSA" list 2>/dev/null)"; MAG_RC=$?
+GWSA_COLD_OUT="$(TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>/dev/null)"; GWSA_COLD_RC=$?
+GWSA_WARM_OUT="$(TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>/dev/null)"; GWSA_WARM_RC=$?
+if [[ "$GWSA_COLD_OUT" == "$GWSA_WARM_OUT" && "$GWSA_COLD_RC" -eq "$GWSA_WARM_RC" ]]; then
+  pass "non-régression : stdout+rc de « gwsa list » identiques, avertissement présent ou pas"
+else
+  fail "non-régression : l'avertissement de dépréciation change le stdout/rc utile (froid=[$GWSA_COLD_OUT]/$GWSA_COLD_RC chaud=[$GWSA_WARM_OUT]/$GWSA_WARM_RC)"
+fi
+if [[ "$GWSA_COLD_RC" -eq "$MAG_RC" ]]; then
+  pass "non-régression : même code retour entre gwsa list et mag list"
+else
+  fail "non-régression : code retour différent entre gwsa list ($GWSA_COLD_RC) et mag list ($MAG_RC)"
+fi
+
+rm -rf "$DEPR_TMPDIR"; mkdir -p "$DEPR_TMPDIR"
+GWSA_STDERR="$(TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>&1 >/dev/null)"
+if [[ "$GWSA_STDERR" == *"déprécié"* && "$GWSA_STDERR" == *"mag"* ]]; then
+  pass "gwsa affiche un avertissement de dépréciation (stderr) pointant vers mag"
+else
+  fail "gwsa n'affiche pas l'avertissement de dépréciation attendu (stderr=[$GWSA_STDERR])"
+fi
+
+rm -rf "$DEPR_TMPDIR"; mkdir -p "$DEPR_TMPDIR"
+MAG_STDERR="$(TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$GWSA" list 2>&1 >/dev/null)"
+if [[ "$MAG_STDERR" != *"déprécié"* ]]; then
+  pass "mag (nom canonique) n'affiche jamais l'avertissement de dépréciation"
+else
+  fail "mag affiche à tort l'avertissement de dépréciation (stderr=[$MAG_STDERR])"
+fi
+
+# Une fois par session : deux invocations gwsa DANS LE MÊME shell (donc même
+# $PPID vu par bin/mag — le marqueur once-per-session est keyé sur tty/$PPID)
+# → un seul avertissement. Un « nouveau terminal » = un nouveau $PPID.
+# NOTE technique : on capture via redirection vers fichier, PAS via
+# « $(cmd) » — la substitution de commande forkerait un sous-shell par appel,
+# ce qui changerait $PPID à chaque fois et fausserait le test (gwsa serait
+# invoqué avec un parent différent à chaque appel, alors qu'un vrai shell
+# interactif garde le même PPID pour deux commandes tapées à la suite).
+rm -rf "$DEPR_TMPDIR"; mkdir -p "$DEPR_TMPDIR"
+TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list >/dev/null 2>"$TMP/once-1.err"
+TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list >/dev/null 2>"$TMP/once-2.err"
+FIRST_STDERR="$(cat "$TMP/once-1.err")"
+SECOND_STDERR="$(cat "$TMP/once-2.err")"
+if [[ "$FIRST_STDERR" == *"déprécié"* && -z "$SECOND_STDERR" ]]; then
+  pass "avertissement une seule fois par session (2e appel gwsa, même session : silencieux)"
+else
+  fail "avertissement pas limité à une fois par session (1er=[$FIRST_STDERR] 2e=[$SECOND_STDERR])"
+fi
+
+# Nouveau terminal (nouvelle session) → ré-avertit. On rend le test DÉTERMINISTE
+# via l'override GWSA_DEPRECATION_SESSION_KEY (2 clés distinctes = 2 « terminaux »)
+# plutôt que de dépendre du tty/$PPID réel : sous un vrai terminal interactif, deux
+# sous-shells frères partagent le même tty contrôlant → même clé → faux échec (revue 0092 P1).
+rm -rf "$DEPR_TMPDIR"; mkdir -p "$DEPR_TMPDIR"
+NEWSHELL_STDERR="$(GWSA_DEPRECATION_SESSION_KEY=term-a TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>&1 >/dev/null)"
+NEWSHELL2_STDERR="$(GWSA_DEPRECATION_SESSION_KEY=term-b TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>&1 >/dev/null)"
+if [[ "$NEWSHELL_STDERR" == *"déprécié"* && "$NEWSHELL2_STDERR" == *"déprécié"* ]]; then
+  pass "un nouveau terminal (nouvelle session) ré-avertit"
+else
+  fail "un nouveau terminal ne ré-avertit pas (1er=[$NEWSHELL_STDERR] 2e=[$NEWSHELL2_STDERR])"
+fi
+
+# Dégradation propre hors TTY (pipe/CI) : gma via un pipe ne doit jamais planter.
+rm -rf "$DEPR_TMPDIR"; mkdir -p "$DEPR_TMPDIR"
+if echo | TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gma" list >/dev/null 2>&1; then
+  pass "gma hors TTY (pipe) : dégrade proprement, ne casse rien"
+else
+  fail "gma hors TTY (pipe) : a échoué (rc=$?)"
+fi
+
+section "Message de fin d'update — guide de refresh terminal (fiche 0092)"
+if grep -q "hash -r" scripts/update.sh && grep -q "nom canonique" scripts/update.sh; then
+  pass "scripts/update.sh mentionne le refresh terminal (hash -r) et le nom canonique mag"
+else
+  fail "scripts/update.sh ne guide pas le refresh terminal / ne nomme pas mag"
+fi
+if grep -q "pré-#114\|pre-#114\|avant #114\|pré-renommage" scripts/update.sh; then
+  pass "scripts/update.sh mentionne le cas update lancé depuis une release pré-#114"
+else
+  fail "scripts/update.sh ne mentionne pas le cas pré-#114"
+fi
+
+rm -rf "$DEPR_ROOT" "$DEPR_TMPDIR"
+
 # --- Bilan ------------------------------------------------------------------
 
 printf '\n\033[1mBilan : %d réussis, %d échoués\033[0m\n' "$PASS" "$FAIL"
