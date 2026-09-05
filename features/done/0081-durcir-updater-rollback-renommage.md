@@ -5,9 +5,9 @@ type: bug
 priority: P2
 version:
 epic:
-status: todo
+status: shipped
 ready: 2026-09-04
-pr:
+pr: "#134"
 created: 2026-08-17
 ---
 
