@@ -30,6 +30,7 @@
 #   mag dev use <id> --cursor|--claude-desktop [--apply]  Snippet (ou écriture) config MCP
 #   mag dev remove <id>                              Supprimer une version dev temporaire
 #   mag update [--check|--to <version>]              Installer la dernière version publiée
+#   mag revert                                       Revenir à la version précédente (rollback rapide)
 #   mag release [patch|minor|major|--print]          Publier une version (semver + CHANGELOG + tag)
 #   mag sandbox deploy [--wire …]|wire [--remove …]|list|status|remove  Sandboxes jetables (0041 ; détail : mag sandbox --help)
 #   mag project show|init|sign                         Manifeste projet .gwsa/ (fiche 0040 phase B)
@@ -95,7 +96,7 @@ check_alias() {
   [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] \
     || die "alias invalide « $1 » (lettres, chiffres, - et _ uniquement)"
   case "$1" in
-    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth|elicitation|admin|broker|dev|update|release|session|vault|project|sandbox|couloir|wire) die "« $1 » est un mot réservé" ;;
+    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth|elicitation|admin|broker|dev|update|release|revert|session|vault|project|sandbox|couloir|wire) die "« $1 » est un mot réservé" ;;
   esac
 }
 
@@ -1783,6 +1784,22 @@ cmd_update() { # mag update [--check|--to <version>|--force] — installer la ve
   exec "$script" "$@"
 }
 
+cmd_revert() { # mag revert — rebascule current sur « previous » (fiche 0091)
+  # « previous » est posé/rafraîchi par deploy-local.sh à CHAQUE bascule de
+  # current (deploy comme --rollback) : pas besoin de connaître le tag exact,
+  # ni de trier l'historique des versions déployées.
+  local deploy_root="${GWSA_DEPLOY_ROOT:-$HOME/.local/share/google-mcp}"
+  local prev_link="$deploy_root/previous"
+  [[ -L "$prev_link" ]] \
+    || die "aucune version précédente enregistrée — rien à revenir (utilise « $SELF update --to <version> » si tu connais le tag exact)"
+  local prev_version; prev_version="$(basename "$(readlink "$prev_link")")"
+  [[ -d "$deploy_root/$prev_version" ]] \
+    || die "version précédente « $prev_version » n'est plus déployée (purgée ?) — rien à revenir, utilise « $SELF update --to <version> » avec un tag encore présent"
+  local script="$REPO_DIR/scripts/deploy-local.sh"
+  [[ -x "$script" ]] || die "script de déploiement introuvable ($script)"
+  exec "$script" --rollback "$prev_version"
+}
+
 cmd_release() { # mag release [patch|minor|major|--print] — publier une version
   # Publier demande le dépôt SOURCE. Une copie installée n'a pas de .git, mais
   # deploy-local.sh y a noté le chemin du clone (.source) — même relais que
@@ -1850,6 +1867,7 @@ main() {
     broker) shift; [[ $# -le 1 ]] || die "usage : $SELF broker [status|stop]"; cmd_broker "$@" ;;
     dev)    shift; cmd_dev "$@" ;;
     update)  shift; cmd_update "$@" ;;
+    revert)  shift; [[ $# -eq 0 ]] || die "« $SELF revert » ne prend aucun argument"; cmd_revert ;;
     release) shift; cmd_release "$@" ;;
     sandbox) shift; cmd_sandbox "$@" ;;
     wire) shift; cmd_wire "$@" ;;
