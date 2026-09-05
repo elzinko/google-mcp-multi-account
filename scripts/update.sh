@@ -7,13 +7,22 @@
 #
 # Usage :
 #   ./scripts/update.sh              # installe la dernière version publiée
-#   ./scripts/update.sh --to v0.1.0  # …ou une version précise
+#   ./scripts/update.sh --to v0.1.0  # …ou une version précise (rollback manuel)
 #   ./scripts/update.sh --check      # dit installé / disponible, n'écrit rien
 #   ./scripts/update.sh --force      # réinstalle même si déjà à jour
 #
 # Marche aussi depuis la copie installée (relais par « .source » vers le clone).
 # Sans clone du tout — installé par curl, ou clone supprimé — il lit la dernière
 # version et son tarball depuis GitHub, plus besoin de garder un clone (fiche 0020).
+#
+# Rollback (fiche 0091) : chaque bascule de « current » pose un lien « previous ».
+# Pour revenir en arrière après une mise à jour qui pose problème :
+#   mag revert                       # rebascule sur la version précédente, direct
+#   ./scripts/update.sh --to v0.1.0  # …ou en visant un tag précis
+#
+# Exemple :
+#   ./scripts/update.sh --to v0.1.0  # revient précisément à v0.1.0
+#   mag revert                       # revient à la version installée juste avant
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -37,7 +46,7 @@ while [[ $# -gt 0 ]]; do
     --force) FORCE=1 ;;
     --to) shift; WANT="${1:-}" ;;
     --to=*) WANT="${1#*=}" ;;
-    -h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "argument inconnu « $1 » (voir --help)" ;;
   esac
   # `|| break` : un flag à valeur en dernière position (« --to » nu) a déjà vidé
@@ -229,3 +238,16 @@ echo "Redémarre Claude Desktop (Cmd-Q puis relance) : le serveur MCP est lancé
 echo "par l'application, il ne se recharge pas tout seul."
 echo
 echo "Vérifier ensuite : le serveur doit annoncer « $TARGET_VERSION »."
+
+# Rappel de rollback (fiche 0091) : seulement quand une installation a eu lieu
+# pour de vrai (pas le cas « déjà à jour », où rien n'a bougé).
+if [[ -z "${SKIP_INSTALL:-}" ]]; then
+  PREVIOUS_VERSION=""
+  [[ -L "$DEPLOY_ROOT/previous" ]] && PREVIOUS_VERSION="$(basename "$(readlink "$DEPLOY_ROOT/previous")")"
+  echo
+  if [[ -n "$PREVIOUS_VERSION" ]]; then
+    echo "Pour revenir en arrière : mag revert (ou mag update --to $PREVIOUS_VERSION)."
+  else
+    echo "Pour revenir en arrière : mag revert."
+  fi
+fi

@@ -25,6 +25,11 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEPLOY_ROOT="${GWSA_DEPLOY_ROOT:-$HOME/.local/share/google-mcp}"
 CURRENT_LINK="$DEPLOY_ROOT/current"
+# « previous » — dernière version que current pointait AVANT la bascule en
+# cours. Posé à CHAQUE bascule (déploiement comme --rollback) : c'est ce qui
+# permet à « mag revert » (fiche 0091) de revenir en arrière sans connaître le
+# tag exact, sans avoir à trier l'historique des versions déployées.
+PREVIOUS_LINK="$DEPLOY_ROOT/previous"
 # Source « GitHub sans clone » (fiche 0020) — sourcée à la demande dans --github.
 LIB_GH="$(cd "$(dirname "$0")" && pwd)/lib-github-release.sh"
 # Re-ciblage des liens PATH mag/gma/gwsa — partagé avec update.sh (fiche 0081).
@@ -91,8 +96,15 @@ current_version() { # nom de la version pointée par current (vide si aucune)
   basename "$(readlink "$CURRENT_LINK")"
 }
 
-point_current_at() { # point_current_at <version> — bascule atomique du symlink
-  ln -sfn "$DEPLOY_ROOT/$1" "$CURRENT_LINK"
+point_current_at() { # point_current_at <version> — bascule atomique du symlink,
+  # en posant/rafraîchissant « previous » AVANT si current pointait déjà
+  # ailleurs (fiche 0091 — socle de « mag revert »).
+  local target="$1" old
+  old="$(current_version)"
+  if [[ -n "$old" && "$old" != "$target" ]]; then
+    ln -sfn "$DEPLOY_ROOT/$old" "$PREVIOUS_LINK"
+  fi
+  ln -sfn "$DEPLOY_ROOT/$target" "$CURRENT_LINK"
 }
 
 stop_broker() { # recycle le broker du couloir stable, sinon l'ancien code reste servi

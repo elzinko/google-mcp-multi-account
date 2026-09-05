@@ -2198,10 +2198,15 @@ out_u="$(relenv "$UPDATE" 2>&1)"; rc=$?
   && pass "update : relancé sans rien à faire → « déjà à jour » (idempotent)" \
   || fail "update : devrait être idempotent"
 
-relenv "$UPDATE" --to v0.1.0 >/dev/null 2>&1; rc=$?
+out_u="$(relenv "$UPDATE" --to v0.1.0 2>&1)"; rc=$?
 [[ "$rc" -eq 0 && "$(basename "$(readlink "$RELDEP/current")")" == "v0.1.0" ]] \
   && pass "update --to : installe une version précise (retour arrière)" \
   || fail "update --to : version précise non installée"
+
+# fiche 0091 : après un update réussi, la sortie rappelle comment revenir en arrière.
+[[ "$out_u" == *"revert"* ]] \
+  && pass "update : message post-update rappelle « mag revert »" \
+  || fail "update : aucun rappel de rollback après update réussi"
 
 relenv "$UPDATE" --to v9.9.9 >/dev/null 2>&1; rc=$?
 [[ "$rc" -ne 0 && "$(basename "$(readlink "$RELDEP/current")")" == "v0.1.0" ]] \
@@ -2213,6 +2218,65 @@ out_u="$(relenv "$RELDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
 [[ "$rc" -eq 0 && "$out_u" == *"clone source"* && "$out_u" == *"v1.0.0"* ]] \
   && pass "update : lancé depuis la copie installée, retrouve le clone via .source" \
   || fail "update : ne retrouve pas le clone depuis la copie installée"
+
+section "update.sh --help — documente --to et le rollback (fiche 0091)"
+
+out_h="$(relenv "$UPDATE" --help 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$out_h" == *"--to"* ]] \
+  && pass "update --help : documente --to" \
+  || fail "update --help : --to absent"
+[[ "$out_h" == *"revert"* ]] \
+  && pass "update --help : documente le rollback (mag revert)" \
+  || fail "update --help : rollback non documenté"
+[[ "$out_h" == *"Exemple"* || "$out_h" == *"exemple"* ]] \
+  && pass "update --help : donne un exemple" \
+  || fail "update --help : aucun exemple"
+
+section "mag revert — rollback ergonomique sans connaître le tag (fiche 0091)"
+
+# GW/gwenv sont normalement introduits plus bas (section suivante) : on les
+# définit ici, avant leur premier usage, pour ce bloc de tests sur « revert ».
+GW="$REL/bin/mag"
+gwenv() { GWSA_DEPLOY_ROOT="$RELDEP" GWSA_DESKTOP_CONFIG="$RELCONF" "$@"; }
+
+# À ce stade, RELDEP a bascule current v1.0.0 → v0.1.0 (via « update --to v0.1.0 »
+# ci-dessus) : point_current_at a donc posé « previous » → v1.0.0. Deux versions
+# non purgées, previous connu : le cas nominal de la fiche.
+[[ "$(basename "$(readlink "$RELDEP/previous" 2>/dev/null)")" == "v1.0.0" ]] \
+  && pass "bascule de current : « previous » posé automatiquement (v1.0.0)" \
+  || fail "bascule de current : « previous » non posé"
+
+# lien PATH pré-existant (posé par un « update » précédent), pointant sur la
+# copie installée courante (v0.1.0) — état réaliste avant un revert.
+ln -sfn "$RELDEP/current/bin/mag" "$LINK"
+
+out_rv="$(GWSA_CLI_LINK="$LINK" gwenv "$GW" revert 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$RELDEP/current")")" == "v1.0.0" ]] \
+  && pass "mag revert : current rebascule sur la version précédente (v1.0.0)" \
+  || fail "mag revert : current n'a pas rebasculé (obtenu « $out_rv »)"
+
+[[ "$(readlink "$LINK")" == "$RELDEP/current/bin/mag" ]] \
+  && pass "mag revert : le lien PATH mag reste invocable (reciblé via retarget_cli_links)" \
+  || fail "mag revert : lien PATH non reciblé après revert"
+
+# le revert est un bascule comme une autre : previous devient à son tour v0.1.0
+# (symétrie avec point_current_at) — un second revert doit donc y revenir.
+out_rv2="$(GWSA_CLI_LINK="$LINK" gwenv "$GW" revert 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$RELDEP/current")")" == "v0.1.0" ]] \
+  && pass "mag revert : un second revert fait l'aller-retour (toggle current/previous)" \
+  || fail "mag revert : le second revert ne re-bascule pas (obtenu « $out_rv2 »)"
+
+# cas « aucune version précédente » : dépôt de déploiement neuf, jamais basculé.
+NOPREV="$TMP/no-previous-deploy"
+mkdir -p "$NOPREV"
+out_np="$(GWSA_DEPLOY_ROOT="$NOPREV" GWSA_CLI_LINK="$FAKEBIN/mag-noprev" "$GW" revert 2>&1)"; rc=$?
+[[ "$rc" -ne 0 && "$out_np" == *"précédente"* && "$out_np" != *"Traceback"* ]] \
+  && pass "mag revert : aucune version précédente → message clair, sortie propre" \
+  || fail "mag revert : cas « pas de previous » mal géré (rc=$rc, obtenu « $out_np »)"
+
+"$GW" help 2>&1 | grep -q "mag revert" \
+  && pass "mag help : « revert » listé dans l'usage" \
+  || fail "mag help : « revert » absent de l'usage"
 
 section "mag update / release — un seul poste de commande (fiche 0030)"
 
