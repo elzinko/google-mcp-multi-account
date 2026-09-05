@@ -79,6 +79,7 @@
 | [0094](0094-sessions-page-dediee-reactive.md) | Panneau Sessions LLM — page dédiée réactive et plus lisible (au lieu d'une modale) | feature | P2 |  | 0060 | google-mcp-multi-account | 🟠 in-progress |  |
 | [0103](done/0103-refonte-barre-navigation-admin.md) | Refonte de la barre de navigation de l'admin (header/menu standard) | feature | P2 |  | 0060 | google-mcp-multi-account | ✅ shipped | #128 |
 | [0106](done/0106-vue-compte-orientee-sessions.md) | Vue compte orientée sessions — compteur, liste des sessions et droits par session | feature | P2 |  |  | google-mcp-multi-account | ✅ shipped | #132 |
+| [20260905175129735](20260905175129735_durcir-rollback-updater-codex-postmerge.md) | Durcir le rollback updater — findings Codex post-merge (#134/#135) | bug | P2 |  |  | google-mcp-multi-account | ❓ todo |  |
 | [0001](0001-elicitation-signee-strongauth-v2.md) | Élicitation signée — faire monter `mag strongauth` de la présence à la signature | feature | P3 |  |  |  | 🟠 in-progress |  |
 | [0090](0090-documenter-statut-oauth-verification.md) | Documenter et outiller le statut OAuth (warning « non vérifiée » + Testing→Production) | feature | P3 |  |  |  | ❓ todo |  |
 | [0093](0093-coherence-nommage-mag-produit-mcp.md) | Cohérence de nommage — relier `mag` / google-multi-account / repo sans casser le MCP | feature | P3 |  |  |  | ❓ todo |  |
