@@ -424,6 +424,20 @@ else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "zone-remove — flags
 fi
 rm -f "$PROFILE/policy.json"
 
+section "Admin — matérialisation policy par bascule (buildTogglePolicy, fiche 0107, revue #1)"
+# Logique JS PURE de admin/index.html, exécutée hors DOM via node:vm (pas de
+# framework JS dans le projet). Verrouille l'invariant AC1 : basculer UNE
+# opération n'en active/perd JAMAIS une autre en douce. C'est là que vivait le
+# NO-GO de la 1re revue (service absent d'une policy existante matérialisé
+# « libre » au lieu de default-deny), non couvert jusqu'ici.
+TOGGLE_OUT="$(node "$(pwd)/scripts/test-policy-toggle.mjs" 2>&1)"; TOGGLE_RC=$?
+printf '%s\n' "$TOGGLE_OUT" | grep -E '✓|✗' || true
+np=$(printf '%s' "$TOGGLE_OUT" | grep -c '✓' || true); nf=$(printf '%s' "$TOGGLE_OUT" | grep -c '✗' || true)
+PASS=$((PASS + np)); FAIL=$((FAIL + nf))
+if [[ "$TOGGLE_RC" -ne 0 && "$nf" -eq 0 ]]; then
+  FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "test-policy-toggle.mjs a échoué (rc=$TOGGLE_RC) : $(printf '%s' "$TOGGLE_OUT" | head -c 200)"
+fi
+
 section "Wrapper mag — verrou « accès sur demande »"
 "$GWSA" lock testprof >/dev/null 2>&1
 cli 3 "profil verrouillé → toute commande refusée"           testprof gmail users messages list
