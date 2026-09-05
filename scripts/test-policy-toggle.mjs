@@ -117,6 +117,11 @@ function ok(cond, desc) {
      "compte libre — basculer gmail 'send' n'éteint que send, le reste reste permis");
   ok(out.drive && out.drive.mode === "open",
      "compte libre — drive non touché reste 'open' (pas de fail-close en douce)");
+  // P0 revue 0106 : les services « scopes rares » ne doivent PAS disparaître de la
+  // policy créée sur un compte libre, sinon ils tombent en default-deny (perte
+  // silencieuse de Docs/Sheets/Tâches).
+  ok(out.docs && out.docs.read === true && out.sheets && out.sheets.read === true && out.tasks && out.tasks.read === true,
+     "compte libre — docs/sheets/tasks préservés (pas de perte silencieuse) [P0 revue 0106]");
 }
 
 // D — drive déclaré mode:open : basculer 'share' part de tout-permis zoné

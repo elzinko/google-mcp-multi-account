@@ -471,6 +471,19 @@ if [[ "$TOGGLE_RC" -ne 0 && "$nf" -eq 0 ]]; then
   FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "test-policy-toggle.mjs a échoué (rc=$TOGGLE_RC) : $(printf '%s' "$TOGGLE_OUT" | head -c 200)"
 fi
 
+section "Admin — vue compte orientée sessions (sessionsForAccount/accountSessionCounts, fiche 0106)"
+# Même motif que ci-dessus : logique JS PURE de admin/index.html, hors DOM via
+# node:vm. Verrouille ce qu'un compte compte comme "session le référençant" (via
+# unlocks OU drive_zones) et ce que le compteur X déverrouillées / Y verrouillées
+# doit refléter, avant que le rendu (hors-scope ici) ne s'en serve.
+SESSVIEW_OUT="$(node "$(pwd)/scripts/test-sessions-account-view.mjs" 2>&1)"; SESSVIEW_RC=$?
+printf '%s\n' "$SESSVIEW_OUT" | grep -E '✓|✗' || true
+np=$(printf '%s' "$SESSVIEW_OUT" | grep -c '✓' || true); nf=$(printf '%s' "$SESSVIEW_OUT" | grep -c '✗' || true)
+PASS=$((PASS + np)); FAIL=$((FAIL + nf))
+if [[ "$SESSVIEW_RC" -ne 0 && "$nf" -eq 0 ]]; then
+  FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "test-sessions-account-view.mjs a échoué (rc=$SESSVIEW_RC) : $(printf '%s' "$SESSVIEW_OUT" | head -c 200)"
+fi
+
 section "Wrapper mag — verrou « accès sur demande »"
 "$GWSA" lock testprof >/dev/null 2>&1
 cli 3 "profil verrouillé → toute commande refusée"           testprof gmail users messages list

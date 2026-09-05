@@ -1888,6 +1888,9 @@ body { margin:0; }
 .ck-acct-id { display:flex; align-items:center; gap:var(--s3); min-width:0; }
 .ck-acct-mail { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ck-row-actions { display:flex; justify-content:flex-end; }
+/* État de ligne « conscient des sessions » (fiche 0106) : compteur de sessions
+   en primaire, porte d'élicitation (verrou admin global) en secondaire. */
+.ck-acct-state { display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
 button.ck-keychip { border:0; cursor:pointer; }
 .ck-keychip:disabled { opacity:.55; cursor:wait; }
 .ck-rail-nav a svg, .ck-rail-tool svg { width:18px; height:18px; flex:none; }
@@ -1928,6 +1931,10 @@ button.ck-keychip { border:0; cursor:pointer; }
 .ck-sess-meta { font-size:var(--fs-cap); color:var(--muted); }
 .ck-sess-caps { display:flex; flex-wrap:wrap; gap:6px; font-size:var(--fs-sm); }
 .ck-sess-empty { color:var(--muted); font-size:var(--fs-sm); }
+/* Modale « voir les droits » d'une session pour un compte (fiche 0106, critère E) */
+.ck-sessrights-sub { color:var(--muted); font-size:var(--fs-sm); margin:0 0 var(--s4); }
+.ck-sessrights-block { margin-bottom:var(--s4); }
+.ck-sessrights-block .ck-chip { margin:4px 4px 0 0; }
 .ck-sess-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; }
 .ck-sess-row .ck-sess-caps, .ck-sess-row .ck-sess-actions { margin:0; }
 .ck-sess-row .ck-sess-actions { justify-content:flex-end; }
@@ -2166,6 +2173,13 @@ main.ck-main { max-width:1400px; margin:0; }
     <button onclick="doSessUnlock(240)">4 h</button>
   </div>
   <div class="mtop"><button onclick="dSessUnlock.close()">Annuler</button></div>
+</dialog>
+
+<dialog id="dSessRights">
+  <h2>Droits de la session</h2>
+  <p class="ck-sessrights-sub" id="sessRightsSub"></p>
+  <div id="sessRightsBody"></div>
+  <div class="mtop"><button onclick="dSessRights.close()">Fermer</button></div>
 </dialog>
 
 <dialog id="dSessGrant">
@@ -2830,6 +2844,13 @@ function buildTogglePolicy(p, serviceKey, opKey) {
       policy[key] = base;
     } else if (p.policy && p.policy[key]) {
       policy[key] = { ...p.policy[key] };
+    } else if (!p.policy) {
+      // Compte LIBRE (aucune policy) : préserver l'état OUVERT de docs/sheets/
+      // tasks aussi (P0 revue 0106). Sans ça, créer policy.json via une bascule
+      // les ferait tomber en default-deny → perte silencieuse de l'accès Docs/
+      // Sheets/Tâches, ce que l'AC1 interdit. (hasPolicy && absent → on omet :
+      // reste default-deny, inchangé.)
+      policy[key] = svcFreeBlock(key);
     }
   }
   return policy;
@@ -2879,13 +2900,31 @@ function ckCapsHtml(key, rules, hasPolicy, alias) {
     return ckCapToggle(alias, key, k, on, lbl, note);
   }).join("");
 }
+// État de ligne « conscient des sessions » (fiche 0106, critère A) : compteur
+// de sessions en primaire, porte d'élicitation (verrou admin global, ex-état
+// unique de la fiche 0107) reléguée en mini-badge secondaire.
+function acctSessionState(p) {
+  const c = accountSessionCounts(SESSIONS, p.alias);
+  const sessBadge = c.total
+    ? '<span class="ck-badge ' + (c.unlocked ? "ck-badge--ok" : "ck-badge--neutral") + '">' +
+        c.total + " session" + (c.total > 1 ? "s" : "") +
+        ' <span class="tnum">(' + c.unlocked + " déverrouillée" + (c.unlocked > 1 ? "s" : "") +
+        " / " + c.locked + " verrouillée" + (c.locked > 1 ? "s" : "") + ")</span></span>"
+    : '<span class="ck-badge ck-badge--neutral">Aucune session</span>';
+  const doorBadge = '<span class="ck-badge ' + (isOpen(p) ? "ck-badge--ok" : "ck-badge--neutral") +
+    '" title="Porte d\'élicitation — verrou admin global (mag lock/unlock), distinct des sessions">' +
+    (isOpen(p) ? "porte ouverte" : "porte fermée") + "</span>";
+  return '<div class="ck-acct-state">' + sessBadge + doorBadge + "</div>";
+}
 function renderList() {
   VIEW = { mode: "list", alias: null };
   syncChrome();
   const el = $("cards");
   const nConn = PROFILES.filter((p) => p.connected).length;
-  const nOpen = PROFILES.filter((p) => p.connected && isOpen(p)).length;
-  const nLock = PROFILES.filter((p) => p.connected && !isOpen(p)).length;
+  // Sémantique session (fiche 0106) : « déverrouillé » = au moins une session a
+  // un unlock actif pour ce compte — plus l'ancien binaire par compte (isOpen).
+  const nOpen = PROFILES.filter((p) => p.connected && accountSessionCounts(SESSIONS, p.alias).unlocked > 0).length;
+  const nLock = nConn - nOpen;
   // Vignettes colorées (fiche 0107) : connecté = bleu, déverrouillé (permissif) =
   // vert, verrouillé (restreint) = rouge. Ce que comptent ces 3 tuiles suit la
   // fiche 0106 ; ici on ne fixe que le code couleur.
@@ -2902,7 +2941,7 @@ function renderList() {
   const rows = PROFILES.map((p) => {
     const av = '<span class="ck-avatar" style="background:' + ckAvatarColor(p) + '">' + esc((p.email || p.alias || "?").charAt(0).toUpperCase()) + "</span>";
     const id = '<div class="ck-acct-id">' + av + '<span class="ck-acct-mail">' + esc(p.email || p.alias) + "</span></div>";
-    const state = p.connected ? ckKeychip(p) : '<span class="offword">Déconnecté</span>';
+    const state = p.connected ? acctSessionState(p) : '<span class="offword">Déconnecté</span>';
     const action = p.connected
       ? '<button type="button" class="ck-iconbtn" onclick="event.stopPropagation();openDetail(\'' + p.alias + '\')" title="Configurer" aria-label="Configurer ' + esc(p.email || p.alias) + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>'
       : reconnectBtn(p.alias);
@@ -2912,6 +2951,48 @@ function renderList() {
   el.innerHTML = head + '<div class="ck-acct-panel"><div class="ck-acct-head"><span>Compte</span><span>État</span><span></span></div>' + rows + "</div>" + connectBtn;
 }
 function openDetail(alias) { const p = byAlias(alias); if (p && p.connected) renderDetail(alias); }
+// Liste des sessions utilisant CE compte (fiche 0106, critère C) : nom lisible
+// (critère D), activité, mini-état, bouton « voir les droits » (critère E).
+function acctSessionsHtml(alias) {
+  const sessions = sessionsForAccount(SESSIONS, alias);
+  if (!sessions.length) {
+    return '<div class="ck-sess-empty">Aucune session n\'utilise ce compte actuellement.</div>';
+  }
+  const rows = sessions.map((s) => {
+    const unlocked = s.unlocks && Object.prototype.hasOwnProperty.call(s.unlocks, alias);
+    const badge = unlocked
+      ? '<span class="ck-badge ck-badge--ok">déverrouillé</span>'
+      : '<span class="ck-badge ck-badge--neutral">zone Drive seule</span>';
+    return '<div class="ck-sess-row"><div class="ck-sess-head"><span class="ck-sess-id">' +
+      esc(sessDisplayName(s)) + "</span>" + badge + "</div>" +
+      '<div class="ck-sess-meta">activité ' + esc(fmtAgo(s.last_seen_at)) + "</div>" +
+      '<div class="ck-sess-actions"><button type="button" class="ck-btn ck-btn--sm" ' +
+      'onclick="event.stopPropagation();openSessRights(\'' + esc(s.session_id) + "', '" + esc(alias) + '\')">Voir les droits</button></div></div>';
+  }).join("");
+  return '<div class="ck-sess-list">' + rows + "</div>";
+}
+// Modale de consultation (critère E, lecture seule) : les droits qu'UNE session
+// détient sur UN compte. Réutilise le motif d'affichage de sessCapsHtml/ck-chip.
+function openSessRights(sid, alias) {
+  const s = SESSIONS.find((x) => x.session_id === sid);
+  if (!s) return toast("Session introuvable — rafraîchis la page.");
+  $("sessRightsSub").textContent = sessDisplayName(s) + " → " + alias;
+  $("sessRightsBody").innerHTML = sessAcctRightsHtml(s, alias);
+  dSessRights.showModal();
+}
+// Variante multi-comptes (fiche 0106, critère E — depuis la page Sessions, revue
+// Codex #132) : une session peut toucher plusieurs comptes ; on montre ses droits
+// POUR CHAQUE compte qu'elle référence (unlocks ∪ drive_zones). Lecture seule.
+function openSessRightsAll(sid) {
+  const s = SESSIONS.find((x) => x.session_id === sid);
+  if (!s) return toast("Session introuvable — rafraîchis la page.");
+  const aliases = sessionAccounts(s);
+  $("sessRightsSub").textContent = sessDisplayName(s) + (aliases.length ? " — " + aliases.length + " compte" + (aliases.length > 1 ? "s" : "") : "");
+  $("sessRightsBody").innerHTML = aliases.length
+    ? aliases.map((a) => '<div class="ck-sessrights-block"><div class="ck-sec-label">' + esc(a) + "</div>" + sessAcctRightsHtml(s, a) + "</div>").join("")
+    : '<div class="ck-sess-empty">Cette session ne détient aucun droit actif sur un compte.</div>';
+  dSessRights.showModal();
+}
 function renderDetail(alias) {
   const p = byAlias(alias);
   if (!p || !p.connected) return renderList();
@@ -2952,6 +3033,8 @@ function renderDetail(alias) {
     '<div class="ck-panel"><div class="ck-sec-head"><span class="ck-sec-label">Droits par application</span>' +
       '<button type="button" class="ck-iconbtn ck-iconbtn--sm" onclick="openPolicy(\'' + alias + '\')" title="Édition avancée (JSON brut — scopes rares)" aria-label="Édition avancée des droits">' + CK_GEAR_ICO + "</button></div>" +
       primary + othersHtml + "</div>" +
+    '<div class="ck-panel"><div class="ck-sec-head"><span class="ck-sec-label">Sessions utilisant ce compte</span></div>' +
+      acctSessionsHtml(alias) + "</div>" +
     '<div class="ck-danger-zone">' +
       '<button type="button" class="ck-iconbtn ck-iconbtn--danger" onclick="openDisconnect(\'' + alias + '\')" title="Retirer ce compte de l\'outil — réversible (reconnexion complète)." aria-label="Retirer ce compte">' + CK_TRASH_ICO + "</button></div>";
 }
@@ -3046,8 +3129,14 @@ let LAST = "";
 async function refresh() {
   try {
     const profiles = (await api("/api/profiles")).profiles;
+    // Chargé avec les profils (fiche 0106) : la page Comptes a besoin des sessions
+    // pour son compteur (critère A) et sa liste par compte (critère C). Best-effort
+    // — une panne de /api/sessions ne doit pas empêcher le poll des comptes.
+    let sessions = SESSIONS;
+    try { sessions = (await api("/api/sessions")).sessions || []; } catch {}
     PROFILES = profiles;
-    const j = JSON.stringify(profiles);
+    SESSIONS = sessions;
+    const j = JSON.stringify(profiles) + "|" + JSON.stringify(sessions);
     if (j !== LAST) { LAST = j; render(); }
   } catch (e) { toast("Erreur : " + e.message); }
 }
@@ -3080,6 +3169,12 @@ async function doLockAll() {
 function fmtMins(m) {
   m = Math.max(0, Math.floor(m || 0));
   return m >= 60 ? Math.floor(m / 60) + "h" + String(m % 60).padStart(2, "0") : m + " min";
+}
+// Activité relative d'une session (fiche 0106, critère C) — même granularité que fmtMins.
+function fmtAgo(ts) {
+  if (!ts) return "—";
+  const s = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  return s < 60 ? "à l'instant" : "il y a " + fmtMins(s / 60);
 }
 function fillAliasSelect(sel) {
   sel.innerHTML = PROFILES.filter((p) => p.connected).map((p) =>
@@ -3184,6 +3279,64 @@ function sessCapsHtml(s) {
   return (unlockBits || zoneBits) ? unlockBits + zoneBits
     : '<span class="ck-sess-empty">aucune capacité accordée</span>';
 }
+
+// --- Vue compte orientée sessions (fiche 0106) ------------------------------
+// Fonctions PURES (pas de DOM), testées sans navigateur dans
+// scripts/test-sessions-account-view.mjs (motif du garde-fou 0107).
+
+// Sessions qui utilisent un compte donné : celles ayant un déverrouillage actif
+// (unlocks[alias]) OU une zone Drive active (drive_zones[alias]) pour ce compte.
+// listSessions() (admin/server.js) a déjà purgé les entrées expirées ; on se fie
+// donc à la simple présence de la clé alias.
+function sessionsForAccount(sessions, alias) {
+  return (sessions || []).filter((s) =>
+    (s.unlocks && Object.prototype.hasOwnProperty.call(s.unlocks, alias)) ||
+    (s.drive_zones && Object.prototype.hasOwnProperty.call(s.drive_zones, alias)));
+}
+// Comptes qu'une session référence (union unlocks ∪ drive_zones), triés — pour la
+// vue « voir les droits » depuis la page Sessions (fiche 0106, critère E).
+function sessionAccounts(s) {
+  if (!s) return [];
+  return [...new Set([...Object.keys(s.unlocks || {}), ...Object.keys(s.drive_zones || {})])].sort();
+}
+// Compteur pour la page Comptes (critère A) : N sessions référençant le compte,
+// dont X ont un déverrouillage ACTIF pour ce compte (« déverrouillées ») — les
+// autres (zone Drive seule, sans unlock) comptent « verrouillées ». C'est un
+// abus de langage assumé : une zone Drive n'est pas un « verrou », mais du point
+// de vue de CE compte, cette session n'a pas déverrouillé l'accès général.
+function accountSessionCounts(sessions, alias) {
+  const forAcct = sessionsForAccount(sessions, alias);
+  const unlocked = forAcct.filter((s) =>
+    s.unlocks && Object.prototype.hasOwnProperty.call(s.unlocks, alias)).length;
+  return { total: forAcct.length, unlocked, locked: forAcct.length - unlocked };
+}
+// Nom lisible d'une session (critère D). La fiche 0101 (nom fourni par le
+// client) n'est pas livrée : pas de champ `name` en pratique aujourd'hui — d'où
+// le fallback id court + client. Le `if (s.name)` en tête rend le branchement
+// d'un futur champ `name` trivial : rien d'autre à changer côté appelants.
+function sessDisplayName(s) {
+  if (s && s.name) return s.name;
+  const id = (s && s.session_id) || "";
+  return (id ? id.slice(0, 6) : "?") + " · " + ((s && s.client) || "mcp");
+}
+// Détail des droits qu'une session détient sur UN compte (critère E) — lecture
+// seule, limité à ce que /api/sessions expose (déverrouillage + zones Drive,
+// avec expiration) : pas de grain plus fin par opération/scope tant que l'API
+// admin ne l'expose pas (dépendance notée dans la fiche, non bloquante).
+function sessAcctRightsHtml(s, alias) {
+  const u = s.unlocks && s.unlocks[alias];
+  const zones = (s.drive_zones && s.drive_zones[alias]) || [];
+  const unlockHtml = u
+    ? '<span class="ck-chip">🔓 Déverrouillé · expire dans ' + fmtMins(u.minutes_left) + "</span>"
+    : '<span class="ck-sess-empty">Pas de déverrouillage actif pour ce compte</span>';
+  const zonesHtml = zones.length
+    ? zones.map((z) => '<span class="ck-chip">🕐 ' + esc(z.name || z.id) +
+        " · expire dans " + fmtMins(z.minutes_left) + "</span>").join("")
+    : '<span class="ck-sess-empty">Aucune zone Drive accordée pour ce compte</span>';
+  return '<div class="ck-sessrights-block"><div class="ck-sec-label">Déverrouillage</div>' + unlockHtml + "</div>" +
+    '<div class="ck-sessrights-block"><div class="ck-sec-label">Zones Drive</div>' + zonesHtml + "</div>";
+}
+
 // Icônes trait (style du header) — currentColor, 24×24 viewBox.
 const SESS_ICONS = {
   unlock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>',
@@ -3191,6 +3344,7 @@ const SESS_ICONS = {
   revoke: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>',
   purge: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>',
   journal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>',
+  rights: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>',
 };
 function sessIconBtn(icon, label, onclick, danger) {
   return '<button type="button" class="ck-iconbtn' + (danger ? " ck-iconbtn--danger" : "") +
@@ -3199,9 +3353,13 @@ function sessIconBtn(icon, label, onclick, danger) {
 function sessActions(s) {
   const sid = s.session_id;
   const journal = sessIconBtn("journal", "Voir le journal de cette session", "openJournal({session:'" + sid + "'})");
+  // « Voir les droits » depuis la page Sessions aussi (fiche 0106, critère E — pas
+  // seulement la liste par compte) : détail LECTURE SEULE des droits de la session,
+  // par compte. Revue Codex #132.
+  const rights = sessIconBtn("rights", "Voir les droits", "openSessRightsAll('" + sid + "')");
   return s.delegated
-    ? journal + sessIconBtn("purge", "Purger", "doSessClose('" + sid + "')", true)
-    : journal +
+    ? journal + rights + sessIconBtn("purge", "Purger", "doSessClose('" + sid + "')", true)
+    : journal + rights +
       sessIconBtn("unlock", "Unlock", "openSessUnlock('" + sid + "')") +
       sessIconBtn("zone", "Zone Drive", "openSessGrant('" + sid + "')") +
       (s.child_count ? sessIconBtn("revoke", "Révoquer les sous-sessions", "doSessRevokeDesc('" + sid + "')") : "") +
