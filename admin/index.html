@@ -1034,8 +1034,12 @@ svg { display: block; }
   letter-spacing: .01em;
 }
 .ck-badge--ok      { color: var(--ok);   background: var(--ok-bg);   border-color: var(--ok-line); }
+.ck-badge--bad     { color: var(--bad);  background: var(--bad-bg);  border-color: var(--bad-line); }
 .ck-badge--warn    { color: var(--warn); background: var(--warn-bg); border-color: var(--warn-line); }
 .ck-badge--neutral { color: var(--muted); background: var(--sunken); border-color: var(--line); }
+
+/* Légende sobre (remplace l'ancien `.note` dans les écrans migrés Setup/Dev) */
+.ck-caption { font-size: var(--fs-cap); color: var(--muted); margin: 4px 0 0; line-height: var(--lh-body, 1.5); }
 
 /* Chip : capacité accordée à une session (accent cobalt) */
 .ck-chip {
@@ -1645,6 +1649,8 @@ button.ck-cap--toggle.ck-cap--off:hover { background: var(--bad-bg); }
   border-top: 1px solid var(--line);
   background: var(--surface);
 }
+/* Variante large : dialogues à contenu riche (policy, zones, setup, dev, doc) */
+.ck-modal--wide { width: min(780px, 100%); }
 
 /* ---------------------------------------------------------------------
    18. CALLOUT — bandeau d'information / alerte
@@ -2093,140 +2099,155 @@ main.ck-main { max-width:1400px; margin:0; }
   <a href="#" data-view="journal" onclick="openJournal();return false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="8" y1="7" x2="20" y2="7"/><line x1="8" y1="12" x2="20" y2="12"/><line x1="8" y1="17" x2="20" y2="17"/><circle cx="4" cy="7" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="17" r="1"/></svg>Journal</a>
 </nav>
 
-<dialog id="dAdd">
-  <h2>Connecter un compte Google</h2>
-  <label>Alias du profil (court, sans espace)</label>
-  <input type="text" id="addAlias" placeholder="ex. perso">
-  <label>Adresse Gmail attendue (vérifiée après connexion)</label>
-  <input type="email" id="addEmail" placeholder="ex. mon-compte@gmail.com">
-  <p class="note">Un onglet Google s'ouvre : <b>choisis bien ce compte-là</b> (présélectionné),
-  écran « app non validée » → Paramètres avancés → Accéder, puis accepte. Mauvais compte = refus automatique.</p>
-  <p class="note mono" id="addStatus"></p>
-  <div class="mtop"><button onclick="dAdd.close()">Fermer</button>
+<dialog id="dAdd" class="ck-modal">
+  <div class="ck-modal__head"><div class="ck-modal__title">Connecter un compte Google</div></div>
+  <div class="ck-modal__body">
+    <label>Alias du profil (court, sans espace)</label>
+    <input type="text" id="addAlias" placeholder="ex. perso">
+    <label>Adresse Gmail attendue (vérifiée après connexion)</label>
+    <input type="email" id="addEmail" placeholder="ex. mon-compte@gmail.com">
+    <div class="ck-callout ck-callout--info"><span class="ck-callout__ico" aria-hidden="true">ℹ️</span><span>Un onglet Google s'ouvre : <b>choisis bien ce compte-là</b> (présélectionné),
+    écran « app non validée » → Paramètres avancés → Accéder, puis accepte. Mauvais compte = refus automatique.</span></div>
+    <p class="note mono" id="addStatus"></p>
+  </div>
+  <div class="ck-modal__foot"><button onclick="dAdd.close()">Fermer</button>
   <button class="primary" id="addGo" onclick="doAdd()">Lancer la connexion</button></div>
 </dialog>
 
-<dialog id="dRelock" class="dlg-confirm">
+<dialog id="dRelock" class="dlg-confirm ck-modal">
   <div class="dlg-confirm-inner">
-    <div class="dlg-confirm-head">
+    <div class="dlg-confirm-head ck-modal__head">
       <span class="dlg-confirm-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>
       <div class="dlg-confirm-titles">
         <h2>Gérer l'accès temporaire</h2>
         <p class="dlg-confirm-sub">Prolonge ou raccourcis la fenêtre, ou verrouille l'accès maintenant.</p>
       </div>
     </div>
-    <div class="dlg-account-chip" id="relockAccount">
-      <span class="dlg-account-avatar" id="relockAvatar" aria-hidden="true"></span>
-      <span class="dlg-account-meta">
-        <span class="dlg-account-email" id="relockEmail"></span>
-        <span class="dlg-account-alias mono" id="relockAlias"></span>
-      </span>
+    <div class="ck-modal__body">
+      <div class="dlg-account-chip" id="relockAccount">
+        <span class="dlg-account-avatar" id="relockAvatar" aria-hidden="true"></span>
+        <span class="dlg-account-meta">
+          <span class="dlg-account-email" id="relockEmail"></span>
+          <span class="dlg-account-alias mono" id="relockAlias"></span>
+        </span>
+      </div>
+      <div class="dlg-relock-adjust">
+        <button type="button" class="ck-btn ck-btn--sm" onclick="relockShorten()">− 30 min</button>
+        <button type="button" class="ck-btn ck-btn--sm" onclick="relockProlong()">+ 30 min</button>
+      </div>
     </div>
-    <div class="dlg-relock-adjust">
-      <button type="button" class="ck-btn ck-btn--sm" onclick="relockShorten()">− 30 min</button>
-      <button type="button" class="ck-btn ck-btn--sm" onclick="relockProlong()">+ 30 min</button>
-    </div>
-    <div class="dlg-foot">
+    <div class="dlg-foot ck-modal__foot">
       <button type="button" onclick="dRelock.close()">Annuler</button>
       <button type="button" class="danger-solid" id="relockGo" onclick="doRelock()" aria-label="Verrouiller l'accès maintenant">Verrouiller maintenant</button>
     </div>
   </div>
 </dialog>
 
-<dialog id="dLockAll" class="dlg-confirm">
+<dialog id="dLockAll" class="dlg-confirm ck-modal">
   <div class="dlg-confirm-inner">
-    <div class="dlg-confirm-head">
+    <div class="dlg-confirm-head ck-modal__head">
       <span class="dlg-confirm-icon info" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>
       <div class="dlg-confirm-titles">
         <h2>Tout verrouiller ?</h2>
         <p class="dlg-confirm-sub">Tous les comptes connectés repassent en accès verrouillé : les nouvelles demandes des assistants seront refusées. ⚠️ Une conversation qui a déjà un déverrouillage de session actif y garde accès jusqu'à son expiration. Réversible, compte par compte.</p>
       </div>
     </div>
-    <div class="dlg-foot">
+    <div class="dlg-foot ck-modal__foot">
       <button type="button" onclick="dLockAll.close()">Annuler</button>
       <button type="button" class="primary" id="lockAllGo" onclick="doLockAll()">Tout verrouiller</button>
     </div>
   </div>
 </dialog>
 
-<dialog id="dUnlock">
-  <h2>Déverrouiller <span id="unlockAlias" class="mono"></span></h2>
-  <p class="note">Fenêtre temporaire (verrouillage automatique) ou retrait du verrou.</p>
-  <div class="mtop" style="justify-content:flex-start">
-    <button onclick="doUnlock(30)">30 min</button>
-    <button onclick="doUnlock(60)">1 h</button>
-    <button onclick="doUnlock(240)">4 h</button>
-    <button class="danger" onclick="doUnlock('off')">Retirer le verrou</button>
+<dialog id="dUnlock" class="ck-modal">
+  <div class="ck-modal__head"><div class="ck-modal__title">Déverrouiller <span id="unlockAlias" class="mono"></span></div></div>
+  <div class="ck-modal__body">
+    <p class="note">Fenêtre temporaire (verrouillage automatique) ou retrait du verrou.</p>
+    <div class="mtop" style="justify-content:flex-start">
+      <button onclick="doUnlock(30)">30 min</button>
+      <button onclick="doUnlock(60)">1 h</button>
+      <button onclick="doUnlock(240)">4 h</button>
+      <button class="danger" onclick="doUnlock('off')">Retirer le verrou</button>
+    </div>
   </div>
-  <div class="mtop"><button onclick="dUnlock.close()">Annuler</button></div>
+  <div class="ck-modal__foot"><button onclick="dUnlock.close()">Annuler</button></div>
 </dialog>
 
-<dialog id="dSessUnlock">
-  <h2>Unlock session</h2>
-  <p class="note">Session <span class="mono" id="sessUnlockSid"></span></p>
-  <label>Profil</label>
-  <select id="sessUnlockAlias"></select>
-  <label>Durée (minutes)</label>
-  <div class="mtop" style="justify-content:flex-start">
-    <button onclick="doSessUnlock(30)">30 min</button>
-    <button onclick="doSessUnlock(60)">1 h</button>
-    <button onclick="doSessUnlock(240)">4 h</button>
+<dialog id="dSessUnlock" class="ck-modal">
+  <div class="ck-modal__head"><div class="ck-modal__title">Unlock session</div></div>
+  <div class="ck-modal__body">
+    <p class="note">Session <span class="mono" id="sessUnlockSid"></span></p>
+    <label>Profil</label>
+    <select id="sessUnlockAlias"></select>
+    <label>Durée (minutes)</label>
+    <div class="mtop" style="justify-content:flex-start">
+      <button onclick="doSessUnlock(30)">30 min</button>
+      <button onclick="doSessUnlock(60)">1 h</button>
+      <button onclick="doSessUnlock(240)">4 h</button>
+    </div>
   </div>
-  <div class="mtop"><button onclick="dSessUnlock.close()">Annuler</button></div>
+  <div class="ck-modal__foot"><button onclick="dSessUnlock.close()">Annuler</button></div>
 </dialog>
 
-<dialog id="dSessRights">
-  <h2>Droits de la session</h2>
-  <p class="ck-sessrights-sub" id="sessRightsSub"></p>
-  <div id="sessRightsBody"></div>
-  <div class="mtop"><button onclick="dSessRights.close()">Fermer</button></div>
+<dialog id="dSessRights" class="ck-modal">
+  <div class="ck-modal__head"><div class="ck-modal__title">Droits de la session</div>
+    <p class="ck-modal__subtitle ck-sessrights-sub" id="sessRightsSub"></p></div>
+  <div class="ck-modal__body"><div id="sessRightsBody"></div></div>
+  <div class="ck-modal__foot"><button onclick="dSessRights.close()">Fermer</button></div>
 </dialog>
 
-<dialog id="dSessGrant">
-  <h2>Zone Drive — session</h2>
-  <p class="note">Session <span class="mono" id="sessGrantSid"></span> — accord temporaire
-    pour cette conversation seulement (pas le fichier global).</p>
-  <label>Profil</label>
-  <select id="sessGrantAlias"></select>
-  <label>Dossier (id Drive ou nom)</label>
-  <input type="text" id="sessGrantTarget" placeholder="id ou nom du dossier">
-  <label>Durée (heures)</label>
-  <input type="number" id="sessGrantHours" value="8" min="1" max="168">
-  <div class="mtop"><button onclick="dSessGrant.close()">Annuler</button>
+<dialog id="dSessGrant" class="ck-modal">
+  <div class="ck-modal__head"><div class="ck-modal__title">Zone Drive — session</div></div>
+  <div class="ck-modal__body">
+    <p class="note">Session <span class="mono" id="sessGrantSid"></span> — accord temporaire
+      pour cette conversation seulement (pas le fichier global).</p>
+    <label>Profil</label>
+    <select id="sessGrantAlias"></select>
+    <label>Dossier (id Drive ou nom)</label>
+    <input type="text" id="sessGrantTarget" placeholder="id ou nom du dossier">
+    <label>Durée (heures)</label>
+    <input type="number" id="sessGrantHours" value="8" min="1" max="168">
+  </div>
+  <div class="ck-modal__foot"><button onclick="dSessGrant.close()">Annuler</button>
     <button class="primary" onclick="doSessGrant()">Accorder</button></div>
 </dialog>
 
-<dialog id="dDisconnect" class="dlg-confirm">
+<dialog id="dDisconnect" class="dlg-confirm ck-modal">
   <div class="dlg-confirm-inner">
-    <div class="dlg-confirm-head">
+    <div class="dlg-confirm-head ck-modal__head">
       <span class="dlg-confirm-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg></span>
       <div class="dlg-confirm-titles">
         <h2>Déconnecter ce compte ?</h2>
         <p class="dlg-confirm-sub">Les assistants perdront l'accès à ce compte et tes réglages (zones, autorisations) seront oubliés. Rien n'est supprimé dans ton compte Google — pour le réutiliser, il faudra refaire une connexion complète.</p>
       </div>
     </div>
-    <div class="dlg-account-chip">
-      <span class="dlg-account-avatar" id="disconnectAvatar" aria-hidden="true"></span>
-      <span class="dlg-account-meta">
-        <span class="dlg-account-email" id="disconnectEmail"></span>
-        <span class="dlg-account-alias mono" id="disconnectAlias"></span>
-      </span>
+    <div class="ck-modal__body">
+      <div class="dlg-account-chip">
+        <span class="dlg-account-avatar" id="disconnectAvatar" aria-hidden="true"></span>
+        <span class="dlg-account-meta">
+          <span class="dlg-account-email" id="disconnectEmail"></span>
+          <span class="dlg-account-alias mono" id="disconnectAlias"></span>
+        </span>
+      </div>
     </div>
-    <div class="dlg-foot">
+    <div class="dlg-foot ck-modal__foot">
       <button type="button" onclick="dDisconnect.close()">Annuler</button>
       <button type="button" class="danger-solid" id="disconnectGo" onclick="doDisconnect()">Déconnecter</button>
     </div>
   </div>
 </dialog>
 
-<dialog id="dPolicy" class="dlg-policy">
+<dialog id="dPolicy" class="dlg-policy ck-modal ck-modal--wide">
   <div class="dlg-policy-inner">
-    <div class="dlg-policy-body">
-      <h2>Policy — <span id="polAlias" class="mono"></span></h2>
-      <div class="tabs">
-        <button class="small" onclick="applyPreset('prudent')">Préréglage prudent (reco)</button>
-        <button class="small" onclick="applyPreset('lecture')">Tout lecture seule</button>
-        <button class="small" onclick="applyPreset('libre')">Tout libre</button>
+    <div class="ck-modal__head">
+      <div class="ck-modal__title">Policy — <span id="polAlias" class="mono"></span></div>
+      <p class="ck-modal__subtitle">Édition avancée (JSON brut) — les droits courants s'éditent sur la page du compte.</p>
+    </div>
+    <div class="ck-modal__body dlg-policy-body">
+      <div class="ck-segmented" role="group" aria-label="Préréglages de policy">
+        <button type="button" onclick="applyPreset('prudent')">Prudent (reco)</button>
+        <button type="button" onclick="applyPreset('lecture')">Tout lecture seule</button>
+        <button type="button" onclick="applyPreset('libre')">Tout libre</button>
       </div>
       <fieldset><legend>Drive</legend>
         <div class="grid" id="pDrive"></div>
@@ -2234,116 +2255,128 @@ main.ck-main { max-width:1400px; margin:0; }
         <div id="zonesBox">
           <div class="addrow"><span class="note" style="margin:0" id="zonesSummary">—</span>
             <button class="small" onclick="openZones()">📁 Gérer les zones…</button></div>
-          <p class="note">Sans zone active, le LLM ne peut écrire nulle part sur Drive : il doit te
-          demander une autorisation (élicitation), que tu peux limiter dans le temps.</p>
+          <div class="ck-callout ck-callout--info"><span class="ck-callout__ico" aria-hidden="true">ℹ️</span><span>Sans zone active, le LLM ne peut écrire nulle part sur Drive : il doit te
+          demander une autorisation (élicitation), que tu peux limiter dans le temps.</span></div>
         </div>
       </fieldset>
       <fieldset><legend>Gmail</legend>
         <div class="grid" id="pGmail"></div>
-        <p class="note">« brouillons » sans « envoi » = le LLM prépare, tu envoies.</p>
+        <div class="ck-callout ck-callout--info"><span class="ck-callout__ico" aria-hidden="true">ℹ️</span><span>« brouillons » sans « envoi » = le LLM prépare, tu envoies.</span></div>
       </fieldset>
       <fieldset><legend>Agenda</legend><div class="grid" id="pCalendar"></div></fieldset>
-      <fieldset><legend>Keep <span class="badge b-warn">expérimental</span></legend>
+      <fieldset><legend>Keep <span class="ck-badge ck-badge--warn">expérimental</span></legend>
         <div class="grid" id="pKeep"></div>
-        <p class="note">Nécessite le scope Keep au login (reconnexion) ; API parfois réservée aux comptes Workspace.</p>
+        <div class="ck-callout ck-callout--info"><span class="ck-callout__ico" aria-hidden="true">ℹ️</span><span>Nécessite le scope Keep au login (reconnexion) ; API parfois réservée aux comptes Workspace.</span></div>
       </fieldset>
-  <p class="note">Docs, Sheets, Tasks : libres tant qu'ils ne sont pas dans la policy.
-  Un service configuré est <b>fail closed</b> : tout ce qui n'est pas coché est refusé.</p>
-  <p class="note"><b>Policy ≠ tools MCP.</b> Les cases ci-dessus autorisent des
-  appels <code>mag</code> / API. Le serveur MCP n'expose qu'un sous-ensemble :
-  Drive = liste / métadonnées / lecture du contenu (<code>drive_read</code>, texte)
-  / création, copie et téléversement zonés — pas de modification d'un fichier
-  existant. Agenda et Keep peuvent être dans la policy sans tool MCP correspondant.</p>
+      <div class="ck-callout ck-callout--info"><span class="ck-callout__ico" aria-hidden="true">ℹ️</span><span>Docs, Sheets, Tasks : libres tant qu'ils ne sont pas dans la policy.
+      Un service configuré est <b>fail closed</b> : tout ce qui n'est pas coché est refusé.</span></div>
+      <div class="ck-callout ck-callout--info"><span class="ck-callout__ico" aria-hidden="true">ℹ️</span><span><b>Policy ≠ tools MCP.</b> Les cases ci-dessus autorisent des
+      appels <code>mag</code> / API. Le serveur MCP n'expose qu'un sous-ensemble :
+      Drive = liste / métadonnées / lecture du contenu (<code>drive_read</code>, texte)
+      / création, copie et téléversement zonés — pas de modification d'un fichier
+      existant. Agenda et Keep peuvent être dans la policy sans tool MCP correspondant.</span></div>
     </div>
-    <div class="dlg-policy-foot">
+    <div class="dlg-policy-foot ck-modal__foot">
       <button onclick="dPolicy.close()">Annuler</button>
       <button class="primary" onclick="savePolicy()">Enregistrer</button>
     </div>
   </div>
 </dialog>
 
-<dialog id="dZones">
-  <h2>📁 Zones d'écriture — <span id="zonesAlias" class="mono"></span></h2>
-  <div class="zone-section">
-    <h3>Permanentes</h3>
-    <p>Restent jusqu'à retrait manuel (policy).</p>
-    <div id="permZones" class="zonelist"></div>
+<dialog id="dZones" class="ck-modal ck-modal--wide">
+  <div class="ck-modal__head"><div class="ck-modal__title">📁 Zones d'écriture — <span id="zonesAlias" class="mono"></span></div></div>
+  <div class="ck-modal__body">
+    <div class="zone-section">
+      <h3>Permanentes</h3>
+      <p>Restent jusqu'à retrait manuel (policy).</p>
+      <div id="permZones" class="zonelist"></div>
+    </div>
+    <div class="zone-section" id="tmpZoneSection">
+      <h3>Temporaires</h3>
+      <p>Expirent automatiquement — le LLM devra redemander.</p>
+      <div id="tmpZones" class="zonelist"></div>
+    </div>
   </div>
-  <div class="zone-section" id="tmpZoneSection">
-    <h3>Temporaires</h3>
-    <p>Expirent automatiquement — le LLM devra redemander.</p>
-    <div id="tmpZones" class="zonelist"></div>
-  </div>
-  <div class="mtop"><button type="button" onclick="dZones.close()">Fermer</button>
+  <div class="ck-modal__foot"><button type="button" onclick="dZones.close()">Fermer</button>
   <button type="button" class="primary" onclick="openAddFolder()">＋ Ajouter un dossier…</button></div>
 </dialog>
 
-<dialog id="dAddFolder">
-  <h2>Ajouter un dossier autorisé</h2>
-  <p class="note" style="margin:0 0 8px">Clic pour sélectionner · double-clic pour ouvrir un dossier.</p>
-  <div class="af-toolbar">
-    <input type="text" id="afQuery" placeholder="Rechercher un dossier par nom…">
-    <button type="button" class="small" onclick="afDoSearch()">Rechercher</button>
+<!-- Navigateur de dossiers (afPick) + durée d'autorisation en panneau inline
+     (fiche 0097, AC3) : un seul dialog au lieu de deux empilés (l'étape durée
+     était auparavant un second dialog distinct, retiré ici). -->
+<dialog id="dAddFolder" class="ck-modal ck-modal--wide">
+  <div class="ck-modal__head">
+    <div class="ck-modal__title">Ajouter un dossier autorisé</div>
+    <p class="ck-modal__subtitle" id="afToolbarHint">Clic pour sélectionner · double-clic pour ouvrir un dossier.</p>
   </div>
-  <div id="afSearchHits" class="af-hits" hidden></div>
-  <p class="note crumb" id="afCrumb" style="margin:4px 0 6px"></p>
-  <div id="afList" class="flist"><div class="flist-empty">Chargement…</div></div>
-  <div class="mtop"><button type="button" onclick="dAddFolder.close()">Annuler</button></div>
-</dialog>
-
-<dialog id="dAuthorizeFolder">
-  <h2>Durée de l'autorisation</h2>
-  <p class="note" id="afAuthTarget" style="margin:0 0 10px"></p>
-  <div class="addrow">
-    <label style="margin:0"><input type="radio" name="afDur" value="temp" checked> temporaire</label>
-    <input type="number" id="afHours" value="8" min="1" max="168"> h
-    <label style="margin:0"><input type="radio" name="afDur" value="perm"> permanent</label>
+  <div class="ck-modal__body">
+    <div class="af-toolbar" id="afToolbar">
+      <input type="text" id="afQuery" placeholder="Rechercher un dossier par nom…">
+      <button type="button" class="small" onclick="afDoSearch()">Rechercher</button>
+    </div>
+    <div id="afSearchHits" class="af-hits" hidden></div>
+    <p class="note crumb" id="afCrumb" style="margin:4px 0 6px"></p>
+    <div id="afList" class="flist"><div class="flist-empty">Chargement…</div></div>
+    <div id="afAuthorize" hidden>
+      <p class="af-authorize-target" id="afAuthTarget" style="margin:0 0 10px"></p>
+      <div class="addrow">
+        <label style="margin:0"><input type="radio" name="afDur" value="temp" checked> temporaire</label>
+        <input type="number" id="afHours" value="8" min="1" max="168"> h
+        <label style="margin:0"><input type="radio" name="afDur" value="perm"> permanent</label>
+      </div>
+      <div class="ck-callout ck-callout--warn"><span class="ck-callout__ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span><span>Accorder une zone, c'est <b>confier ce dossier</b>. Les assistants pourront
+      y <b>créer et modifier</b> des fichiers (sous-dossiers compris). Ils ne toucheront pas au
+      dossier lui-même — ni renommé, ni déplacé, ni mis à la corbeille — et ne mettront rien à la
+      corbeille tant que tu n'as pas autorisé la suppression. N'accorde une zone que sur un dossier
+      que tu acceptes de confier.</span></div>
+    </div>
   </div>
-  <p class="zwarn">⚠️ Accorder une zone, c'est <b>confier ce dossier</b>. Les assistants pourront
-  y <b>créer et modifier</b> des fichiers (sous-dossiers compris). Ils ne toucheront pas au
-  dossier lui-même — ni renommé, ni déplacé, ni mis à la corbeille — et ne mettront rien à la
-  corbeille tant que tu n'as pas autorisé la suppression. N'accorde une zone que sur un dossier
-  que tu acceptes de confier.</p>
-  <div class="mtop"><button type="button" id="afCancelAuthBtn" onclick="afCancelAuthorize()">Annuler</button>
-  <button type="button" class="primary" id="afValidateBtn" onclick="afConfirm()">Valider</button></div>
+  <div class="ck-modal__foot">
+    <button type="button" id="afCancelAuthBtn" onclick="afCancelAuthorize()" hidden>Retour</button>
+    <button type="button" id="afCloseBtn" onclick="dAddFolder.close()">Annuler</button>
+    <button type="button" class="primary" id="afValidateBtn" onclick="afConfirm()" hidden>Valider</button>
+  </div>
 </dialog>
 
-
-<dialog id="dSetup">
-  <h2>🩺 Santé du setup</h2>
-  <div class="docbody" id="setupBody">Chargement…</div>
-  <div class="mtop"><button onclick="dSetup.close()">Fermer</button></div>
+<dialog id="dSetup" class="ck-modal ck-modal--wide">
+  <div class="ck-modal__head"><div class="ck-modal__title">🩺 Santé du setup</div></div>
+  <div class="ck-modal__body"><div class="docbody" id="setupBody">Chargement…</div></div>
+  <div class="ck-modal__foot"><button onclick="dSetup.close()">Fermer</button></div>
 </dialog>
 
-<dialog id="dDev">
-  <h2>🛠 Développement</h2>
-  <p class="note">Version du code et couloirs sous <span class="mono">~/.local/share/google-mcp</span>
+<dialog id="dDev" class="ck-modal ck-modal--wide">
+  <div class="ck-modal__head">
+    <div class="ck-modal__title">🛠 Développement</div>
+    <p class="ck-modal__subtitle">Version du code et couloirs sous <span class="mono">~/.local/share/google-mcp</span>
     (distinct du projet GCP OAuth du Setup).</p>
-  <div id="devTabs" class="tabs devtabs"></div>
-  <div id="devBody" class="devpanel">Chargement…</div>
-  <div class="mtop"><button onclick="dDev.close()">Fermer</button></div>
+  </div>
+  <div class="ck-modal__body">
+    <div id="devTabs" class="ck-segmented" role="group" aria-label="Sections développement"></div>
+    <div id="devBody" class="devpanel">Chargement…</div>
+  </div>
+  <div class="ck-modal__foot"><button onclick="dDev.close()">Fermer</button></div>
 </dialog>
 
-<dialog id="dDoc">
-  <h2>Documentation</h2>
-  <div class="docbody" id="docBody"></div>
-  <div class="mtop">
+<dialog id="dDoc" class="ck-modal ck-modal--wide">
+  <div class="ck-modal__head"><div class="ck-modal__title">Documentation</div></div>
+  <div class="ck-modal__body"><div class="docbody" id="docBody"></div></div>
+  <div class="ck-modal__foot">
     <a class="btn-doclink" href="https://elzinko.github.io/google-mcp-multi-account/" target="_blank" rel="noopener">📚 Documentation complète en ligne ↗</a>
     <span class="spacer"></span>
     <button onclick="dDoc.close()">Fermer</button>
   </div>
 </dialog>
 
-<dialog id="dConfirm" class="dlg-confirm">
+<dialog id="dConfirm" class="dlg-confirm ck-modal">
   <div class="dlg-confirm-inner">
-    <div class="dlg-confirm-head">
+    <div class="dlg-confirm-head ck-modal__head">
       <span class="dlg-confirm-icon" id="confirmIcon" aria-hidden="true"></span>
       <div class="dlg-confirm-titles">
         <h2 id="confirmTitle"></h2>
         <p class="dlg-confirm-sub" id="confirmBody"></p>
       </div>
     </div>
-    <div class="dlg-foot">
+    <div class="dlg-foot ck-modal__foot">
       <button type="button" id="confirmCancel">Annuler</button>
       <button type="button" id="confirmOk" class="danger-solid">Confirmer</button>
     </div>
@@ -2402,6 +2435,13 @@ function toast(msg) { const t = $("toast"); t.textContent = msg; t.style.opacity
 // Confirmation stylée (aux couleurs de l'app) en remplacement de confirm() natif.
 // Renvoie une Promise<bool>. Icône triangle d'alerte ; bouton rouge par défaut.
 const WARN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
+const INFO_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>';
+// Callout .ck-callout (§3 design-system-admin) : remplace les <p class="note">
+// en prose dans Policy / Setup / Dev par un bandeau icône + couleur (fiche 0097).
+function callout(kind, html) {
+  const ico = kind === "warn" || kind === "bad" ? WARN_ICON : INFO_ICON;
+  return '<div class="ck-callout ck-callout--' + kind + '"><span class="ck-callout__ico" aria-hidden="true">' + ico + "</span><span>" + html + "</span></div>";
+}
 let _confirmResolve = null;
 function uiConfirm({ title, body, confirmLabel = "Confirmer", danger = true }) {
   $("confirmTitle").textContent = title;
@@ -2428,8 +2468,8 @@ async function recheckIam() { IAM_PROPAGATING = null; await renderSetup(); }
 async function renderSetup() {
   let r;
   try { r = await api("/api/setup"); }
-  catch (e) { $("setupBody").innerHTML = '<p class="note">Erreur : ' + esc(e.message) + "</p>"; return; }
-  if (!r.ok) { $("setupBody").innerHTML = '<p class="note">' + esc(r.error || "indisponible") + "</p>"; return; }
+  catch (e) { $("setupBody").innerHTML = callout("bad", "Erreur : " + esc(e.message)); return; }
+  if (!r.ok) { $("setupBody").innerHTML = callout("bad", esc(r.error || "indisponible")); return; }
   const s = r.setup;
   LAST_SETUP = s;
   // Purge du set de propagation les comptes qui ne sont plus « missing » (accès OK) :
@@ -2440,21 +2480,21 @@ async function renderSetup() {
     IAM_PROPAGATING = new Set([...IAM_PROPAGATING].filter((e) => stillMissing.has(e)));
     if (!IAM_PROPAGATING.size) IAM_PROPAGATING = null;
   }
-  const BADGE = { ok: '<span class="badge b-ok">accès OK</span>',
-                  missing: '<span class="badge b-bad">sans rôle IAM</span>',
-                  unknown: '<span class="badge b-mut">non vérifié</span>' };
+  const BADGE = { ok: '<span class="ck-badge ck-badge--ok">accès OK</span>',
+                  missing: '<span class="ck-badge ck-badge--bad">sans rôle IAM</span>',
+                  unknown: '<span class="ck-badge ck-badge--neutral">non vérifié</span>' };
   // Un compte toujours « missing » juste après réparation = propagation Google en
   // cours (~2 min), pas un échec — badge d'attente au lieu du rouge « sans rôle ».
   const prop = IAM_PROPAGATING;
   const isProp = (a) => !!(prop && a.iam === "missing" && prop.has((a.email || "").toLowerCase()));
   const rows = (s.accounts || []).map((a) =>
     '<div class="zone"><b>' + esc(a.alias) + '</b> <span class="mono">' + esc(a.email || "?") + "</span> " +
-    (isProp(a) ? '<span class="badge b-warn">propagation ~2 min</span>' : (BADGE[a.iam] || esc(a.iam))) +
+    (isProp(a) ? '<span class="ck-badge ck-badge--warn">propagation ~2 min</span>' : (BADGE[a.iam] || esc(a.iam))) +
     "</div>").join("");
   const missing = (s.accounts || []).filter((a) => a.iam === "missing");
   const stillMissing = missing.filter((a) => !isProp(a));
   const propagating = missing.filter(isProp);
-  const head = '<p class="note">Projet <b>GCP</b> (OAuth) : <span class="mono">' + esc(s.project_id || "?") +
+  const head = '<p class="ck-caption">Projet <b>GCP</b> (OAuth) : <span class="mono">' + esc(s.project_id || "?") +
     "</span> · " + (s.published ? "app publiée" : "app non publiée") +
     ' — ce n\'est <b>pas</b> la version MCP (voir bandeau / Développement).</p>';
   let action;
@@ -2462,21 +2502,21 @@ async function renderSetup() {
     action = '<div class="mtop" style="justify-content:flex-start">' +
       '<button class="primary" id="syncBtn" onclick="doSyncIam()">🔧 Réparer l\'accès (' +
       stillMissing.length + ")</button></div>" +
-      '<p class="note">Accorde le rôle <span class="mono">serviceUsageConsumer</span> aux comptes ci-dessus ' +
+      callout("warn", "Accorde le rôle <span class=\"mono\">serviceUsageConsumer</span> aux comptes ci-dessus " +
       "(Touch ID si l'authentification forte est activée). Requiert que ta session <span class=\"mono\">gcloud</span> " +
-      "active soit le propriétaire du projet.</p>";
+      "active soit le propriétaire du projet.");
   } else if (propagating.length) {
     action = '<div class="mtop" style="justify-content:flex-start">' +
       '<button class="small" id="recheckBtn" onclick="recheckIam()">↻ Revérifier</button></div>' +
-      '<p class="note">⏳ Accès accordé — <b>propagation Google en cours (~2 min)</b>. Les comptes ci-dessus ' +
-      "passeront en « accès OK » d'ici là ; clique « Revérifier » dans un moment (ou rouvre le Setup).</p>";
+      callout("info", "⏳ Accès accordé — <b>propagation Google en cours (~2 min)</b>. Les comptes ci-dessus " +
+      "passeront en « accès OK » d'ici là ; clique « Revérifier » dans un moment (ou rouvre le Setup).");
   } else if (s.iam_checked) {
-    action = '<p class="note">✓ Tous les comptes connectés ont accès au projet.</p>';
+    action = callout("info", "✓ Tous les comptes connectés ont accès au projet.");
   } else {
-    action = '<p class="note">Accès IAM non vérifiable ici (gcloud non connecté). En terminal : ' +
-      '<span class="mono">./scripts/provision-gcp.sh status</span>.</p>';
+    action = callout("info", "Accès IAM non vérifiable ici (gcloud non connecté). En terminal : " +
+      '<span class="mono">./scripts/provision-gcp.sh status</span>.');
   }
-  $("setupBody").innerHTML = head + (rows || '<p class="note">Aucun compte connecté.</p>') + action;
+  $("setupBody").innerHTML = head + (rows || '<p class="ck-caption">Aucun compte connecté.</p>') + action;
 }
 async function doSyncIam() {
   const btn = $("syncBtn");
@@ -3571,8 +3611,7 @@ dZones.addEventListener("close", () => {
   }
 });
 dAddFolder.addEventListener("close", () => {
-  /* Si le dialog durée est toujours ouvert (Annuler / Escape sur le picker), le fermer aussi. */
-  if (dAuthorizeFolder.open) dAuthorizeFolder.close();
+  afShowAuthorizeUI(false); // repart toujours sur la vue « navigateur » à la prochaine ouverture
   if (afResumeZonesAfterAdd) {
     afResumeZonesAfterAdd = false;
     dZones.showModal();
@@ -3678,6 +3717,7 @@ function afRowDblClick(e) {
 function openAddFolder() {
   afSel = null;
   afCrumbs = [{ id: "root", name: "Mon Drive" }];
+  afShowAuthorizeUI(false);
   $("afQuery").value = "";
   $("afSearchHits").hidden = true;
   $("afSearchHits").innerHTML = "";
@@ -3701,6 +3741,20 @@ function afSetAuthorizeLoading(on) {
   }
   if (cancel) cancel.disabled = !!on;
 }
+// Bascule le corps de dAddFolder entre la vue « navigateur » et la vue
+// « durée de l'autorisation », en panneau inline (fiche 0097, AC3) — remplace
+// l'ancien second dialog empilé par-dessus le picker.
+function afShowAuthorizeUI(show) {
+  $("afAuthorize").hidden = !show;
+  $("afToolbar").hidden = show;
+  $("afToolbarHint").hidden = show;
+  $("afCrumb").hidden = show;
+  $("afList").hidden = show;
+  if (show) $("afSearchHits").hidden = true;
+  $("afCloseBtn").hidden = show;
+  $("afCancelAuthBtn").hidden = !show;
+  $("afValidateBtn").hidden = !show;
+}
 function afOpenAuthorize() {
   if (!afSel) return;
   if (AF_PERM_ONLY) {
@@ -3709,14 +3763,12 @@ function afOpenAuthorize() {
     afAddPermZone(afSel.id);
     return;
   }
-  /* Garde le picker ouvert sous le dialog durée : le fermer reprenait dZones
-     (close handler) et faisait disparaître l'étape Valider — zones restaient vides. */
   afSetAuthorizeLoading(false);
   $("afAuthTarget").innerHTML = "Dossier : <b>" + esc(afSel.name) + "</b>" +
     (afSel.path ? ' <span class="note">(' + esc(afSel.path) + ")</span>" : "");
   const tempRadio = document.querySelector('input[name="afDur"][value="temp"]');
   if (tempRadio) tempRadio.checked = true;
-  if (!dAuthorizeFolder.open) dAuthorizeFolder.showModal();
+  afShowAuthorizeUI(true);
 }
 async function afAddPermZone(targetId) {
   try {
@@ -3730,9 +3782,8 @@ async function afAddPermZone(targetId) {
 }
 function afCancelAuthorize() {
   if ($("afValidateBtn") && $("afValidateBtn").disabled) return;
-  dAuthorizeFolder.close();
+  afShowAuthorizeUI(false);
 }
-dAuthorizeFolder.addEventListener("close", () => { afSetAuthorizeLoading(false); });
 async function afDoSearch() {
   const q = $("afQuery").value.trim();
   const hits = $("afSearchHits");
@@ -3778,7 +3829,6 @@ async function afConfirm() {
       const h = Math.min(168, Math.max(1, parseInt($("afHours").value, 10) || 8));
       r = await api("/api/profiles/" + polTarget + "/grant", { method: "POST", body: JSON.stringify({ target: targetId, hours: h }) });
     }
-    if (dAuthorizeFolder.open) dAuthorizeFolder.close();
     if (dAddFolder.open) dAddFolder.close(); /* close → reprend dZones + refresh listes */
     toast(r.out || "Dossier autorisé");
     await refresh(); renderZonesLists(); updateZonesSummary();
@@ -4046,7 +4096,7 @@ function toggleDevArchives() {
 
 function renderDevInstance(d) {
   const gitRef = (d.git_branch && d.git_sha)
-    ? esc(d.git_branch) + "@" + esc(d.git_sha) + (d.git_dirty ? ' <span class="badge b-warn">dirty</span>' : "")
+    ? esc(d.git_branch) + "@" + esc(d.git_sha) + (d.git_dirty ? ' <span class="ck-badge ck-badge--warn">dirty</span>' : "")
     : esc(d.version || "?");
   let html = '<div class="dev-summary">'
     + '<div class="dev-summary-line"><span class="lbl">code</span> <span class="mono">' + gitRef + "</span></div>"
@@ -4069,7 +4119,7 @@ function renderDevInstance(d) {
 function renderDevSandboxes(d) {
   const sandboxes = d.sandboxes || [];
   if (!sandboxes.length) {
-    return '<p class="note">Aucune sandbox — <span class="mono">./bin/mag sandbox deploy --dev</span></p>';
+    return '<p class="ck-caption">Aucune sandbox — <span class="mono">./bin/mag sandbox deploy --dev</span></p>';
   }
   return '<div class="sblist">' + sandboxes.map((s) => {
     const open = DEV_EXPANDED_SB.has(s.id);
@@ -4078,7 +4128,7 @@ function renderDevSandboxes(d) {
     return '<div class="sbcard" data-sbid="' + esc(s.id) + '" onclick="toggleSb(this.dataset.sbid)">'
       + '<div class="sbcard-head">'
       + '<span class="mono sbcard-id">' + esc(s.id) + "</span>"
-      + (here ? ' <span class="badge b-ok">cette page</span>' : "")
+      + (here ? ' <span class="ck-badge ck-badge--ok">cette page</span>' : "")
       + '<span class="spacer"></span>'
       + portChip("admin", s.admin_port, s.admin_up)
       + portChip("broker", s.broker_port, s.broker_up)
@@ -4090,7 +4140,7 @@ function renderDevSandboxes(d) {
         + "<div>MCP : " + mcp + "</div>"
         + '<div class="mono" style="word-break:break-all">' + esc(s.path) + "</div>"
         + (here
-          ? '<p class="note" style="margin-top:8px">Tu consultes cette sandbox — ouvre une autre admin pour la supprimer.</p>'
+          ? callout("info", "Tu consultes cette sandbox — ouvre une autre admin pour la supprimer.")
           : '<div style="margin-top:10px"><button type="button" class="small" onclick="removeSandbox(\'' + esc(s.id).replace(/[\\']/g, "\\$&") + '\')">Supprimer cette sandbox</button></div>')
         + "</div>" : "")
       + "</div>";
@@ -4101,18 +4151,18 @@ function renderDevDeploys(d) {
   const deps = (d.deployments || []).filter((x) => !x.is_sandbox);
   const current = deps.find((x) => x.is_current);
   const archives = deps.filter((x) => !x.is_current);
-  if (!deps.length) return '<p class="note">Aucun déploiement stable.</p>';
+  if (!deps.length) return '<p class="ck-caption">Aucun déploiement stable.</p>';
   let html = "";
   if (current) {
     html += '<div class="devcard"><h3>Déploiement actif</h3><div class="devmeta">'
-      + '<div><span class="mono">' + esc(current.id) + '</span> <span class="badge b-ok">current</span></div>'
+      + '<div><span class="mono">' + esc(current.id) + '</span> <span class="ck-badge ck-badge--ok">current</span></div>'
       + "<div>" + esc(current.version || "") + "</div>"
       + "<div>" + portChip("admin", current.admin_port, current.admin_up)
       + " " + portChip("broker", current.broker_port, current.broker_up) + "</div>"
       + (current.admin_url ? '<div><a href="' + esc(current.admin_url) + '" target="_blank" rel="noopener">' + esc(current.admin_url) + "</a></div>" : "")
       + "</div></div>";
   } else {
-    html += '<p class="note">Aucun déploiement marqué <span class="mono">current</span>.</p>';
+    html += '<p class="ck-caption">Aucun déploiement marqué <span class="mono">current</span>.</p>';
   }
   if (archives.length) {
     html += '<button type="button" class="arch-toggle" onclick="toggleDevArchives()">'
@@ -4127,10 +4177,10 @@ function renderDevDeploys(d) {
 
 function renderDevClients(d) {
   const clients = d.mcp_clients || [];
-  if (!clients.length) return '<p class="note">Aucune entrée <span class="mono">google-mcp</span> dans Claude / Cursor.</p>';
-  return '<p class="note" style="margin-bottom:10px">Entrées dans les configs clients (Claude Desktop / Cursor). '
-    + 'L’entrée stable <span class="mono">google-multi-account</span> est protégée. '
-    + 'Après suppression : redémarrer le client MCP.</p>'
+  if (!clients.length) return '<p class="ck-caption">Aucune entrée <span class="mono">google-mcp</span> dans Claude / Cursor.</p>';
+  return callout("info", "Entrées dans les configs clients (Claude Desktop / Cursor). "
+    + "L’entrée stable <span class=\"mono\">google-multi-account</span> est protégée. "
+    + "Après suppression : redémarrer le client MCP.")
     + clients.map((c, i) => {
       const protected = !!c.protected;
       const btn = protected
@@ -4138,7 +4188,7 @@ function renderDevClients(d) {
         : '<button type="button" class="small" onclick="removeMcpClient(' + i + ')">Retirer</button>';
       return '<div class="mcp-row"><div style="display:flex;gap:10px;align-items:flex-start;justify-content:space-between">'
         + '<div style="min-width:0;flex:1"><b>' + esc(c.name) + "</b>"
-        + (protected ? ' <span class="badge b-ok">stable</span>' : "")
+        + (protected ? ' <span class="ck-badge ck-badge--ok">stable</span>' : "")
         + " · broker " + esc(c.broker_port)
         + (c.version ? " · " + esc(c.version) : "")
         + '<div class="mono" style="margin-top:3px;word-break:break-all">' + esc(c.binary) + "</div>"
@@ -4197,7 +4247,7 @@ function renderDevPanel() {
     { id: "clients", label: "Clients MCP" + (clients.length ? " (" + clients.length + ")" : "") },
   ];
   $("devTabs").innerHTML = tabs.map((t) =>
-    '<button type="button" class="small' + (DEV_TAB === t.id ? " active" : "") + '" onclick="switchDevTab(\'' + t.id + "')\">" + esc(t.label) + "</button>").join("");
+    '<button type="button" aria-pressed="' + (DEV_TAB === t.id ? "true" : "false") + '" onclick="switchDevTab(\'' + t.id + "')\">" + esc(t.label) + "</button>").join("");
   const bodies = {
     instance: renderDevInstance,
     sandboxes: renderDevSandboxes,
@@ -4217,7 +4267,7 @@ async function openDev() {
     renderDevPanel();
   } catch (e) {
     DEV_DATA = null;
-    $("devBody").innerHTML = '<p class="note">Erreur : ' + esc(e.message) + "</p>";
+    $("devBody").innerHTML = callout("bad", "Erreur : " + esc(e.message));
   }
 }
 

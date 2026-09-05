@@ -4467,10 +4467,13 @@ AF_HTML=admin/index.html
 AF_LOGIC=scripts/af-selection-logic.js
 
 # Markers UI / handlers : auraient attrapé « Sélectionner → Zones vides »
+# Fiche 0097 (AC3) : la durée d'autorisation est un panneau inline (#afAuthorize)
+# dans dAddFolder, plus un <dialog id="dAuthorizeFolder"> empilé par-dessus.
 if grep -q 'data-af-action="select"' "$AF_HTML" \
   && grep -q 'afOpenAuthorize()' "$AF_HTML" \
   && grep -q 'onclick="afConfirm()"' "$AF_HTML" \
-  && grep -q 'id="dAuthorizeFolder"' "$AF_HTML" \
+  && grep -q 'id="afAuthorize"' "$AF_HTML" \
+  && ! grep -q 'id="dAuthorizeFolder"' "$AF_HTML" \
   && grep -q '/drive-folder"' "$AF_HTML" \
   && grep -q '"/grant"' "$AF_HTML"; then
   pass "wiring : Sélectionner → durée → Valider appelle drive-folder/grant"
@@ -4498,8 +4501,9 @@ else
   fail "wiring : marqueurs loading Valider manquants"
 fi
 
-# Footer picker = Annuler seul (entre dAddFolder et dAuthorizeFolder)
-picker_footer="$(awk '/id="dAddFolder"/,/id="dAuthorizeFolder"/' "$AF_HTML")"
+# Footer picker : pas de bouton « Autoriser… » dédié (Sélectionner suffit),
+# le footer bascule Annuler/Valider en panneau inline (fiche 0097, AC3).
+picker_footer="$(awk '/id="dAddFolder"/,/^<\/dialog>$/' "$AF_HTML")"
 if echo "$picker_footer" | grep -q 'dAddFolder.close()' \
   && ! echo "$picker_footer" | grep -q 'Autoriser'; then
   pass "UI : footer picker = Annuler uniquement"
@@ -4507,7 +4511,9 @@ else
   fail "UI : footer picker encore trop chargé"
 fi
 
-# Régression critique : afOpenAuthorize ne doit PAS fermer le picker
+# Régression critique : afOpenAuthorize ne doit PAS fermer le picker, et bascule
+# en panneau inline (#afAuthorize) plutôt que d'ouvrir un second <dialog>
+# (l'ancien dAuthorizeFolder, retiré par la fiche 0097 — AC3, empilement réduit).
 if node -e '
 const fs = require("fs");
 const html = fs.readFileSync("admin/index.html", "utf8");
@@ -4518,14 +4524,18 @@ if (body.includes("dAddFolder.close")) {
   console.error("afOpenAuthorize ferme encore dAddFolder (reprise Zones prématurée)");
   process.exit(1);
 }
-if (!body.includes("dAuthorizeFolder.showModal")) {
-  console.error("afOpenAuthorize n'\''ouvre pas dAuthorizeFolder");
+if (!body.includes("afShowAuthorizeUI(true)")) {
+  console.error("afOpenAuthorize n'\''affiche pas le panneau inline afAuthorize");
+  process.exit(1);
+}
+if (html.includes("id=\"dAuthorizeFolder\"")) {
+  console.error("dialog dAuthorizeFolder encore présent (empilement non retiré)");
   process.exit(1);
 }
 ' ; then
-  pass "régression : afOpenAuthorize garde le picker ouvert sous le dialog durée"
+  pass "régression : afOpenAuthorize garde le picker ouvert, panneau durée inline"
 else
-  fail "régression : afOpenAuthorize referme le picker (bug zones vides)"
+  fail "régression : afOpenAuthorize referme le picker ou rouvre un dialog empilé"
 fi
 
 # Navigation efface la sélection (afClearSelection dans afOpen / afJump / afEnterFolder)
@@ -4701,6 +4711,67 @@ else
 fi
 
 if [[ -n "$AF_PID" ]]; then kill "$AF_PID" 2>/dev/null || true; wait "$AF_PID" 2>/dev/null || true; fi
+
+section "admin : design system Cockpit — coquille modale + Policy/Setup/Dev (fiche 0097)"
+
+CK_HTML=admin/index.html
+
+# AC1 : tous les <dialog> subsistants portent la coquille .ck-modal (les seuls
+# <dialog ...> restants dans le markup, hors mentions en commentaire).
+CK_DIALOG_TAGS="$(grep -oE '<dialog id="[A-Za-z]+"[^>]*>' "$CK_HTML")"
+CK_DIALOG_COUNT="$(echo "$CK_DIALOG_TAGS" | grep -c '<dialog ')"
+CK_DIALOG_WITH_SHELL="$(echo "$CK_DIALOG_TAGS" | grep -c 'class="[^"]*\bck-modal\b')"
+if [[ "$CK_DIALOG_COUNT" -ge 14 ]] && [[ "$CK_DIALOG_COUNT" == "$CK_DIALOG_WITH_SHELL" ]] \
+  && grep -q 'ck-modal__head' "$CK_HTML" && grep -q 'ck-modal__body' "$CK_HTML" \
+  && grep -q 'ck-modal__foot' "$CK_HTML"; then
+  pass "coquille modale : les $CK_DIALOG_COUNT <dialog> subsistants portent .ck-modal (tête/corps/pied)"
+else
+  fail "coquille modale : dialog(s) sans .ck-modal ($CK_DIALOG_WITH_SHELL/$CK_DIALOG_COUNT) ou classes ck-modal__* absentes"
+fi
+
+# AC2 : Policy migrée — plus de faux onglets (class="tabs"), préréglages en
+# contrôle segmenté, notes en callouts (plus de <p class="note"> dans dPolicy).
+DPOLICY_BLOCK="$(awk '/<dialog id="dPolicy"/,/^<\/dialog>$/' "$CK_HTML")"
+if ! echo "$DPOLICY_BLOCK" | grep -q 'class="tabs"' \
+  && echo "$DPOLICY_BLOCK" | grep -q 'ck-segmented' \
+  && echo "$DPOLICY_BLOCK" | grep -q 'onclick="applyPreset(' \
+  && ! echo "$DPOLICY_BLOCK" | grep -q '<p class="note">' \
+  && echo "$DPOLICY_BLOCK" | grep -qc 'ck-callout' ; then
+  pass "policy : préréglages en .ck-segmented (fin des faux onglets), notes en .ck-callout"
+else
+  fail "policy : faux onglets, préréglages ou callouts manquants dans dPolicy"
+fi
+
+# AC3 : Zones (navigateur afPick) — panneau inline (#afAuthorize) plutôt qu'un
+# second <dialog> empilé pour le choix de durée.
+if grep -q 'id="afAuthorize"' "$CK_HTML" \
+  && grep -q 'function afShowAuthorizeUI' "$CK_HTML" \
+  && ! grep -q 'id="dAuthorizeFolder"' "$CK_HTML"; then
+  pass "zones : durée d'autorisation en panneau inline (afAuthorize), pas un dialog empilé"
+else
+  fail "zones : panneau inline afAuthorize manquant ou dialog empilé encore présent"
+fi
+
+# AC4 : Setup et Dev migrés — plus de class="note" / badge b-ok, badges ck-badge.
+SETUP_DEV_JS="$(awk '/^async function renderSetup/,0' "$CK_HTML" | sed -n '1,260p')"
+if ! grep -q 'class="note">Erreur\|<p class="note">Aucun compte connecté' "$CK_HTML" \
+  && ! grep -qE 'badge b-(ok|warn|mut|bad)"' "$CK_HTML" \
+  && grep -q 'ck-badge ck-badge--ok' "$CK_HTML" \
+  && grep -q 'ck-badge ck-badge--bad' "$CK_HTML"; then
+  pass "setup/dev : classes .ck-* (plus de class=\"note\" / badge b-ok)"
+else
+  fail "setup/dev : anciennes classes note/badge b-ok encore présentes"
+fi
+
+# AC4bis : l'écran Dev bascule ses sections en .ck-segmented (aria-pressed),
+# plus l'ancien class="tabs devtabs".
+if grep -q 'id="devTabs" class="ck-segmented"' "$CK_HTML" \
+  && grep -q 'aria-pressed=.*switchDevTab\|switchDevTab.*aria-pressed' "$CK_HTML" \
+  && ! grep -q 'class="tabs devtabs"' "$CK_HTML"; then
+  pass "dev : sections en .ck-segmented (aria-pressed), fin de class=\"tabs devtabs\""
+else
+  fail "dev : devTabs pas migré en .ck-segmented"
+fi
 
 # --- mag dev test — déploiement + admin + marqueur PR ----------------------
 
