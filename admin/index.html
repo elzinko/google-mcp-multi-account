@@ -2786,16 +2786,26 @@ function buildTogglePolicy(p, serviceKey, opKey) {
     if (key === serviceKey) {
       if (key === "drive") {
         const cur = currentEffectiveBlock(p, "drive");
-        // Drive libre → conversion en schéma explicite ZONÉ (AC2 : activer
-        // l'écriture Drive pose zonesOnly, jamais wildcard), writeFolders vide
-        // (défaut sûr) ; un Drive déjà explicite garde zonesOnly/writeFolders
-        // tels quels, seule l'opération cliquée change.
-        const base = cur ? { ...cur } : { read: true, create: true, update: true, delete: true, share: true, zonesOnly: true, writeFolders: [], writeFolderNames: {} };
+        // cur=null a DEUX sens qu'il ne faut pas confondre (NO-GO revue #1) :
+        //  • Drive libre (compte sans policy, ou Drive déclaré mode:open) → on
+        //    convertit en schéma explicite ZONÉ tout-permis (AC2 : activer
+        //    l'écriture pose zonesOnly, jamais wildcard), writeFolders vide ;
+        //  • Drive ABSENT d'une policy qui EXISTE → default-deny par service
+        //    (scripts/policy-check.py) → base tout-REFUSÉ. Sinon couper une op
+        //    en activerait d'autres en douce (ex. share).
+        const driveDenied = hasPolicy && !isDeclared(p, "drive");
+        const base = cur ? { ...cur }
+          : (driveDenied ? svcDeniedBlock("drive")
+                         : { read: true, create: true, update: true, delete: true, share: true, zonesOnly: true, writeFolders: [], writeFolderNames: {} });
         base[opKey] = !base[opKey];
         policy.drive = base;
       } else {
         const cur = currentEffectiveBlock(p, key);
-        const base = cur ? { ...cur } : svcFreeBlock(key);
+        // Même piège que Drive (NO-GO revue #1) : un service ABSENT d'une policy
+        // qui existe est refusé par défaut (default-deny), pas libre. Partir de
+        // svcDeniedBlock, sinon basculer une op en activerait d'autres en douce.
+        // Sans policy du tout = compte libre → svcFreeBlock (tout permis).
+        const base = cur ? { ...cur } : (hasPolicy ? svcDeniedBlock(key) : svcFreeBlock(key));
         base[opKey] = !base[opKey];
         policy[key] = base;
       }
@@ -2846,7 +2856,12 @@ function ckCapsHtml(key, rules, hasPolicy, alias) {
   }
   // Bascules cliquables (fiche 0107) : toujours au grain par opération, jamais
   // de pilule unique repliée « libre » — chaque droit reste éditable d'un clic.
-  const r = (key === "drive" ? normDrive(rules) : rules) || svcFreeDisplay(key);
+  // L'affichage doit dire la VÉRITÉ de l'état effectif (NO-GO revue #1) : un
+  // service absent d'une policy qui existe est default-deny → tout coupé (jamais
+  // « tout vert »), cohérent avec la pilule lecture-seule et avec ce qu'écrira
+  // buildTogglePolicy. Sans policy (ou Drive mode:open) = libre → tout permis.
+  let r = key === "drive" ? normDrive(rules) : rules;
+  if (!r) r = (hasPolicy && !rules) ? svcDeniedBlock(key) : svcFreeDisplay(key);
   return def.keys.map(([k, lbl]) => {
     const on = !!r[k];
     const note = (key === "drive" && (k === "create" || k === "update") && on && r.zonesOnly) ? ' <span class="ck-cap-note">(zones)</span>' : "";
