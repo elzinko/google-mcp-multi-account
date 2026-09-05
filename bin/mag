@@ -92,6 +92,33 @@ SELF="$(basename "$0")"  # nom sous lequel on est invoqué : « mag » ou les al
 
 die() { echo "$SELF : $*" >&2; exit 3; }
 
+# warn_deprecated_alias — dépréciation douce de gwsa/gma (fiche 0092).
+# gwsa/gma restent invocables tels quels (repli rollback interne, fiche 0081) :
+# cet avertissement part UNIQUEMENT sur stderr, jamais sur stdout, et ne change
+# ni la sortie utile ni le code retour — sinon ce serait une régression pour
+# tout utilisateur/script qui tape encore gwsa aujourd'hui.
+# Une fois par session : un marqueur est posé dans ${TMPDIR:-/tmp}, keyé par le
+# tty (ou par $PPID quand il n'y a pas de tty — pipe/CI). Un nouveau terminal
+# = un nouveau tty/PPID = un nouvel avertissement ; la même session ne répète
+# pas l'avertissement à chaque commande.
+deprecation_session_key() {
+  local key
+  key="$(tty 2>/dev/null || true)"
+  [[ -n "$key" && "$key" != "not a tty" ]] || key="ppid-$PPID"
+  # neutralise les caractères qui ne vont pas dans un nom de fichier (ex. /dev/ttys001)
+  printf '%s' "$key" | tr -c 'A-Za-z0-9_-' '_'
+}
+
+warn_deprecated_alias() {
+  [[ "$SELF" == "mag" ]] && return 0
+  local tmpdir marker
+  tmpdir="${TMPDIR:-/tmp}"
+  marker="$tmpdir/.gwsa-deprecation-warned-$(deprecation_session_key)"
+  [[ -e "$marker" ]] && return 0
+  echo "⚠ $SELF est déprécié — utilise « mag » (mêmes commandes). $SELF continue de marcher pour l'instant." >&2
+  touch "$marker" 2>/dev/null || true
+}
+
 check_alias() {
   [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] \
     || die "alias invalide « $1 » (lettres, chiffres, - et _ uniquement)"
@@ -1840,6 +1867,7 @@ remove_vault_alias(sys.argv[1])
 }
 
 main() {
+  warn_deprecated_alias
   [[ $# -ge 1 ]] || { usage; exit 3; }
   case "$1" in
     -h|--help|help) usage ;;
