@@ -824,7 +824,10 @@ const server = http.createServer(async (req, res) => {
           args = ["grant", alias, target, String(h)];
           timeout = GWSA_TIMEOUT_AUTH_MS;
         } else {
-          args = ["policy", alias, "allow", target];
+          // Mutation zone-seule (fiche 0107) : « policy allow » forçait create/update à
+          // true en douce quand le bloc drive était absent (défaut sûr). zone-add ne
+          // touche que writeFolders/zonesOnly, jamais les flags d'opération existants.
+          args = ["policy", alias, "zone-add", target];
         }
         const r = await mag(args, timeout);
         if (action === "grant") {
@@ -837,7 +840,7 @@ const server = http.createServer(async (req, res) => {
         const b = await readBody(req);
         const id = String(b.id || "");
         if (!/^[A-Za-z0-9_-]{5,128}$/.test(id)) return send(res, 400, { error: "id invalide" });
-        const args = action === "grant-revoke" ? ["grant", alias, "revoke", id] : ["policy", alias, "revoke", id];
+        const args = action === "grant-revoke" ? ["grant", alias, "revoke", id] : ["policy", alias, "zone-remove", id];
         const r = await mag(args);
         return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).trim() });
       }
