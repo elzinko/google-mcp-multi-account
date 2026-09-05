@@ -209,65 +209,20 @@ fi  # fin du bloc sauté quand « déjà à jour »
 # Prudence : on ne reprend QUE un lien symbolique dont la cible est un bin/mag
 # du clone source ou d'une version déployée. Un fichier réel ou une cible
 # étrangère est laissé intact.
-link_cli() {
-  local link expected target
-  # Garde-fou de bac à sable : si le dépôt d'installation est surchargé (suite de
-  # tests) sans que le lien à gérer soit désigné explicitement, on ne touche à
-  # RIEN. Un test ne doit jamais pouvoir réécrire le mag du PATH réel — c'est
-  # arrivé une fois, en retirant une garde pendant un test de mutation.
-  if [[ -n "${GWSA_DEPLOY_ROOT:-}" && -z "${GWSA_CLI_LINK:-}" ]]; then
-    warn "dépôt d'installation surchargé sans GWSA_CLI_LINK — lien du PATH laissé tel quel"
-    return 0
-  fi
-  # une install antérieure n'a que gma/gwsa sur le PATH — on les cherche en repli
-  link="${GWSA_CLI_LINK:-$(command -v mag 2>/dev/null || command -v gma 2>/dev/null || command -v gwsa 2>/dev/null || true)}"
-  # cible = le binaire de la version installée. Rollback vers une release
-  # pré-renommage : elle n'a que bin/gwsa/bin/gma — on s'y replie (Codex #114 r4).
-  expected="$DEPLOY_ROOT/current/bin/mag"
-  [[ -x "$expected" ]] || expected="$DEPLOY_ROOT/current/bin/gwsa"
-  [[ -x "$expected" ]] || expected="$DEPLOY_ROOT/current/bin/gma"
-
-  [[ -n "$link" ]] || { warn "mag absent du PATH — lien non posé"; return 0; }
-  [[ -x "$expected" ]] || { warn "binaire absent de la copie installée — liens inchangés"; return 0; }
-
-  if [[ ! -L "$link" ]]; then
-    warn "« $link » n'est pas un lien symbolique — laissé tel quel"
-    return 0
-  fi
-  target="$(readlink "$link")"
-  if [[ "$target" == "$expected" ]]; then
-    ok "mag du PATH déjà sur la copie installée"
-    # ne PAS return : on continue pour (re)poser les alias gma/gwsa manquants
-  else
-    case "$target" in
-      "$SRC"/bin/mag|"$DEPLOY_ROOT"/*/bin/mag) ;;
-      # cibles legacy d'une install antérieure (lien nommé gma/gwsa) — à migrer aussi
-      "$SRC"/bin/gma|"$SRC"/bin/gwsa|"$DEPLOY_ROOT"/*/bin/gma|"$DEPLOY_ROOT"/*/bin/gwsa) ;;
-      *) warn "mag du PATH pointe « $target » (hors projet) — laissé tel quel"; return 0 ;;
-    esac
-    if ln -sfn "$expected" "$link" 2>/dev/null; then
-      ok "mag du PATH → $expected"
-    else
-      warn "impossible de réécrire « $link » — à refaire à la main : ln -sfn \"$expected\" \"$link\""
-    fi
-  fi
-
-  # poser/rafraîchir « mag » (nom courant) + les alias dépréciés « gma »/« gwsa »
-  # à côté, vers la MÊME cible $expected (repliée sur gwsa/gma au rollback) : une
-  # install antérieure n'a QUE gma/gwsa, il faut donc y créer mag, sinon les
-  # commandes « mag … » manqueraient au PATH après « update » (Codex #92, #114).
-  for _name in mag gma gwsa; do
-    _nlink="$(dirname "$link")/$_name"
-    if [[ -e "$_nlink" && ! -L "$_nlink" ]]; then
-      warn "« $_nlink » n'est pas un lien symbolique — laissé tel quel"
-    elif ln -sfn "$expected" "$_nlink" 2>/dev/null; then
-      ok "$_name du PATH → $expected"
-    else
-      warn "impossible de poser « $_nlink » — à faire à la main : ln -sfn \"$expected\" \"$_nlink\""
-    fi
-  done
-}
-link_cli
+#
+# La logique de re-ciblage est partagée avec deploy-local.sh --rollback
+# (fiche 0081, socle du cluster updater 0091/0092) — voir scripts/lib/cli-link.sh.
+# Une copie déployée avant ce partage n'a pas ce fichier : on le signale
+# plutôt que de faire échouer tout « update » (best-effort, comme le reste
+# du branchement des liens du PATH).
+LIBCLI="$(cd "$(dirname "$0")" && pwd)/lib/cli-link.sh"
+if [[ -f "$LIBCLI" ]]; then
+  # shellcheck source=scripts/lib/cli-link.sh
+  source "$LIBCLI"
+  retarget_cli_links "$SRC" "$DEPLOY_ROOT"
+else
+  warn "helper de re-ciblage introuvable ($LIBCLI) — lien du PATH non géré"
+fi
 
 step "Terminé — un dernier geste"
 echo "Redémarre Claude Desktop (Cmd-Q puis relance) : le serveur MCP est lancé"

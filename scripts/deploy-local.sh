@@ -27,6 +27,8 @@ DEPLOY_ROOT="${GWSA_DEPLOY_ROOT:-$HOME/.local/share/google-mcp}"
 CURRENT_LINK="$DEPLOY_ROOT/current"
 # Source « GitHub sans clone » (fiche 0020) — sourcée à la demande dans --github.
 LIB_GH="$(cd "$(dirname "$0")" && pwd)/lib-github-release.sh"
+# Re-ciblage des liens PATH mag/gma/gwsa — partagé avec update.sh (fiche 0081).
+LIB_CLI="$(cd "$(dirname "$0")" && pwd)/lib/cli-link.sh"
 
 # ── affichage (même convention que provision-gcp.sh) ─────────────
 if [[ -t 1 ]]; then
@@ -129,6 +131,19 @@ if [[ "$MODE" == "rollback" ]]; then
   point_current_at "$ROLLBACK_TO"
   ok "current → $ROLLBACK_TO"
   stop_broker
+  # Sans ça, un rollback vers une release pré-renommage (bin/gwsa/bin/gma
+  # seulement) laisse les liens PATH pointer vers un bin/mag qui n'existe
+  # plus : toutes les commandes cassées après un rollback « réussi » (Codex
+  # #114 round 5, fiche 0081). Même cible que le repli déjà appliqué par
+  # stop_broker ci-dessus. Best-effort : une copie déployée avant ce partage
+  # n'a pas ce fichier — on le signale plutôt que de faire échouer le rollback.
+  if [[ -f "$LIB_CLI" ]]; then
+    # shellcheck source=scripts/lib/cli-link.sh
+    source "$LIB_CLI"
+    retarget_cli_links "$REPO_ROOT" "$DEPLOY_ROOT"
+  else
+    warn "helper de re-ciblage introuvable ($LIB_CLI) — liens du PATH non gérés"
+  fi
   echo; echo "Redémarre Claude Desktop pour recharger le serveur."
   exit 0
 fi

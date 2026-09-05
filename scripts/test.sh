@@ -64,7 +64,7 @@ section "Syntaxe des scripts — avec le bash DU SYSTÈME (macOS = 3.2)"
 # local, avec /bin/bash et pas le bash du PATH.
 SYS_BASH="/bin/bash"
 [[ -x "$SYS_BASH" ]] || SYS_BASH="$(command -v bash)"
-for f in install.sh bin/mag scripts/*.sh; do
+for f in install.sh bin/mag scripts/*.sh scripts/lib/*.sh; do
   if "$SYS_BASH" -n "$f" 2>/dev/null; then
     PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m %s : syntaxe valide (%s)\n' "$f" "$("$SYS_BASH" --version | head -1 | sed 's/.*version \([0-9.]*\).*/\1/')"
   else
@@ -2037,9 +2037,10 @@ section "release.sh — semver déduit des commits, CHANGELOG, tag annoté"
 REL="$TMP/relrepo"
 RELDEP="$TMP/reldeploy"
 RELCONF="$TMP/reldesktop.json"
-mkdir -p "$REL/scripts" "$REL/bin"
+mkdir -p "$REL/scripts/lib" "$REL/bin"
 cp scripts/release.sh scripts/update.sh scripts/deploy-local.sh \
    scripts/lib-github-release.sh scripts/install-claude-desktop.sh "$REL/scripts/"
+cp scripts/lib/cli-link.sh "$REL/scripts/lib/"
 printf '#!/bin/sh\nexit 0\n' > "$REL/scripts/test.sh"; chmod +x "$REL/scripts/test.sh"
 printf '#!/bin/sh\necho faux-mcp\n' > "$REL/bin/google-mcp"; chmod +x "$REL/bin/google-mcp"
 cp bin/mag "$REL/bin/mag"   # embarqué dans les copies déployées (cf. link_cli)
@@ -2290,6 +2291,120 @@ out_l="$(GWSA_CLI_LINK="$LINK" relenv "$UPDATE" --force 2>&1)"
 [[ ! -L "$LINK" && "$(cat "$LINK")" == *"vrai fichier"* && "$out_l" == *"pas un lien"* ]] \
   && pass "lien PATH : fichier réel jamais remplacé par un lien" \
   || fail "lien PATH : a écrasé un fichier réel"
+
+section "lib/cli-link.sh — localiser un lien cassé sans command -v (fiche 0081, Codex #114 r5)"
+
+# command -v IGNORE un symlink dont la cible n'existe plus : c'est exactement
+# ce qui arrive après qu'un rollback a basculé « current » avant le
+# re-ciblage des liens. resolve_cli_link doit trouver le lien lui-même
+# (test -L), pas sa cible. Isolé de tout GWSA_DEPLOY_ROOT : ce n'est pas
+# retarget_cli_links qu'on teste ici (son garde-fou de bac à sable
+# désactiverait tout), mais la primitive de résolution seule.
+CLIBIN="$TMP/cli-link-bin"; mkdir -p "$CLIBIN"
+ln -sfn "$CLIBIN/current-absent/bin/mag" "$CLIBIN/mag"   # symlink cassé : cible absente
+
+out_rcl="$(env -i PATH="$CLIBIN:/usr/bin:/bin" HOME="$HOME" bash -c '
+  set -euo pipefail
+  source "'"$PWD"'/scripts/lib/cli-link.sh"
+  resolve_cli_link
+')"
+[[ "$out_rcl" == "$CLIBIN/mag" ]] \
+  && pass "resolve_cli_link : localise un lien cassé (cible absente) sans command -v" \
+  || fail "resolve_cli_link : lien cassé non localisé (obtenu « $out_rcl »)"
+
+# command -v, lui, échoue bien sur ce même lien cassé — la preuve que le bug
+# décrit par la fiche est réel, et que resolve_cli_link le contourne.
+out_cv="$(env -i PATH="$CLIBIN:/usr/bin:/bin" HOME="$HOME" bash -c 'command -v mag' 2>/dev/null || true)"
+[[ -z "$out_cv" ]] \
+  && pass "témoin du bug : command -v ne voit pas le lien dont la cible est absente" \
+  || fail "témoin du bug : command -v aurait dû échouer sur un lien cassé"
+
+section "update.sh & deploy-local.sh --rollback — rollback à travers le renommage gma→mag (fiche 0081)"
+
+# Reproduit le point de bascule #114 : une version « avant renommage » n'a que
+# bin/gwsa, une version « après » a bin/mag. Dépôt jouet dédié (indépendant de
+# $REL) pour ne pas perturber les sections précédentes.
+RB="$TMP/rollback-repo"; mkdir -p "$RB/scripts/lib" "$RB/bin"
+cp scripts/update.sh scripts/deploy-local.sh scripts/lib-github-release.sh "$RB/scripts/"
+cp scripts/lib/cli-link.sh "$RB/scripts/lib/"
+printf '#!/bin/sh\nexit 0\n' > "$RB/bin/google-mcp"; chmod +x "$RB/bin/google-mcp"
+cp bin/mag "$RB/bin/gwsa"; chmod +x "$RB/bin/gwsa"   # avant #114 : le binaire s'appelait gwsa
+git -C "$RB" init -q >/dev/null 2>&1
+git -C "$RB" checkout -qb main >/dev/null 2>&1
+git -C "$RB" config user.email "test@example.invalid"
+git -C "$RB" config user.name "test"
+git -C "$RB" add -A >/dev/null 2>&1
+git -C "$RB" commit -qm "avant le renommage : bin/gwsa" >/dev/null 2>&1
+git -C "$RB" tag v0.9.0-pre-mag
+
+git -C "$RB" mv bin/gwsa bin/mag >/dev/null 2>&1   # #114 : renommage gma/gwsa → mag
+git -C "$RB" commit -qam "apres le renommage : bin/mag" >/dev/null 2>&1
+git -C "$RB" tag v1.0.0-post-mag
+
+RBDEP="$TMP/rollback-deploy"
+RBBIN="$TMP/rollback-bin"; mkdir -p "$RBBIN"
+RBLINK="$RBBIN/mag"
+rbenv() { GWSA_DEPLOY_ROOT="$RBDEP" GWSA_CLI_LINK="$RBLINK" "$@"; }
+
+# amorce : lien vers le clone, comme au premier quickstart
+ln -sfn "$RB/bin/mag" "$RBLINK"
+rbenv "$RB/scripts/update.sh" --to v1.0.0-post-mag >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$RBDEP/current")")" == "v1.0.0-post-mag" \
+   && "$(readlink "$RBLINK")" == "$RBDEP/current/bin/mag" ]] \
+  && pass "update --to : install post-renommage, lien PATH → current/bin/mag" \
+  || fail "update --to : amorce post-renommage en échec"
+
+# LE scénario de la fiche : rollback vers le tag PRÉ-renommage (current n'a
+# plus que bin/gwsa) → mag/gma/gwsa doivent suivre, sans réinstall.
+rbenv "$RB/scripts/update.sh" --to v0.9.0-pre-mag >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$RBDEP/current")")" == "v0.9.0-pre-mag" ]] \
+  && pass "update --to <pré-renommage> : current bascule sur la version legacy" \
+  || fail "update --to <pré-renommage> : current n'a pas basculé"
+
+[[ ! -e "$RBDEP/current/bin/mag" && -x "$RBDEP/current/bin/gwsa" ]] \
+  && pass "update --to <pré-renommage> : la version déployée n'a bien que bin/gwsa" \
+  || fail "update --to <pré-renommage> : fixture incorrecte (bin/mag ne devrait pas exister)"
+
+for _n in mag gma gwsa; do
+  [[ "$(readlink "$RBBIN/$_n" 2>/dev/null)" == "$RBDEP/current/bin/gwsa" ]] \
+    && pass "update --to <pré-renommage> : lien « $_n » repointé sur current/bin/gwsa" \
+    || fail "update --to <pré-renommage> : lien « $_n » pas repointé sur current/bin/gwsa"
+done
+
+"$RBLINK" help >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 ]] \
+  && pass "update --to <pré-renommage> : mag du PATH reste invocable (récupérable sans réinstall)" \
+  || fail "update --to <pré-renommage> : mag du PATH cassé après rollback"
+
+# --- même scénario, mais via deploy-local.sh --rollback directement ---------
+# (pas via « mag update ») : c'est LUI qui, avant ce fix, ne reciblait rien.
+rbenv "$RB/scripts/deploy-local.sh" --rollback v1.0.0-post-mag >/dev/null 2>&1   # retour à un état "sain" connu
+ln -sfn "$RBDEP/current/bin/mag" "$RBLINK"
+ln -sfn "$RBDEP/current/bin/mag" "$RBBIN/gma"
+ln -sfn "$RBDEP/current/bin/mag" "$RBBIN/gwsa"
+
+out_dlr="$(rbenv "$RB/scripts/deploy-local.sh" --rollback v0.9.0-pre-mag 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$RBDEP/current")")" == "v0.9.0-pre-mag" ]] \
+  && pass "deploy-local --rollback <pré-renommage> : current bascule sur la version legacy" \
+  || fail "deploy-local --rollback <pré-renommage> : current n'a pas basculé"
+
+for _n in mag gma gwsa; do
+  [[ "$(readlink "$RBBIN/$_n" 2>/dev/null)" == "$RBDEP/current/bin/gwsa" ]] \
+    && pass "deploy-local --rollback <pré-renommage> : lien « $_n » reciblé (broker recyclé)" \
+    || fail "deploy-local --rollback <pré-renommage> : lien « $_n » PAS reciblé (commandes cassées)"
+done
+
+"$RBLINK" help >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 ]] \
+  && pass "deploy-local --rollback <pré-renommage> : mag du PATH reste invocable" \
+  || fail "deploy-local --rollback <pré-renommage> : mag du PATH cassé après rollback"
+
+# bac à sable sans GWSA_CLI_LINK : deploy-local --rollback ne doit toucher à
+# AUCUN lien réel du PATH (même garde-fou que côté update.sh).
+out_dlr2="$(GWSA_DEPLOY_ROOT="$RBDEP" "$RB/scripts/deploy-local.sh" --rollback v1.0.0-post-mag 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$out_dlr2" == *"sans GWSA_CLI_LINK"* ]] \
+  && pass "deploy-local --rollback : dépôt surchargé sans GWSA_CLI_LINK → aucun lien touché" \
+  || fail "deploy-local --rollback : un test pourrait atteindre le mag réel du PATH"
 
 section "install.sh / update --github — installer & mettre à jour SANS clone (fiche 0020)"
 
