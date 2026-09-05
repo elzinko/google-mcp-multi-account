@@ -1615,6 +1615,12 @@ button.ck-cap--toggle.ck-cap--off:hover { background: var(--bad-bg); }
   box-shadow: var(--e-pop);
   overflow: hidden;
 }
+/* Un <dialog> FERMÉ doit rester caché. « .ck-modal { display:flex } » est une
+   règle AUTEUR : elle bat la règle UA « dialog:not([open]) { display:none } »,
+   donc sans ce garde les 15 dialogues s'afficheraient au chargement (revue Codex
+   #133 P1). Spécificité plus haute (dialog.ck-modal:not([open])) → l'emporte sur
+   .ck-modal ; à l'ouverture, [open] annule ce sélecteur et flex reprend. */
+dialog.ck-modal:not([open]) { display: none; }
 .ck-modal__head {
   padding: var(--s5) var(--s5) var(--s4);
   border-bottom: 1px solid var(--line);
@@ -1649,8 +1655,10 @@ button.ck-cap--toggle.ck-cap--off:hover { background: var(--bad-bg); }
   border-top: 1px solid var(--line);
   background: var(--surface);
 }
-/* Variante large : dialogues à contenu riche (policy, zones, setup, dev, doc) */
-.ck-modal--wide { width: min(780px, 100%); }
+/* Variante large : dialogues à contenu riche (policy, zones, setup, dev, doc).
+   max-width explicite : sinon le « dialog { max-width:660px } » générique plafonne
+   la largeur et les dialogues larges n'atteignent jamais 780px (revue Codex #133 P2). */
+.ck-modal--wide { width: min(780px, 100%); max-width: min(780px, 100%); }
 
 /* ---------------------------------------------------------------------
    18. CALLOUT — bandeau d'information / alerte

@@ -4927,6 +4927,24 @@ else
   fail "coquille modale : dialog(s) sans .ck-modal ($CK_DIALOG_WITH_SHELL/$CK_DIALOG_COUNT) ou classes ck-modal__* absentes"
 fi
 
+# Régression (revue Codex #133 P1) : « .ck-modal { display:flex } » est une règle
+# AUTEUR — elle bat la règle UA « dialog:not([open]){display:none} », donc SANS ce
+# garde les 15 dialogs s'affichent au chargement. Le bug avait passé l'E2E (qui ne
+# regardait que des modales OUVERTES). On verrouille la présence du garde.
+if grep -Eq 'dialog\.ck-modal:not\(\[open\]\)[^{]*\{[^}]*display:[[:space:]]*none' "$CK_HTML"; then
+  pass "coquille modale : un <dialog> fermé reste caché (garde dialog.ck-modal:not([open]))"
+else
+  fail "coquille modale : garde manquant — les .ck-modal fermés seraient visibles au chargement (Codex #133 P1)"
+fi
+
+# Régression (revue Codex #133 P2) : .ck-modal--wide doit surcharger max-width,
+# sinon « dialog { max-width:660px } » plafonne les dialogues larges sous 780px.
+if grep -Eq '\.ck-modal--wide[^{]*\{[^}]*max-width' "$CK_HTML"; then
+  pass "coquille modale : .ck-modal--wide surcharge max-width (dialogues larges non plafonnés à 660px)"
+else
+  fail "coquille modale : .ck-modal--wide sans max-width — plafonné à 660px (Codex #133 P2)"
+fi
+
 # AC2 : Policy migrée — plus de faux onglets (class="tabs"), préréglages en
 # contrôle segmenté, notes en callouts (plus de <p class="note"> dans dPolicy).
 DPOLICY_BLOCK="$(awk '/<dialog id="dPolicy"/,/^<\/dialog>$/' "$CK_HTML")"
