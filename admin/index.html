@@ -1164,6 +1164,25 @@ svg { display: block; }
   text-decoration: line-through;
   text-decoration-color: var(--faint);
 }
+/* Bascule par opération (fiche 0107) : chaque droit se coupe/active d'un clic.
+   Rouge = coupé, mais en CONTOUR (pas aplat plein) — jamais confondu avec le
+   cadenas rouge plein du compte verrouillé (.ck-keychip--shut, forme et zone
+   différentes : ici une pilule inline dans la liste des droits). */
+button.ck-cap--toggle {
+  font: inherit;
+  cursor: pointer;
+  transition: background .12s ease, border-color .12s ease, color .12s ease;
+}
+button.ck-cap--toggle:hover { filter: brightness(0.97); }
+button.ck-cap--toggle:disabled { opacity: .55; cursor: wait; }
+button.ck-cap--toggle.ck-cap--off {
+  color: var(--bad);
+  background: var(--surface-2);
+  border: 1px solid var(--bad-line);
+  opacity: 1;
+  text-decoration: none;
+}
+button.ck-cap--toggle.ck-cap--off:hover { background: var(--bad-bg); }
 
 /* ---------------------------------------------------------------------
    12. CARTES COMPTE — .ck-card (tactile)
@@ -1273,6 +1292,28 @@ svg { display: block; }
 }
 .ck-stat--warn .ck-stat__label { color: var(--warn); }
 .ck-stat--warn .ck-stat__val { color: var(--warn); }
+/* Vignettes colorées de la liste des comptes (fiche 0107) : connecté = bleu
+   (accent), ouvert/permissif = vert, fermé/restreint = rouge. Le SENS exact
+   (verrou compte vs compteur de sessions) suit la fiche 0106 ; 0107 ne fixe
+   que le code couleur. */
+.ck-stat--acc {
+  background: var(--acc-bg);
+  border-color: var(--acc-line);
+}
+.ck-stat--acc .ck-stat__label { color: var(--acc-strong); }
+.ck-stat--acc .ck-stat__val { color: var(--acc-strong); }
+.ck-stat--ok {
+  background: var(--ok-bg);
+  border-color: var(--ok-line);
+}
+.ck-stat--ok .ck-stat__label { color: var(--ok); }
+.ck-stat--ok .ck-stat__val { color: var(--ok); }
+.ck-stat--bad {
+  background: var(--bad-bg);
+  border-color: var(--bad-line);
+}
+.ck-stat--bad .ck-stat__label { color: var(--bad); }
+.ck-stat--bad .ck-stat__val { color: var(--bad); }
 
 /* ---------------------------------------------------------------------
    14. TABLE CONSOLE — .ck-table (grid)
@@ -1837,6 +1878,7 @@ body { margin:0; }
 .add-account-row { display:none; }
 /* la page Comptes Cockpit (rendue par renderList) */
 .ck-comptes-head { display:flex; align-items:center; justify-content:space-between; gap:var(--s4); margin:0 0 var(--s5); flex-wrap:wrap; }
+.ck-comptes-foot { margin-top:var(--s5); display:flex; justify-content:center; }
 .ck-comptes-head h2 { font-family:var(--disp); font-weight:700; font-size:var(--fs-h2); margin:0; letter-spacing:-.01em; }
 .ck-acct-panel { background:var(--surface); border:1px solid var(--line); border-radius:var(--r4); box-shadow:var(--e1); overflow:hidden; }
 .ck-acct-head, .ck-acct-row { display:grid; grid-template-columns:1fr auto 40px; align-items:center; gap:var(--s4); padding:var(--s3) var(--s4); }
@@ -1858,7 +1900,9 @@ button.ck-keychip { border:0; cursor:pointer; }
 .ck-detail-key { margin-left:auto; }
 .ck-sec-head { display:flex; align-items:center; justify-content:space-between; gap:var(--s3); margin:0 0 var(--s4); }
 .ck-sec-label { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--faint); font-weight:600; }
-.ck-svcrow { display:grid; grid-template-columns:96px 1fr; align-items:center; gap:var(--s3); padding:var(--s3) 0; border-top:1px solid var(--line); }
+.ck-svcrow { display:grid; grid-template-columns:96px 1fr auto; align-items:center; gap:var(--s3); padding:var(--s3) 0; border-top:1px solid var(--line); }
+.ck-iconbtn--sm { width:32px; height:32px; }
+.ck-iconbtn--sm svg { width:14px; height:14px; }
 .ck-svcrow:first-of-type { border-top:0; }
 .ck-svcname { font-weight:600; color:var(--acc); }
 .ck-caps { display:flex; flex-wrap:wrap; gap:6px; }
@@ -1866,8 +1910,7 @@ button.ck-keychip { border:0; cursor:pointer; }
 .ck-cap-note { opacity:.7; font-weight:400; }
 .ck-svcmore { margin-top:var(--s3); }
 .ck-svcmore summary { cursor:pointer; color:var(--muted); font-size:var(--fs-sm); padding:var(--s2) 0; }
-.ck-danger-zone { margin-top:var(--s5); align-items:center; justify-content:space-between; gap:var(--s3); }
-.ck-danger-zone span { flex:1; }
+.ck-danger-zone { margin-top:var(--s5); display:flex; align-items:center; justify-content:flex-end; gap:var(--s3); }
 /* Page Sessions (lot 3) */
 .ck-sub { color:var(--muted); font-size:var(--fs-sm); margin:0 0 var(--s4); }
 .ck-ph-spacer { flex:1 1 auto; }
@@ -2212,7 +2255,7 @@ main.ck-main { max-width:1400px; margin:0; }
     <p>Restent jusqu'à retrait manuel (policy).</p>
     <div id="permZones" class="zonelist"></div>
   </div>
-  <div class="zone-section">
+  <div class="zone-section" id="tmpZoneSection">
     <h3>Temporaires</h3>
     <p>Expirent automatiquement — le LLM devra redemander.</p>
     <div id="tmpZones" class="zonelist"></div>
@@ -2658,8 +2701,9 @@ function ckAvatarColor(p) {
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
   return CK_AV[h % CK_AV.length];
 }
-function ckStat(label, val) {
-  return '<div class="ck-stat"><div class="ck-stat__label">' + label + '</div><div class="ck-stat__val tnum">' + val + "</div></div>";
+function ckStat(label, val, variant) {
+  const cls = variant ? " ck-stat--" + variant : "";
+  return '<div class="ck-stat' + cls + '"><div class="ck-stat__label">' + label + '</div><div class="ck-stat__val tnum">' + val + "</div></div>";
 }
 const CK_LOCK_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>';
 const CK_LOCK_SHUT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
@@ -2677,19 +2721,162 @@ function ckKeychip(p) {
 }
 const CK_CAP_OK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
 const CK_CAP_NO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+const CK_FOLDER_ICO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>';
+const CK_GEAR_ICO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>';
+const CK_TRASH_ICO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>';
 function ckCap(on, label, note) {
   return '<span class="ck-cap ck-cap--' + (on ? "on" : "off") + '"><span class="ck-cap__ico">' +
     (on ? CK_CAP_OK : CK_CAP_NO) + "</span>" + label + (note || "") + "</span>";
 }
-function ckCapsHtml(key, rules, hasPolicy) {
+// Bascule cliquable (fiche 0107) : un bouton par opération, câblé à toggleServiceOp.
+function ckCapToggle(alias, serviceKey, opKey, on, label, note) {
+  return '<button type="button" class="ck-cap ck-cap--toggle ck-cap--' + (on ? "on" : "off") + '"' +
+    ' data-alias="' + attr(alias) + '" data-svc="' + serviceKey + '" data-op="' + opKey + '"' +
+    ' onclick="event.stopPropagation();toggleServiceOp(this)"' +
+    ' title="' + attr((on ? "Cliquer pour couper : " : "Cliquer pour autoriser : ") + label) + '">' +
+    '<span class="ck-cap__ico">' + (on ? CK_CAP_OK : CK_CAP_NO) + "</span>" + label + (note || "") + "</button>";
+}
+// Bloc explicite « tout autorisé » pour un service actuellement libre — sert à
+// matérialiser SANS RIEN CHANGER son comportement effectif (jamais de zonage
+// forcé pour Drive ici : c'est l'état affiché AVANT toute bascule).
+function svcFreeBlock(key) {
+  if (key === "drive") return { mode: "open" };
   const def = SVCDEF.find((s) => s.key === key);
-  if (rules == null) return hasPolicy ? def.keys.map(([, lbl]) => ckCap(false, lbl)).join("") : ckCap(true, "tous droits · libre");
-  const r = key === "drive" ? normDrive(rules) : rules;
-  if (!r) return ckCap(true, "tous droits · libre");
+  const o = {}; def.keys.forEach(([k]) => { o[k] = true; });
+  return o;
+}
+// Représentation d'AFFICHAGE (jamais écrite telle quelle) d'un service libre :
+// tout vrai, per-op — contrairement à svcFreeBlock("drive") = {mode:"open"}
+// (forme de stockage sans booléens par opération).
+function svcFreeDisplay(key) {
+  const def = SVCDEF.find((s) => s.key === key);
+  const o = {}; def.keys.forEach(([k]) => { o[k] = true; });
+  return o;
+}
+// Bloc explicite « tout refusé » — reflète l'état déjà AFFICHÉ (ckCapsHtml) pour
+// un service non déclaré alors qu'une policy.json existe (default-deny par
+// service, cf. scripts/policy-check.py). Matérialiser depuis cet état ne fait
+// que ce que l'utilisateur vient de cliquer, jamais plus.
+function svcDeniedBlock(key) {
+  if (key === "drive") return { read: false, create: false, update: false, delete: false, share: false, zonesOnly: true, writeFolders: [], writeFolderNames: {} };
+  const def = SVCDEF.find((s) => s.key === key);
+  const o = {}; def.keys.forEach(([k]) => { o[k] = false; });
+  return o;
+}
+function isDeclared(p, key) { return !!(p.policy && Object.prototype.hasOwnProperty.call(p.policy, key)); }
+// Bloc effectif ACTUEL d'un service, ou null si libre (wildcard) — utilisé pour
+// matérialiser policy.json au clic, jamais pour le rendu de la pilule unique
+// « libre » (qui reste géré séparément dans ckCapsHtml).
+function currentEffectiveBlock(p, key) {
+  const raw = p.policy && p.policy[key];
+  if (key === "drive") return normDrive(raw);
+  return raw != null ? raw : null;
+}
+// Construit le policy.json COMPLET à écrire pour une seule bascule (alias,
+// serviceKey, opKey) — piège relevé par la revue (même famille que « mag
+// policy allow ») : matérialiser un service pour la première fois ne doit
+// JAMAIS activer/couper en douce un AUTRE service. Chaque service non touché
+// est donc recopié tel quel (préservant son état effectif exact) plutôt que
+// laissé absent d'un policy.json qui, une fois créé, rend tout service non
+// déclaré default-deny.
+function buildTogglePolicy(p, serviceKey, opKey) {
+  const hasPolicy = !!p.policy;
+  const policy = {};
+  for (const key of ["drive", "gmail", "calendar", "keep"]) {
+    if (key === serviceKey) {
+      if (key === "drive") {
+        const cur = currentEffectiveBlock(p, "drive");
+        // cur=null a DEUX sens qu'il ne faut pas confondre (NO-GO revue #1) :
+        //  • Drive libre (compte sans policy, ou Drive déclaré mode:open) → on
+        //    convertit en schéma explicite ZONÉ tout-permis (AC2 : activer
+        //    l'écriture pose zonesOnly, jamais wildcard), writeFolders vide ;
+        //  • Drive ABSENT d'une policy qui EXISTE → default-deny par service
+        //    (scripts/policy-check.py) → base tout-REFUSÉ. Sinon couper une op
+        //    en activerait d'autres en douce (ex. share).
+        const driveDenied = hasPolicy && !isDeclared(p, "drive");
+        const base = cur ? { ...cur }
+          : (driveDenied ? svcDeniedBlock("drive")
+                         : { read: true, create: true, update: true, delete: true, share: true, zonesOnly: true, writeFolders: [], writeFolderNames: {} });
+        base[opKey] = !base[opKey];
+        // AC2 (revue Codex P1) : activer une écriture Drive impose le mode zoné,
+        // jamais wildcard — même si l'état de départ était mode:open/readonly
+        // (normDrive rend zonesOnly:false). Sinon un clic ouvrirait l'écriture
+        // HORS de toute zone (compte-large).
+        if (base[opKey] && (opKey === "create" || opKey === "update" || opKey === "delete")) base.zonesOnly = true;
+        policy.drive = base;
+      } else {
+        const cur = currentEffectiveBlock(p, key);
+        // Même piège que Drive (NO-GO revue #1) : un service ABSENT d'une policy
+        // qui existe est refusé par défaut (default-deny), pas libre. Partir de
+        // svcDeniedBlock, sinon basculer une op en activerait d'autres en douce.
+        // Sans policy du tout = compte libre → svcFreeBlock (tout permis).
+        const base = cur ? { ...cur } : (hasPolicy ? svcDeniedBlock(key) : svcFreeBlock(key));
+        base[opKey] = !base[opKey];
+        policy[key] = base;
+      }
+    } else {
+      const cur = currentEffectiveBlock(p, key);
+      if (cur != null) policy[key] = { ...cur };
+      else if (isDeclared(p, key)) policy[key] = svcFreeBlock(key);
+      else policy[key] = hasPolicy ? svcDeniedBlock(key) : svcFreeBlock(key);
+    }
+  }
+  // Docs/Sheets/Tâches : scopes rares, seulement s'ils étaient déjà déclarés
+  // (repliés par défaut, revue P4) — la bascule ne les fait jamais apparaître.
+  for (const key of ["docs", "sheets", "tasks"]) {
+    if (key === serviceKey) {
+      const base = { ...currentEffectiveBlock(p, key) };
+      base[opKey] = !base[opKey];
+      policy[key] = base;
+    } else if (p.policy && p.policy[key]) {
+      policy[key] = { ...p.policy[key] };
+    }
+  }
+  return policy;
+}
+async function toggleServiceOp(btn) {
+  if (btn.disabled) return;
+  const alias = btn.dataset.alias, serviceKey = btn.dataset.svc, opKey = btn.dataset.op;
+  const p = byAlias(alias);
+  if (!p) return;
+  // Sérialiser les bascules du compte (revue Codex P2) : deux clics avant la fin
+  // du 1er POST construiraient chacun depuis le MÊME snapshot PROFILES périmé,
+  // et le 2e écraserait la policy complète du 1er (toggle perdu). On gèle TOUTES
+  // les bascules du compte jusqu'au refresh (qui recrée les boutons à jour).
+  const sel = '.ck-cap--toggle[data-alias="' + ((window.CSS && CSS.escape) ? CSS.escape(alias) : alias) + '"]';
+  const acctBtns = document.querySelectorAll(sel);
+  acctBtns.forEach((b) => { b.disabled = true; });
+  try {
+    const policy = buildTogglePolicy(p, serviceKey, opKey);
+    await api("/api/profiles/" + alias + "/policy", { method: "POST", body: JSON.stringify({ policy }) });
+    await refresh();
+    if (VIEW.mode === "detail" && VIEW.alias === alias) renderDetail(alias);
+  } catch (e) {
+    toast("Erreur : " + e.message);
+    acctBtns.forEach((b) => { b.disabled = false; });
+  }
+}
+function ckCapsHtml(key, rules, hasPolicy, alias) {
+  const def = SVCDEF.find((s) => s.key === key);
+  if (!alias) {
+    // Lecture seule (Keep, expérimental — hors grain de l'AC1) : pilule statique.
+    if (rules == null) return hasPolicy ? def.keys.map(([, lbl]) => ckCap(false, lbl)).join("") : ckCap(true, "tous droits · libre");
+    const r = key === "drive" ? normDrive(rules) : rules;
+    if (!r) return ckCap(true, "tous droits · libre");
+    return def.keys.map(([k, lbl]) => ckCap(!!r[k], lbl)).join("");
+  }
+  // Bascules cliquables (fiche 0107) : toujours au grain par opération, jamais
+  // de pilule unique repliée « libre » — chaque droit reste éditable d'un clic.
+  // L'affichage doit dire la VÉRITÉ de l'état effectif (NO-GO revue #1) : un
+  // service absent d'une policy qui existe est default-deny → tout coupé (jamais
+  // « tout vert »), cohérent avec la pilule lecture-seule et avec ce qu'écrira
+  // buildTogglePolicy. Sans policy (ou Drive mode:open) = libre → tout permis.
+  let r = key === "drive" ? normDrive(rules) : rules;
+  if (!r) r = (hasPolicy && !rules) ? svcDeniedBlock(key) : svcFreeDisplay(key);
   return def.keys.map(([k, lbl]) => {
     const on = !!r[k];
     const note = (key === "drive" && (k === "create" || k === "update") && on && r.zonesOnly) ? ' <span class="ck-cap-note">(zones)</span>' : "";
-    return ckCap(on, lbl, note);
+    return ckCapToggle(alias, key, k, on, lbl, note);
   }).join("");
 }
 function renderList() {
@@ -2699,14 +2886,17 @@ function renderList() {
   const nConn = PROFILES.filter((p) => p.connected).length;
   const nOpen = PROFILES.filter((p) => p.connected && isOpen(p)).length;
   const nLock = PROFILES.filter((p) => p.connected && !isOpen(p)).length;
-  const head = '<div class="ck-comptes-head"><h2>Comptes</h2>' +
-    '<button type="button" class="ck-btn ck-btn--primary" onclick="openAdd()">＋ Connecter</button></div>' +
+  // Vignettes colorées (fiche 0107) : connecté = bleu, déverrouillé (permissif) =
+  // vert, verrouillé (restreint) = rouge. Ce que comptent ces 3 tuiles suit la
+  // fiche 0106 ; ici on ne fixe que le code couleur.
+  const head = '<div class="ck-comptes-head"><h2>Comptes</h2></div>' +
     '<div class="ck-comptes-tiles">' +
-      ckStat("Comptes connectés", nConn) + ckStat("Déverrouillés", nOpen) + ckStat("Verrouillés", nLock) +
+      ckStat("Comptes connectés", nConn, "acc") + ckStat("Déverrouillés", nOpen, "ok") + ckStat("Verrouillés", nLock, "bad") +
     "</div>";
+  const connectBtn = '<div class="ck-comptes-foot"><button type="button" class="ck-btn ck-btn--primary" onclick="openAdd()">＋ Connecter un compte</button></div>';
   if (!PROFILES.length) {
     el.innerHTML = head + '<div class="ck-empty"><div class="ck-empty__title">Aucun compte connecté</div>' +
-      '<div class="ck-empty__sub">Connecte un compte Google pour commencer.</div></div>';
+      '<div class="ck-empty__sub">Connecte un compte Google pour commencer.</div></div>' + connectBtn;
     return;
   }
   const rows = PROFILES.map((p) => {
@@ -2719,7 +2909,7 @@ function renderList() {
     const rowClick = p.connected ? ' onclick="openDetail(\'' + p.alias + '\')"' : "";
     return '<div class="ck-acct-row"' + rowClick + ">" + id + "<div>" + state + '</div><div class="ck-row-actions">' + action + "</div></div>";
   }).join("");
-  el.innerHTML = head + '<div class="ck-acct-panel"><div class="ck-acct-head"><span>Compte</span><span>État</span><span></span></div>' + rows + "</div>";
+  el.innerHTML = head + '<div class="ck-acct-panel"><div class="ck-acct-head"><span>Compte</span><span>État</span><span></span></div>' + rows + "</div>" + connectBtn;
 }
 function openDetail(alias) { const p = byAlias(alias); if (p && p.connected) renderDetail(alias); }
 function renderDetail(alias) {
@@ -2727,10 +2917,18 @@ function renderDetail(alias) {
   if (!p || !p.connected) return renderList();
   VIEW = { mode: "detail", alias };
   syncChrome();
+  // Bascules par opération (AC1, fiche 0107) : au grain réel de default_policy.py,
+  // sans passer par la modale Policy. Keep reste en lecture seule (expérimental,
+  // hors liste des services « courants » de la fiche).
   const svcRow = (s) => {
     const rules = p.policy && p.policy[s.key];
+    const readOnly = s.key === "keep";
+    const caps = ckCapsHtml(s.key, rules, !!p.policy, readOnly ? undefined : alias);
+    const zoneBtn = s.key === "drive"
+      ? '<button type="button" class="ck-iconbtn ck-iconbtn--sm" onclick="event.stopPropagation();openAcctZones(\'' + alias + '\')" title="Dossiers autorisés en écriture (zones permanentes)" aria-label="Gérer les dossiers Drive autorisés">' + CK_FOLDER_ICO + "</button>"
+      : "";
     return '<div class="ck-svcrow"><span class="ck-svcname">' + s.name + '</span><span class="ck-caps">' +
-      ckCapsHtml(s.key, rules, !!p.policy) + "</span></div>";
+      caps + "</span>" + zoneBtn + "</div>";
   };
   const byKey = (k) => SVCDEF.find((s) => s.key === k);
   // Primaire = ce que l'assistant utilise via MCP aujourd'hui (Gmail + Drive).
@@ -2752,11 +2950,10 @@ function renderDetail(alias) {
       '<span class="ck-detail-mail">' + esc(p.email || alias) + "</span>" +
       '<span class="ck-detail-key">' + ckKeychip(p) + "</span></div>" +
     '<div class="ck-panel"><div class="ck-sec-head"><span class="ck-sec-label">Droits par application</span>' +
-      '<button type="button" class="ck-btn ck-btn--sm" onclick="openPolicy(\'' + alias + '\')">Configurer les droits</button></div>' +
+      '<button type="button" class="ck-iconbtn ck-iconbtn--sm" onclick="openPolicy(\'' + alias + '\')" title="Édition avancée (JSON brut — scopes rares)" aria-label="Édition avancée des droits">' + CK_GEAR_ICO + "</button></div>" +
       primary + othersHtml + "</div>" +
-    '<div class="ck-callout ck-callout--bad ck-danger-zone">' +
-      "<span>Retirer ce compte de l'outil — réversible (reconnexion complète).</span>" +
-      '<button type="button" class="ck-btn ck-btn--quiet-danger ck-btn--sm" onclick="openDisconnect(\'' + alias + '\')">Déconnecter…</button></div>';
+    '<div class="ck-danger-zone">' +
+      '<button type="button" class="ck-iconbtn ck-iconbtn--danger" onclick="openDisconnect(\'' + alias + '\')" title="Retirer ce compte de l\'outil — réversible (reconnexion complète)." aria-label="Retirer ce compte">' + CK_TRASH_ICO + "</button></div>";
 }
 function lockClick(alias) {
   const p = byAlias(alias);
@@ -3165,6 +3362,11 @@ function renderZonesLists() {
     '<span class="zmeta">' + Math.floor(g.minutesLeft / 60) + "h" + String(g.minutesLeft % 60).padStart(2, "0") + '</span>' +
     '<button type="button" class="zdel" title="Révoquer" data-zone-id="' + attr(g.id) + '" data-zone-kind="temp">✕</button></div>').join("")
     || '<div class="flist-empty">Aucune autorisation temporaire</div>';
+  // Bouton « dossiers » de la page compte (fiche 0107, AC3) : zones PERMANENTES
+  // uniquement — la section « Temporaires » (grants compte-large legacy) reste
+  // réservée au repli avancé (modale Policy), jamais à ce point d'entrée.
+  const tmpSection = $("tmpZoneSection");
+  if (tmpSection) tmpSection.hidden = AF_PERM_ONLY;
 }
 function zonesClick(e) {
   const btn = e.target.closest("button.zdel");
@@ -3176,7 +3378,12 @@ function zonesClick(e) {
 let zonesResumePolicy = false;
 let suppressZonesCloseResume = false;
 let afResumeZonesAfterAdd = false;
+// Zones PERMANENTES uniquement (fiche 0107) : vrai quand dZones est ouvert
+// depuis le bouton « dossiers » de la page compte (openAcctZones) — masque la
+// section « Temporaires » et saute le choix de durée (toujours permanent).
+let AF_PERM_ONLY = false;
 function openZones() {
+  AF_PERM_ONLY = false;
   $("zonesAlias").textContent = polTarget;
   renderZonesLists();
   /* Évite les dialogs imbriqués (wheel / overflow cassés sur le top-layer). */
@@ -3184,11 +3391,25 @@ function openZones() {
   if (zonesResumePolicy) dPolicy.close();
   dZones.showModal();
 }
+// Point d'entrée direct depuis la page compte (bouton « dossiers » de la ligne
+// Drive) : édite uniquement writeFolders (zones permanentes), jamais un grant
+// temporaire compte-large (piège relevé par la revue — la page compte n'a pas
+// de session à qui accorder un accès borné dans le temps).
+function openAcctZones(alias) {
+  polTarget = alias;
+  AF_PERM_ONLY = true;
+  zonesResumePolicy = false; // pas ouvert depuis la modale Policy avancée
+  $("zonesAlias").textContent = alias;
+  renderZonesLists();
+  dZones.showModal();
+}
 dZones.addEventListener("close", () => {
   if (suppressZonesCloseResume) return;
   if (zonesResumePolicy) {
     zonesResumePolicy = false;
     dPolicy.showModal();
+  } else if (VIEW.mode === "detail") {
+    renderDetail(VIEW.alias); // reflète l'ajout/retrait de zone sur la ligne Drive
   }
 });
 dAddFolder.addEventListener("close", () => {
@@ -3323,15 +3544,31 @@ function afSetAuthorizeLoading(on) {
   if (cancel) cancel.disabled = !!on;
 }
 function afOpenAuthorize() {
+  if (!afSel) return;
+  if (AF_PERM_ONLY) {
+    // Page compte (bouton « dossiers ») : jamais de choix de durée, jamais de
+    // grant temporaire — ajoute directement une zone permanente (AC3).
+    afAddPermZone(afSel.id);
+    return;
+  }
   /* Garde le picker ouvert sous le dialog durée : le fermer reprenait dZones
      (close handler) et faisait disparaître l'étape Valider — zones restaient vides. */
-  if (!afSel) return;
   afSetAuthorizeLoading(false);
   $("afAuthTarget").innerHTML = "Dossier : <b>" + esc(afSel.name) + "</b>" +
     (afSel.path ? ' <span class="note">(' + esc(afSel.path) + ")</span>" : "");
   const tempRadio = document.querySelector('input[name="afDur"][value="temp"]');
   if (tempRadio) tempRadio.checked = true;
   if (!dAuthorizeFolder.open) dAuthorizeFolder.showModal();
+}
+async function afAddPermZone(targetId) {
+  try {
+    const r = await api("/api/profiles/" + polTarget + "/drive-folder", { method: "POST", body: JSON.stringify({ target: targetId }) });
+    if (dAddFolder.open) dAddFolder.close(); /* close → reprend dZones + refresh listes */
+    toast(r.out || "Dossier autorisé");
+    await refresh();
+    renderZonesLists();
+    updateZonesSummary();
+  } catch (e) { toast("Erreur : " + e.message); }
 }
 function afCancelAuthorize() {
   if ($("afValidateBtn") && $("afValidateBtn").disabled) return;

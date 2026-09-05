@@ -364,6 +364,113 @@ cli 3 "policy allow sans dossier rejeté"                     policy testprof al
 cli 3 "alias '..' (path-traversal) rejeté"                   ".." auth status
 cli 3 "alias avec espace rejeté"                             "a b" auth status
 
+section "Drive — mutation zone-seule (policy zone-add / zone-remove, fiche 0107)"
+# Piège relevé par la revue : « mag policy allow » crée le bloc drive avec
+# create/update forcés à true (setdefault) — sur un compte dont la policy omet
+# Drive (défaut sûr), ajouter une zone activerait deux opérations en douce.
+# zone-add / zone-remove doivent être des mutations PURES de writeFolders qui
+# préservent exactement les flags d'opération existants (absent reste absent,
+# false reste false).
+cli 3 "policy zone-add sans dossier rejeté"                  policy testprof zone-add
+cli 3 "policy zone-remove sans id rejeté"                    policy testprof zone-remove
+
+rm -f "$PROFILE/policy.json"
+"$GWSA" policy testprof zone-add "$ZONE" >/dev/null 2>&1
+if python3 - "$PROFILE/policy.json" "$ZONE" <<'PYEOF'
+import json, sys
+path, zone = sys.argv[1], sys.argv[2]
+d = json.load(open(path))
+drv = d.get("drive", {})
+assert zone in drv.get("writeFolders", []), "zone absente de writeFolders"
+assert drv.get("zonesOnly") is True, "zonesOnly non posé"
+assert drv.get("create") is not True, "create forcé à true en douce"
+assert drv.get("update") is not True, "update forcé à true en douce"
+PYEOF
+then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "zone-add sur policy SANS bloc drive — n'active create/update en douce"
+else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "zone-add sur policy sans drive — create/update activés à tort (piège allow)"
+fi
+
+printf '%s\n' '{"drive": {"read": true, "create": false, "update": false, "delete": false, "share": false}}' \
+  > "$PROFILE/policy.json"
+"$GWSA" policy testprof zone-add "$ZONE" >/dev/null 2>&1
+if python3 - "$PROFILE/policy.json" "$ZONE" <<'PYEOF'
+import json, sys
+path, zone = sys.argv[1], sys.argv[2]
+d = json.load(open(path))
+drv = d.get("drive", {})
+assert zone in drv.get("writeFolders", []), "zone absente de writeFolders"
+assert drv.get("zonesOnly") is True, "zonesOnly non posé"
+assert drv.get("create") is False, "create préexistant (false) écrasé en douce"
+assert drv.get("update") is False, "update préexistant (false) écrasé en douce"
+assert drv.get("read") is True, "read préexistant perdu"
+PYEOF
+then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "zone-add sur policy create:false/update:false — flags préservés tels quels"
+else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "zone-add sur policy create:false/update:false — flags altérés"
+fi
+
+"$GWSA" policy testprof zone-remove "$ZONE" >/dev/null 2>&1
+if python3 - "$PROFILE/policy.json" "$ZONE" <<'PYEOF'
+import json, sys
+path, zone = sys.argv[1], sys.argv[2]
+d = json.load(open(path))
+drv = d.get("drive", {})
+assert zone not in drv.get("writeFolders", []), "zone toujours présente après zone-remove"
+assert zone not in drv.get("writeFolderNames", {}), "writeFolderNames pas nettoyé"
+assert drv.get("create") is False, "create altéré par zone-remove"
+assert drv.get("update") is False, "update altéré par zone-remove"
+PYEOF
+then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "zone-remove — retire la zone et préserve les flags d'opération"
+else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "zone-remove — flags altérés ou zone non retirée"
+fi
+rm -f "$PROFILE/policy.json"
+
+section "Drive — zone-add traduit l'ancien schéma «mode» (fiche 0107, revue Codex P2)"
+# mode:restricted encode create/update implicites ; retirer «mode» sans les
+# traduire les perdrait → zone ajoutée mais inutilisable. On les fige d'abord.
+printf '%s\n' '{"drive": {"mode": "restricted"}}' > "$PROFILE/policy.json"
+"$GWSA" policy testprof zone-add "$ZONE" >/dev/null 2>&1
+if python3 - "$PROFILE/policy.json" "$ZONE" <<'PYEOF'
+import json, sys
+path, zone = sys.argv[1], sys.argv[2]
+d = json.load(open(path)); drv = d.get("drive", {})
+assert "mode" not in drv, "mode legacy pas retiré"
+assert zone in drv.get("writeFolders", []), "zone absente"
+assert drv.get("zonesOnly") is True, "zonesOnly non posé"
+assert drv.get("create") is True, "create implicite (restricted) perdu"
+assert drv.get("update") is True, "update implicite (restricted) perdu"
+PYEOF
+then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "zone-add sur mode:restricted — traduit le mode, préserve create/update"
+else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "zone-add sur mode:restricted — create/update perdus (mode non traduit)"
+fi
+printf '%s\n' '{"drive": {"mode": "readonly"}}' > "$PROFILE/policy.json"
+"$GWSA" policy testprof zone-add "$ZONE" >/dev/null 2>&1
+if python3 - "$PROFILE/policy.json" "$ZONE" <<'PYEOF'
+import json, sys
+path, zone = sys.argv[1], sys.argv[2]
+d = json.load(open(path)); drv = d.get("drive", {})
+assert zone in drv.get("writeFolders", []), "zone absente"
+assert drv.get("create") is False, "readonly : create ne doit pas être activé"
+assert drv.get("update") is False, "readonly : update ne doit pas être activé"
+PYEOF
+then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "zone-add sur mode:readonly — traduit le mode sans activer d'écriture"
+else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "zone-add sur mode:readonly — écriture activée à tort"
+fi
+rm -f "$PROFILE/policy.json"
+
+section "Admin — matérialisation policy par bascule (buildTogglePolicy, fiche 0107, revue #1)"
+# Logique JS PURE de admin/index.html, exécutée hors DOM via node:vm (pas de
+# framework JS dans le projet). Verrouille l'invariant AC1 : basculer UNE
+# opération n'en active/perd JAMAIS une autre en douce. C'est là que vivait le
+# NO-GO de la 1re revue (service absent d'une policy existante matérialisé
+# « libre » au lieu de default-deny), non couvert jusqu'ici.
+TOGGLE_OUT="$(node "$(pwd)/scripts/test-policy-toggle.mjs" 2>&1)"; TOGGLE_RC=$?
+printf '%s\n' "$TOGGLE_OUT" | grep -E '✓|✗' || true
+np=$(printf '%s' "$TOGGLE_OUT" | grep -c '✓' || true); nf=$(printf '%s' "$TOGGLE_OUT" | grep -c '✗' || true)
+PASS=$((PASS + np)); FAIL=$((FAIL + nf))
+if [[ "$TOGGLE_RC" -ne 0 && "$nf" -eq 0 ]]; then
+  FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "test-policy-toggle.mjs a échoué (rc=$TOGGLE_RC) : $(printf '%s' "$TOGGLE_OUT" | head -c 200)"
+fi
+
 section "Wrapper mag — verrou « accès sur demande »"
 "$GWSA" lock testprof >/dev/null 2>&1
 cli 3 "profil verrouillé → toute commande refusée"           testprof gmail users messages list
@@ -4549,6 +4656,37 @@ if [[ "$AF_CODE" == "200" ]] \
 else
   fail "API profiles : zone absente du payload refresh"
 fi
+# Piège relevé par la revue (fiche 0107) : sur un compte SANS bloc drive (défaut
+# sûr), la route /drive-folder ne doit PAS activer create/update en douce
+# (c'était le cas quand elle appelait « mag policy allow », qui setdefault ces
+# deux flags à true). Elle doit passer par la mutation zone-seule zone-add.
+AF_ALIAS2=zonesapinodrivepiege
+AF_DIR2="$GWSA_ROOT/$AF_ALIAS2"
+mkdir -p "$AF_DIR2"
+rm -f "$AF_DIR2/policy.json"   # aucune policy drive déclarée — défaut sûr
+AF_CODE="$(af_api POST "/api/profiles/${AF_ALIAS2}/drive-folder" "{\"target\":\"${AF_FID}\"}")"
+if [[ "$AF_CODE" == "200" ]] \
+  && grep -q "$AF_FID" "$AF_DIR2/policy.json" 2>/dev/null \
+  && python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1]))
+drv = d.get("drive", {})
+assert drv.get("zonesOnly") is True
+assert drv.get("create") is not True
+assert drv.get("update") is not True
+' "$AF_DIR2/policy.json" 2>/dev/null; then
+  pass "API drive-folder : zone ajoutée SANS activer create/update en douce (piège allow corrigé)"
+else
+  fail "API drive-folder : create/update activés à tort sur un compte sans bloc drive"
+fi
+AF_CODE="$(af_api POST "/api/profiles/${AF_ALIAS2}/drive-folder-remove" "{\"id\":\"${AF_FID}\"}")"
+if [[ "$AF_CODE" == "200" ]] \
+  && ! grep -q "$AF_FID" "$AF_DIR2/policy.json" 2>/dev/null; then
+  pass "API drive-folder-remove : retire la zone (mutation zone-seule)"
+else
+  fail "API drive-folder-remove : HTTP $AF_CODE — zone toujours présente"
+fi
+
 if [[ -n "$AF_PID" ]]; then kill "$AF_PID" 2>/dev/null || true; wait "$AF_PID" 2>/dev/null || true; fi
 
 # --- mag dev test — déploiement + admin + marqueur PR ----------------------

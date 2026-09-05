@@ -14,7 +14,7 @@
 #   mag list                                         Lister les profils et leur état
 #   mag lock <alias>                                 Verrouiller un profil (accès sur demande)
 #   mag unlock <alias> [minutes]                     Déverrouiller temporairement (défaut 60 min)
-#   mag policy <alias> [show|mode <m>|allow <dossier>|revoke <id>|clear]
+#   mag policy <alias> [show|mode <m>|allow <dossier>|zone-add <dossier>|zone-remove <id>|revoke <id>|clear]
 #                                                     Zones d'écriture Drive PERMANENTES
 #   mag grant <alias> <dossier> [heures]             Autorisation Drive TEMPORAIRE (défaut 8 h)
 #   mag grant <alias> revoke <folderId>              Révoquer une autorisation temporaire
@@ -454,7 +454,7 @@ session_unlock(sys.argv[1], sys.argv[2], int(sys.argv[3]))
   echo "🔓 Profil « $alias » déverrouillé pour $mins min (reverrouillage automatique ensuite)."
 }
 
-cmd_policy() { # mag policy <alias> [show|mode <m>|allow <idOuNom>|revoke <id>|clear]
+cmd_policy() { # mag policy <alias> [show|mode <m>|allow <idOuNom>|zone-add <idOuNom>|zone-remove <id>|revoke <id>|clear]
   local alias; alias="$(resolve_alias "$1")" || exit; shift
   check_alias "$alias"
   local dir; dir="$(profile_dir "$alias")"
@@ -499,6 +499,60 @@ drv.setdefault("writeFolderNames", {})[fid] = fname
 json.dump(d, open(path, "w"), indent=2)
 PYEOF
       echo "✓ « $alias » : écriture autorisée en permanence sous « $fname » ($fid) et ses sous-dossiers" ;;
+    zone-add)
+      # Mutation writeFolders PURE (fiche 0107) : contrairement à « allow », ne
+      # force JAMAIS create/update à true — les flags d'opération existants
+      # (absents ou false) restent exactement dans leur état courant. Sert la
+      # route admin /drive-folder pour ajouter une zone permanente sans activer
+      # d'opération en douce sur un compte en défaut sûr (Drive absent de la policy).
+      local target="${2:-}"; [[ -n "$target" ]] || die "usage : $SELF policy $alias zone-add <nomDeDossier|folderId>"
+      local resolved fid fname
+      resolved="$(resolve_folder "$dir" "$target")"
+      fid="${resolved%%$'\t'*}"; fname="${resolved#*$'\t'}"
+      [[ -n "$fid" ]] || die "dossier « $target » introuvable ou ambigu — donne son ID (fin de l'URL du dossier dans Drive)"
+      "$SYS_PYTHON" - "$P" "$fid" "$fname" <<'PYEOF'
+import json, os, sys
+path, fid, fname = sys.argv[1], sys.argv[2], sys.argv[3]
+d = json.load(open(path)) if os.path.exists(path) else {}
+drv = d.setdefault("drive", {})
+# Ancien schéma «mode» : le traduire en booléens AVANT de le retirer (revue
+# Codex P2). Sinon mode:"restricted" (create/update implicites) perdrait ses
+# écritures et la zone ajoutée serait inutilisable. Aligné sur normalize_drive
+# (scripts/policy-check.py). setdefault : ne clobbe aucun flag déjà explicite.
+_mode = drv.pop("mode", None)
+if _mode is not None:
+    if _mode == "readonly":
+        _expand = {"read": True, "create": False, "update": False, "delete": False, "share": False}
+    elif _mode == "open":
+        _expand = {"read": True, "create": True, "update": True, "delete": True, "share": True}
+    else:  # restricted (et tout mode inconnu → prudence : droits restreints d'écriture)
+        _expand = {"read": True, "create": True, "update": True, "delete": False, "share": False}
+    for _k, _v in _expand.items():
+        drv.setdefault(_k, _v)
+drv["zonesOnly"] = True   # AC2 : jamais wildcard — mais pas de setdefault sur create/update
+wf = drv.setdefault("writeFolders", [])
+if fid not in wf:
+    wf.append(fid)
+drv.setdefault("writeFolderNames", {})[fid] = fname
+json.dump(d, open(path, "w"), indent=2)
+PYEOF
+      echo "✓ « $alias » : zone permanente ajoutée — « $fname » ($fid) (droits d'opération Drive inchangés)" ;;
+    zone-remove)
+      # Symétrique de zone-add : retire la zone SANS toucher aux flags d'opération.
+      local rid="${2:-}"; [[ -n "$rid" ]] || die "usage : $SELF policy $alias zone-remove <folderId>"
+      [[ -f "$P" ]] || die "aucune policy pour « $alias » — aucune zone à retirer"
+      "$SYS_PYTHON" - "$P" "$rid" <<'PYEOF'
+import json, sys
+path, rid = sys.argv[1], sys.argv[2]
+d = json.load(open(path))
+drv = d.get("drive", {})
+wf = drv.get("writeFolders", [])
+if rid in wf:
+    wf.remove(rid)
+drv.get("writeFolderNames", {}).pop(rid, None)
+json.dump(d, open(path, "w"), indent=2)
+PYEOF
+      echo "✓ zone $rid retirée des zones permanentes de « $alias » (droits d'opération Drive inchangés)" ;;
     revoke)
       local rid="${2:-}"; [[ -n "$rid" ]] || die "usage : $SELF policy $alias revoke <folderId>"
       [[ -f "$P" ]] || die "aucune policy pour « $alias »"
@@ -528,7 +582,7 @@ else:
 PYEOF
       fi
       echo "✓ policy Drive supprimée — Drive de « $alias » repasse en mode open (autres services inchangés)." ;;
-    *) die "action inconnue « $action » (show|mode|allow|revoke|clear)" ;;
+    *) die "action inconnue « $action » (show|mode|allow|zone-add|zone-remove|revoke|clear)" ;;
   esac
 }
 
@@ -1776,7 +1830,7 @@ main() {
     list)   shift; [[ $# -eq 0 ]] || die "« $SELF list » ne prend aucun argument (reçu : $*)"; cmd_list ;;
     lock)   shift; [[ $# -eq 1 ]] || die "usage : $SELF lock <alias>"; cmd_lock "$@" ;;
     unlock) shift; [[ $# -ge 1 && $# -le 2 ]] || die "usage : $SELF unlock <alias> [minutes|off]"; cmd_unlock "$@" ;;
-    policy) shift; [[ $# -ge 1 ]] || die "usage : $SELF policy <alias> [show|mode|allow|revoke|clear]"; cmd_policy "$@" ;;
+    policy) shift; [[ $# -ge 1 ]] || die "usage : $SELF policy <alias> [show|mode|allow|zone-add|zone-remove|revoke|clear]"; cmd_policy "$@" ;;
     grant)  shift; [[ $# -ge 1 ]] || die "usage : $SELF grant <alias> <dossier> [heures]"; cmd_grant "$@" ;;
     grants) shift; [[ $# -ge 1 && $# -le 2 ]] || die "usage : $SELF grants <alias> [clear]"; cmd_grants "$@" ;;
     session) shift; cmd_session "$@" ;;
