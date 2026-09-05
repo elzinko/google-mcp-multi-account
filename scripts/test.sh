@@ -2278,6 +2278,25 @@ out_np="$(GWSA_DEPLOY_ROOT="$NOPREV" GWSA_CLI_LINK="$FAKEBIN/mag-noprev" "$GW" r
   && pass "mag help : « revert » listé dans l'usage" \
   || fail "mag help : « revert » absent de l'usage"
 
+# cas « previous PRÉSENT mais cible PURGÉE » (fiche « Comment vérifier » + 0028) :
+# distinct du cas « aucun previous » — c'est une autre garde (-d sur le dossier cible).
+PURGED="$TMP/purged-previous-deploy"
+mkdir -p "$PURGED/vkeep/bin" "$PURGED/vgone/bin"
+printf '#!/bin/sh\necho vkeep\n' > "$PURGED/vkeep/bin/mag"; chmod +x "$PURGED/vkeep/bin/mag"
+ln -sfn "$PURGED/vkeep" "$PURGED/current"
+ln -sfn "$PURGED/vgone" "$PURGED/previous"
+rm -rf "$PURGED/vgone"   # previous pendouille : sa cible a été purgée (0028)
+out_pg="$(GWSA_DEPLOY_ROOT="$PURGED" GWSA_CLI_LINK="$FAKEBIN/mag-purged" "$GW" revert 2>&1)"; rc=$?
+[[ "$rc" -ne 0 && "$(basename "$(readlink "$PURGED/current")")" == "vkeep" && "$out_pg" != *"Traceback"* ]] \
+  && pass "mag revert : previous pointe une version purgée → refus, current inchangé" \
+  || fail "mag revert : previous purgé mal géré (rc=$rc, current=$(basename "$(readlink "$PURGED/current")"), obtenu « $out_pg »)"
+
+# revert refuse tout argument (c'est update qui prend --to, pas revert).
+out_ra="$(GWSA_DEPLOY_ROOT="$RELDEP" "$GW" revert extra 2>&1)"; rc=$?
+[[ "$rc" -ne 0 ]] \
+  && pass "mag revert : refuse tout argument (revert seul)" \
+  || fail "mag revert : argument accepté à tort (rc=$rc)"
+
 section "mag update / release — un seul poste de commande (fiche 0030)"
 
 # De quoi publier : sans commit nouveau, release refuse (et le test ne dirait

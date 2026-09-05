@@ -248,6 +248,8 @@ if [[ -z "${SKIP_INSTALL:-}" ]]; then
   if [[ -n "$PREVIOUS_VERSION" ]]; then
     echo "Pour revenir en arrière : mag revert (ou mag update --to $PREVIOUS_VERSION)."
   else
-    echo "Pour revenir en arrière : mag revert."
+    # 1er install : aucune version précédente enregistrée — « mag revert »
+    # échouerait encore. Il deviendra utile dès la prochaine mise à jour (revue 0091 P2).
+    echo "Pour revenir en arrière après une prochaine mise à jour : mag revert."
   fi
 fi
