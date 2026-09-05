@@ -2844,6 +2844,13 @@ function buildTogglePolicy(p, serviceKey, opKey) {
       policy[key] = base;
     } else if (p.policy && p.policy[key]) {
       policy[key] = { ...p.policy[key] };
+    } else if (!p.policy) {
+      // Compte LIBRE (aucune policy) : préserver l'état OUVERT de docs/sheets/
+      // tasks aussi (P0 revue 0106). Sans ça, créer policy.json via une bascule
+      // les ferait tomber en default-deny → perte silencieuse de l'accès Docs/
+      // Sheets/Tâches, ce que l'AC1 interdit. (hasPolicy && absent → on omet :
+      // reste default-deny, inchangé.)
+      policy[key] = svcFreeBlock(key);
     }
   }
   return policy;
