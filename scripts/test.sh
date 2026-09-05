@@ -5750,10 +5750,13 @@ else
   fail "avertissement pas limité à une fois par session (1er=[$FIRST_STDERR] 2e=[$SECOND_STDERR])"
 fi
 
-# Nouveau terminal (nouveau $PPID, simulé par un sous-shell dédié) → ré-avertit.
+# Nouveau terminal (nouvelle session) → ré-avertit. On rend le test DÉTERMINISTE
+# via l'override GWSA_DEPRECATION_SESSION_KEY (2 clés distinctes = 2 « terminaux »)
+# plutôt que de dépendre du tty/$PPID réel : sous un vrai terminal interactif, deux
+# sous-shells frères partagent le même tty contrôlant → même clé → faux échec (revue 0092 P1).
 rm -rf "$DEPR_TMPDIR"; mkdir -p "$DEPR_TMPDIR"
-NEWSHELL_STDERR="$(bash -c "TMPDIR='$DEPR_TMPDIR' GWSA_ROOT='$GWSA_ROOT' '$DEPR_ROOT/gwsa' list 2>&1 >/dev/null")"
-NEWSHELL2_STDERR="$(bash -c "TMPDIR='$DEPR_TMPDIR' GWSA_ROOT='$GWSA_ROOT' '$DEPR_ROOT/gwsa' list 2>&1 >/dev/null")"
+NEWSHELL_STDERR="$(GWSA_DEPRECATION_SESSION_KEY=term-a TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>&1 >/dev/null)"
+NEWSHELL2_STDERR="$(GWSA_DEPRECATION_SESSION_KEY=term-b TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>&1 >/dev/null)"
 if [[ "$NEWSHELL_STDERR" == *"déprécié"* && "$NEWSHELL2_STDERR" == *"déprécié"* ]]; then
   pass "un nouveau terminal (nouvelle session) ré-avertit"
 else

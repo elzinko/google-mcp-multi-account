@@ -103,6 +103,13 @@ die() { echo "$SELF : $*" >&2; exit 3; }
 # pas l'avertissement à chaque commande.
 deprecation_session_key() {
   local key
+  # Override explicite : rend la clé déterministe indépendamment du tty/$PPID de
+  # l'environnement (les tests l'utilisent pour simuler « même session » vs
+  # « nouveau terminal » sans dépendre d'un vrai tty — revue 0092 P1).
+  if [[ -n "${GWSA_DEPRECATION_SESSION_KEY:-}" ]]; then
+    printf '%s' "$GWSA_DEPRECATION_SESSION_KEY" | tr -c 'A-Za-z0-9_-' '_'
+    return 0
+  fi
   key="$(tty 2>/dev/null || true)"
   [[ -n "$key" && "$key" != "not a tty" ]] || key="ppid-$PPID"
   # neutralise les caractères qui ne vont pas dans un nom de fichier (ex. /dev/ttys001)
