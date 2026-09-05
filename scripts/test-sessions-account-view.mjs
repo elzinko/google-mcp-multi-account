@@ -44,6 +44,7 @@ const pieces = [
   extractFn("sessionsForAccount"),
   extractFn("accountSessionCounts"),
   extractFn("sessDisplayName"),
+  extractFn("sessionAccounts"),
 ];
 const sandbox = {};
 vm.createContext(sandbox);
@@ -51,6 +52,7 @@ vm.runInContext(pieces.join("\n"), sandbox);
 const sessionsForAccount = sandbox.sessionsForAccount;
 const accountSessionCounts = sandbox.accountSessionCounts;
 const sessDisplayName = sandbox.sessDisplayName;
+const sessionAccounts = sandbox.sessionAccounts;
 
 let pass = 0, fail = 0;
 function ok(cond, desc) {
@@ -112,6 +114,17 @@ function ok(cond, desc) {
      "un futur champ `name` prime sur le fallback, sans autre changement");
   ok(sessDisplayName({ session_id: "abcdef123456" }) === "abcdef · mcp",
      "client absent — fallback sur 'mcp' (valeur par défaut de listSessions())");
+}
+
+// G — comptes d'une session (critère E depuis la page Sessions, revue Codex #132) :
+// union unlocks ∪ drive_zones, triée, dédoublonnée.
+{
+  ok(JSON.stringify(sessionAccounts({ unlocks: { perso: {} }, drive_zones: { perso: [], boulot: [] } })) === JSON.stringify(["boulot", "perso"]),
+     "sessionAccounts — union unlocks∪zones, triée et dédoublonnée");
+  ok(sessionAccounts({}).length === 0 && sessionAccounts(null).length === 0,
+     "sessionAccounts — session vide ou nulle → aucun compte");
+  ok(JSON.stringify(sessionAccounts({ drive_zones: { perso: [] } })) === JSON.stringify(["perso"]),
+     "sessionAccounts — zone Drive seule (sans unlock) référence bien le compte");
 }
 
 process.stdout.write("\nvue compte orientée sessions (0106) : " + pass + " réussis, " + fail + " échoués\n");
