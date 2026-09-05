@@ -29,7 +29,7 @@
 
 - ~~[0081](done/0081-durcir-updater-rollback-renommage.md) — socle : rollback à travers le renommage `gma→mag` (helper de re-ciblage des liens)~~ — **shipped #134** (2026-09-05) — helper `scripts/lib/cli-link.sh` prêt pour 0091/0092
 - ~~[0091](done/0091-updater-rollback-ergonomique.md) — `mag revert` + message post-update + `--help` enrichi~~ — **shipped #135** (2026-09-05)
-- [0092](0092-bascule-gwsa-mag-path-refresh-terminal.md) — dépréciation douce `gwsa` + guide refresh terminal · **build** *(ready)* — après 0081
+- ~~[0092](done/0092-bascule-gwsa-mag-path-refresh-terminal.md) — dépréciation douce `gwsa` + guide refresh terminal~~ — **shipped #136** (2026-09-05)
 - [0028](0028-menage-des-versions-deployees.md) — ménage des versions déployées · **idée** — dépendance lâche (cible du revert de 0091)
 
 ## Notes
