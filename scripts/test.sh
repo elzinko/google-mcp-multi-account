@@ -424,6 +424,39 @@ else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "zone-remove — flags
 fi
 rm -f "$PROFILE/policy.json"
 
+section "Drive — zone-add traduit l'ancien schéma «mode» (fiche 0107, revue Codex P2)"
+# mode:restricted encode create/update implicites ; retirer «mode» sans les
+# traduire les perdrait → zone ajoutée mais inutilisable. On les fige d'abord.
+printf '%s\n' '{"drive": {"mode": "restricted"}}' > "$PROFILE/policy.json"
+"$GWSA" policy testprof zone-add "$ZONE" >/dev/null 2>&1
+if python3 - "$PROFILE/policy.json" "$ZONE" <<'PYEOF'
+import json, sys
+path, zone = sys.argv[1], sys.argv[2]
+d = json.load(open(path)); drv = d.get("drive", {})
+assert "mode" not in drv, "mode legacy pas retiré"
+assert zone in drv.get("writeFolders", []), "zone absente"
+assert drv.get("zonesOnly") is True, "zonesOnly non posé"
+assert drv.get("create") is True, "create implicite (restricted) perdu"
+assert drv.get("update") is True, "update implicite (restricted) perdu"
+PYEOF
+then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "zone-add sur mode:restricted — traduit le mode, préserve create/update"
+else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "zone-add sur mode:restricted — create/update perdus (mode non traduit)"
+fi
+printf '%s\n' '{"drive": {"mode": "readonly"}}' > "$PROFILE/policy.json"
+"$GWSA" policy testprof zone-add "$ZONE" >/dev/null 2>&1
+if python3 - "$PROFILE/policy.json" "$ZONE" <<'PYEOF'
+import json, sys
+path, zone = sys.argv[1], sys.argv[2]
+d = json.load(open(path)); drv = d.get("drive", {})
+assert zone in drv.get("writeFolders", []), "zone absente"
+assert drv.get("create") is False, "readonly : create ne doit pas être activé"
+assert drv.get("update") is False, "readonly : update ne doit pas être activé"
+PYEOF
+then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "zone-add sur mode:readonly — traduit le mode sans activer d'écriture"
+else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "zone-add sur mode:readonly — écriture activée à tort"
+fi
+rm -f "$PROFILE/policy.json"
+
 section "Admin — matérialisation policy par bascule (buildTogglePolicy, fiche 0107, revue #1)"
 # Logique JS PURE de admin/index.html, exécutée hors DOM via node:vm (pas de
 # framework JS dans le projet). Verrouille l'invariant AC1 : basculer UNE

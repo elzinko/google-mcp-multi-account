@@ -128,6 +128,23 @@ function ok(cond, desc) {
      "drive mode:open — basculer 'share' garde les autres ops permises + pose zonesOnly (pas de fail-close)");
 }
 
+// G — AC2 sur schéma legacy (revue Codex P1) : activer une écriture Drive impose
+// zonesOnly, même depuis mode:readonly (normDrive → zonesOnly:false).
+{
+  const p = { policy: { drive: { mode: "readonly" } } };
+  const out = build(p, "drive", "create");
+  ok(out.drive.create === true && out.drive.zonesOnly === true,
+     "P1 — activer 'create' depuis mode:readonly impose zonesOnly:true (jamais compte-large)");
+}
+{
+  // mode:restricted (create/update implicites) : activer 'delete' garde zonesOnly
+  // ET ne perd pas create/update.
+  const p = { policy: { drive: { mode: "restricted" } } };
+  const out = build(p, "drive", "delete");
+  ok(out.drive.delete === true && out.drive.zonesOnly === true && out.drive.create === true && out.drive.update === true,
+     "P1 — mode:restricted, activer 'delete' garde zonesOnly + create/update préservés");
+}
+
 // F — AFFICHAGE (ckCapsHtml, mode bascule) : un service absent d'une policy qui
 // EXISTE se lit tout-COUPÉ (jamais « tout vert »), sinon la page ment sur l'état
 // courant et matérialiser ce faux vert ouvre le service (jumeau du P0).

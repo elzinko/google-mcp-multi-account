@@ -2798,6 +2798,11 @@ function buildTogglePolicy(p, serviceKey, opKey) {
           : (driveDenied ? svcDeniedBlock("drive")
                          : { read: true, create: true, update: true, delete: true, share: true, zonesOnly: true, writeFolders: [], writeFolderNames: {} });
         base[opKey] = !base[opKey];
+        // AC2 (revue Codex P1) : activer une écriture Drive impose le mode zoné,
+        // jamais wildcard — même si l'état de départ était mode:open/readonly
+        // (normDrive rend zonesOnly:false). Sinon un clic ouvrirait l'écriture
+        // HORS de toute zone (compte-large).
+        if (base[opKey] && (opKey === "create" || opKey === "update" || opKey === "delete")) base.zonesOnly = true;
         policy.drive = base;
       } else {
         const cur = currentEffectiveBlock(p, key);
@@ -2834,7 +2839,13 @@ async function toggleServiceOp(btn) {
   const alias = btn.dataset.alias, serviceKey = btn.dataset.svc, opKey = btn.dataset.op;
   const p = byAlias(alias);
   if (!p) return;
-  btn.disabled = true;
+  // Sérialiser les bascules du compte (revue Codex P2) : deux clics avant la fin
+  // du 1er POST construiraient chacun depuis le MÊME snapshot PROFILES périmé,
+  // et le 2e écraserait la policy complète du 1er (toggle perdu). On gèle TOUTES
+  // les bascules du compte jusqu'au refresh (qui recrée les boutons à jour).
+  const sel = '.ck-cap--toggle[data-alias="' + ((window.CSS && CSS.escape) ? CSS.escape(alias) : alias) + '"]';
+  const acctBtns = document.querySelectorAll(sel);
+  acctBtns.forEach((b) => { b.disabled = true; });
   try {
     const policy = buildTogglePolicy(p, serviceKey, opKey);
     await api("/api/profiles/" + alias + "/policy", { method: "POST", body: JSON.stringify({ policy }) });
@@ -2842,7 +2853,7 @@ async function toggleServiceOp(btn) {
     if (VIEW.mode === "detail" && VIEW.alias === alias) renderDetail(alias);
   } catch (e) {
     toast("Erreur : " + e.message);
-    btn.disabled = false;
+    acctBtns.forEach((b) => { b.disabled = false; });
   }
 }
 function ckCapsHtml(key, rules, hasPolicy, alias) {

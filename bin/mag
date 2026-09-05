@@ -515,7 +515,20 @@ import json, os, sys
 path, fid, fname = sys.argv[1], sys.argv[2], sys.argv[3]
 d = json.load(open(path)) if os.path.exists(path) else {}
 drv = d.setdefault("drive", {})
-drv.pop("mode", None)
+# Ancien schéma «mode» : le traduire en booléens AVANT de le retirer (revue
+# Codex P2). Sinon mode:"restricted" (create/update implicites) perdrait ses
+# écritures et la zone ajoutée serait inutilisable. Aligné sur normalize_drive
+# (scripts/policy-check.py). setdefault : ne clobbe aucun flag déjà explicite.
+_mode = drv.pop("mode", None)
+if _mode is not None:
+    if _mode == "readonly":
+        _expand = {"read": True, "create": False, "update": False, "delete": False, "share": False}
+    elif _mode == "open":
+        _expand = {"read": True, "create": True, "update": True, "delete": True, "share": True}
+    else:  # restricted (et tout mode inconnu → prudence : droits restreints d'écriture)
+        _expand = {"read": True, "create": True, "update": True, "delete": False, "share": False}
+    for _k, _v in _expand.items():
+        drv.setdefault(_k, _v)
 drv["zonesOnly"] = True   # AC2 : jamais wildcard — mais pas de setdefault sur create/update
 wf = drv.setdefault("writeFolders", [])
 if fid not in wf:
