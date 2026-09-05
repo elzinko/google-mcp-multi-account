@@ -9,7 +9,7 @@
 **Jalon A — Finir l'admin (épic [0060](0060-admin-ux-ui-refresh.md)).** Série Cockpit : l'essentiel est **livré**, reste le fonctionnel et la dernière migration.
 
 - [0094](0094-sessions-page-dediee-reactive.md) — Sessions en page dédiée réactive · **build** *(in-progress)*
-- [0107](0107-vue-compte-droits-sur-place.md) — Vue compte : droits sur place, au grain par opération · **build** *(ready)* — prochain build propre
+- ~~[0107](done/0107-vue-compte-droits-sur-place.md) — Vue compte : droits sur place, au grain par opération~~ — **shipped #131** (2026-09-05)
 - [0098](0098-micro-routeur-vues.md) — Micro-routeur (VIEW + poll unifiés) · **build** *(ready)* — refactor indépendant, quand on veut
 - [0106](0106-vue-compte-orientee-sessions.md) — Vue compte orientée sessions (compteur + liste des sessions) · **build** *(ready)* — après 0107 (même page)
 - [0097](0097-composants-transverses.md) — Finir la migration des dialogues → design system (ex-0097 + ex-0100) · **build** *(ready)* — après 0107 (dialogues subsistants)
