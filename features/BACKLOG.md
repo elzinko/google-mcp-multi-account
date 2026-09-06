@@ -83,6 +83,7 @@
 | [0001](0001-elicitation-signee-strongauth-v2.md) | Élicitation signée — faire monter `mag strongauth` de la présence à la signature | feature | P3 |  |  |  | 🟠 in-progress |  |
 | [0090](0090-documenter-statut-oauth-verification.md) | Documenter et outiller le statut OAuth (warning « non vérifiée » + Testing→Production) | feature | P3 |  |  |  | ❓ todo |  |
 | [0093](0093-coherence-nommage-mag-produit-mcp.md) | Cohérence de nommage — relier `mag` / google-multi-account / repo sans casser le MCP | feature | P3 |  |  |  | ❓ todo |  |
+| [20260906234210000](20260906234210000_purge-sessions-vides-expiration.md) | Sessions — purger les sessions vides + expiration automatique | feature | P3 |  | 0060 | google-mcp-multi-account | ❓ suggest |  |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)
 
