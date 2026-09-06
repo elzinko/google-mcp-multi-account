@@ -2546,6 +2546,22 @@ async function doSyncIam() {
 function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 function attr(s) { return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;"); }
 
+// Socle de rendu sûr (fiche 0096, ADR-0010 brique 2). raw() marque un
+// fragment DÉJÀ sûr (ex. un bloc <svg> constant) ; html`` échappe par défaut
+// tout le reste via esc() — un oubli d'échappement devient impossible tant
+// qu'on n'appelle pas raw() explicitement. esc()/attr() restent les
+// primitives en dessous (attributs construits à la main, cas hors html``).
+function raw(s) { return { __html: String(s) }; }
+function html(strings, ...values) {
+  let out = strings[0];
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+    out += (v && typeof v === "object" && "__html" in v) ? v.__html : esc(v == null ? "" : v);
+    out += strings[i + 1];
+  }
+  return out;
+}
+
 function normDrive(d) {
   if (!d) return null;
   if ("mode" in d) {
@@ -2786,9 +2802,12 @@ const CK_CAP_NO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 const CK_FOLDER_ICO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>';
 const CK_GEAR_ICO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>';
 const CK_TRASH_ICO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>';
+// Démo de migration vers html`` (fiche 0096) : label est toujours du texte
+// (échappé par défaut) ; l'icône et note sont déjà du HTML sûr construit par
+// ce fichier (marqués via raw() pour ne pas être ré-échappés). Sortie
+// identique à l'ancienne concaténation — voir scripts/test-html-render.mjs.
 function ckCap(on, label, note) {
-  return '<span class="ck-cap ck-cap--' + (on ? "on" : "off") + '"><span class="ck-cap__ico">' +
-    (on ? CK_CAP_OK : CK_CAP_NO) + "</span>" + label + (note || "") + "</span>";
+  return html`<span class="ck-cap ck-cap--${on ? "on" : "off"}"><span class="ck-cap__ico">${raw(on ? CK_CAP_OK : CK_CAP_NO)}</span>${label}${raw(note || "")}</span>`;
 }
 // Bascule cliquable (fiche 0107) : un bouton par opération, câblé à toggleServiceOp.
 function ckCapToggle(alias, serviceKey, opKey, on, label, note) {
