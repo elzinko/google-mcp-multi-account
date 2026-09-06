@@ -2703,9 +2703,11 @@ function capsHtml(key, rules, hasPolicy) {
 }
 function render() { rerender(); finishLockExpand(); }
 function rerender() {
-  // Les vues Sessions et Journal se pilotent seules (leur propre poll) ; le poll des
-  // profils ne doit pas les refermer en repassant sur la liste des comptes.
-  if (VIEW.mode === "sessions" || VIEW.mode === "journal") return;
+  // Les routes qui pilotent leur propre poll (registre ROUTES, cf. plus bas)
+  // se rafraîchissent seules ; le poll des profils ne doit pas les refermer
+  // en repassant sur la liste des comptes.
+  const route = ROUTES[VIEW.mode];
+  if (route && route.ownsPoll) return;
   (VIEW.mode === "detail" && byAlias(VIEW.alias)) ? renderDetail(VIEW.alias) : renderList();
 }
 // Chrome hors #cards à accorder au mode de vue (fiche 0065 : masquer le CTA
@@ -2734,12 +2736,44 @@ function syncNav() {
     else b.removeAttribute("aria-current");
   });
 }
-// Coupe les rafraîchissements des pages Sessions/Journal (une seule à la fois).
-function clearPageTimers() {
-  if (sessTimer) { clearInterval(sessTimer); sessTimer = null; }
-  if (journalTimer) { clearInterval(journalTimer); journalTimer = null; }
+// Registre de poll par route (fiche 0098, ADR-0010 brique 3) : une route
+// « page » (liste, détail, sessions, journal) déclare si elle pilote son
+// propre flux de données (ownsPoll + tick + cadence) ou si elle se contente
+// du repaint du poll global des profils (rerender(), cf. plus haut). Une
+// surface sans flux/cadence propre (policy, zones, révocation…) est une
+// MODALE : elle s'ouvre par-dessus la route courante, hors de ce registre.
+// Un seul timer de route est actif à la fois — il est coupé avant d'entrer
+// dans la suivante (go(), plus bas) : plus de boucles ad hoc en parallèle.
+const ROUTES = {
+  list: {},
+  detail: {},
+  sessions: { ownsPoll: true, tick: () => refreshSessions(), every: 3000 },
+  journal: { ownsPoll: true, tick: () => refreshJournal(), every: 5000 },
+};
+let routeTimer = null;
+function stopRoutePoll() {
+  if (routeTimer) { clearInterval(routeTimer); routeTimer = null; }
 }
-function goComptes() { clearPageTimers(); renderList(); }
+function startRoutePoll(mode) {
+  const route = ROUTES[mode];
+  if (!route || !route.ownsPoll) return;
+  routeTimer = setInterval(route.tick, route.every);
+}
+// Point d'entrée UNIQUE de navigation : fixe VIEW, accorde le chrome (syncChrome),
+// rend l'écran de la route et démarre son poll dédié s'il en a un. Les render*()
+// eux-mêmes ne touchent plus VIEW — rendre n'est plus naviguer (fiche 0098).
+function go(mode, params) {
+  const p = params || {};
+  stopRoutePoll();
+  VIEW = { mode, alias: mode === "detail" ? (p.alias || null) : null };
+  syncChrome();
+  if (mode === "list") renderList();
+  else if (mode === "detail") renderDetail(p.alias);
+  else if (mode === "sessions") enterSessions();
+  else if (mode === "journal") enterJournal(p);
+  startRoutePoll(mode);
+}
+function goComptes() { go("list"); }
 // Menu overflow « ⋯ » du header (refonte) : les outils avancés (développement,
 // santé du setup) vivent dans un menu déroulant standard, pas un toggle qui
 // pousse des boutons. Ferme au clic extérieur / Échap.
@@ -2989,7 +3023,6 @@ function acctSessionState(p) {
   return '<div class="ck-acct-state">' + sessBadge + doorBadge + "</div>";
 }
 function renderList() {
-  VIEW = { mode: "list", alias: null };
   syncChrome();
   const el = $("cards");
   const nConn = PROFILES.filter((p) => p.connected).length;
@@ -3022,7 +3055,7 @@ function renderList() {
   }).join("");
   el.innerHTML = head + '<div class="ck-acct-panel"><div class="ck-acct-head"><span>Compte</span><span>État</span><span></span></div>' + rows + "</div>" + connectBtn;
 }
-function openDetail(alias) { const p = byAlias(alias); if (p && p.connected) renderDetail(alias); }
+function openDetail(alias) { const p = byAlias(alias); if (p && p.connected) go("detail", { alias }); }
 // Liste des sessions utilisant CE compte (fiche 0106, critère C) : nom lisible
 // (critère D), activité, mini-état, bouton « voir les droits » (critère E).
 function acctSessionsHtml(alias) {
@@ -3067,8 +3100,7 @@ function openSessRightsAll(sid) {
 }
 function renderDetail(alias) {
   const p = byAlias(alias);
-  if (!p || !p.connected) return renderList();
-  VIEW = { mode: "detail", alias };
+  if (!p || !p.connected) return go("list");
   syncChrome();
   // Bascules par opération (AC1, fiche 0107) : au grain réel de default_policy.py,
   // sans passer par la modale Policy. Keep reste en lecture seule (expérimental,
@@ -3097,7 +3129,7 @@ function renderDetail(alias) {
         others.map(svcRow).join("") + "</details>"
     : "";
   $("cards").innerHTML =
-    '<div class="ck-comptes-head"><button type="button" class="ck-btn ck-btn--sm" onclick="renderList()">← Comptes</button></div>' +
+    '<div class="ck-comptes-head"><button type="button" class="ck-btn ck-btn--sm" onclick="go(\'list\')">← Comptes</button></div>' +
     '<div class="ck-detail-id">' +
       '<span class="ck-avatar ck-avatar--lg" style="background:' + ckAvatarColor(p) + '">' + esc((p.email || alias).charAt(0).toUpperCase()) + "</span>" +
       '<span class="ck-detail-mail">' + esc(p.email || alias) + "</span>" +
@@ -3253,7 +3285,7 @@ function fillAliasSelect(sel) {
     '<option value="' + esc(p.alias) + '">' + esc(p.alias) + (p.email ? " — " + esc(p.email) : "") + "</option>"
   ).join("") || '<option value="">(aucun profil)</option>';
 }
-let sessTimer = null, SESS_LAST = "";
+let SESS_LAST = "";
 // Tri + affichage de la page Sessions, mémorisés entre visites (fiche 0099).
 let SESS_SORT = (() => { try { return localStorage.getItem("gwsaSessSort") || "activity"; } catch { return "activity"; } })();
 let SESS_LAYOUT = (() => { try { return localStorage.getItem("gwsaSessLayout") === "list" ? "list" : "grid"; } catch { return "grid"; } })();
@@ -3281,21 +3313,17 @@ function sessCapsCount(s) {
     // qu'ils apparaissent, au lieu de reléguer ces sessions au niveau « aucun accès ».
     (Array.isArray(s.capabilities) ? s.capabilities.length : 0);
 }
-function openSessions() {
-  VIEW = { mode: "sessions", alias: null };
+// Écran de la route "sessions" (appelé par go(), pas directement) : peuple
+// l'écran et déclenche le premier chargement. Le poll (3s) est démarré par
+// go() via le registre ROUTES tant que cette route reste active.
+function enterSessions() {
   SESS_LAST = "";
-  syncChrome();
   syncSessControls();
   $("sessBody").innerHTML = "Chargement…";
   refreshSessions();
-  // Auto-rafraîchissement tant que la page Sessions est ouverte (plus de clic manuel).
-  clearPageTimers();
-  sessTimer = setInterval(() => { if (VIEW.mode === "sessions") refreshSessions(); }, 3000);
 }
-function closeSessions() {
-  clearPageTimers();
-  renderList(); // repasse VIEW en liste des comptes + syncChrome
-}
+function openSessions() { go("sessions"); }
+function closeSessions() { go("list"); }
 function setSessLive(ok) {
   const el = $("sessLive");
   if (!el) return;
@@ -3927,22 +3955,19 @@ let LOG_ENTRIES = [];
 let LOG_DENSE = (() => { try { return localStorage.getItem("gwsaLogDense") === "1"; } catch { return false; } })();
 // Journal en page dédiée (fiche 0102) : filtres + auto-refresh + journal par session.
 let JRN = { alias: "", client: "", session: "", decision: "", search: "" };
-let journalTimer = null, JRN_LAST = "";
-function openJournal(opts) {
-  VIEW = { mode: "journal", alias: null };
+let JRN_LAST = "";
+// Écran de la route "journal" (appelé par go(), pas directement) : applique les
+// filtres, peuple l'écran, déclenche le premier chargement. Le poll (5s) est
+// démarré par go() via le registre ROUTES tant que cette route reste active.
+function enterJournal(opts) {
   JRN = { alias: "", client: "", session: "", decision: "", search: "", ...(opts || {}) };
   JRN_LAST = "";
-  syncChrome();
   const dense = $("logTable"); if (dense) dense.classList.toggle("dense", LOG_DENSE);
   const denseBtn = $("logDenseBtn"); if (denseBtn) denseBtn.classList.toggle("active", LOG_DENSE);
   refreshJournal();
-  clearPageTimers();
-  journalTimer = setInterval(() => { if (VIEW.mode === "journal") refreshJournal(); }, 5000);
 }
-function closeJournal() {
-  clearPageTimers();
-  renderList();
-}
+function openJournal(opts) { go("journal", opts); }
+function closeJournal() { go("list"); }
 function setJrnLive(ok) {
   const el = $("jrnLive"); if (!el) return;
   el.classList.toggle("stale", !ok);

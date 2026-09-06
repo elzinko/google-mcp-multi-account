@@ -498,6 +498,21 @@ if [[ "$HTMLREND_RC" -ne 0 && "$nf" -eq 0 ]]; then
   FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "test-html-render.mjs a échoué (rc=$HTMLREND_RC) : $(printf '%s' "$HTMLREND_OUT" | head -c 200)"
 fi
 
+section "Admin — micro-routeur de vues (go()/registre de poll par route, fiche 0098)"
+# Même motif que ci-dessus : logique JS PURE de admin/index.html, hors DOM via
+# node:vm (les render*() réels touchent le DOM, hors-scope ici). Verrouille
+# l'AC1 (renderList/renderDetail ne réassignent plus VIEW — rendre n'est plus
+# naviguer) et le contrat de go() (fixe VIEW, accorde le chrome, dispatche vers
+# la route, coupe le timer de la route précédente avant d'en démarrer un autre :
+# un seul poll actif à la fois, piloté par VIEW.mode).
+ROUTER_OUT="$(node "$(pwd)/scripts/test-router-view.mjs" 2>&1)"; ROUTER_RC=$?
+printf '%s\n' "$ROUTER_OUT" | grep -E '✓|✗' || true
+np=$(printf '%s' "$ROUTER_OUT" | grep -c '✓' || true); nf=$(printf '%s' "$ROUTER_OUT" | grep -c '✗' || true)
+PASS=$((PASS + np)); FAIL=$((FAIL + nf))
+if [[ "$ROUTER_RC" -ne 0 && "$nf" -eq 0 ]]; then
+  FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "test-router-view.mjs a échoué (rc=$ROUTER_RC) : $(printf '%s' "$ROUTER_OUT" | head -c 200)"
+fi
+
 section "Wrapper mag — verrou « accès sur demande »"
 "$GWSA" lock testprof >/dev/null 2>&1
 cli 3 "profil verrouillé → toute commande refusée"           testprof gmail users messages list
