@@ -69,7 +69,7 @@ function extractFn(name) {
 }
 
 const pieces = [
-  extractFn("esc"), extractFn("attr"), extractFn("raw"), extractFn("html"),
+  extractFn("esc"), extractFn("attr"), extractConst("RAW"), extractFn("raw"), extractFn("html"),
   extractFn("normDrive"),
   // CK_CAP_OK/NO sont de simples chaînes (icônes SVG), pas des valeurs entre
   // crochets — sliceBalanced (conçu pour tableaux/objets) ne s'y applique pas ;
@@ -118,13 +118,19 @@ function ok(cond, desc) {
   ok(out === "<span><svg><path/></svg></span>", "raw() insère un fragment déjà sûr sans l'échapper");
 }
 {
-  // raw() ne doit pas devenir une porte dérobée pour une valeur NON marquée :
-  // seul un objet produit par raw() échappe à l'échappement.
-  const pasSur = { __html: '<script>alert(1)</script>' };
-  // Un objet qui ressemble à celui de raw() mais n'en vient pas reste un cas
-  // interne à la primitive : on vérifie ici que la primitive esc() reste la
-  // voie par défaut pour tout ce qui n'est pas explicitement raw().
-  ok(typeof raw === "function", "raw() existe comme fonction dédiée au marquage explicite");
+  // Non-vacuité (Codex P1 sur #138 ; leçon rétro R4 « témoin rouge→vert ») :
+  // un objet qui IMITE la forme de raw() sans en venir — p. ex. un objet
+  // dérivé d'une réponse d'API portant un champ __html — NE DOIT PAS contourner
+  // l'échappement. Sur l'ancien code (`"__html" in v`), le <script> ressortait
+  // brut et cette assertion ÉCHOUAIT ; le marqueur infalsifiable (Symbol privé)
+  // la rend verte. C'est le témoin qui rougit sur le code pré-fix.
+  const forge = { __html: '"><script>alert(1)</script>' };
+  const out = html`<span>${forge}</span>`;
+  ok(!out.includes("<script>"),
+     "html`` neutralise un FAUX marqueur {__html} non issu de raw() (marqueur infalsifiable)");
+  // Contraste : un marqueur AUTHENTIQUE (Symbol privé) laisse bien passer le brut.
+  ok(html`<span>${raw("<i>ok</i>")}</span>` === "<span><i>ok</i></span>",
+     "raw() authentique émet le fragment brut (le vrai marqueur passe, le faux non)");
 }
 
 // --- normDrive : état au repos + cas nominal --------------------------------

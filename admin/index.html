@@ -2551,12 +2551,17 @@ function attr(s) { return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;
 // tout le reste via esc() — un oubli d'échappement devient impossible tant
 // qu'on n'appelle pas raw() explicitement. esc()/attr() restent les
 // primitives en dessous (attributs construits à la main, cas hors html``).
-function raw(s) { return { __html: String(s) }; }
+// Le marqueur raw() est un Symbol PRIVÉ (RAW), pas un simple champ "__html" :
+// un objet quelconque portant "__html" — p. ex. dérivé d'une réponse d'API —
+// ne peut donc PAS se faire passer pour un fragment sûr ; il retombe sur esc()
+// (Codex P1 sur #138 : marqueur infalsifiable).
+const RAW = Symbol("html-raw");
+function raw(s) { return { [RAW]: String(s) }; }
 function html(strings, ...values) {
   let out = strings[0];
   for (let i = 0; i < values.length; i++) {
     const v = values[i];
-    out += (v && typeof v === "object" && "__html" in v) ? v.__html : esc(v == null ? "" : v);
+    out += (v && typeof v === "object" && typeof v[RAW] === "string") ? v[RAW] : esc(v == null ? "" : v);
     out += strings[i + 1];
   }
   return out;
