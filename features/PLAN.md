@@ -17,7 +17,7 @@
 > **Rangé au grooming (2026-09-03).** Déjà livrées par Cockpit (#128) : 0095 (tokens), 0099 (sessions
 > pilote), 0102 (journal), 0103 (barre de nav), 0104 (app shell mobile). Fusionnée : ex-0100 → 0097.
 > Restes mineurs capturés en idées : filtre « date » du journal, cibles tactiles 44 px mobile. Base
-> technique prête mais **différée** (décision PO) : 0096 (socle de rendu sûr `html`` ``).
+> technique livrée : ~~0096 (socle de rendu sûr `html`` ``)~~ — **shipped #138** (2026-09-06, déferral levée).
 
 **Jalon B — Accès fin par session — APRÈS le jalon A.**
 
