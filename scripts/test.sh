@@ -484,6 +484,20 @@ if [[ "$SESSVIEW_RC" -ne 0 && "$nf" -eq 0 ]]; then
   FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "test-sessions-account-view.mjs a échoué (rc=$SESSVIEW_RC) : $(printf '%s' "$SESSVIEW_OUT" | head -c 200)"
 fi
 
+section "Admin — socle de rendu sûr (html\`\` échappant par défaut, fiche 0096)"
+# Même motif que ci-dessus : logique JS PURE de admin/index.html, hors DOM via
+# node:vm. Verrouille que html`` échappe chaque interpolation par défaut (test
+# d'injection "><script> obligatoire), que raw() insère un fragment déjà sûr
+# sans le casser, et que les fonctions de rendu pures qui s'appuient dessus
+# (normDrive, ckCapsHtml, fmtMins, mdToHtml) restent correctes et sans injection.
+HTMLREND_OUT="$(node "$(pwd)/scripts/test-html-render.mjs" 2>&1)"; HTMLREND_RC=$?
+printf '%s\n' "$HTMLREND_OUT" | grep -E '✓|✗' || true
+np=$(printf '%s' "$HTMLREND_OUT" | grep -c '✓' || true); nf=$(printf '%s' "$HTMLREND_OUT" | grep -c '✗' || true)
+PASS=$((PASS + np)); FAIL=$((FAIL + nf))
+if [[ "$HTMLREND_RC" -ne 0 && "$nf" -eq 0 ]]; then
+  FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "test-html-render.mjs a échoué (rc=$HTMLREND_RC) : $(printf '%s' "$HTMLREND_OUT" | head -c 200)"
+fi
+
 section "Wrapper mag — verrou « accès sur demande »"
 "$GWSA" lock testprof >/dev/null 2>&1
 cli 3 "profil verrouillé → toute commande refusée"           testprof gmail users messages list
