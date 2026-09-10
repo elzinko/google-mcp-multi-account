@@ -910,6 +910,10 @@ cmd_elicitation() { # mag elicitation enroll|status|in-conversation — clé bio
           echo "   before any popup) — but that confirmation is a SOFT lock: the LLM applies"
           echo "   it itself, it is not a system guarantee. The real safety net stays the"
           echo "   Touch ID signature."
+          # Créer la racine si elle n'existe pas encore (install neuve) avant
+          # d'écrire le marqueur : le durcissement de démarrage ne crée pas la
+          # racine, il la sécurise si elle existe (revue Codex #142).
+          mkdir -p "$GWSA_ROOT" && chmod 700 "$GWSA_ROOT" 2>/dev/null || true
           touch "$flag"
           echo "✓ In-conversation elicitation ENABLED (run 'mag elicitation enroll' if needed)."
           echo "↻ Reconnect your conversation (or restart the MCP client) to see the tool:"

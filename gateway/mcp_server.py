@@ -619,7 +619,9 @@ DISPATCH: dict[str, Callable] = {
     ),
     "session_unlock_in_conversation": lambda **kw: api.session_unlock_in_conversation(
         alias=kw["alias"],
-        minutes=int(kw.get("minutes") or 60),
+        # Valeur BRUTE (pas de `or`) : ne pas écraser un « minutes: 0 » explicite —
+        # l'api borne 0 → 1 min et None (absent) → 60 (revue Codex #142).
+        minutes=kw.get("minutes"),
         session=kw.get("session") or "",
         # Valeur BRUTE (pas de bool() permissif) : bool("false") == True
         # court-circuiterait le protocole en deux temps (popup dès le 1er appel).

@@ -3558,6 +3558,18 @@ with try_file_lock(_inconv_inflight_path()):   # simule une élicitation déjà 
   && pass "in-conversation : verrou global « une élicitation en vol » → 2e demande concurrente refusée" \
   || fail "in-conversation : verrou in-flight ($inflight_ok)"
 
+# Codex #142 : minutes=0 explicite borné à 1 (pas transformé en 60 par « or »)
+zeromin_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.sessions import create_session
+s = create_session(client="t")
+r = api.session_unlock_in_conversation(alias="alpha", minutes=0, session=s.session_id, confirm=False)
+print("ok" if r.get("minutes") == 1 else "got=%r" % r.get("minutes"))
+')"
+[[ "$zeromin_ok" == "ok" ]] \
+  && pass "in-conversation : minutes=0 explicite borné à 1 min (pas 60)" \
+  || fail "in-conversation : minutes=0 ($zeromin_ok)"
+
 # fail-closed : élicitation indisponible (non enrôlée) → pas de déverrouillage
 rm -f "$INCONV_ROOT/.elicitation/mock.key"
 failclosed_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
@@ -3607,6 +3619,15 @@ if [[ "$cli_status_before" == "disabled" && "$cli_flag_after_on" == "yes" \
 else
   fail "CLI : elicitation in-conversation (before=$cli_status_before after_on=$cli_flag_after_on status_on=$cli_status_on after_off=$cli_flag_after_off)"
 fi
+
+# Codex #142 : « on » sur une racine inexistante (install neuve) crée la racine puis le marqueur
+FRESH_ROOT="$TMP/mag-inconv-fresh"
+rm -rf "$FRESH_ROOT"
+fresh_out="$(GWSA_ROOT="$FRESH_ROOT" "$GWSA" elicitation in-conversation on 2>&1)"
+fresh_flag=$([ -f "$FRESH_ROOT/.elicitation-in-conversation" ] && echo yes || echo no)
+[[ "$fresh_flag" == "yes" ]] \
+  && pass "in-conversation : 'on' sur racine inexistante → racine créée puis marqueur (install neuve)" \
+  || fail "in-conversation : fresh root ($fresh_flag / $fresh_out)"
 
 section "consume_nonce : verrou inter-process anti-TOCTOU (fiche 0084)"
 # consume_nonce fait reload → check → save sans atomicité inter-process avant

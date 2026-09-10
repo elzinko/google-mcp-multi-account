@@ -1120,7 +1120,7 @@ def access_request(
 
 def session_unlock_in_conversation(
     alias: str,
-    minutes: int = 60,
+    minutes: int | None = 60,
     session: str = "",
     confirm: bool = False,
 ) -> dict[str, Any]:
@@ -1175,7 +1175,10 @@ def session_unlock_in_conversation(
             f"profil inconnu « {alias} » — le créer avec : mag add {alias}",
             code="not_found",
         )
-    mins = max(1, min(int(minutes or 60), 1440))
+    # None (absent) → 60 par défaut ; un 0 explicite est borné à 1 par max(1, …),
+    # pas transformé en 60 (ne pas confondre « absent » et « zéro », Codex #142).
+    mins = 60 if minutes is None else int(minutes)
+    mins = max(1, min(mins, 1440))
     acct_email = profile_email(alias)
     who = f"« {alias} » ({acct_email})" if acct_email else f"« {alias} »"
 
