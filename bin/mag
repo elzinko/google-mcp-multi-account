@@ -904,19 +904,19 @@ cmd_elicitation() { # mag elicitation enroll|status|in-conversation — clé bio
       local flag="$GWSA_ROOT/.elicitation-in-conversation"
       case "${1:-status}" in
         on)
-          echo "⚠️  Mode opt-in : un tool MCP (session_unlock_in_conversation) va pouvoir"
-          echo "   déclencher le popup Touch ID DIRECTEMENT depuis la conversation, sans"
-          echo "   passer par ce terminal. Protocole en deux temps (confirmation dans le"
-          echo "   chat avant tout popup) — mais cette confirmation est un verrou SOUPLE :"
-          echo "   c'est le LLM qui l'auto-applique, pas une garantie du système. Le vrai"
-          echo "   filet de sécurité reste la signature Touch ID."
+          echo "⚠️  Opt-in mode: an MCP tool (session_unlock_in_conversation) will be able"
+          echo "   to trigger the Touch ID popup DIRECTLY from the conversation, without"
+          echo "   going through this terminal. Two-step protocol (confirmation in the chat"
+          echo "   before any popup) — but that confirmation is a SOFT lock: the LLM applies"
+          echo "   it itself, it is not a system guarantee. The real safety net stays the"
+          echo "   Touch ID signature."
           touch "$flag"
-          echo "✓ Élicitation dans la conversation ACTIVÉE (mag elicitation enroll si besoin)."
-          echo "↻ Reconnecte ta conversation (ou redémarre le client MCP) pour voir le tool :"
-          echo "   la liste des outils n'est relue qu'à la connexion (pas de notification à chaud)."
+          echo "✓ In-conversation elicitation ENABLED (run 'mag elicitation enroll' if needed)."
+          echo "↻ Reconnect your conversation (or restart the MCP client) to see the tool:"
+          echo "   the tool list is only re-read on connect (no hot notification)."
           ;;
-        off) rm -f "$flag"; echo "Élicitation dans la conversation désactivée." ;;
-        status) [[ -f "$flag" ]] && echo "activée" || echo "désactivée" ;;
+        off) rm -f "$flag"; echo "In-conversation elicitation disabled." ;;
+        status) [[ -f "$flag" ]] && echo "enabled" || echo "disabled" ;;
         *) die "usage: $SELF elicitation in-conversation on|off|status" ;;
       esac
       ;;

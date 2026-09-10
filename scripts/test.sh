@@ -3600,9 +3600,9 @@ cli_flag_after_on=$([ -f "$INCONV_ROOT/.elicitation-in-conversation" ] && echo y
 cli_status_on="$(GWSA_ROOT="$INCONV_ROOT" "$GWSA" elicitation in-conversation status 2>&1)"
 GWSA_ROOT="$INCONV_ROOT" "$GWSA" elicitation in-conversation off >/dev/null 2>&1
 cli_flag_after_off=$([ -f "$INCONV_ROOT/.elicitation-in-conversation" ] && echo yes || echo no)
-if [[ "$cli_status_before" == "désactivée" && "$cli_flag_after_on" == "yes" \
-      && "$cli_status_on" == "activée" && "$cli_flag_after_off" == "no" \
-      && "$cli_on_out" == *"⚠️"* && "$cli_on_out" == *"Reconnecte"* ]]; then
+if [[ "$cli_status_before" == "disabled" && "$cli_flag_after_on" == "yes" \
+      && "$cli_status_on" == "enabled" && "$cli_flag_after_off" == "no" \
+      && "$cli_on_out" == *"⚠️"* && "$cli_on_out" == *"Reconnect"* ]]; then
   pass "CLI : mag elicitation in-conversation on|off|status (avertissement de risque + reconnexion + marqueur)"
 else
   fail "CLI : elicitation in-conversation (before=$cli_status_before after_on=$cli_flag_after_on status_on=$cli_status_on after_off=$cli_flag_after_off)"
