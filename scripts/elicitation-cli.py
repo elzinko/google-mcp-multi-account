@@ -46,10 +46,10 @@ def main() -> int:
             run_elicitation_gate(fields)
             return 0
     except ElicitationError as e:
-        print(f"elicitation : {e}", file=sys.stderr)
+        print(f"elicitation: {e}", file=sys.stderr)
         return 1
     except json.JSONDecodeError as e:
-        print(f"elicitation : JSON invalide — {e}", file=sys.stderr)
+        print(f"elicitation: invalid JSON — {e}", file=sys.stderr)
         return 1
     return 1
 

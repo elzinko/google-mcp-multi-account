@@ -5475,7 +5475,7 @@ Path('$response_file2').write_text(json.dumps(assertion))
 replay_out="$(GWSA_ROOT="$RA_OOP" "$PY" scripts/remote-approval-cli.py verify \
   --challenge-id "$challenge_id" --response "$response_file2" 2>&1)"
 replay_rc=$?
-[[ "$replay_rc" != "0" ]] && echo "$replay_out" | grep -q "approbation distante" \
+[[ "$replay_rc" != "0" ]] && echo "$replay_out" | grep -q "remote approval" \
   && pass "remote_approval CLI : rejeu d'un challenge_id déjà clos (« verify ») → refusé (pending one-shot)" \
   || fail "remote_approval CLI : rejeu de challenge_id non refusé ($replay_out, rc=$replay_rc)"
 

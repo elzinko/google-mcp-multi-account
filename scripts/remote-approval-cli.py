@@ -73,13 +73,13 @@ def main() -> int:
             print(json.dumps(payload, ensure_ascii=False))
             return 0
     except RemoteApprovalError as e:
-        print(f"approbation distante : {e}", file=sys.stderr)
+        print(f"remote approval: {e}", file=sys.stderr)
         return 1
     except json.JSONDecodeError as e:
-        print(f"approbation distante : JSON invalide — {e}", file=sys.stderr)
+        print(f"remote approval: invalid JSON — {e}", file=sys.stderr)
         return 1
     except OSError as e:
-        print(f"approbation distante : {e}", file=sys.stderr)
+        print(f"remote approval: {e}", file=sys.stderr)
         return 1
     return 1
 
