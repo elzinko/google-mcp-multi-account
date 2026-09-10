@@ -335,13 +335,13 @@ section "Wrapper mag — validation des arguments"
 rm -f "$PROFILE/policy.json"
 
 cli 3 "alias invalide (slash) rejeté"                        "bad/alias" auth status
-reserved() { # reserved <mot> — le refus doit CITER « mot réservé »
+reserved() { # reserved <mot> — le refus doit CITER « reserved word »
   local word="$1" out rc
   out="$("$GWSA" add "$word" 2>&1)"; rc=$?
-  if [[ "$rc" -eq 3 && "$out" == *"mot réservé"* ]]; then
-    PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m « %s » refusé comme alias (mot réservé)\n' "$word"
+  if [[ "$rc" -eq 3 && "$out" == *"reserved word"* ]]; then
+    PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m « %s » refusé comme alias (reserved word)\n' "$word"
   else
-    FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m « %s » devrait être refusé comme mot réservé (rc=%s)\n' "$word" "$rc"
+    FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m « %s » devrait être refusé comme reserved word (rc=%s)\n' "$word" "$rc"
   fi
 }
 reserved list
@@ -1915,13 +1915,13 @@ BPID="$GWSA_ROOT/.broker-4977.pid"
 rm -f "$BPID"
 
 out="$("$GWSA" broker status 2>&1)"; rc=$?
-[[ "$rc" -eq 0 && "$out" == *"arrêté"* ]] \
-  && pass "broker status sans pidfile → « arrêté », exit 0" \
-  || fail "broker status sans pidfile → « arrêté », exit 0"
+[[ "$rc" -eq 0 && "$out" == *"stopped"* ]] \
+  && pass "broker status sans pidfile → « stopped », exit 0" \
+  || fail "broker status sans pidfile → « stopped », exit 0"
 
 echo "999999" > "$BPID"          # pid qui n'existe pas → pidfile obsolète
 out="$("$GWSA" broker status 2>&1)"; rc=$?
-[[ "$rc" -eq 0 && "$out" == *"obsolète"* ]] \
+[[ "$rc" -eq 0 && "$out" == *"stale"* ]] \
   && pass "broker status sur pidfile obsolète → le signale, exit 0" \
   || fail "broker status sur pidfile obsolète → le signale"
 
@@ -1929,7 +1929,7 @@ out="$("$GWSA" broker status 2>&1)"; rc=$?
 # sont recyclés, un pidfile périmé ne doit pas condamner un process innocent.
 echo "$$" > "$BPID"
 out="$("$GWSA" broker status 2>&1)"; rc=$?
-[[ "$rc" -eq 0 && "$out" == *"obsolète"* ]] \
+[[ "$rc" -eq 0 && "$out" == *"stale"* ]] \
   && pass "broker status : pid vivant mais non-broker → obsolète (pas de faux positif)" \
   || fail "broker status : pid vivant mais non-broker → obsolète"
 
@@ -2299,7 +2299,7 @@ out_rv2="$(GWSA_CLI_LINK="$LINK" gwenv "$GW" revert 2>&1)"; rc=$?
 NOPREV="$TMP/no-previous-deploy"
 mkdir -p "$NOPREV"
 out_np="$(GWSA_DEPLOY_ROOT="$NOPREV" GWSA_CLI_LINK="$FAKEBIN/mag-noprev" "$GW" revert 2>&1)"; rc=$?
-[[ "$rc" -ne 0 && "$out_np" == *"précédente"* && "$out_np" != *"Traceback"* ]] \
+[[ "$rc" -ne 0 && "$out_np" == *"previous"* && "$out_np" != *"Traceback"* ]] \
   && pass "mag revert : aucune version précédente → message clair, sortie propre" \
   || fail "mag revert : cas « pas de previous » mal géré (rc=$rc, obtenu « $out_np »)"
 
@@ -3401,7 +3401,7 @@ rm -f "$er_root/perso/.locked"
 GWSA_ROOT="$er_root" "$GWSA" lock perso >/dev/null 2>&1              # l'alias reste accepté
 er_by_alias=$([ -f "$er_root/perso/.locked" ] && echo ok || echo no)
 er_unknown="$(GWSA_ROOT="$er_root" "$GWSA" lock inconnu@example.com 2>&1)"; er_rc=$?
-if [[ "$er_by_email" == ok && "$er_by_alias" == ok && "$er_rc" != 0 && "$er_unknown" == *"aucun compte connecté"* ]]; then
+if [[ "$er_by_email" == ok && "$er_by_alias" == ok && "$er_rc" != 0 && "$er_unknown" == *"no account connected"* ]]; then
   PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m commandes : email résolu vers son profil (alias toujours OK ; email inconnu refusé clairement)\n'
 else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m résolution email (email=%s alias=%s rc=%s msg=%s)\n' "$er_by_email" "$er_by_alias" "$er_rc" "$er_unknown"
@@ -4832,7 +4832,7 @@ touch "$GWSA_ROOT/.strong-auth"
 out_add="$("$GWSA" add newacct 2>&1)"; rc_add=$?
 rm -f "$GWSA_ROOT/.strong-auth"
 if [[ "$rc_add" -eq 3 ]] \
-  && echo "$out_add" | grep -q 'email requis quand strongauth'; then
+  && echo "$out_add" | grep -q 'email required when strongauth'; then
   pass "touchid : mag add sans email refusé sous strongauth (exit 3)"
 else
   fail "touchid : add sans email sous strongauth — rc=$rc_add out=$(echo "$out_add" | head -c 160)"
@@ -5052,9 +5052,9 @@ if command -v node >/dev/null 2>&1; then
     GWSA_ADMIN_PORT="$DEVTEST_PORT" \
     "$GWSA" dev test 2>&1)" || true
   if [[ -d "$DEVTEST_DEP/$dev_id" ]] \
-    && echo "$out" | grep -q "Déploiement : $dev_id" \
+    && echo "$out" | grep -q "Deployment  : $dev_id" \
     && echo "$out" | grep -q "http://127.0.0.1:$DEVTEST_PORT" \
-    && echo "$out" | grep -q 'Marqueur PR  : oui' \
+    && echo "$out" | grep -q 'PR marker  : yes' \
     && echo "$out" | grep -q 'afSearchHits' \
     && echo "$out" | grep -q './bin/mag dev test'; then
     pass "dev test : déploiement + admin + marqueur afSearchHits (hermétique)"
@@ -5100,7 +5100,7 @@ server_name="google-mcp-$dev_corr_id"
 out_iso="$(HOME="$DEVCORR_HOME" GWSA_DEPLOY_ROOT="$DEVCORR_DEP" \
   "$GWSA" dev deploy --isolated 2>&1)" || true
 if [[ -d "$dev_corr_target" ]] \
-  && echo "$out_iso" | grep -q '(isolé)' \
+  && echo "$out_iso" | grep -q '(isolated)' \
   && [[ -f "$DEVCORR_ISO/client_secret.json" ]] \
   && cmp -s "$DEVCORR_PROD/client_secret.json" "$DEVCORR_ISO/client_secret.json" \
   && DEVCORR_ISO="$DEVCORR_ISO" DEVCORR_TARGET="$dev_corr_target" python3 - <<'PY'
@@ -5183,7 +5183,7 @@ fi
 
 rm_stable_out="$(HOME="$DEVCORR_HOME" GWSA_DEPLOY_ROOT="$DEVCORR_DEP" \
   "$GWSA" dev remove v1.0.0 2>&1)" || true
-if echo "$rm_stable_out" | grep -q "n'est pas une version dev"; then
+if echo "$rm_stable_out" | grep -q "is not a dev version"; then
   pass "dev remove : refuse une version stable (dev-* uniquement)"
 else
   fail "dev remove : aurait dû refuser une version stable — $rm_stable_out"
@@ -5399,7 +5399,7 @@ from gateway.sessions import create_session
 print(create_session(client='ca5b').session_id)
 ")"
 out_ca5b="$(GWSA_ROOT="$RA5B" "$GWSA" session unlock "$sid5b" prof5b 10 --remote 2>&1)"
-echo "$out_ca5b" | grep -q "approbation distante" \
+echo "$out_ca5b" | grep -q "remote approval" \
   && pass "mag session unlock --remote : emprunte le chemin frère require_remote_approval (fail-closed sans enrôlement)" \
   || fail "mag session unlock --remote : chemin inattendu ($out_ca5b)"
 
@@ -5764,7 +5764,7 @@ fi
 
 rm -rf "$DEPR_TMPDIR"; mkdir -p "$DEPR_TMPDIR"
 GWSA_STDERR="$(TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>&1 >/dev/null)"
-if [[ "$GWSA_STDERR" == *"déprécié"* && "$GWSA_STDERR" == *"mag"* ]]; then
+if [[ "$GWSA_STDERR" == *"deprecated"* && "$GWSA_STDERR" == *"mag"* ]]; then
   pass "gwsa affiche un avertissement de dépréciation (stderr) pointant vers mag"
 else
   fail "gwsa n'affiche pas l'avertissement de dépréciation attendu (stderr=[$GWSA_STDERR])"
@@ -5772,7 +5772,7 @@ fi
 
 rm -rf "$DEPR_TMPDIR"; mkdir -p "$DEPR_TMPDIR"
 MAG_STDERR="$(TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$GWSA" list 2>&1 >/dev/null)"
-if [[ "$MAG_STDERR" != *"déprécié"* ]]; then
+if [[ "$MAG_STDERR" != *"deprecated"* ]]; then
   pass "mag (nom canonique) n'affiche jamais l'avertissement de dépréciation"
 else
   fail "mag affiche à tort l'avertissement de dépréciation (stderr=[$MAG_STDERR])"
@@ -5791,7 +5791,7 @@ TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list >/dev/null 2
 TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list >/dev/null 2>"$TMP/once-2.err"
 FIRST_STDERR="$(cat "$TMP/once-1.err")"
 SECOND_STDERR="$(cat "$TMP/once-2.err")"
-if [[ "$FIRST_STDERR" == *"déprécié"* && -z "$SECOND_STDERR" ]]; then
+if [[ "$FIRST_STDERR" == *"deprecated"* && -z "$SECOND_STDERR" ]]; then
   pass "avertissement une seule fois par session (2e appel gwsa, même session : silencieux)"
 else
   fail "avertissement pas limité à une fois par session (1er=[$FIRST_STDERR] 2e=[$SECOND_STDERR])"
@@ -5804,7 +5804,7 @@ fi
 rm -rf "$DEPR_TMPDIR"; mkdir -p "$DEPR_TMPDIR"
 NEWSHELL_STDERR="$(GWSA_DEPRECATION_SESSION_KEY=term-a TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>&1 >/dev/null)"
 NEWSHELL2_STDERR="$(GWSA_DEPRECATION_SESSION_KEY=term-b TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>&1 >/dev/null)"
-if [[ "$NEWSHELL_STDERR" == *"déprécié"* && "$NEWSHELL2_STDERR" == *"déprécié"* ]]; then
+if [[ "$NEWSHELL_STDERR" == *"deprecated"* && "$NEWSHELL2_STDERR" == *"deprecated"* ]]; then
   pass "un nouveau terminal (nouvelle session) ré-avertit"
 else
   fail "un nouveau terminal ne ré-avertit pas (1er=[$NEWSHELL_STDERR] 2e=[$NEWSHELL2_STDERR])"
