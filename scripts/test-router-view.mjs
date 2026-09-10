@@ -77,6 +77,7 @@ for (const name of ["renderList", "renderDetail"]) {
 const goSrc = extractFn("go");
 const stopPollSrc = extractFn("stopRoutePoll");
 const startPollSrc = (() => { try { return extractFn("startRoutePoll"); } catch { return ""; } })();
+const rerenderSrc = extractFn("rerender");
 
 const sandbox = {
   clearInterval: (id) => { sandbox.__cleared.push(id); },
@@ -104,9 +105,13 @@ vm.runInContext(
     "function renderDetail(alias) { entered.push(['detail', alias]); }",
     "function enterSessions() { entered.push(['sessions', null]); }",
     "function enterJournal(p) { entered.push(['journal', p]); }",
+    // Stub d'annuaire des profils : 'perso' existe et est connecté, tout autre
+    // alias a disparu (retourne null) — pour exercer le repli de rerender().
+    "function byAlias(a) { return a === 'perso' ? { alias: 'perso', connected: true } : null; }",
     stopPollSrc,
     startPollSrc,
     goSrc,
+    rerenderSrc,
   ].join("\n"),
   sandbox
 );
@@ -129,9 +134,26 @@ const sessionsIntervalId = sandbox.__intervals.length;
 sandbox.go("journal", {});
 ok(sandbox.__cleared.includes(sessionsIntervalId),
    "go('journal') coupe le timer de la route précédente avant d'ouvrir la suivante (jamais deux polls en parallèle)");
+// Verrou d'ORDRE (pas seulement d'appartenance) : après go('journal'), le timer
+// de la NOUVELLE route doit être vivant (routeTimer courant) et NON coupé. Un
+// mutant qui inverse l'ordre (start puis stop) couperait son propre timer et
+// laisserait la route sans poll — cette assertion rougit alors, l'ancienne non.
+const journalIntervalId = sandbox.__intervals.length;
+ok(sandbox.routeTimer === journalIntervalId && !sandbox.__cleared.includes(journalIntervalId),
+   "go('journal') coupe l'ancien timer AVANT de démarrer le nouveau (l'ordre inverse laisserait la route sans poll)");
 
 sandbox.go("list", {});
 ok(sandbox.__intervals.length === 2, "go('list') ne redémarre pas de poll de route dédié (liste/détail = pas de poll propre)");
+
+// --- Repli de rerender() quand le compte ouvert a disparu (Codex #139) ------
+// Au poll de fond, un compte ouvert en détail peut disparaître. rerender() doit
+// RE-ROUTER via go("list"), pas peindre la liste en laissant VIEW en "detail"
+// (régression 0098 : renderList() ne fixe plus VIEW ni le chrome). Rougit sur
+// l'ancien code, qui appelait renderList() en laissant VIEW.mode === "detail".
+sandbox.VIEW = { mode: "detail", alias: "ghost" };
+sandbox.rerender();
+ok(sandbox.VIEW.mode === "list",
+   "rerender() re-route vers la liste quand le compte ouvert a disparu (VIEW cohérent, pas un simple repaint)");
 
 process.stdout.write("\nmicro-routeur de vues : " + pass + " réussis, " + fail + " échoués\n");
 process.exit(fail === 0 ? 0 : 1);

@@ -2708,7 +2708,13 @@ function rerender() {
   // en repassant sur la liste des comptes.
   const route = ROUTES[VIEW.mode];
   if (route && route.ownsPoll) return;
-  (VIEW.mode === "detail" && byAlias(VIEW.alias)) ? renderDetail(VIEW.alias) : renderList();
+  // Repli quand le compte ouvert en détail a disparu (poll de fond des profils) :
+  // re-router via go("list"). Sinon renderList() peint la liste mais VIEW.mode
+  // reste "detail" et le chrome aussi (CTA « + Connecter » caché) — régression
+  // 0098, car renderList() ne fixe plus VIEW. Codex #139.
+  if (VIEW.mode === "detail" && byAlias(VIEW.alias)) renderDetail(VIEW.alias);
+  else if (VIEW.mode === "detail") go("list");
+  else renderList();
 }
 // Chrome hors #cards à accorder au mode de vue (fiche 0065 : masquer le CTA
 // « + Connecter un compte » en vue détail — un compte est déjà ouvert).
@@ -2771,7 +2777,10 @@ function go(mode, params) {
   else if (mode === "detail") renderDetail(p.alias);
   else if (mode === "sessions") enterSessions();
   else if (mode === "journal") enterJournal(p);
-  startRoutePoll(mode);
+  // startRoutePoll sur VIEW.mode (et pas `mode`) : si un render() se re-route en
+  // interne (renderDetail sur alias absent → go("list")), on démarre le poll de
+  // la route RÉELLement active, jamais un timer sur un VIEW déjà changé. #139.
+  startRoutePoll(VIEW.mode);
 }
 function goComptes() { go("list"); }
 // Menu overflow « ⋯ » du header (refonte) : les outils avancés (développement,
