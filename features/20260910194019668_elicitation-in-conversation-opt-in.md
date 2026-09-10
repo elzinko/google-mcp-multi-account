@@ -165,6 +165,16 @@ lancé par le client (app GUI) peut-il afficher ce popup ?** À valider en branc
 sur cette branche. Pistes si non : faire porter l'affichage par une app au premier plan (le
 client lui-même), ou un helper GUI dédié.
 
+**Blocage en amont du popup — le jeton de session (constaté le 2026-09-11).** Test via un vrai
+client MCP (Claude Code branché sur cette branche, serveur lancé par l'app) : le tool est bien
+exposé et appelé, mais le Claude bute **avant le popup**, dès le 1er appel — il n'a **pas de jeton
+de session** à mettre dans le paramètre `session` (requis). C'est le point dur des fiches
+[`0101`](0101-nom-de-session-fourni-par-le-client.md) et
+[`0108`](0108-session-demande-sous-ensemble-droits-compte.md) : le client MCP ne transmet pas
+d'identité de conversation au LLM (« branché à vide », [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md)).
+**Conséquence : ce mode est subordonné à la résolution du problème du jeton** — le popup n'est pas
+le premier verrou. Et le blocage touche **tous** les tools (gmail, drive…), pas seulement ce POC.
+
 ## Notes
 
 - **Faisabilité constatée le 2026-09-10** (session Claude) : le popup n'est appelé aujourd'hui

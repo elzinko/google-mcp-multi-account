@@ -117,6 +117,11 @@ accès réels. Vérifier qu'un déverrouillage du compte entier n'est **plus** l
 
 ## Notes
 
+- **Constaté le 2026-09-11** (test manuel du POC « élicitation dans la conversation »,
+  fiche `20260910194019668`) : sur **Claude Code** branché sur une build feature, le LLM **n'a
+  pas** le jeton de session à passer au tool — blocage dès le 1er appel. La dépendance décrite
+  plus haut (« à constater sur un client réel ») est donc **confirmée** : le point dur du jeton
+  bloque l'usage de bout en bout, pour ce POC comme pour tous les tools.
 - **Séquencement** : P1, mais **après** l'épic 0060 (admin) et 0107. À porter dans `PLAN.md` au
   moment de le décider.
 - **Limite de menace inchangée** (ADR-0007) : sans vault (fiche 0003), le modèle reste
