@@ -884,7 +884,7 @@ close_session(sys.argv[1])
   esac
 }
 
-cmd_elicitation() { # mag elicitation enroll|status — clé biométrique (fiche 0001)
+cmd_elicitation() { # mag elicitation enroll|status|in-conversation — clé biométrique (fiche 0001)
   local sub="${1:-status}"; shift || true
   case "$sub" in
     enroll)
@@ -899,7 +899,26 @@ cmd_elicitation() { # mag elicitation enroll|status — clé biométrique (fiche
       REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" \
         "$SYS_PYTHON" "$REPO_DIR/scripts/elicitation-cli.py" status
       ;;
-    *) die "usage: $SELF elicitation enroll [--mock] | status" ;;
+    in-conversation)
+      [[ $# -le 1 ]] || die "usage: $SELF elicitation in-conversation on|off|status"
+      local flag="$GWSA_ROOT/.elicitation-in-conversation"
+      case "${1:-status}" in
+        on)
+          echo "⚠️  Mode opt-in : un tool MCP (session_unlock_in_conversation) va pouvoir"
+          echo "   déclencher le popup Touch ID DIRECTEMENT depuis la conversation, sans"
+          echo "   passer par ce terminal. Protocole en deux temps (confirmation dans le"
+          echo "   chat avant tout popup) — mais cette confirmation est un verrou SOUPLE :"
+          echo "   c'est le LLM qui l'auto-applique, pas une garantie du système. Le vrai"
+          echo "   filet de sécurité reste la signature Touch ID."
+          touch "$flag"
+          echo "✓ Élicitation dans la conversation ACTIVÉE (mag elicitation enroll si besoin)."
+          ;;
+        off) rm -f "$flag"; echo "Élicitation dans la conversation désactivée." ;;
+        status) [[ -f "$flag" ]] && echo "activée" || echo "désactivée" ;;
+        *) die "usage: $SELF elicitation in-conversation on|off|status" ;;
+      esac
+      ;;
+    *) die "usage: $SELF elicitation enroll [--mock] | status | in-conversation on|off|status" ;;
   esac
 }
 

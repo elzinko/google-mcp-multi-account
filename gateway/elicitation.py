@@ -410,6 +410,65 @@ def obtain_signature(payload: dict[str, Any]) -> str:
     return _swift_sign(payload)
 
 
+# ── Élicitation dans la conversation (opt-in, fiche « session_unlock_in_conversation ») ──
+#
+# Réglage calqué sur .strong-auth (gateway/project.py:260) : simple fichier
+# marqueur sous la racine gws. Off par défaut — le tool MCP correspondant
+# reste alors invisible dans tools/list (cf. gateway/mcp_server.py).
+IN_CONVERSATION_FLAG_NAME = ".elicitation-in-conversation"
+INCONV_THROTTLE_NAME = "inconv-throttle.json"
+INCONV_THROTTLE_SEC = 10  # une seule demande confirm=true à la fois par session
+
+
+def in_conversation_enabled() -> bool:
+    return (gwsa_root() / IN_CONVERSATION_FLAG_NAME).is_file()
+
+
+def _inconv_throttle_path() -> Path:
+    return elicitation_dir() / INCONV_THROTTLE_NAME
+
+
+def _inconv_throttle_lock_path() -> Path:
+    return _inconv_throttle_path().with_suffix(".lock")
+
+
+def check_inconv_throttle(session_id: str) -> None:
+    """Refuse un 2e déclenchement rapproché (confirm=true) pour la même session.
+
+    Verrou fichier inter-process, même schéma que consume_nonce (fiche 0084) :
+    c'est un garde-fou souple contre un LLM qui redéclenche trop vite, pas le
+    filet de sécurité réel (qui reste la signature Touch ID).
+    """
+    if not session_id:
+        return
+    now = time.time()
+    with file_lock(_inconv_throttle_lock_path()):
+        path = _inconv_throttle_path()
+        data: dict[str, float] = {}
+        if path.is_file():
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(raw, dict):
+                    data = {str(k): float(v) for k, v in raw.items()}
+            except (OSError, json.JSONDecodeError, TypeError, ValueError):
+                data = {}
+        last = data.get(session_id)
+        if last is not None and now - last < INCONV_THROTTLE_SEC:
+            raise ElicitationError(
+                "élicitation en conversation déjà en cours pour cette session — "
+                "réessayer dans quelques secondes"
+            )
+        data = {k: v for k, v in data.items() if now - v < 86400}
+        data[session_id] = now
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data), encoding="utf-8")
+        try:
+            os.chmod(tmp, 0o600)
+        except OSError:
+            pass
+        tmp.replace(path)
+
+
 def run_elicitation_gate(fields: dict[str, Any]) -> None:
     """Point d'entrée : construit le payload, obtient signature, vérifie, journalise."""
     if not is_enrolled():

@@ -3423,6 +3423,140 @@ GWSA_ROOT="$ELIC_ROOT" GWSA_SESSION_ID="$sid_e" GWSA_ELICITATION_MOCK=1 \
   && pass "elicitation : mag session unlock avec strongauth+mock" \
   || fail "elicitation : mag session unlock strongauth"
 
+section "élicitation dans la conversation — opt-in (session_unlock_in_conversation)"
+INCONV_ROOT="$TMP/mag-inconv"
+mkdir -p "$INCONV_ROOT/alpha"
+export GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 PYTHONPATH="$(pwd)"
+"$PY" "$(pwd)/scripts/elicitation-cli.py" enroll --mock >/dev/null 2>&1
+
+# off par défaut : tools/list ne contient PAS le tool ; access_request inchangé
+off_ok="$(GWSA_ROOT="$INCONV_ROOT" "$PY" -c '
+import json, subprocess, sys
+out = subprocess.run([sys.executable, "-m", "gateway"],
+                      input=json.dumps({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}) + "\n",
+                      capture_output=True, text=True).stdout.splitlines()[0]
+r = json.loads(out)
+names = [t["name"] for t in r["result"]["tools"]]
+assert "session_unlock_in_conversation" not in names, names
+assert "access_request" in names
+print("ok")
+')"
+[[ "$off_ok" == "ok" ]] \
+  && pass "in-conversation : off par défaut → tool absent de tools/list, access_request inchangé" \
+  || fail "in-conversation : off par défaut ($off_ok)"
+
+# on : le tool apparaît dans tools/list
+touch "$INCONV_ROOT/.elicitation-in-conversation"
+on_ok="$(GWSA_ROOT="$INCONV_ROOT" "$PY" -c '
+import json, subprocess, sys
+out = subprocess.run([sys.executable, "-m", "gateway"],
+                      input=json.dumps({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}) + "\n",
+                      capture_output=True, text=True).stdout.splitlines()[0]
+r = json.loads(out)
+names = [t["name"] for t in r["result"]["tools"]]
+assert "session_unlock_in_conversation" in names, names
+print("ok")
+')"
+[[ "$on_ok" == "ok" ]] \
+  && pass "in-conversation : on → le tool apparaît dans tools/list" \
+  || fail "in-conversation : on ($on_ok)"
+
+# 1er appel (sans confirm) : confirmation requise, AUCUN popup, AUCUN déverrouillage
+first_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.sessions import create_session, is_session_unlocked
+s = create_session(client="t")
+r = api.session_unlock_in_conversation(alias="alpha", minutes=30, session=s.session_id, confirm=False)
+assert r.get("ok") and r.get("confirmation_required"), r
+assert "alpha" in r["message"] and "30" in r["message"] and s.session_id in r["message"], r
+assert is_session_unlocked(s.session_id, "alpha") is False
+print("ok")
+')"
+[[ "$first_ok" == "ok" ]] \
+  && pass "in-conversation : 1er appel (sans confirm) → confirmation requise, aucun déverrouillage" \
+  || fail "in-conversation : 1er appel ($first_ok)"
+
+# 2e appel confirm=true (mode mock) : élicitation signée puis déverrouillage
+second_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.sessions import create_session, is_session_unlocked
+s = create_session(client="t")
+r = api.session_unlock_in_conversation(alias="alpha", minutes=30, session=s.session_id, confirm=True)
+assert r.get("ok") and r.get("unlocked"), r
+assert is_session_unlocked(s.session_id, "alpha") is True
+print("ok")
+')"
+[[ "$second_ok" == "ok" ]] \
+  && pass "in-conversation : 2e appel (confirm=true) → élicitation mock puis déverrouillage" \
+  || fail "in-conversation : 2e appel ($second_ok)"
+
+# throttle : un 2e confirm=true rapproché sur la même session est refusé
+throttle_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.errors import GatewayError
+from gateway.sessions import create_session
+s = create_session(client="t")
+api.session_unlock_in_conversation(alias="alpha", minutes=30, session=s.session_id, confirm=True)
+try:
+    api.session_unlock_in_conversation(alias="alpha", minutes=30, session=s.session_id, confirm=True)
+    print("no-throttle")
+except GatewayError:
+    print("ok")
+')"
+[[ "$throttle_ok" == "ok" ]] \
+  && pass "in-conversation : throttle → 2e confirm=true rapproché refusé" \
+  || fail "in-conversation : throttle ($throttle_ok)"
+
+# fail-closed : élicitation indisponible (non enrôlée) → pas de déverrouillage
+rm -f "$INCONV_ROOT/.elicitation/mock.key"
+failclosed_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.errors import GatewayError
+from gateway.sessions import create_session, is_session_unlocked
+s = create_session(client="t")
+try:
+    api.session_unlock_in_conversation(alias="alpha", minutes=30, session=s.session_id, confirm=True)
+    print("unlocked-anyway")
+except GatewayError:
+    print("ok" if is_session_unlocked(s.session_id, "alpha") is False else "unlocked-anyway")
+')"
+[[ "$failclosed_ok" == "ok" ]] \
+  && pass "in-conversation : échec d'élicitation → fail-closed (pas de déverrouillage)" \
+  || fail "in-conversation : fail-closed ($failclosed_ok)"
+"$PY" "$(pwd)/scripts/elicitation-cli.py" enroll --mock >/dev/null 2>&1  # ré-enrôler pour la suite
+
+# réglage off : refus même en appelant directement la fonction (défense en profondeur)
+rm -f "$INCONV_ROOT/.elicitation-in-conversation"
+disabled_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.errors import GatewayError
+from gateway.sessions import create_session
+s = create_session(client="t")
+try:
+    api.session_unlock_in_conversation(alias="alpha", minutes=30, session=s.session_id, confirm=False)
+    print("bypass")
+except GatewayError:
+    print("ok")
+')"
+[[ "$disabled_ok" == "ok" ]] \
+  && pass "in-conversation : réglage off → refus même en appel direct (défense en profondeur)" \
+  || fail "in-conversation : off refuse ($disabled_ok)"
+
+# CLI : mag elicitation in-conversation on|off|status (calque strongauth)
+cli_status_before="$(GWSA_ROOT="$INCONV_ROOT" "$GWSA" elicitation in-conversation status 2>&1)"
+cli_on_out="$(GWSA_ROOT="$INCONV_ROOT" "$GWSA" elicitation in-conversation on 2>&1)"
+cli_flag_after_on=$([ -f "$INCONV_ROOT/.elicitation-in-conversation" ] && echo yes || echo no)
+cli_status_on="$(GWSA_ROOT="$INCONV_ROOT" "$GWSA" elicitation in-conversation status 2>&1)"
+GWSA_ROOT="$INCONV_ROOT" "$GWSA" elicitation in-conversation off >/dev/null 2>&1
+cli_flag_after_off=$([ -f "$INCONV_ROOT/.elicitation-in-conversation" ] && echo yes || echo no)
+if [[ "$cli_status_before" == "désactivée" && "$cli_flag_after_on" == "yes" \
+      && "$cli_status_on" == "activée" && "$cli_flag_after_off" == "no" \
+      && "$cli_on_out" == *"⚠️"* ]]; then
+  pass "CLI : mag elicitation in-conversation on|off|status (avertissement de risque + fichier marqueur)"
+else
+  fail "CLI : elicitation in-conversation (before=$cli_status_before after_on=$cli_flag_after_on status_on=$cli_status_on after_off=$cli_flag_after_off)"
+fi
+
 section "consume_nonce : verrou inter-process anti-TOCTOU (fiche 0084)"
 # consume_nonce fait reload → check → save sans atomicité inter-process avant
 # le correctif de la fiche 0084 : deux process concurrents peuvent tous deux

@@ -11,6 +11,7 @@ from typing import Any, Callable
 
 from . import api
 from .context import set_git_root
+from .elicitation import in_conversation_enabled
 from .errors import GatewayError
 from .project import git_toplevel
 from .sessions import create_session
@@ -455,6 +456,55 @@ TOOLS: list[dict[str, Any]] = [
     },
 ]
 
+# Tool masqué par défaut — n'apparaît dans tools/list que si le réglage opt-in
+# est activé (mag elicitation in-conversation on). access_request ci-dessus
+# reste INCHANGÉ : ce mode vit dans un tool séparé (décision ferme).
+_SESSION_UNLOCK_IN_CONVERSATION_TOOL: dict[str, Any] = {
+    "name": "session_unlock_in_conversation",
+    "description": (
+        "Mode opt-in (désactivé par défaut) : déverrouille un profil en déclenchant "
+        "l'élicitation signée (Touch ID) DIRECTEMENT depuis cette conversation, sans "
+        "passer par un terminal. Protocole en DEUX temps obligatoire : 1er appel "
+        "(sans confirm) → AUCUN popup, juste un message de confirmation à annoncer "
+        "dans le chat et à faire valider par l'utilisateur ; 2e appel (confirm=true) "
+        "→ déclenche réellement l'élicitation signée puis déverrouille si la "
+        "signature est valide. Un throttle refuse un 2e confirm=true rapproché sur "
+        "la même session. La confirmation chat est un verrou SOUPLE (coopération du "
+        "LLM) — le vrai filet de sécurité reste Touch ID."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "alias": {"type": "string"},
+            "minutes": {"type": "integer", "default": 60, "description": "Durée du déverrouillage"},
+            "session": _SESSION_PROPERTY,
+            "confirm": {
+                "type": "boolean",
+                "default": False,
+                "description": (
+                    "Ne passer à true qu'APRÈS confirmation explicite de "
+                    "l'utilisateur dans le chat — déclenche alors le popup Touch ID."
+                ),
+            },
+        },
+        "required": ["alias", "session"],
+        "additionalProperties": False,
+    },
+}
+
+
+def _visible_tools() -> list[dict[str, Any]]:
+    """tools/list : ré-évalué à chaque appel (capabilities.listChanged=False —
+
+    cf. commentaire sur `main()` — donc pas de notification de changement ; le
+    client redécouvre le tool au prochain tools/list une fois le réglage activé).
+    """
+    tools = list(TOOLS)
+    if in_conversation_enabled():
+        tools.append(_SESSION_UNLOCK_IN_CONVERSATION_TOOL)
+    return tools
+
+
 DISPATCH: dict[str, Callable] = {
     "profiles_list": lambda **_: api.profiles_list(),
     "setup_status": lambda **_: api.setup_status(),
@@ -567,6 +617,12 @@ DISPATCH: dict[str, Callable] = {
         email=kw.get("email") or "",
         session=kw.get("session") or "",
     ),
+    "session_unlock_in_conversation": lambda **kw: api.session_unlock_in_conversation(
+        alias=kw["alias"],
+        minutes=int(kw.get("minutes") or 60),
+        session=kw.get("session") or "",
+        confirm=bool(kw.get("confirm") or False),
+    ),
 }
 
 
@@ -589,7 +645,7 @@ def _handle(msg: dict) -> None:
         return
 
     if method == "tools/list":
-        _write({"jsonrpc": "2.0", "id": mid, "result": {"tools": TOOLS}})
+        _write({"jsonrpc": "2.0", "id": mid, "result": {"tools": _visible_tools()}})
         return
 
     if method == "tools/call":

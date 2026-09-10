@@ -1116,3 +1116,83 @@ def access_request(
         "« session_grant », « project_grant » ou « add_account »",
         code="error",
     )
+
+
+def session_unlock_in_conversation(
+    alias: str,
+    minutes: int = 60,
+    session: str = "",
+    confirm: bool = False,
+) -> dict[str, Any]:
+    """Mode opt-in — élicitation dans la conversation (mag elicitation in-conversation).
+
+    Protocole en DEUX temps (décision ferme, ne pas ré-arbitrer) :
+      - 1er appel (confirm=False) : AUCUN popup. Renvoie juste le texte de
+        l'action à annoncer dans le chat, à charge pour le LLM d'attendre le
+        « ok » humain avant de rappeler avec confirm=True.
+      - 2e appel (confirm=True) : déclenche l'élicitation signée (Touch ID ou
+        mock en test), puis déverrouille la session si la signature est valide.
+
+    La confirmation chat est un verrou SOUPLE (coopération du LLM) — le vrai
+    filet de sécurité reste la signature Touch ID (fail-closed en cas de refus).
+    """
+    from .elicitation import (
+        ElicitationError,
+        check_inconv_throttle,
+        in_conversation_enabled,
+        run_elicitation_gate,
+    )
+    from .sessions import session_unlock
+
+    if not in_conversation_enabled():
+        raise GatewayError(
+            "élicitation dans la conversation désactivée — "
+            "l'utilisateur doit exécuter : mag elicitation in-conversation on",
+            code="error",
+        )
+    validate_alias(alias)
+    sid = (session or "").strip()
+    if not sid:
+        raise GatewayError("session requise (jeton de conversation)", code="error")
+    require_session(sid)
+    _reject_if_delegated(sid, "session_unlock_in_conversation")
+    mins = max(1, min(int(minutes or 60), 1440))
+    acct_email = profile_email(alias)
+    who = f"« {alias} » ({acct_email})" if acct_email else f"« {alias} »"
+
+    if not confirm:
+        return {
+            "ok": True,
+            "confirmation_required": True,
+            "alias": alias,
+            "session_id": sid,
+            "minutes": mins,
+            "message": (
+                f"Déverrouillage demandé pour {who}, session {sid}, {mins} min. "
+                f"AUCUN popup n'a été déclenché — annoncer cette action dans le "
+                f"chat et attendre l'accord explicite de l'utilisateur avant de "
+                f"rappeler ce tool avec confirm=true (cela déclenchera Touch ID)."
+            ),
+        }
+
+    try:
+        check_inconv_throttle(sid)
+        run_elicitation_gate({
+            "action": "session_unlock",
+            "alias": alias,
+            "email": acct_email,
+            "session_id": sid,
+            "minutes": mins,
+        })
+    except ElicitationError as e:
+        raise GatewayError(str(e), code="error") from e
+
+    session_unlock(sid, alias, mins)
+    return {
+        "ok": True,
+        "unlocked": True,
+        "alias": alias,
+        "session_id": sid,
+        "minutes": mins,
+        "message": f"{who} déverrouillé pour la session {sid} ({mins} min).",
+    }
