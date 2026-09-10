@@ -80,6 +80,12 @@ flowchart LR
 
 Why a wrapper, the local broker, who talks to whom: [docs/architecture.md](docs/architecture.md). Step-by-step walkthroughs: [diagrams/](diagrams/).
 
+## 👥 Usage by persona
+
+- **Daily user (agent operator)** — you chat with the agent in Claude Desktop, Code or Cursor. It reads your setup and *proposes* the exact `mag` command for anything it can't do itself — unlock a profile, grant a Drive folder, connect an account — and you run it. Nothing is sent or widened without your gesture. Start at [Quickstart](#-quickstart).
+- **Admin / owner** — you decide *what each account may do*. Per-profile policy (default-deny), locks with optional Touch ID, temporary Drive zones, and per-conversation session rights — all from the local web admin (`mag admin` → `http://127.0.0.1:4877`) or the `mag` CLI. See [docs/admin.md](docs/admin.md) and [docs/policies.md](docs/policies.md).
+- **Contributor** — you build against the local backlog under [`features/`](features/), run the hermetic tests, and open one PR per feature. See [Contributing](#-contributing).
+
 ## 🔒 Security
 
 Stance: **don’t trust the LLM by default** — it can *ask*, only a human opens. Per-profile locks (optional Touch ID), zoned Drive writes, no mail sending, encrypted tokens. Guarantees phase by phase, what is *not* yet covered, and how to report a flaw: [SECURITY.md](SECURITY.md) · [docs/threat-model.md](docs/threat-model.md). Honest self-critique (strengths, limits, competition): [docs/critique.md](docs/critique.md).
@@ -109,6 +115,21 @@ features/  # backlog — one card per feature/bug
 
 Product / MCP server `google-multi-account` (source of truth: `gateway/config.py` `PRODUCT_SLUG`) · git repo `google-mcp-multi-account` · CLI `mag` (this project's wrapper — what you run; formerly `gwsa`/`gma`, still deprecated aliases) · MCP binary `google-mcp` · upstream dependency `gws` = the [Google Workspace CLI](https://github.com/googleworkspace/cli) that `mag` wraps (install it first).
 </details>
+
+## 🤝 Contributing
+
+- **Dev setup** — clone, then run the hermetic suite (no real account, no network — `gws` and the network are stubbed):
+
+```bash
+git clone https://github.com/elzinko/google-mcp-multi-account && cd google-mcp-multi-account
+./scripts/test.sh
+```
+
+  Running the tool against real accounts also needs the [`gws` CLI](https://github.com/googleworkspace/cli) (`brew install googleworkspace-cli`) — see [Quickstart](#-quickstart).
+
+- **Backlog-driven** — work is one Markdown card per feature/bug under [`features/`](features/) (priority-sorted index: [features/BACKLOG.md](features/BACKLOG.md)). Pick a `ready` card; **one feature = one branch = one PR**.
+- **Commit conventions** — [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `refactor:`…); `mag release` derives the semver tag from them.
+- **Before a PR** — `./scripts/test.sh` green, and walk the reviewer checklist in [docs/PR_VALIDATION.md](docs/PR_VALIDATION.md). Every PR gets an adversarial review before merge.
 
 ## 📚 Further reading
 
