@@ -42,6 +42,7 @@
 | [0102](done/0102-journal-page-monitoring-filtres-par-session.md) | Journal en page dédiée — filtres + journal par session (virage monitoring) | feature | P1 |  | 0060 | google-mcp-multi-account | ✅ shipped | #128 |
 | [0104](done/0104-app-shell-responsive-mobile.md) | App shell responsive — navigation et rendu mobile pro (bottom-nav + top-bar) | feature | P1 |  | 0060 | google-mcp-multi-account | ✅ shipped | #128 |
 | [0107](done/0107-vue-compte-droits-sur-place.md) | Vue compte — piloter les droits sur place (remplacer la modale Policy) + nettoyer la liste | feature | P1 |  | 0060 | google-mcp-multi-account | ✅ shipped | #131 |
+| [20260910194019668](20260910194019668_elicitation-in-conversation-opt-in.md) | Élicitation dans la conversation — popup sans terminal, confirmé dans le chat (opt-in) | feature | P1 |  | 0082 | google-mcp-multi-account | 🔵 ready |  |
 | [0002](done/0002-durcir-modele-policy-default-deny.md) | Durcir le modèle de policy — décisions « default-deny » soulevées par l'audit | feature | P2 |  |  |  | ✅ shipped | #12 |
 | [0007](done/0007-provisioning-idempotent-declaratif.md) | Provisioning GCP idempotent/déclaratif — durcir provision-gcp.sh ou passer à Terraform | feature | P2 |  |  |  | ✅ shipped | #10 |
 | [0008](done/0008-connexion-dynamique-compte-elicitation.md) | Connexion dynamique d'un nouveau compte via élicitation forte (access_request kind=add_account) | feature | P2 |  |  |  | ✅ shipped | #7 |
