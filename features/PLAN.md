@@ -10,7 +10,7 @@
 
 - [0094](0094-sessions-page-dediee-reactive.md) — Sessions en page dédiée réactive · **build** *(in-progress)*
 - ~~[0107](done/0107-vue-compte-droits-sur-place.md) — Vue compte : droits sur place, au grain par opération~~ — **shipped #131** (2026-09-05)
-- [0098](0098-micro-routeur-vues.md) — Micro-routeur (VIEW + poll unifiés) · **build** *(ready)* — refactor indépendant, quand on veut
+- ~~[0098](done/0098-micro-routeur-vues.md) — Micro-routeur (VIEW + poll unifiés)~~ — **shipped #139** (2026-09-10)
 - ~~[0106](done/0106-vue-compte-orientee-sessions.md) — Vue compte orientée sessions (compteur + liste des sessions)~~ — **shipped #132** (2026-09-05)
 - ~~[0097](done/0097-composants-transverses.md) — Finir la migration des dialogues → design system~~ — **shipped #133** (2026-09-05)
 
