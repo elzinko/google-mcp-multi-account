@@ -48,6 +48,7 @@ from gateway.categorize import (  # noqa: E402
     categorize,
     drive_files_trash_override,
     norm,
+    norm_service,
     operand_resource,
     parse_json_flag,
 )
@@ -556,8 +557,11 @@ def main():
 
     # Normaliser le service AVANT le lookup policy : retirer un éventuel suffixe
     # de version (`gmail:v1`, `drive:v3` — syntaxe acceptée par gws) et la casse,
-    # sinon `pol.get("gmail:v1")` = None ferait tout passer hors policy.
-    raw_service = args[0].split(":", 1)[0].lower()
+    # sinon `pol.get("gmail:v1")` = None ferait tout passer hors policy. Même
+    # normalisation que `gateway.categorize.norm_service`, réutilisée aussi
+    # côté audit (`gateway.usage.infer_call`, fiche 0086) pour que les deux
+    # chemins s'accordent sur le même service normalisé.
+    raw_service = norm_service(args[0])
     service = SERVICE_ALIASES.get(raw_service, raw_service)
     if service in PASSTHROUGH_SERVICES:
         return

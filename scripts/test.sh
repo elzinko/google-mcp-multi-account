@@ -4405,6 +4405,20 @@ print('update', rc({'service': 'drive', 'operation': 'update', 'resource': 'FILE
   && pass "0086 fix#1 : capacité session sur « files update {trashed:true} » suit la catégorie delete, comme l'audit" \
   || fail "0086 fix#1 : autorisation session désalignée de l'audit sur le trashed override ($out_0086_trash)"
 
+# ── (2) normaliser le service versionné (« calendar:v3 ») avant l'inférence
+# de ressource côté audit — sinon le mapping opérande → ressource, indexé
+# par service brut, ne matche jamais un service versionné → ressource "" ──
+out_0086_versioned="$(PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.usage import infer_call
+service, operation, resource = infer_call([
+    'calendar:v3', 'events', 'list', '--params', '{\"calendarId\": \"cal123\"}',
+])
+print(service, operation, resource)
+")"
+[[ "$out_0086_versioned" == "calendar read cal123" ]] \
+  && pass "0086 fix#2 : « calendar:v3 events list » journalise la vraie ressource (cal123), pas \"\"" \
+  || fail "0086 fix#2 : service versionné non normalisé avant l'inférence de ressource ($out_0086_versioned)"
+
 section "sandbox remove (fiche 0041)"
 SB_DEP="$TMP/sandbox-remove"
 mkdir -p "$SB_DEP/test-sb"

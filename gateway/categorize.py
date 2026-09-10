@@ -42,6 +42,17 @@ def norm(method: str) -> str:
     return method.lstrip("+").replace("-", "").replace("_", "").lower()
 
 
+def norm_service(service: str) -> str:
+    """Nom de service normalisé : retire un éventuel suffixe de version
+    (`calendar:v3` → `calendar`, syntaxe acceptée par gws) et met en
+    minuscules — même normalisation que `scripts/policy-check.py` (source de
+    vérité pour l'AUTORISATION) avant tout lookup service-aware, pour que
+    l'AUDIT (`gateway.usage.infer_call`) catégorise et dérive la ressource
+    d'un appel versionné (ex. `calendar:v3`) au lieu de traiter le service
+    versionné comme inconnu (fiche 0086)."""
+    return service.split(":", 1)[0].strip().lower()
+
+
 def categorize(service: str, resources: list[str], raw_method: str) -> str | None:
     """Catégorie d'action, ou None si inconnue (l'appelant décide du repli)."""
     m = norm(raw_method)
