@@ -4419,6 +4419,40 @@ print(service, operation, resource)
   && pass "0086 fix#2 : « calendar:v3 events list » journalise la vraie ressource (cal123), pas \"\"" \
   || fail "0086 fix#2 : service versionné non normalisé avant l'inférence de ressource ($out_0086_versioned)"
 
+# ── (3) petit-enfant d'un parent legacy hérite des CAPACITÉS FINES
+# effectives (résolues via le repli), pas de la liste locale brute du
+# parent (vide pour un fichier legacy) — même trou que 0085 pour
+# unlock/zones, appliqué ici aux capacités fines (Codex PR #118, P2 finding
+# #2). DÉJÀ couvert par `create_child_session` (fiche 0085, qui snapshotte
+# `_effective_capabilities(parent)`) — ce test verrouille le comportement en
+# régression et est PROUVÉ non-vacuous : il vire au rouge si
+# `create_child_session` snapshotte `parent.capabilities` (liste locale
+# brute) au lieu de `_effective_capabilities(parent)` (vérifié en TDD par
+# régression temporaire lors de l'écriture de ce test, fiche 0086). ──
+L3_0086_CAPS="$TMP/mag-0086-caps-legacy"
+out_0086_caps="$(GWSA_ROOT="$L3_0086_CAPS" PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from gateway.sessions import (
+    create_session, create_child_session, session_grant_capability,
+    session_has_capability, _path,
+)
+root = create_session(client='0086-caps-root')
+session_grant_capability(root.session_id, 'alpha', 'drive', 'read', hours=1)
+mid = create_child_session(root.session_id)
+# mid devient legacy (upgrade in-place) : marqueur capabilities_snapshot
+# absent, capacités locales vides — comme un fichier écrit avant 0080.
+p = _path(mid.session_id)
+data = json.loads(p.read_text())
+data['capabilities'] = []
+data.pop('capabilities_snapshot', None)
+p.write_text(json.dumps(data))
+grandchild = create_child_session(mid.session_id)
+print(session_has_capability(grandchild.session_id, 'alpha', 'drive', 'read'))
+")"
+[[ "$out_0086_caps" == "True" ]] \
+  && pass "0086 fix#3 : petit-enfant d'un parent legacy hérite des capacités EFFECTIVES (pas la liste locale brute)" \
+  || fail "0086 fix#3 : petit-enfant d'un parent legacy a perdu les capacités héritées ($out_0086_caps)"
+
 section "sandbox remove (fiche 0041)"
 SB_DEP="$TMP/sandbox-remove"
 mkdir -p "$SB_DEP/test-sb"
