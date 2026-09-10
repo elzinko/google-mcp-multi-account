@@ -44,8 +44,8 @@ Options utiles :
 - `--isolated` — couloir sans comptes prod (`~/.config/gws-accounts-dev`)
 - `--open` — ouvrir `http://127.0.0.1:4877` dans le navigateur (macOS)
 
-Signal pass/fail minimal : la ligne `Marqueur PR : oui — marqueur PR afSearchHits
-présent` dans le résumé, et l'admin répond sur l'URL affichée.
+Signal pass/fail minimal : la ligne `PR marker  : yes — PR marker afSearchHits present`
+dans le résumé (sortie CLI en anglais, fiche 0019), et l'admin répond sur l'URL affichée.
 
 ## 3. Signaux observables pass/fail
 
