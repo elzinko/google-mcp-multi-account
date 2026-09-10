@@ -118,12 +118,14 @@ Product / MCP server `google-multi-account` (source of truth: `gateway/config.py
 
 ## 🤝 Contributing
 
-- **Dev setup** — clone, install the [`gws` CLI](https://github.com/googleworkspace/cli) prerequisite (`brew install googleworkspace-cli`), then run the hermetic suite (no real account, no network):
+- **Dev setup** — clone, then run the hermetic suite (no real account, no network — `gws` and the network are stubbed):
 
 ```bash
 git clone https://github.com/elzinko/google-mcp-multi-account && cd google-mcp-multi-account
 ./scripts/test.sh
 ```
+
+  Running the tool against real accounts also needs the [`gws` CLI](https://github.com/googleworkspace/cli) (`brew install googleworkspace-cli`) — see [Quickstart](#-quickstart).
 
 - **Backlog-driven** — work is one Markdown card per feature/bug under [`features/`](features/) (priority-sorted index: [features/BACKLOG.md](features/BACKLOG.md)). Pick a `ready` card; **one feature = one branch = one PR**.
 - **Commit conventions** — [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `refactor:`…); `mag release` derives the semver tag from them.
