@@ -46,6 +46,7 @@ from gateway.categorize import (  # noqa: E402
     READ_METHODS,
     SHARE_RESOURCES,
     categorize,
+    drive_files_trash_override,
     norm,
     operand_resource,
     parse_json_flag,
@@ -495,6 +496,14 @@ def _gate_drive_session(profile_dir, args, pos):
         cat = "update"
     else:
         cat = "update"
+    # Même override qu'en tête de `check_drive` (Option A, fiche 0037) : une
+    # mise à la corbeille via « files update {"trashed": true} » doit être
+    # traitée comme une suppression pour l'intersection de capacités de
+    # session — sinon une capacité `drive:update` autoriserait ici un appel
+    # que l'audit (`infer_call`) journalise pourtant en `delete`, et le
+    # triplet journalisé ne correspondrait plus à la capacité qui a
+    # réellement autorisé l'appel (fiche 0086).
+    cat = drive_files_trash_override(pos[:-1], pos[-1], cat, args)
     parents = parse_json_flag(args, "--json").get("parents") or []
     targets = parents if (cat == "create" and parents) else [_drive_target_id(args)]
     for t in targets:

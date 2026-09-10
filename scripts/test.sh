@@ -4376,6 +4376,35 @@ print(resource)
   && pass "audit : drive files copy journalise le parent de DESTINATION (ZONE456), pas le fileId source" \
   || fail "audit : drive files copy journalise encore la source, pas ce qui a autorisé ($out_audit_copy)"
 
+section "fiche 0086 — raffinements audit + capacités de session (suite revue Codex PR #118)"
+
+# ── (1) aligner l'override « trashed » côté AUTORISATION session (pas
+# seulement côté audit) : sous policy Drive open/non-zonesOnly,
+# `_gate_drive_session` (scripts/policy-check.py) recatégorisait un
+# « files update {trashed:true} » depuis le seul nom de méthode → « update »,
+# indépendamment du reclassement « delete » déjà appliqué par `check_drive`
+# et par l'audit (`infer_call`). Une capacité de session `drive:delete`
+# devait autoriser ce triplet ; une `drive:update` seule ne devait pas ──
+L3_0086_TRASH="$TMP/mag-0086-trash-align"
+mkdir -p "$L3_0086_TRASH/alpha"
+echo '{"drive":{"read":true,"create":true,"update":true,"delete":true,"share":true,"zonesOnly":false}}' \
+  > "$L3_0086_TRASH/alpha/policy.json"
+out_0086_trash="$(GWSA_ROOT="$L3_0086_TRASH" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys, os
+def rc(cap):
+    env = dict(os.environ, GWSA_SESSION_CAPS=json.dumps([cap]))
+    r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$L3_0086_TRASH/alpha',
+                         'drive', 'files', 'update', '--params', json.dumps({'fileId': 'FILE1'}),
+                         '--json', json.dumps({'trashed': True})],
+                        env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return r.returncode
+print('delete', rc({'service': 'drive', 'operation': 'delete', 'resource': 'FILE1'}))
+print('update', rc({'service': 'drive', 'operation': 'update', 'resource': 'FILE1'}))
+")"
+[[ "$out_0086_trash" == $'delete 0\nupdate 4' ]] \
+  && pass "0086 fix#1 : capacité session sur « files update {trashed:true} » suit la catégorie delete, comme l'audit" \
+  || fail "0086 fix#1 : autorisation session désalignée de l'audit sur le trashed override ($out_0086_trash)"
+
 section "sandbox remove (fiche 0041)"
 SB_DEP="$TMP/sandbox-remove"
 mkdir -p "$SB_DEP/test-sb"
