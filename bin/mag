@@ -912,6 +912,8 @@ cmd_elicitation() { # mag elicitation enroll|status|in-conversation — clé bio
           echo "   filet de sécurité reste la signature Touch ID."
           touch "$flag"
           echo "✓ Élicitation dans la conversation ACTIVÉE (mag elicitation enroll si besoin)."
+          echo "↻ Reconnecte ta conversation (ou redémarre le client MCP) pour voir le tool :"
+          echo "   la liste des outils n'est relue qu'à la connexion (pas de notification à chaud)."
           ;;
         off) rm -f "$flag"; echo "Élicitation dans la conversation désactivée." ;;
         status) [[ -f "$flag" ]] && echo "activée" || echo "désactivée" ;;

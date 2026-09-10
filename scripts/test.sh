@@ -3507,6 +3507,57 @@ except GatewayError:
   && pass "in-conversation : throttle → 2e confirm=true rapproché refusé" \
   || fail "in-conversation : throttle ($throttle_ok)"
 
+# F1 (revue Codex #142) : confirm non booléen (ex "false" string) refusé, aucun déverrouillage
+confirmtype_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.errors import GatewayError
+from gateway.sessions import create_session, is_session_unlocked
+s = create_session(client="t")
+try:
+    api.session_unlock_in_conversation(alias="alpha", minutes=30, session=s.session_id, confirm="false")
+    print("accepted-string")
+except GatewayError:
+    print("ok" if is_session_unlocked(s.session_id, "alpha") is False else "unlocked")
+')"
+[[ "$confirmtype_ok" == "ok" ]] \
+  && pass "in-conversation : confirm non booléen (« false » string) refusé, aucun déverrouillage" \
+  || fail "in-conversation : confirm type ($confirmtype_ok)"
+
+# F2 (revue Codex #142) : profil inexistant refusé AVANT confirmation/Touch ID
+ghost_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.errors import GatewayError
+from gateway.sessions import create_session, is_session_unlocked
+s = create_session(client="t")
+try:
+    api.session_unlock_in_conversation(alias="ghost", minutes=30, session=s.session_id, confirm=False)
+    print("accepted-ghost")
+except GatewayError:
+    print("ok" if is_session_unlocked(s.session_id, "ghost") is False else "unlocked")
+')"
+[[ "$ghost_ok" == "ok" ]] \
+  && pass "in-conversation : profil inconnu refusé avant confirmation (pas de Touch ID dans le vide)" \
+  || fail "in-conversation : profil inconnu ($ghost_ok)"
+
+# F3 (revue Codex #142) : verrou global « une élicitation en vol » → 2e demande concurrente refusée
+inflight_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.errors import GatewayError
+from gateway.elicitation import _inconv_inflight_path
+from gateway._filelock import try_file_lock
+from gateway.sessions import create_session, is_session_unlocked
+s = create_session(client="t")
+with try_file_lock(_inconv_inflight_path()):   # simule une élicitation déjà en vol (autre conversation)
+    try:
+        api.session_unlock_in_conversation(alias="alpha", minutes=30, session=s.session_id, confirm=True)
+        print("no-guard")
+    except GatewayError:
+        print("ok" if is_session_unlocked(s.session_id, "alpha") is False else "unlocked")
+')"
+[[ "$inflight_ok" == "ok" ]] \
+  && pass "in-conversation : verrou global « une élicitation en vol » → 2e demande concurrente refusée" \
+  || fail "in-conversation : verrou in-flight ($inflight_ok)"
+
 # fail-closed : élicitation indisponible (non enrôlée) → pas de déverrouillage
 rm -f "$INCONV_ROOT/.elicitation/mock.key"
 failclosed_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
@@ -3551,8 +3602,8 @@ GWSA_ROOT="$INCONV_ROOT" "$GWSA" elicitation in-conversation off >/dev/null 2>&1
 cli_flag_after_off=$([ -f "$INCONV_ROOT/.elicitation-in-conversation" ] && echo yes || echo no)
 if [[ "$cli_status_before" == "désactivée" && "$cli_flag_after_on" == "yes" \
       && "$cli_status_on" == "activée" && "$cli_flag_after_off" == "no" \
-      && "$cli_on_out" == *"⚠️"* ]]; then
-  pass "CLI : mag elicitation in-conversation on|off|status (avertissement de risque + fichier marqueur)"
+      && "$cli_on_out" == *"⚠️"* && "$cli_on_out" == *"Reconnecte"* ]]; then
+  pass "CLI : mag elicitation in-conversation on|off|status (avertissement de risque + reconnexion + marqueur)"
 else
   fail "CLI : elicitation in-conversation (before=$cli_status_before after_on=$cli_flag_after_on status_on=$cli_status_on after_off=$cli_flag_after_off)"
 fi

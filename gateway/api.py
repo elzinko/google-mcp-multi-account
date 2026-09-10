@@ -1140,6 +1140,7 @@ def session_unlock_in_conversation(
         ElicitationError,
         check_inconv_throttle,
         in_conversation_enabled,
+        inconv_inflight_guard,
         run_elicitation_gate,
     )
     from .sessions import session_unlock
@@ -1156,6 +1157,24 @@ def session_unlock_in_conversation(
         raise GatewayError("session requise (jeton de conversation)", code="error")
     require_session(sid)
     _reject_if_delegated(sid, "session_unlock_in_conversation")
+    # Rejeter tout `confirm` non booléen (revue Codex #142) : un client peut
+    # envoyer une valeur schéma-invalide mais plausible (« "confirm": "false" »)
+    # que le dispatch transmet brute — sans ce garde, elle serait vue comme un
+    # accord et déclencherait le popup dès le 1er appel.
+    if not isinstance(confirm, bool):
+        raise GatewayError(
+            "paramètre « confirm » invalide — un booléen JSON est requis "
+            "(1er appel sans confirm = annonce ; confirm=true = déclenche Touch ID)",
+            code="error",
+        )
+    # Profil inconnu → refus AVANT toute confirmation ou signature (revue Codex
+    # #142) : sinon un alias fabriqué passe Touch ID, « déverrouille » dans le
+    # vide, et créer cet alias avant l'expiration rendrait le grant effectif.
+    if not profile_dir(alias).is_dir():
+        raise GatewayError(
+            f"profil inconnu « {alias} » — le créer avec : mag add {alias}",
+            code="not_found",
+        )
     mins = max(1, min(int(minutes or 60), 1440))
     acct_email = profile_email(alias)
     who = f"« {alias} » ({acct_email})" if acct_email else f"« {alias} »"
@@ -1177,13 +1196,18 @@ def session_unlock_in_conversation(
 
     try:
         check_inconv_throttle(sid)
-        run_elicitation_gate({
-            "action": "session_unlock",
-            "alias": alias,
-            "email": acct_email,
-            "session_id": sid,
-            "minutes": mins,
-        })
+        # Verrou GLOBAL « une élicitation en conversation à la fois », tenu
+        # pendant tout le popup (revue Codex #142) : le throttle par session ne
+        # suffit pas — deux conversations (deux session_id) pourraient déclencher
+        # deux Touch ID concurrents. Toute autre demande en vol est refusée ici.
+        with inconv_inflight_guard():
+            run_elicitation_gate({
+                "action": "session_unlock",
+                "alias": alias,
+                "email": acct_email,
+                "session_id": sid,
+                "minutes": mins,
+            })
     except ElicitationError as e:
         raise GatewayError(str(e), code="error") from e
 

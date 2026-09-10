@@ -13,10 +13,11 @@ import os
 import secrets
 import subprocess
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from ._filelock import file_lock
+from ._filelock import file_lock, try_file_lock
 from .config import PRODUCT_SLUG, REPO_DIR, SYS_PYTHON, gwsa_root
 
 ELICITATION_DIR_NAME = ".elicitation"
@@ -467,6 +468,32 @@ def check_inconv_throttle(session_id: str) -> None:
         except OSError:
             pass
         tmp.replace(path)
+
+
+INCONV_INFLIGHT_NAME = "inconv-inflight.lock"
+
+
+def _inconv_inflight_path() -> Path:
+    return elicitation_dir() / INCONV_INFLIGHT_NAME
+
+
+@contextmanager
+def inconv_inflight_guard():
+    """Garantit UNE seule élicitation en conversation en vol à la fois.
+
+    Verrou GLOBAL (toutes sessions confondues), tenu pour toute la durée du
+    popup Touch ID — pas un simple rate-limit par session (revue Codex #142).
+    Deux conversations concurrentes ne peuvent pas déclencher deux popups en
+    même temps : la seconde est refusée (fail-closed) au lieu de faire la queue.
+    """
+    try:
+        with try_file_lock(_inconv_inflight_path()):
+            yield
+    except BlockingIOError:
+        raise ElicitationError(
+            "une élicitation en conversation est déjà en cours — "
+            "attendre qu'elle se termine avant de réessayer"
+        )
 
 
 def run_elicitation_gate(fields: dict[str, Any]) -> None:

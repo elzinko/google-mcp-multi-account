@@ -621,7 +621,10 @@ DISPATCH: dict[str, Callable] = {
         alias=kw["alias"],
         minutes=int(kw.get("minutes") or 60),
         session=kw.get("session") or "",
-        confirm=bool(kw.get("confirm") or False),
+        # Valeur BRUTE (pas de bool() permissif) : bool("false") == True
+        # court-circuiterait le protocole en deux temps (popup dès le 1er appel).
+        # L'api rejette tout non-booléen (revue Codex #142).
+        confirm=kw.get("confirm", False),
     ),
 }
 
