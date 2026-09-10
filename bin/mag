@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # mag — multi-account wrapper for the Google Workspace CLI (gws)
 #
-# CLI messages policy: user-facing output is English (fiche 0019, decided
-# 2026-09-04) — code comments below stay French, that's an internal choice.
+# CLI language policy: all user-facing output is English (set 2026-09-04) —
+# code comments below stay French, that's an internal choice.
 #
 # The gws CLI only handles one account at a time (native support was removed,
 # see https://github.com/googleworkspace/cli/issues/293). This wrapper isolates
@@ -23,7 +23,7 @@
 #   mag grant <alias> revoke <folderId>              Revoke a temporary authorization
 #   mag grants <alias> [clear]                       List/clear temporary authorizations
 #   mag strongauth on|off|status                     Require signed elicitation for unlock & grant
-#   mag elicitation enroll|status                    Enroll biometric key / status (fiche 0001)
+#   mag elicitation enroll|status                    Enroll biometric key / status
 #   mag admin [stop]                                 Start/stop the web interface (127.0.0.1:4877)
 #   mag broker [status|stop]                         Status/stop the broker for this GWSA_ROOT
 #   mag dev deploy [--isolated]                      Deploy the current clone as a temporary dev version
@@ -36,7 +36,7 @@
 #   mag revert                                       Roll back to the previous version (quick rollback)
 #   mag release [patch|minor|major|--print]          Publish a version (semver + CHANGELOG + tag)
 #   mag sandbox deploy [--wire …]|wire [--remove …]|list|status|remove  Disposable sandboxes (0041; details: mag sandbox --help)
-#   mag project show|init|sign                         Project manifest .gwsa/ (fiche 0040 phase B)
+#   mag project show|init|sign                         Project manifest .gwsa/ (phase B)
 #   mag couloir …                                      Deprecated alias → sandbox
 #   mag remove <alias>                               Disconnect and remove a profile
 #   mag <alias> <gws command…>                       Run gws on the <alias> account
