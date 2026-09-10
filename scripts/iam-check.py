@@ -38,14 +38,14 @@ def remediation(project: str, email: str) -> str:
         f"--member=user:{email} --role={ROLE}"
     )
     return (
-        f"⚠ Le compte {email} n'a pas accès au projet GCP « {project} » "
-        f"(quota project de l'app OAuth).\n"
-        f"  Tant que le rôle serviceUsageConsumer n'est pas accordé, chaque "
-        f"appel API renverra 403.\n"
-        f"  À faire exécuter par le propriétaire du projet (geste admin — le "
-        f"LLM ne l'exécute jamais) :\n"
+        f"⚠ Account {email} has no access to the GCP project “{project}” "
+        f"(the OAuth app's project quota).\n"
+        f"  Until the serviceUsageConsumer role is granted, every API call "
+        f"returns 403.\n"
+        f"  To be run by the project owner (admin action — the LLM never runs "
+        f"it):\n"
         f"    {cmd}\n"
-        f"  Propagation ~2 min. Détail : docs/setup-oauth.md §7."
+        f"  Propagation ~2 min. Details: docs/setup-oauth.md §7."
     )
 
 
@@ -59,7 +59,7 @@ def detect(email: str, text: str) -> Optional[str]:
 
 def main(argv: list[str]) -> int:
     if len(argv) < 2 or argv[0] != "detect" or not argv[1]:
-        sys.stderr.write("usage : gws … 2>&1 | iam-check.py detect <email>\n")
+        sys.stderr.write("usage: gws … 2>&1 | iam-check.py detect <email>\n")
         return 2
     msg = detect(argv[1], sys.stdin.read())
     if msg is None:
