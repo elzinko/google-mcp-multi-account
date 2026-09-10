@@ -148,6 +148,23 @@ l'accès passe. Puis : désactiver le réglage → la même demande **retombe** 
 taper, et le tool dédié disparaît de la liste. Enfin, enchaîner deux demandes → la seconde est
 **bloquée** par le throttle.
 
+## Résultat du test manuel (2026-09-11)
+
+**Le mécanisme fonctionne de bout en bout — au premier plan.** Lancé depuis un terminal
+(process rattaché à la session graphique), le 2e appel `confirm=true` fait surgir le vrai popup
+macOS. Le texte est correct (« déverrouiller "perso" … 1 min »), l'authentification propose
+Touch ID **ou** mot de passe, et la validation produit une signature (reçu `session_unlock`,
+`signé=oui`). Protocole en deux temps, throttle et fail-closed confirmés en réel.
+
+**Point de faisabilité ouvert — l'affichage depuis un process en arrière-plan.** Lancé par un
+process sans accès à la session graphique (l'outil shell de Claude Code lors du test), le helper
+est bien invoqué mais **le popup ne s'affiche pas** : il attend puis expire (fail-closed, aucun
+déverrouillage). Or le mode vise un déclenchement depuis le **serveur MCP**, qui tourne en
+arrière-plan. La vraie faisabilité dépend donc d'une question non tranchée : **un serveur MCP
+lancé par le client (app GUI) peut-il afficher ce popup ?** À valider en branchant un client réel
+sur cette branche. Pistes si non : faire porter l'affichage par une app au premier plan (le
+client lui-même), ou un helper GUI dédié.
+
 ## Notes
 
 - **Faisabilité constatée le 2026-09-10** (session Claude) : le popup n'est appelé aujourd'hui
