@@ -71,6 +71,40 @@ confirme « oui, agis **maintenant** », dans ces droits.
 - **Anti-injection** : en quoi le transactionnel réduit-il réellement la surface par rapport à la
   fenêtre ? (à énoncer noir sur blanc dans l'ADR).
 
+> **Décision d'architecture prise (2026-09-11)** — les questions ci-dessus sont tranchées dans
+> [ADR-0011](../docs/adr/ADR-0011-consentement-transactionnel-par-session.md) : bail de lecture
+> court **auto-refermé** (TTL ~90 s ET budget ~20 ops) + **acte sensible signé à usage unique**
+> (écriture/envoi/partage : Touch ID par acte), `minutes` **déprécié/écrêté**, retrait **jamais**
+> dépendant du LLM.
+
+## Modes de consentement (vision Thomas, 2026-09-11)
+
+Plutôt qu'un réglage unique, exposer des **modes** que l'utilisateur choisit — c'est lui qui règle
+le curseur friction / sécurité :
+
+- **Mode manuel** — Touch ID à **chaque opération**, lecture comme écriture. Le plus strict.
+- **Mode auto** — lecture en **bail court** (Touch ID par compte, ADR-0011), mais **acte sensible
+  toujours signé** (envoi mail, écriture/partage Drive : Touch ID par acte, **même en auto** —
+  c'est irréversible/sortant). Le plus fluide, sans banaliser l'irréversible.
+
+Ces modes **se posent par-dessus** ADR-0011 : ils règlent le curseur, l'ADR fixe la mécanique
+lecture/écriture. **Pas de « durée » comme réglage** : le mode auto n'ouvre pas « N minutes » mais
+un bail court auto-refermé. « Fermer avec la session » n'est **pas détectable** par le MCP (il ne
+sait pas quand la conversation finit — ADR-0007) ; le bail court **est** le proxy réaliste.
+
+## Contrainte de déploiement : version dev séparée + rollback (exigence Thomas)
+
+Le projet est **utilisé pour d'autres usages** : cette évolution ne doit **jamais casser
+l'existant qui marche**.
+
+- **Développer sur une version dev** = un serveur MCP **séparé** (ex. `gma-feat` → binaire de la
+  branche), qui **n'écrase pas** `google-multi-account` (prod, `current`). Déjà en place et validé
+  cette session (Code + Desktop).
+- **Déployer avec rollback** : mécanisme `current` → tag versionné (v1.1.0 → v1.x) ; rollback =
+  re-pointer `current` sur le tag précédent. Natif au projet.
+- **Opt-in, off par défaut** : comme le mode in-conversation, ce changement de modèle reste
+  activable/désactivable — rien ne change au comportement stable tant qu'il n'est pas choisi.
+
 ## Relation aux fiches voisines
 
 - [`20260910194019668`](20260910194019668_elicitation-in-conversation-opt-in.md) — le mode
