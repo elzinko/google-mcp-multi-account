@@ -58,7 +58,7 @@
 | [0041](done/0041-ecart-policy-surface-mcp.md) | Clarifier l'écart policy admin ↔ surface MCP (Drive copie, contenu, modification) | bug | P2 |  |  |  | ✅ shipped | #52 |
 | [0042](done/0042-version-connecteur-et-maj.md) | Version visible dans le connecteur MCP + mise à jour guidée | feature | P2 | V2 |  |  | ✅ shipped | #128 |
 | [0044](done/0044-touchid-signe-nom-produit.md) | Sous strongauth, le dialogue Touch ID nomme « swift-frontend » au lieu du produit | bug | P2 |  |  |  | ✅ shipped | #74 |
-| [0045](0045-capacites-projet-signees.md) | Droits par session et par projet git — état des lieux, écarts, pistes | feature | P2 |  | 0082 |  | 🟠 in-progress |  |
+| [0045](done/0045-capacites-projet-signees.md) | Droits par session et par projet git — état des lieux, écarts, pistes | feature | P2 |  | 0082 |  | 🗑️ superseded |  |
 | [0046](done/0046-sandbox-deploy-cli.md) | CLI locale pour déployer des sandboxes temporaires (branche / worktree) | feature | P2 |  |  |  | ✅ shipped | 24dfd5d |
 | [0047](done/0047-nommer-le-compte-au-moment-d-autoriser.md) | Au moment d'autoriser un accès, nommer le compte (email) — pas seulement l'alias | feature | P2 |  |  |  | ✅ shipped | #75 |
 | [0068](done/0068-accessibilite-focus-reduced-motion.md) | Accessibilité — focus-visible + reduced-motion (cadenas/modales/boutons) | feature | P2 | v0.4.0 | 0060 |  | ✅ shipped | #112 |
@@ -83,17 +83,16 @@
 | [0001](0001-elicitation-signee-strongauth-v2.md) | Élicitation signée — faire monter `mag strongauth` de la présence à la signature | feature | P3 |  |  |  | 🟠 in-progress |  |
 | [0090](0090-documenter-statut-oauth-verification.md) | Documenter et outiller le statut OAuth (warning « non vérifiée » + Testing→Production) | feature | P3 |  |  |  | ❓ todo |  |
 | [0093](done/0093-coherence-nommage-mag-produit-mcp.md) | Cohérence de nommage — relier `mag` / google-multi-account / repo sans casser le MCP | feature | P3 |  |  |  | ✅ shipped | #144 |
-| [20260906234210000](20260906234210000_purge-sessions-vides-expiration.md) | Sessions — purger les sessions vides + expiration automatique | feature | P3 |  | 0060 | google-mcp-multi-account | ❓ suggest |  |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)
 
 | # | Titre | Type | Prio | Version | Épic | Produit | Statut | PR |
 |---|-------|------|------|---------|------|---------|--------|----|
-| [0060](0060-admin-ux-ui-refresh.md) | Admin UX/UI refresh + docs/README + GitHub metadata | epic | P1 | v0.4.0 |  |  | ❓ todo |  |
-| [0077](0077-acces-mobile-souverain.md) | Accès mobile souverain — approbation passkey + holder natif | epic | P1 |  |  |  | ❓ todo |  |
+| [0060](0060-admin-ux-ui-refresh.md) | Admin UX/UI refresh + docs/README + GitHub metadata | epic | P1 | v0.4.0 |  |  | 🟠 in-progress |  |
+| [0077](0077-acces-mobile-souverain.md) | Accès mobile souverain — approbation passkey + holder natif | epic | P1 |  |  |  | 🟠 in-progress |  |
 | [0082](0082-droits-par-session.md) | Droits par session — isolation & capacités fines par conversation | epic | P1 |  |  |  | 🟠 in-progress |  |
 | [0105](done/0105-refonte-admin-cockpit.md) | Refonte de l'admin — adopter le design system « Cockpit » (par écran) | epic | P1 |  |  | google-mcp-multi-account | ✅ shipped | #128 |
-| [0017](0017-generaliser-autres-utilisateurs.md) | Généraliser le projet à d'autres utilisateurs que l'auteur | epic | P2 |  |  |  | 💡 idea |  |
+| [0017](0017-generaliser-autres-utilisateurs.md) | Généraliser le projet à d'autres utilisateurs que l'auteur | epic | P2 |  |  |  | 🟠 in-progress |  |
 
 ## 💡 Idées (non groomées)
 
@@ -115,6 +114,7 @@
 | [0079](0079-modele-soutenabilite-freemium.md) | Modèle de soutenabilité — freemium (cœur libre + options payantes) | feature | P3 |  |  |  | 💡 idea |  |
 | [20260903155243753](20260903155243753_journal-filtre-date.md) | Journal — filtre par date (la dimension manquante) | feature | P3 |  | 0060 | google-mcp-multi-account | 💡 idea |  |
 | [20260903155243879](20260903155243879_mobile-cibles-tactiles-44px.md) | Admin mobile — cibles tactiles à 44 px (barre haute) | bug | P3 |  | 0060 | google-mcp-multi-account | 💡 idea |  |
+| [20260906234210000](20260906234210000_purge-sessions-vides-expiration.md) | Sessions — purger les sessions vides + expiration automatique | feature | P3 |  | 0060 | google-mcp-multi-account | 💡 idea |  |
 | [20260910160500000](20260910160500000_poll-fond-profils-sessions-registre-route.md) | Poll de fond profils/sessions — le piloter par le registre de route (éviter les fetch inutiles) | refactor | P3 |  | 0060 | google-mcp-multi-account | 💡 idea |  |
 | [20260911120000000](20260911120000000_sandbox-scan-configs-projet-v2.md) | Sandbox v2 — scanner les configs projet Claude Code / Cursor | feature | P3 |  |  | google-multi-account | 💡 idea |  |
 
