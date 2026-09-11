@@ -1223,3 +1223,68 @@ def session_unlock_in_conversation(
         "minutes": mins,
         "message": f"{who} déverrouillé pour la session {sid} ({mins} min).",
     }
+
+
+def session_open_in_conversation(confirm: bool = False) -> dict[str, Any]:
+    """Mode opt-in — OUVRIR une session depuis la conversation (zéro terminal).
+
+    Pendant MCP du geste terminal `mag session open`, mais déclenché par le LLM à
+    la demande de l'humain : le popup Touch ID est levé par le serveur MCP, une
+    session vide (zéro droit) est créée, et son `session_id` est RENDU au LLM pour
+    qu'il le porte ensuite (déverrouillage, lectures…). C'est le maillon qui rend
+    le mode utilisable sans terminal préalable (fiche 20260910194019668).
+
+    Réservé au mode opt-in (`mag elicitation in-conversation on`) : que le LLM
+    déclenche l'élicitation est un choix de sécurité assumé ; le filet reste le
+    popup Touch ID (fail-closed). Protocole en deux temps comme
+    session_unlock_in_conversation.
+    """
+    from .elicitation import (
+        ElicitationError,
+        in_conversation_enabled,
+        inconv_inflight_guard,
+        run_elicitation_gate,
+    )
+    from .sessions import create_session
+
+    if not in_conversation_enabled():
+        raise GatewayError(
+            "élicitation dans la conversation désactivée — "
+            "l'utilisateur doit exécuter : mag elicitation in-conversation on",
+            code="error",
+        )
+    if not isinstance(confirm, bool):
+        raise GatewayError(
+            "paramètre « confirm » invalide — un booléen JSON est requis "
+            "(1er appel sans confirm = annonce ; confirm=true = déclenche Touch ID)",
+            code="error",
+        )
+
+    if not confirm:
+        return {
+            "ok": True,
+            "confirmation_required": True,
+            "message": (
+                "Ouverture d'une session pour cette conversation demandée. AUCUN "
+                "popup n'a été déclenché — annoncer cette action dans le chat et "
+                "attendre l'accord explicite de l'utilisateur avant de rappeler ce "
+                "tool avec confirm=true (cela déclenchera Touch ID)."
+            ),
+        }
+
+    try:
+        with inconv_inflight_guard():
+            run_elicitation_gate({"action": "session_open"})
+    except ElicitationError as e:
+        raise GatewayError(str(e), code="error") from e
+
+    state = create_session(client="mcp-in-conversation")
+    return {
+        "ok": True,
+        "opened": True,
+        "session": state.session_id,
+        "message": (
+            f"Session ouverte : {state.session_id}. Porter ce session_id dans le "
+            f"paramètre « session » des prochains appels (déverrouillage, lecture…)."
+        ),
+    }

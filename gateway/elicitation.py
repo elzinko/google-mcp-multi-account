@@ -169,6 +169,8 @@ def prompt_from_payload(payload: dict[str, Any]) -> str:
         return f"mag : révoquer les sous-sessions de {sid or target}"
     if action == "strongauth_off":
         return "mag : désactiver l'authentification forte"
+    if action == "session_open":
+        return "mag : ouvrir une session pour cette conversation"
     return f"mag : {action} — {alias} {target}".strip()
 
 

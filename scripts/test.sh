@@ -3629,6 +3629,80 @@ fresh_flag=$([ -f "$FRESH_ROOT/.elicitation-in-conversation" ] && echo yes || ec
   && pass "in-conversation : 'on' sur racine inexistante → racine créée puis marqueur (install neuve)" \
   || fail "in-conversation : fresh root ($fresh_flag / $fresh_out)"
 
+section "session_open_in_conversation — ouvrir une session depuis la conversation (zéro terminal)"
+touch "$INCONV_ROOT/.elicitation-in-conversation"   # mode on
+"$PY" "$(pwd)/scripts/elicitation-cli.py" enroll --mock >/dev/null 2>&1
+
+# le tool apparaît dans tools/list quand le mode est on
+open_listed="$(GWSA_ROOT="$INCONV_ROOT" "$PY" -c '
+import json, subprocess, sys
+out = subprocess.run([sys.executable, "-m", "gateway"],
+                     input=json.dumps({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}) + "\n",
+                     capture_output=True, text=True).stdout.splitlines()[0]
+names = [t["name"] for t in json.loads(out)["result"]["tools"]]
+assert "session_open_in_conversation" in names, names
+print("ok")
+')"
+[[ "$open_listed" == "ok" ]] \
+  && pass "session_open : exposé dans tools/list quand le mode est on" \
+  || fail "session_open : listé ($open_listed)"
+
+# 1er appel (sans confirm) : confirmation requise, AUCUNE session créée
+open_first="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+r = api.session_open_in_conversation(confirm=False)
+assert r.get("ok") and r.get("confirmation_required") and "session" not in r, r
+print("ok")
+')"
+[[ "$open_first" == "ok" ]] \
+  && pass "session_open : 1er appel (sans confirm) → confirmation requise, aucune session" \
+  || fail "session_open : 1er appel ($open_first)"
+
+# 2e appel (confirm=true, mock) : session créée + session_id rendu, réellement utilisable
+open_second="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.sessions import get_session
+r = api.session_open_in_conversation(confirm=True)
+assert r.get("ok") and r.get("opened"), r
+sid = r.get("session")
+assert sid and get_session(sid) is not None, (sid, r)
+print("ok")
+')"
+[[ "$open_second" == "ok" ]] \
+  && pass "session_open : 2e appel (confirm=true) → session créée + session_id rendu au LLM" \
+  || fail "session_open : 2e appel ($open_second)"
+
+# fail-closed : élicitation indisponible → aucune session ouverte
+rm -f "$INCONV_ROOT/.elicitation/mock.key"
+open_failclosed="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.errors import GatewayError
+try:
+    api.session_open_in_conversation(confirm=True)
+    print("opened-anyway")
+except GatewayError:
+    print("ok")
+')"
+[[ "$open_failclosed" == "ok" ]] \
+  && pass "session_open : échec d'élicitation → fail-closed (aucune session)" \
+  || fail "session_open : fail-closed ($open_failclosed)"
+"$PY" "$(pwd)/scripts/elicitation-cli.py" enroll --mock >/dev/null 2>&1   # ré-enrôler pour la suite
+
+# réglage off : refus même en appel direct (défense en profondeur)
+rm -f "$INCONV_ROOT/.elicitation-in-conversation"
+open_disabled="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.errors import GatewayError
+try:
+    api.session_open_in_conversation(confirm=False)
+    print("bypass")
+except GatewayError:
+    print("ok")
+')"
+[[ "$open_disabled" == "ok" ]] \
+  && pass "session_open : réglage off → refus même en appel direct (défense en profondeur)" \
+  || fail "session_open : off refuse ($open_disabled)"
+
 section "consume_nonce : verrou inter-process anti-TOCTOU (fiche 0084)"
 # consume_nonce fait reload → check → save sans atomicité inter-process avant
 # le correctif de la fiche 0084 : deux process concurrents peuvent tous deux

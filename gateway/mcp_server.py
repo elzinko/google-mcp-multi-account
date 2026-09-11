@@ -493,6 +493,40 @@ _SESSION_UNLOCK_IN_CONVERSATION_TOOL: dict[str, Any] = {
 }
 
 
+# Pendant de session_unlock_in_conversation : OUVRE la session (zéro terminal).
+# Point d'entrée SANS `session` (il en crée une) — masqué hors mode opt-in.
+_SESSION_OPEN_IN_CONVERSATION_TOOL: dict[str, Any] = {
+    "name": "session_open_in_conversation",
+    "description": (
+        "Mode opt-in (désactivé par défaut) : OUVRE une session pour cette "
+        "conversation DIRECTEMENT depuis le chat, sans terminal. Déclenche "
+        "l'élicitation signée (Touch ID) via le serveur MCP, crée une session vide "
+        "(zéro droit) et RENVOIE son `session_id` — à porter ensuite dans le "
+        "paramètre `session` des autres appels (session_unlock_in_conversation, "
+        "lectures…). Protocole en DEUX temps : 1er appel (sans confirm) → AUCUN "
+        "popup, message à faire valider dans le chat ; 2e appel (confirm=true) → "
+        "déclenche le popup puis crée la session. À appeler quand aucun jeton de "
+        "session n'est encore disponible. La confirmation chat est un verrou SOUPLE "
+        "— le vrai filet reste Touch ID."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "confirm": {
+                "type": "boolean",
+                "default": False,
+                "description": (
+                    "Ne passer à true qu'APRÈS confirmation explicite de "
+                    "l'utilisateur dans le chat — déclenche alors le popup Touch ID."
+                ),
+            },
+        },
+        "required": [],
+        "additionalProperties": False,
+    },
+}
+
+
 def _visible_tools() -> list[dict[str, Any]]:
     """tools/list : ré-évalué à chaque appel (capabilities.listChanged=False —
 
@@ -501,6 +535,7 @@ def _visible_tools() -> list[dict[str, Any]]:
     """
     tools = list(TOOLS)
     if in_conversation_enabled():
+        tools.append(_SESSION_OPEN_IN_CONVERSATION_TOOL)
         tools.append(_SESSION_UNLOCK_IN_CONVERSATION_TOOL)
     return tools
 
@@ -626,6 +661,9 @@ DISPATCH: dict[str, Callable] = {
         # Valeur BRUTE (pas de bool() permissif) : bool("false") == True
         # court-circuiterait le protocole en deux temps (popup dès le 1er appel).
         # L'api rejette tout non-booléen (revue Codex #142).
+        confirm=kw.get("confirm", False),
+    ),
+    "session_open_in_conversation": lambda **kw: api.session_open_in_conversation(
         confirm=kw.get("confirm", False),
     ),
 }
