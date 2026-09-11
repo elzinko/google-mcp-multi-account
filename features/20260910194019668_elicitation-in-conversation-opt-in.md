@@ -150,6 +150,17 @@ taper, et le tool dédié disparaît de la liste. Enfin, enchaîner deux demande
 
 ## Résultat du test manuel (2026-09-11)
 
+**✅ VISION VALIDÉE — zéro terminal, avec Claude Code (2026-09-11).** Une fois le tool
+`session_open_in_conversation` ajouté, le flux complet marche **sans terminal** : depuis une
+conversation Claude Code (serveur MCP lancé par l'app), le LLM appelle
+`session_open_in_conversation` puis `session_unlock_in_conversation` ; **les deux popups Touch ID
+surgissent, déclenchés par le serveur MCP**, l'humain valide, la session s'ouvre et se
+déverrouille. La faisabilité du popup depuis le MCP est donc **tranchée : oui, ça marche** (au
+moins avec Claude Code). Reste à confirmer sur les autres surfaces de Claude Desktop (chat,
+cowork) — très probable (même app GUI), à vérifier surface par surface.
+
+Le reste de cette section retrace le chemin parcouru (utile pour comprendre les limites rencontrées).
+
 **Le mécanisme fonctionne de bout en bout — au premier plan.** Lancé depuis un terminal
 (process rattaché à la session graphique), le 2e appel `confirm=true` fait surgir le vrai popup
 macOS. Le texte est correct (« déverrouiller "perso" … 1 min »), l'authentification propose
