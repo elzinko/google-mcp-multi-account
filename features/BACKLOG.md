@@ -1,7 +1,7 @@
 # Backlog — mega-city
 
 > Index auto-généré (`regen-backlog.sh` mega-city, via `/ezk-backlog regen`) — **ne pas éditer à la main**. Source de vérité = le front-matter de chaque fiche.
-> Guide du dossier : [README.md](README.md). Statuts : 💡 idea · 🔵 ready · 🟠 in-progress · ⛔ blocked · ✅ shipped.
+> Guide du dossier : [README.md](README.md). Statuts : 💡 idea · 🔵 ready · 🟠 in-progress · ⛔ blocked · ✅ shipped · 🗑️ superseded.
 
 > 📋 Séquence décidée (curée, hors index) : [PLAN.md](PLAN.md).
 
@@ -102,6 +102,7 @@
 |---|-------|------|------|---------|------|---------|--------|----|
 | [0101](0101-nom-de-session-fourni-par-le-client.md) | Nom lisible de session, fourni par le client MCP | feature | P1 |  | 0082 | google-mcp-multi-account | 💡 idea |  |
 | [0108](0108-session-demande-sous-ensemble-droits-compte.md) | Session — demander un sous-ensemble des droits du compte (accès fin, vérifiable par session) | feature | P1 |  | 0082 | google-mcp-multi-account | 💡 idea |  |
+| [20260911135931576](20260911135931576_deverrouillage-transactionnel-vs-minutes.md) | Déverrouillage transactionnel — remplacer la fenêtre de minutes par un consentement par demande | feature | P1 |  | 0082 | google-multi-account | 💡 idea |  |
 | [0026](0026-savoir-quelle-version-repond.md) | Savoir quelle version répond — version annoncée par les tools, dérive détectée | feature | P2 |  |  |  | 💡 idea |  |
 | [0035](0035-admin-acces-rapide-et-visu-zones.md) | Accès rapide à l'admin + visualisation des zones (icône barre de menus ?) | feature | P2 |  |  |  | 💡 idea |  |
 | [0039](0039-harmoniser-vocabulaire-jeton.md) | Bannir « jeton/token » des surfaces utilisateur — un seul vocabulaire (accès / connexion) | chore | P2 |  |  |  | 💡 idea |  |
