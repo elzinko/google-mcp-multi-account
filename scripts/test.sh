@@ -3703,6 +3703,46 @@ except GatewayError:
   && pass "session_open : réglage off → refus même en appel direct (défense en profondeur)" \
   || fail "session_open : off refuse ($open_disabled)"
 
+# guidage : en mode in-conversation, les refus pointent vers les TOOLS MCP (pas le terminal)
+touch "$INCONV_ROOT/.elicitation-in-conversation"
+mkdir -p "$INCONV_ROOT/alpha" && touch "$INCONV_ROOT/alpha/.locked"
+guid_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.errors import GatewayError
+from gateway.sessions import create_session
+m1 = m2 = False
+try:
+    api._run("alpha", ["gmail", "list"], session="")
+except GatewayError as e:
+    m1 = "session_open_in_conversation" in str(e)
+s = create_session(client="t")
+try:
+    api._run("alpha", ["gmail", "list"], session=s.session_id)
+except GatewayError as e:
+    m2 = "session_unlock_in_conversation" in str(e)
+print("ok" if (m1 and m2) else "m1=%s m2=%s" % (m1, m2))
+')"
+[[ "$guid_ok" == "ok" ]] \
+  && pass "guidage : mode on → refus pointent vers les tools MCP (session_open/unlock_in_conversation)" \
+  || fail "guidage in-conversation ($guid_ok)"
+
+# guidage OFF : message terminal inchangé (non-régression)
+rm -f "$INCONV_ROOT/.elicitation-in-conversation"
+guidoff_ok="$(GWSA_ROOT="$INCONV_ROOT" "$PY" -c '
+import gateway.api as api
+from gateway.errors import GatewayError
+from gateway.sessions import create_session
+s = create_session(client="t")
+try:
+    api._run("alpha", ["gmail", "list"], session=s.session_id)
+    print("no-error")
+except GatewayError as e:
+    print("ok" if "access_request kind=session_unlock" in str(e) else "got:%s" % e)
+')"
+[[ "$guidoff_ok" == "ok" ]] \
+  && pass "guidage : mode off → message terminal inchangé (non-régression)" \
+  || fail "guidage off ($guidoff_ok)"
+
 section "consume_nonce : verrou inter-process anti-TOCTOU (fiche 0084)"
 # consume_nonce fait reload → check → save sans atomicité inter-process avant
 # le correctif de la fiche 0084 : deux process concurrents peuvent tous deux

@@ -102,10 +102,23 @@ def _run(
     sid = (session or "").strip()
     gro = get_git_root() or git_toplevel()
     try:
+        # Guidage adaptatif : en mode « élicitation dans la conversation », pointer
+        # le LLM vers les tools MCP (zéro terminal) plutôt que vers « mag … » —
+        # sinon le LLM relaie une commande terminale que l'utilisateur refuse.
+        from .elicitation import in_conversation_enabled
+        inconv = in_conversation_enabled()
         if not sid:
             raise GatewayError(
-                "jeton de session requis — paramètre « session » manquant sur "
-                "cet appel (obtenu à l'initialize, ou via access_request)",
+                (
+                    "aucune session pour cette conversation — appeler d'abord le "
+                    "tool session_open_in_conversation (popup Touch ID) pour en "
+                    "ouvrir une, puis porter le session_id obtenu dans « session »"
+                )
+                if inconv else
+                (
+                    "jeton de session requis — paramètre « session » manquant sur "
+                    "cet appel (obtenu à l'initialize, ou via access_request)"
+                ),
                 code="session",
             )
         require_session(sid)  # lève si jeton inconnu ou expiré (TTL)
@@ -117,8 +130,15 @@ def _run(
             )
         if is_locked(d) and not is_session_unlocked(sid, alias):
             raise GatewayError(
-                f"profil « {alias} » verrouillé pour cette session — "
-                f"access_request kind=session_unlock",
+                (
+                    f"profil « {alias} » verrouillé — appeler le tool "
+                    f"session_unlock_in_conversation sur « {alias} » (popup Touch ID)"
+                )
+                if inconv else
+                (
+                    f"profil « {alias} » verrouillé pour cette session — "
+                    f"access_request kind=session_unlock"
+                ),
                 code="locked",
             )
     except GatewayError as e:
@@ -862,6 +882,21 @@ def _bootstrap_no_session(kind: str) -> dict[str, Any]:
     un tool de données), mais un kind qui exige une session en pointe ici vers
     `mag session open`, plutôt que d'échouer sans piste.
     """
+    from .elicitation import in_conversation_enabled
+    if in_conversation_enabled():
+        return {
+            "ok": True,
+            "elicitation": True,
+            "kind": "session_open",
+            "requested_kind": kind,
+            "message": (
+                f"« {kind} » nécessite une session active, et aucune n'est ouverte "
+                f"pour cette conversation. Appeler le tool "
+                f"session_open_in_conversation (popup Touch ID) pour en ouvrir une, "
+                f"puis porter le session_id obtenu — aucun terminal requis."
+            ),
+            "suggested_tool": "session_open_in_conversation",
+        }
     return {
         "ok": True,
         "elicitation": True,
