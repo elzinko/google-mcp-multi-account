@@ -165,15 +165,23 @@ lancé par le client (app GUI) peut-il afficher ce popup ?** À valider en branc
 sur cette branche. Pistes si non : faire porter l'affichage par une app au premier plan (le
 client lui-même), ou un helper GUI dédié.
 
-**Blocage en amont du popup — le jeton de session (constaté le 2026-09-11).** Test via un vrai
-client MCP (Claude Code branché sur cette branche, serveur lancé par l'app) : le tool est bien
-exposé et appelé, mais le Claude bute **avant le popup**, dès le 1er appel — il n'a **pas de jeton
-de session** à mettre dans le paramètre `session` (requis). C'est le point dur des fiches
-[`0101`](0101-nom-de-session-fourni-par-le-client.md) et
-[`0108`](0108-session-demande-sous-ensemble-droits-compte.md) : le client MCP ne transmet pas
-d'identité de conversation au LLM (« branché à vide », [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md)).
-**Conséquence : ce mode est subordonné à la résolution du problème du jeton** — le popup n'est pas
-le premier verrou. Et le blocage touche **tous** les tools (gmail, drive…), pas seulement ce POC.
+**Un prérequis mal déroulé — l'ouverture de session (constaté le 2026-09-11).** Test via un vrai
+client MCP (Claude Code branché sur cette branche, serveur lancé par l'app) : le tool est exposé
+et appelé, mais le Claude bute **avant le popup**, dès le 1er appel — il n'a **pas de jeton de
+session** à mettre dans le paramètre `session` (requis), et il a été interrompu avant de guider
+vers l'obtention d'un jeton. Or le flux **existe** ([ADR-0007](../docs/adr/ADR-0007-droits-par-session.md),
+Décision 1) : une session naît d'un **geste humain** — `mag session open` (Touch ID) émet un jeton
+signé que l'humain transmet ensuite au LLM ; le client MCP ne le fournit **pas** automatiquement
+(l'option « id de conversation émis par le client » est explicitement **rejetée** dans l'ADR, car
+Claude Desktop ne l'émet pas). Donc : **pas un cul-de-sac** — le mode est testable de bout en bout
+en déroulant `mag session open` d'abord. La **friction** restante (transmettre le `session_id` au
+LLM à la main) est le sujet des fiches [`0101`](0101-nom-de-session-fourni-par-le-client.md) /
+[`0108`](0108-session-demande-sous-ensemble-droits-compte.md), pas un bloqueur.
+
+**Deux améliorations à retenir** : (1) sans jeton, `session_unlock_in_conversation` devrait
+**guider vers `mag session open`** (comme `access_request` via `_bootstrap_no_session`) au lieu
+d'un sec « session requise » ; (2) le test du popup **depuis le serveur MCP** reste **à refaire**
+une fois la session ouverte — c'est la seule question de faisabilité encore ouverte.
 
 ## Notes
 
