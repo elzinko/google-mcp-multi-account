@@ -5,12 +5,22 @@ type: feature
 priority: P3
 version:
 epic:
-status: in-progress
+status: superseded
 ready:
 pr:
 created: 2026-07-20
-updated: 2026-07-28
+updated: 2026-09-12
 ---
+
+> **🗑️ Superseded (2026-09-12).** La proposition — consentement **scellé par une signature à présence
+> physique** (P-256 Secure Enclave, défi nonce + hachage, reçu vérifiable, fail-closed) — est **livrée** :
+> **ADR-0005** (« Élicitation signée v2 »), `scripts/elicitation-sign.swift`, `gateway/elicitation.py`
+> (challenge / `consume_nonce` / `log_receipt` / vérification). Durcie ensuite par [[0082]]/[[0083]]/[[0084]]
+> (anti-TOCTOU, anti-clonage) et exploitée par le POC in-conversation (#142).
+>
+> Le **2ᵉ trou** soulevé ici — « le contrôle vit dans le wrapper, un shell nu contourne » — est
+> **orthogonal** et reste porté par l'axe **holder/vault souverain** : épic [[0077]] (accès mobile
+> souverain, ADR-0008). Cette fiche est donc close ; son reliquat vit ailleurs.
 
 ## Contexte / Problème
 
