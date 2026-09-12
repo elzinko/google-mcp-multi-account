@@ -11,7 +11,7 @@
 set -euo pipefail
 
 REPO="${GWSA_REPO:-elzinko/google-mcp-multi-account}"
-DEPLOY_ROOT="${GWSA_DEPLOY_ROOT:-$HOME/.local/share/google-mcp}"
+DEPLOY_ROOT="${MAG_DEPLOY_ROOT:-${GWSA_DEPLOY_ROOT:-$HOME/.local/share/google-mcp}}"  # compat bi-nom (fiche 20260912000249823)
 CURRENT_LINK="$DEPLOY_ROOT/current"
 
 if [[ -t 1 ]]; then
@@ -41,17 +41,17 @@ Arguments :
   -h, --help   affiche cette aide
   --wire       branche Claude Desktop/Code (opt-in ; défaut : imprime le geste)
 
-Surcharges (tests / cas particuliers) :
+Surcharges (tests / cas particuliers) — les anciens noms GWSA_* restent acceptés :
   GWSA_REPO / GWSA_TAGS_URL / GWSA_TARBALL_BASE  (idem lib-github-release.sh)
-  GWSA_DEPLOY_ROOT   où figer les versions (défaut ~/.local/share/google-mcp)
-  GWSA_CLI_LINK      lien « mag » sur le PATH (défaut : brew, sinon ~/.local/bin)
-  GWSA_WIRE=1|--wire branche Desktop/Code (défaut : imprime seulement le geste)
-  GWSA_ALLOW_NO_GWS=1  ne bloque pas si « gws » manque (CI / l'installer après)
+  MAG_DEPLOY_ROOT    où figer les versions (défaut ~/.local/share/google-mcp)
+  MAG_CLI_LINK       lien « mag » sur le PATH (défaut : brew, sinon ~/.local/bin)
+  MAG_WIRE=1|--wire  branche Desktop/Code (défaut : imprime seulement le geste)
+  MAG_ALLOW_NO_GWS=1  ne bloque pas si « gws » manque (CI / l'installer après)
 EOF
 }
 
-# Arguments : --help (aide) · --wire (opt-in : brancher les clients). GWSA_WIRE=1 ≡ --wire.
-WIRE="${GWSA_WIRE:-}"
+# Arguments : --help (aide) · --wire (opt-in : brancher les clients). MAG_WIRE=1 ≡ --wire (GWSA_WIRE en repli).
+WIRE="${MAG_WIRE:-${GWSA_WIRE:-}}"  # compat bi-nom (fiche 20260912000249823)
 for _arg in "$@"; do
   case "$_arg" in
     -h|--help) usage; exit 0 ;;
@@ -68,7 +68,7 @@ for tool in curl tar python3; do
 done
 GWS_MISSING=""
 if ! command -v gws >/dev/null 2>&1; then
-  if [[ -n "${GWSA_ALLOW_NO_GWS:-}" ]]; then
+  if [[ -n "${MAG_ALLOW_NO_GWS:-${GWSA_ALLOW_NO_GWS:-}}" ]]; then
     GWS_MISSING=1
     warn "la CLI « gws » manque — tu l'installeras après (GWSA_ALLOW_NO_GWS) ; rappel à la fin"
   else
@@ -145,7 +145,7 @@ fi
 
 # ── mag sur le PATH ─────────────────────────────────────────────
 step "Commandes sur le PATH — mag (+ alias gma/gwsa)"
-link="${GWSA_CLI_LINK:-}"
+link="${MAG_CLI_LINK:-${GWSA_CLI_LINK:-}}"  # compat bi-nom (fiche 20260912000249823)
 if [[ -z "$link" ]]; then
   if command -v brew >/dev/null 2>&1; then link="$(brew --prefix)/bin/mag"; else link="$HOME/.local/bin/mag"; fi
 fi
@@ -173,8 +173,9 @@ DESK="$CURRENT_LINK/scripts/install-claude-desktop.sh"
 CODE="$CURRENT_LINK/scripts/install-claude-code.sh"
 if [[ -n "$WIRE" ]]; then
   if [[ -x "$DESK" ]]; then
-    if [[ -n "${GWSA_DESKTOP_CONFIG:-}" ]]; then
-      "$DESK" --config "$GWSA_DESKTOP_CONFIG" >/dev/null 2>&1 \
+    _desk_cfg="${MAG_DESKTOP_CONFIG:-${GWSA_DESKTOP_CONFIG:-}}"  # compat bi-nom (fiche 20260912000249823)
+    if [[ -n "$_desk_cfg" ]]; then
+      "$DESK" --config "$_desk_cfg" >/dev/null 2>&1 \
         && ok "Claude Desktop branché" || warn "branchement Desktop à faire : $DESK"
     else
       "$DESK" >/dev/null 2>&1 && ok "Claude Desktop branché" || warn "branchement Desktop à faire : $DESK"

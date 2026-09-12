@@ -3,7 +3,7 @@
 #
 # Fusionne (sans rien écraser) une entrée « google-multi-account » dans le
 # fichier de config de Claude Desktop, en pointant sur bin/google-mcp de CE
-# clone (chemin absolu résolu tout seul) avec GWSA_CLIENT=claude-desktop.
+# clone (chemin absolu résolu tout seul) avec MAG_CLIENT=claude-desktop.
 #
 # Usage :
 #   ./scripts/install-claude-desktop.sh                 # branche (ou met à jour)
@@ -13,7 +13,7 @@
 #   ./scripts/install-claude-desktop.sh --config PATH    # config Desktop non standard
 #
 # Brancher DEUX versions à la fois demande DEUX ports : le serveur MCP parle au
-# broker qui écoute sur GWSA_BROKER_PORT, et le premier broker démarré sert tous
+# broker qui écoute sur MAG_BROKER_PORT, et le premier broker démarré sert tous
 # ceux qui visent son port. Sans port distinct, le nom de l'entrée ment sur la
 # version qui répond (fiche 0025) — le script refuse donc ce cas.
 #
@@ -25,7 +25,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MCP_BIN="$REPO_ROOT/bin/google-mcp"
 SERVER_NAME="google-multi-account"
-GWSA_CLIENT="claude-desktop"
+CLIENT="claude-desktop"       # émis dans MAG_CLIENT (renommage GWSA_→MAG_, fiche 20260912000249823)
 BROKER_PORT="4878"
 PYTHON="/usr/bin/python3"
 [[ -x "$PYTHON" ]] || PYTHON="$(command -v python3 || true)"
@@ -95,7 +95,7 @@ echo "  config   : $CONFIG_PATH"
 # machine (result=… / backup=… / preview=…) que bash met en forme.
 set +e
 out="$(
-  MCP_BIN="$MCP_BIN" SERVER_NAME="$SERVER_NAME" GWSA_CLIENT="$GWSA_CLIENT" \
+  MCP_BIN="$MCP_BIN" SERVER_NAME="$SERVER_NAME" CLIENT="$CLIENT" \
   BROKER_PORT="$BROKER_PORT" \
   CONFIG_PATH="$CONFIG_PATH" DRY="$DRY" "$PYTHON" - <<'PY'
 import json, os, sys, tempfile, time
@@ -108,8 +108,8 @@ port  = os.environ["BROKER_PORT"]
 # Le port est écrit MÊME quand c’est celui par défaut : le couloir doit se lire
 # dans la config, pas se déduire (fiche 0025).
 entry = {"command": os.environ["MCP_BIN"],
-         "env": {"GWSA_CLIENT": os.environ["GWSA_CLIENT"],
-                 "GWSA_BROKER_PORT": port}}
+         "env": {"MAG_CLIENT": os.environ["CLIENT"],
+                 "MAG_BROKER_PORT": port}}
 dry   = bool(os.environ.get("DRY"))
 
 # Lecture tolérante : fichier absent ou vide → objet neuf.
@@ -137,7 +137,10 @@ if not isinstance(servers, dict):
 # Les serveurs MCP tiers ne sont pas concernés : seul « google-mcp » est compté.
 def rival_port(srv):
     env = srv.get("env") if isinstance(srv, dict) else None
-    return (env or {}).get("GWSA_BROKER_PORT", DEFAULT_PORT)
+    env = env or {}
+    # Renommage GWSA_→MAG_ : un voisin peut viser son port via MAG_ (neuf) ou
+    # GWSA_ (legacy). On lit les deux, MAG_ prioritaire (fiche 20260912000249823).
+    return env.get("MAG_BROKER_PORT") or env.get("GWSA_BROKER_PORT", DEFAULT_PORT)
 
 
 for other, srv in servers.items():

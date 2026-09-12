@@ -1651,14 +1651,14 @@ print(d)' "$1" "$2" 2>/dev/null
   && pass "le script existe et est exécutable" \
   || fail "le script existe et est exécutable"
 
-# création : config absente → entrée ajoutée (command absolu + GWSA_CLIENT)
+# création : config absente → entrée ajoutée (command absolu + MAG_CLIENT)
 f="$CD/create.json"
 "$INSTALL" --config "$f" >/dev/null 2>&1
 cmd="$(jget "$f" mcpServers.google-multi-account.command)"
-env_client="$(jget "$f" mcpServers.google-multi-account.env.GWSA_CLIENT)"
+env_client="$(jget "$f" mcpServers.google-multi-account.env.MAG_CLIENT)"
 [[ "$cmd" == */bin/google-mcp && "$env_client" == "claude-desktop" ]] \
-  && pass "création : fichier absent → entrée (command absolu + GWSA_CLIENT=claude-desktop)" \
-  || fail "création : fichier absent → entrée (command absolu + GWSA_CLIENT)"
+  && pass "création : fichier absent → entrée (command absolu + MAG_CLIENT=claude-desktop)" \
+  || fail "création : fichier absent → entrée (command absolu + MAG_CLIENT)"
 
 # préservation : autres serveurs MCP + clés annexes intacts
 f="$CD/preserve.json"
@@ -1693,6 +1693,20 @@ ls "$f".bak-* >/dev/null 2>&1 \
   && pass "backup horodaté créé avant modification" \
   || fail "backup horodaté créé avant modification"
 
+# migration legacy → MAG_ : une entrée CORRECTE mais nommée en GWSA_ (ancien nom)
+# est ré-écrite en MAG_ (renommage fiche 20260912000249823). Backup fait ; le
+# serveur lit les deux noms, donc rien ne casse pendant la bascule.
+f="$CD/migrate.json"
+MCP_ABS_DT="$(cd "$(dirname "$INSTALL")/.." && pwd)/bin/google-mcp"
+cat > "$f" <<JSON
+{ "mcpServers": { "google-multi-account": { "command": "$MCP_ABS_DT", "env": { "GWSA_CLIENT": "claude-desktop", "GWSA_BROKER_PORT": "4878" } } } }
+JSON
+"$INSTALL" --config "$f" >/dev/null 2>&1
+[[ "$(jget "$f" mcpServers.google-multi-account.env.MAG_CLIENT)" == "claude-desktop" \
+   && -z "$(jget "$f" mcpServers.google-multi-account.env.GWSA_CLIENT)" ]] \
+  && pass "migration : entrée legacy GWSA_ correcte → ré-écrite en MAG_ (backup)" \
+  || fail "migration : legacy GWSA_ → MAG_"
+
 # JSON invalide → refus (exit ≠ 0), fichier intact
 f="$CD/bad.json"
 printf '{ pas du json ' > "$f"; orig="$(cat "$f")"
@@ -1725,14 +1739,14 @@ printf '{ "mcpServers": [1, 2, 3] }' > "$f"; orig="$(cat "$f")"
 # le port part dans l'entrée, même quand c'est celui par défaut
 f="$CD/port-default.json"
 "$INSTALL" --config "$f" >/dev/null 2>&1
-[[ "$(jget "$f" mcpServers.google-multi-account.env.GWSA_BROKER_PORT)" == "4878" ]] \
+[[ "$(jget "$f" mcpServers.google-multi-account.env.MAG_BROKER_PORT)" == "4878" ]] \
   && pass "couloir : le port du broker est écrit dans l'entrée (4878 par défaut)" \
   || fail "couloir : port par défaut absent de l'entrée"
 
 # --port choisit le couloir
 f="$CD/port-custom.json"
 "$INSTALL" --config "$f" --name google-multi-account-v0 --port 4881 >/dev/null 2>&1
-[[ "$(jget "$f" mcpServers.google-multi-account-v0.env.GWSA_BROKER_PORT)" == "4881" ]] \
+[[ "$(jget "$f" mcpServers.google-multi-account-v0.env.MAG_BROKER_PORT)" == "4881" ]] \
   && pass "couloir : --port 4881 écrit dans l'entrée nommée" \
   || fail "couloir : --port ignoré"
 
@@ -1751,7 +1765,7 @@ out_c="$("$INSTALL" --config "$f" --name google-multi-account-dev 2>&1)"; rc_c=$
 
 # … mais un port libre passe, et l'entrée existante n'est pas touchée
 "$INSTALL" --config "$f" --name google-multi-account-dev --port 4880 >/dev/null 2>&1
-[[ "$(jget "$f" mcpServers.google-multi-account-dev.env.GWSA_BROKER_PORT)" == "4880" \
+[[ "$(jget "$f" mcpServers.google-multi-account-dev.env.MAG_BROKER_PORT)" == "4880" \
    && "$(jget "$f" mcpServers.google-multi-account.command)" == "/ailleurs/google-mcp" ]] \
   && pass "couloir : port libre accepté, entrée voisine intacte" \
   || fail "couloir : port libre refusé ou voisin modifié"
@@ -1823,9 +1837,9 @@ ccrun >/dev/null 2>&1
   && pass "claude-code : première fois → mcp add scope user sur le bon binaire" \
   || fail "claude-code : enregistrement initial"
 
-# les --env attendus sont transmis
-grep -q "GWSA_CLIENT=claude-code" "$CCLOG" && grep -q "GWSA_BROKER_PORT=4878" "$CCLOG" \
-  && pass "claude-code : --env GWSA_CLIENT=claude-code + port 4878 transmis" \
+# les --env attendus sont transmis (renommage : émis en MAG_)
+grep -q "MAG_CLIENT=claude-code" "$CCLOG" && grep -q "MAG_BROKER_PORT=4878" "$CCLOG" \
+  && pass "claude-code : --env MAG_CLIENT=claude-code + port 4878 transmis" \
   || fail "claude-code : env manquants"
 
 # 2. relance → idempotent, aucun nouvel add
@@ -1848,17 +1862,27 @@ printf '%s\n' "$MCP_ABS" > "$CCREG"
 printf '    GWSA_CLIENT=claude-code\n    GWSA_BROKER_PORT=9999\n' > "$CCENV"; : > "$CCLOG"
 ccrun >/dev/null 2>&1
 [[ "$(grep -c "mcp remove" "$CCLOG")" -ge 1 && "$(grep -c "mcp add" "$CCLOG")" -ge 1 ]] \
-  && grep -q "GWSA_BROKER_PORT=4878" "$CCLOG" \
+  && grep -q "MAG_BROKER_PORT=4878" "$CCLOG" \
   && pass "claude-code : bon binaire mais mauvais port → re-branché sur le bon couloir" \
   || fail "claude-code : devrait re-brancher quand le port de broker diffère"
 
-# 3c. bon binaire + bon port, mais SANS GWSA_CLIENT → re-branchement (attribution).
+# 3c. bon binaire + bon port, mais SANS client → re-branchement (attribution).
 printf '%s\n' "$MCP_ABS" > "$CCREG"
 printf '    GWSA_BROKER_PORT=4878\n' > "$CCENV"; : > "$CCLOG"
 ccrun >/dev/null 2>&1
 [[ "$(grep -c "mcp add" "$CCLOG")" -ge 1 ]] \
-  && pass "claude-code : entrée sans GWSA_CLIENT → re-branchée (attribution du journal)" \
-  || fail "claude-code : devrait re-brancher quand GWSA_CLIENT manque"
+  && pass "claude-code : entrée sans client → re-branchée (attribution du journal)" \
+  || fail "claude-code : devrait re-brancher quand le client manque"
+
+# 3d. entrée legacy COMPLÈTE et correcte, mais nommée en GWSA_ → migrée vers MAG_
+#     (renommage fiche 20260912000249823 ; le serveur lit les deux, rien ne casse).
+printf '%s\n' "$MCP_ABS" > "$CCREG"
+printf '    GWSA_CLIENT=claude-code\n    GWSA_BROKER_PORT=4878\n' > "$CCENV"; : > "$CCLOG"
+ccrun >/dev/null 2>&1
+[[ "$(grep -c "mcp add" "$CCLOG")" -ge 1 ]] \
+  && grep -q "MAG_CLIENT=claude-code" "$CCLOG" && grep -q "MAG_BROKER_PORT=4878" "$CCLOG" \
+  && pass "claude-code : entrée legacy GWSA_ correcte → migrée en MAG_" \
+  || fail "claude-code : legacy GWSA_ correcte devrait migrer en MAG_"
 
 # 4. --print : montre la commande, n'invoque JAMAIS le CLI
 : > "$CCLOG"

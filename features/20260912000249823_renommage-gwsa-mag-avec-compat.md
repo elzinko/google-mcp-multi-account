@@ -46,20 +46,46 @@ D'où : **compat obligatoire**, jamais un find-replace sec.
 ## Découpage en lots
 
 - **Lot 1** — helper `env()` + compat des lectures **`gateway/`** (surtout les vars clients :
-  `ROOT`, `CLIENT`, `BROKER_HOST/PORT`) + tests bi-nom. *(en cours)*
+  `ROOT`, `CLIENT`, `BROKER_HOST/PORT`) + tests bi-nom. ✅ *(commit 519d403)*
 - **Lot 2** — reste des lectures `gateway/` (sessions, elicitation, api) + scripts Python
-  (`policy-check`, `log-usage`, `elicitation-cli`).
-- **Lot 3** — compat bash (`bin/mag`, `scripts/*.sh`) : normalisation en tête.
-- **Lot 4** — émission `MAG_` (CLI + install clients) + doc (carte des noms).
+  (`policy-check`, `log-usage`, `elicitation-cli`). ✅ *(commit ec5b154)*
+- **Lot 3** — compat bash (`bin/mag`, `scripts/*.sh`, `install.sh`) : normalisation en tête,
+  pour tout ce qu'un humain ou un client MCP peut poser. ✅ *(commit e76b996)*
+- **Lot 4** — émission `MAG_` : installeurs Claude Desktop/Code + `mag wire` écrivent `MAG_`
+  dans les configs clients ; une entrée legacy `GWSA_` est **migrée** au prochain passage
+  (backup). Doc « carte des noms » dans `configurer-client.md`. ✅
 - **Lot 5** (plus tard) — retrait du repli `GWSA_`.
+
+### Reporté volontairement (à faire dans une passe dédiée, non bloquant)
+
+Le repli `GWSA_` étant en place partout, ces bascules sont sûres à faire plus tard :
+
+- **Écritures internes gateway → sous-process** (Python) : `env["GWSA_SESSION_CAPS"]`,
+  `GWSA_LOG_*`, `GWSA_GWS_CONFIG_DIR`, `GWSA_GIT_ROOT`, `GWSA_SESSION_ID`,
+  `GWSA_USE_SESSION_GRANTS`, `GWSA_SESSION_DRIVE_ZONES`, `GWSA_ELICITATION_DIR`,
+  `GWSA_ROOT` (posées par `broker_server.py`, `usage.py`, `elicitation.py`). Invisibles
+  côté configs ; leurs lecteurs acceptent déjà les deux noms.
+  ⚠️ `SESSION_CAPS` se teste par présence (voir garde de sécurité) : basculer l'écrivain
+  **et** le lecteur ensemble. Le **signeur swift** lit `GWSA_ELICITATION_DIR`/`GWSA_ROOT`
+  (binaire compilé, pas de helper) → auditer avant de renommer côté émission.
+- **Émissions internes `bin/mag` → sous-process Python** : `GWSA_SYS_SWIFT`,
+  `GWSA_SIGN_BIN`, `GWSA_ELICITATION_MOCK` (forward), `GWSA_LOG_*`, `GWSA_ROOT` pour
+  l'élicitation. Éphémères, lecteurs Python bi-nom ; laissées pour ne pas toucher le
+  chemin Touch ID en autonomie.
+- **Snippets config `mag dev use` + `sandbox.sh` wire** : flux dev/sandbox (pas la config
+  stable de prod). Même soin détection/préservation que les installeurs quand on le fera.
+- **Boutons release/CI/test** : `GWSA_REPO`, `GWSA_TAGS_URL`, `GWSA_TARBALL_BASE`,
+  `GWSA_MAIN_BRANCH`, `GWSA_RELEASE_TEST_CMD` — personne ne les pose en `MAG_` ;
+  migrer avec le lot 5.
+- **Constantes de tests de course** : `GWSA_*_TEST_RACE_DELAY_MS` (posées par `test.sh`).
 
 ## Critères d'acceptation
 
-- [ ] Une config passant `MAG_CLIENT` / `MAG_BROKER_PORT` / `MAG_ROOT` fonctionne. Testé.
-- [ ] Une config passant les anciens `GWSA_*` fonctionne **toujours** (repli). Testé (non-régression).
-- [ ] Le dossier `gws-accounts` (tokens) est **inchangé**.
-- [ ] `MAG_` a priorité sur `GWSA_` quand les deux sont présents. Testé.
-- [ ] `./scripts/test.sh` au vert.
+- [x] Une config passant `MAG_CLIENT` / `MAG_BROKER_PORT` / `MAG_ROOT` fonctionne. Testé.
+- [x] Une config passant les anciens `GWSA_*` fonctionne **toujours** (repli). Testé (non-régression).
+- [x] Le dossier `gws-accounts` (tokens) est **inchangé**.
+- [x] `MAG_` a priorité sur `GWSA_` quand les deux sont présents. Testé.
+- [x] `./scripts/test.sh` au vert (527 réussis).
 
 ## Comment vérifier
 
