@@ -6,8 +6,8 @@ priority: P1
 product: google-multi-account
 version:
 epic: 0082
-status: idea
-ready:
+status: ready
+ready: 2026-09-12
 pr:
 created: 2026-09-11
 ---
@@ -114,15 +114,38 @@ l'existant qui marche**.
   (sous-ensemble de droits). Ici c'est le *combien de temps / à quelle granularité temporelle*.
 - Épic parent [`0082`](0082-droits-par-session.md) ; socle [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md).
 
-## Critères d'acceptation (esquisse — à compléter au grooming)
+## Incrément 1 (ce sprint) — le cœur ADR-0011, sur `main`
 
-- [ ] Un modèle de durée **décidé** (transactionnel + filet court + par-acte-sensible), acté dans
-  un **ADR** (trade-offs friction/sécurité explicités).
-- [ ] `session_unlock` (et le mode in-conversation) suivent ce modèle ; `minutes` recadré (repli
-  ou retiré, tranché).
-- [ ] Opérations sensibles (envoi, écriture, partage) → re-validation par acte, testée.
-- [ ] Retrait effectif après la demande (mécanisme retenu) — testé.
-- [ ] `./scripts/test.sh` au vert.
+Objectif : poser la **mécanique** d'ADR-0011 dans la couche session/gate, sans la couche « modes ».
+
+**Dans le périmètre :**
+- Registre de session : remplacer la fenêtre `minutes` par un **bail de lecture** borné — TTL ~90 s
+  **ET** budget ~20 ops, première limite atteinte → referme —, calculé côté broker à chaque appel.
+- Point de contrôle `_run` : router selon **lecture** (bail actif ? sinon Touch ID « lire maintenant »
+  ouvre un bail) vs **mutation** (Touch ID signé lié à l'acte, usage unique via `consume_nonce` —
+  aucune fenêtre).
+- **Mapping tool → lecture|mutation** explicite et **fail-closed** (tool non classé = mutation).
+- `session_unlock` : `minutes` **déprécié + écrêté** au plafond du bail (compat, pas de casse d'API).
+- Retrait **jamais** dépendant du LLM (TTL/budget seuls) ; `session_close` **hors périmètre** (optim. ultérieure).
+
+**Hors périmètre (incréments suivants) :** la couche **modes auto/manuel** (par-dessus) ; l'adaptation du
+mode **in-conversation** (`session_unlock_in_conversation`, sur #142 — suit une fois #142 mergé, même
+socle) ; la **calibration** des défauts et l'**allowlist** de comptes sensibles.
+
+**Base :** `main` (le socle sessions/`_run`/minutes y vit). Opt-in / rollback natifs (version dev
+`gma-feat` séparée, `current` → tag).
+
+## Critères d'acceptation (incrément 1)
+
+- [ ] Le registre de session porte un **bail de lecture** (TTL **et** budget) au lieu d'une fenêtre
+  `minutes` ; il se referme seul (TTL écoulé **ou** budget épuisé) — testé (hermétique).
+- [ ] `_run` : une **lecture** sous bail actif passe (budget −1) ; bail fermé → refus sauf nouveau
+  consentement — testé.
+- [ ] Une **mutation** (écriture / envoi / partage / suppression) exige un **acte signé dédié** (usage
+  unique) ; un 2ᵉ acte identique redemande un geste — testé.
+- [ ] Tool **non classé** → traité en **mutation** (fail-closed) — testé.
+- [ ] `session_unlock` accepte encore `minutes` mais l'**écrête** au plafond du bail — testé (non-régression API).
+- [ ] `./scripts/test.sh` au vert (aucune régression).
 
 ## Comment vérifier
 
