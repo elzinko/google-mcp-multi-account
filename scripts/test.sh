@@ -6075,6 +6075,46 @@ print('READ', prompt_from_payload({'action':'transactional_read_lease','alias':'
   && pass "transactionnel : le prompt de mutation nomme l'opération (P1) et le compte/email (P2)" \
   || fail "transactionnel : prompt de mutation générique/anonyme ($out_tx_prompt)"
 
+# 6bis) Codex #147 (re-review) : l'action signée distingue create/delete des
+#       permissions Drive — categorize() rend « share » pour les deux, donc
+#       l'op_label doit porter la MÉTHODE BRUTE, sinon les deux actes se confondent.
+out_tx_oplabel="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import gateway.api as api
+_, _, c = api._classify_operation(['drive','permissions','create','--params','{}'])
+_, _, d = api._classify_operation(['drive','permissions','delete','--params','{}'])
+print('create', c, 'delete', d, 'distinct', c != d)
+")"
+[[ "$out_tx_oplabel" == *"distinct True"* ]] \
+  && pass "transactionnel : action signée distingue create/delete des permissions Drive (méthode brute, Codex #147 P1)" \
+  || fail "transactionnel : op_label confond encore create/delete ($out_tx_oplabel)"
+
+# 6ter) Codex #147 (re-review) : en mode transactionnel le broker N'exige PAS
+#       is_session_unlocked (le consentement est porté par le gate _run en amont) ;
+#       sinon tout appel consenti échouerait au broker. Hors mode : verrou legacy.
+out_tx_broker="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import os, pathlib
+import gateway.broker_server as bs
+from gateway.sessions import create_session
+d = pathlib.Path('$TX_ROOT')/'beta'; d.mkdir(exist_ok=True)   # profil dédié (n'affecte pas alpha)
+(d/'.locked').write_text('1')                                  # verrouillé
+s = create_session(client='txBroker')
+os.environ.pop('GWSA_TRANSACTIONAL_CONSENT', None)
+legacy_refused = False
+try:
+    bs._require_access('beta', s.session_id)
+except bs.GatewayError as e:
+    legacy_refused = (e.code == 'locked')
+os.environ['GWSA_TRANSACTIONAL_CONSENT'] = '1'
+try:
+    bs._require_access('beta', s.session_id); tx_allowed = True
+except bs.GatewayError:
+    tx_allowed = False
+print('legacy_refused', legacy_refused, 'tx_allowed', tx_allowed)
+")"
+[[ "$out_tx_broker" == *"legacy_refused True"* && "$out_tx_broker" == *"tx_allowed True"* ]] \
+  && pass "transactionnel : broker — verrou legacy hors mode, laissé passer en mode transactionnel (Codex #147 P1)" \
+  || fail "transactionnel : broker _require_access incorrect ($out_tx_broker)"
+
 # 7) Flag ON : `session_unlock(minutes=…)` déprécié + écrêté au plafond du bail
 #    (quelques minutes max, plus 1440) — non-casse de l'API.
 out_tx_unlock_clamp="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" GWSA_TRANSACTIONAL_CONSENT=1 \
