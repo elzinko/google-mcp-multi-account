@@ -58,10 +58,15 @@ def transactional_mode() -> str:
     raw = os.environ.get("GWSA_TRANSACTIONAL_MODE", "").strip().lower()
     if not raw:
         p = gwsa_root() / TRANSACTIONAL_MODE_FLAG_NAME
-        try:
-            raw = p.read_text(encoding="utf-8").strip().lower() if p.is_file() else ""
-        except OSError:
-            raw = ""
+        if p.is_file():
+            try:
+                raw = p.read_text(encoding="utf-8").strip().lower()
+            except OSError:
+                # Fail-closed (Codex PR #148, P2) : le fichier de mode EXISTE mais
+                # est illisible (perms / erreur FS transitoire). Ne PAS downgrader
+                # vers « auto » (qui ouvrirait un bail au lieu d'exiger un geste par
+                # opération) — retenir le mode le plus strict.
+                return "manuel"
     return "manuel" if raw == "manuel" else "auto"
 
 
