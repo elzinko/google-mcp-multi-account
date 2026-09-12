@@ -34,6 +34,7 @@ from .sessions import (
     open_read_lease,
     require_session,
     transactional_enabled,
+    transactional_mode,
     try_consume_read_lease,
 )
 from .setup_status import setup_status  # noqa: F401 — re-export pour le dispatch MCP
@@ -148,12 +149,17 @@ def _transactional_gate(alias: str, gws_args: list[str], sid: str) -> None:
     # pour que le prompt/reçu nomme le compte réel, pas juste l'alias, en
     # multi-comptes (Codex PR #147, P2).
     email = profile_email(alias)
-    if op_class == "mutation":
+    # Mode « manuel » (vision Thomas, fiche 20260911135931576) : Touch ID à CHAQUE
+    # opération, lecture COMME écriture — pas de bail, chaque lecture est un acte
+    # signé. Mode « auto » (défaut) : seule la mutation est signée par acte, la
+    # lecture passe par le bail court (ADR-0011). Le mode se pose PAR-DESSUS ADR-0011.
+    if op_class == "mutation" or transactional_mode() == "manuel":
         try:
             run_elicitation_gate(
                 {
                     # opération concrète dans l'action SIGNÉE (Codex #147, P1) :
-                    # « transactional_mutation:gmail:send » ≠ « …:drive:delete ».
+                    # « transactional_mutation:gmail:send » ≠ « …:drive:delete » ;
+                    # en manuel, une lecture est aussi signée (« …:gmail:read »).
                     "action": f"transactional_mutation:{op_label}",
                     "alias": alias,
                     "email": email,
