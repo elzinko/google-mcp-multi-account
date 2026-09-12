@@ -2056,6 +2056,23 @@ GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" --rollback v9.9.9 >/dev/null 2>&1; rc=$?
   && pass "rollback vers une version non déployée → refus" \
   || fail "rollback vers une version non déployée → refus"
 
+# --- « previous » : lien réservé, ni listé ni ciblable (item 3, fiche 20260905175129735) ---
+# À ce stade $DEP a « previous » posé (→ v1.1.0, par le rollback ci-dessus).
+out_list_prev="$(GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" --list 2>&1)"
+[[ "$out_list_prev" != *"previous"* ]] \
+  && pass "--list : « previous » (lien réservé) exclu de l'énumération" \
+  || fail "--list : « previous » apparaît à tort comme une version (out=$out_list_prev)"
+
+PREV_TARGET_BEFORE="$(basename "$(readlink "$DEP/previous")")"
+out_rb_prev="$(GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" --rollback previous 2>&1)"; rc=$?
+[[ "$rc" -ne 0 && "$out_rb_prev" == *"previous"* ]] \
+  && pass "--rollback previous : refusé explicitement (lien réservé, pas une version)" \
+  || fail "--rollback previous : accepté à tort (rc=$rc, out=$out_rb_prev)"
+
+[[ "$(basename "$(readlink "$DEP/previous" 2>/dev/null)")" == "$PREV_TARGET_BEFORE" ]] \
+  && pass "--rollback previous refusé : la vraie cible de « previous » n'a pas été perdue" \
+  || fail "--rollback previous : la cible de « previous » a été écrasée malgré le refus"
+
 # --- Publication et mise à jour (fiche 0029) --------------------------------
 #
 # Hermétique : dépôt git jouet sous $TMP, aucun remote, aucun réseau, suite de
@@ -2290,7 +2307,12 @@ out_rv="$(GWSA_CLI_LINK="$LINK" gwenv "$GW" revert 2>&1)"; rc=$?
 
 # le revert est un bascule comme une autre : previous devient à son tour v0.1.0
 # (symétrie avec point_current_at) — un second revert doit donc y revenir.
-out_rv2="$(GWSA_CLI_LINK="$LINK" gwenv "$GW" revert 2>&1)"; rc=$?
+# Invocation via $LINK (le lien PATH reciblé par le 1er revert), PAS via $GW
+# (le binaire du clone, qui a TOUJOURS la commande « revert ») — item 4 : ici
+# les deux versions du fixture $REL partagent le même bin/mag, donc le 2e
+# revert réussit réellement ; c'est la section dédiée plus bas qui couvre la
+# limite documentée (release antérieure au commit introduisant « revert »).
+out_rv2="$(GWSA_CLI_LINK="$LINK" gwenv "$LINK" revert 2>&1)"; rc=$?
 [[ "$rc" -eq 0 && "$(basename "$(readlink "$RELDEP/current")")" == "v0.1.0" ]] \
   && pass "mag revert : un second revert fait l'aller-retour (toggle current/previous)" \
   || fail "mag revert : le second revert ne re-bascule pas (obtenu « $out_rv2 »)"
@@ -2325,6 +2347,129 @@ out_ra="$(GWSA_DEPLOY_ROOT="$RELDEP" "$GW" revert extra 2>&1)"; rc=$?
 [[ "$rc" -ne 0 ]] \
   && pass "mag revert : refuse tout argument (revert seul)" \
   || fail "mag revert : argument accepté à tort (rc=$rc)"
+
+section "mag revert — amorçage rétroactif de « previous » (item 2, fiche 20260905175129735)"
+
+# Une install SANS CLONE dont la 1ère mise à jour introduisant « mag revert »
+# a été exécutée par un ANCIEN deploy-local.sh (qui ne posait jamais
+# « previous ») : juste après cette upgrade, « previous » manque, mais
+# l'ancienne release est encore là, à côté. « mag revert » doit la dériver et
+# l'enregistrer après coup plutôt que de refuser à tort.
+RETRO="$TMP/retro-deploy"; mkdir -p "$RETRO/v1.0.0/bin" "$RETRO/v2.0.0/bin"
+printf '#!/bin/sh\necho v1\n' > "$RETRO/v1.0.0/bin/mag"; chmod +x "$RETRO/v1.0.0/bin/mag"
+printf '#!/bin/sh\necho v2\n' > "$RETRO/v2.0.0/bin/mag"; chmod +x "$RETRO/v2.0.0/bin/mag"
+ln -sfn "$RETRO/v2.0.0" "$RETRO/current"   # ancien updater : jamais posé « previous »
+
+out_retro="$(GWSA_DEPLOY_ROOT="$RETRO" GWSA_CLI_LINK="$FAKEBIN/mag-retro" "$GW" revert 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$RETRO/current")")" == "v1.0.0" ]] \
+  && pass "mag revert : « previous » absent mais une seule autre release présente → dérivée et utilisée" \
+  || fail "mag revert : repli rétro-compatible en échec (rc=$rc, current=$(basename "$(readlink "$RETRO/current" 2>/dev/null)"), out=$out_retro)"
+
+[[ "$(basename "$(readlink "$RETRO/previous" 2>/dev/null)")" == "v2.0.0" ]] \
+  && pass "mag revert : « previous » enregistré après coup (pointe l'ancienne current, v2.0.0)" \
+  || fail "mag revert : « previous » non enregistré après le repli"
+
+# Ambiguïté : plusieurs autres releases candidates → pas de choix arbitraire
+# risqué, message clair plutôt qu'un repli au hasard.
+RETRO2="$TMP/retro-deploy-ambigu"; mkdir -p "$RETRO2/v1.0.0/bin" "$RETRO2/v1.5.0/bin" "$RETRO2/v2.0.0/bin"
+for _rd in v1.0.0 v1.5.0 v2.0.0; do
+  printf '#!/bin/sh\necho %s\n' "$_rd" > "$RETRO2/$_rd/bin/mag"; chmod +x "$RETRO2/$_rd/bin/mag"
+done
+ln -sfn "$RETRO2/v2.0.0" "$RETRO2/current"
+
+out_retro2="$(GWSA_DEPLOY_ROOT="$RETRO2" GWSA_CLI_LINK="$FAKEBIN/mag-retro2" "$GW" revert 2>&1)"; rc=$?
+[[ "$rc" -ne 0 && "$out_retro2" == *"previous"* && ! -L "$RETRO2/previous" ]] \
+  && pass "mag revert : plusieurs releases candidates → pas de repli automatique (ambigu), message clair" \
+  || fail "mag revert : ambiguïté mal gérée (rc=$rc, out=$out_retro2)"
+
+# Exclusion dev/sandbox (Codex PR #146, P1) : « mag dev deploy » (dev-*) et
+# « mag sandbox deploy » (.sandbox.json) stockent des copies NON stables dans le
+# même GWSA_DEPLOY_ROOT. Elles ne doivent JAMAIS être dérivées comme « previous ».
+DEVX="$TMP/revert-devexclude"; mkdir -p "$DEVX/v2.0.0/bin" "$DEVX/dev-abc123/bin" "$DEVX/sbx-deadbeef/bin"
+printf '#!/bin/sh\necho v2\n' > "$DEVX/v2.0.0/bin/mag"; chmod +x "$DEVX/v2.0.0/bin/mag"
+printf '#!/bin/sh\necho dev\n' > "$DEVX/dev-abc123/bin/mag"; chmod +x "$DEVX/dev-abc123/bin/mag"
+printf '#!/bin/sh\necho sbx\n' > "$DEVX/sbx-deadbeef/bin/mag"; chmod +x "$DEVX/sbx-deadbeef/bin/mag"
+printf '{}' > "$DEVX/sbx-deadbeef/.sandbox.json"   # marqueur sandbox
+ln -sfn "$DEVX/v2.0.0" "$DEVX/current"   # aucune release stable en repli — seulement dev + sandbox
+out_devx="$(GWSA_DEPLOY_ROOT="$DEVX" GWSA_CLI_LINK="$FAKEBIN/mag-devx" "$GW" revert 2>&1)"; rc=$?
+[[ "$rc" -ne 0 && ! -L "$DEVX/previous" ]] \
+  && pass "mag revert : dev-* et sandbox (.sandbox.json) exclus du repli → aucun « previous » dérivé à tort" \
+  || fail "mag revert : dev/sandbox pris à tort comme previous (rc=$rc, previous=$(readlink "$DEVX/previous" 2>/dev/null))"
+
+# … et un dev-* voisin ne DÉSACTIVE pas le repli vers la vraie release stable.
+DEVX2="$TMP/revert-devexclude2"; mkdir -p "$DEVX2/v1.0.0/bin" "$DEVX2/v2.0.0/bin" "$DEVX2/dev-xyz/bin"
+for _d in v1.0.0 v2.0.0 dev-xyz; do printf '#!/bin/sh\necho %s\n' "$_d" > "$DEVX2/$_d/bin/mag"; chmod +x "$DEVX2/$_d/bin/mag"; done
+ln -sfn "$DEVX2/v2.0.0" "$DEVX2/current"
+out_devx2="$(GWSA_DEPLOY_ROOT="$DEVX2" GWSA_CLI_LINK="$FAKEBIN/mag-devx2" "$GW" revert 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$DEVX2/current")")" == "v1.0.0" ]] \
+  && pass "mag revert : un dev-* voisin ne casse pas le repli vers la vraie release stable" \
+  || fail "mag revert : dev-* a désactivé le repli légitime (rc=$rc, current=$(basename "$(readlink "$DEVX2/current" 2>/dev/null)"))"
+
+# Repli exige un « current » VALIDE (Codex PR #146, P2) : sans current (retiré /
+# install ratée), une release en cache ne doit être ni dérivée comme previous ni
+# « réactivée » en créant current de toutes pièces.
+NOCUR="$TMP/revert-nocurrent"; mkdir -p "$NOCUR/v1.0.0/bin"
+printf '#!/bin/sh\necho v1\n' > "$NOCUR/v1.0.0/bin/mag"; chmod +x "$NOCUR/v1.0.0/bin/mag"
+out_nocur="$(GWSA_DEPLOY_ROOT="$NOCUR" GWSA_CLI_LINK="$FAKEBIN/mag-nocur" "$GW" revert 2>&1)"; rc=$?
+[[ "$rc" -ne 0 && ! -e "$NOCUR/current" && ! -L "$NOCUR/previous" ]] \
+  && pass "mag revert : sans « current » valide → refus, ni previous dérivé ni current créé (Codex #146 P2)" \
+  || fail "mag revert : repli sans current a réactivé une install (rc=$rc, out=$out_nocur)"
+
+section "mag revert — 2e revert via le lien PATH reciblé : limite documentée (item 4, fiche 20260905175129735)"
+
+# Décision PO (déjà tranchée, ne pas ré-arbitrer) : un 2e « mag revert » est
+# indisponible quand la release COURANTE après le 1er revert prédate le
+# commit qui introduit « revert ». Le test vérifie un échec PROPRE (message
+# clair, pas de crash silencieux), jamais un faux succès simulé via le
+# binaire du clone (qui a toujours la commande).
+REVERT2="$TMP/revert2-deploy"; mkdir -p "$REVERT2/v-new/bin" "$REVERT2/v-old/bin"
+cp bin/mag "$REVERT2/v-new/bin/mag"; chmod +x "$REVERT2/v-new/bin/mag"   # la release courante : a « revert »
+cat > "$REVERT2/v-old/bin/mag" <<'EOF'
+#!/bin/sh
+case "$1" in
+  list) echo "(stub v-old : rien à lister)"; exit 0 ;;
+  help) echo "mag — stub v-old (pas de commande revert)"; exit 0 ;;
+  *) echo "mag: \"$1\" is not a mag command." >&2; exit 3 ;;
+esac
+EOF
+chmod +x "$REVERT2/v-old/bin/mag"
+
+R2BIN="$TMP/revert2-bin"; mkdir -p "$R2BIN"
+R2LINK="$R2BIN/mag"
+
+# état de départ : current = v-new (a « revert »), previous = v-old (antérieure).
+ln -sfn "$REVERT2/v-new" "$REVERT2/current"
+ln -sfn "$REVERT2/v-old" "$REVERT2/previous"
+ln -sfn "$REVERT2/current/bin/mag" "$R2LINK"
+
+out_r2a="$(GWSA_CLI_LINK="$R2LINK" GWSA_DEPLOY_ROOT="$REVERT2" "$GW" revert 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$REVERT2/current")")" == "v-old" ]] \
+  && pass "mag revert (1er) : current rebascule sur la release antérieure à « revert »" \
+  || fail "mag revert (1er) : current n'a pas rebasculé (out=$out_r2a)"
+
+[[ "$(readlink "$R2LINK")" == "$REVERT2/current/bin/mag" ]] \
+  && pass "mag revert (1er) : lien PATH reciblé sur la release antérieure" \
+  || fail "mag revert (1er) : lien PATH pas reciblé"
+
+# 2e revert : via $R2LINK (le lien PATH reciblé, donc désormais le stub
+# v-old sans « revert »), PAS via un binaire qui aurait toujours la commande.
+out_r2b="$("$R2LINK" revert 2>&1)"; rc=$?
+[[ "$rc" -ne 0 && "$out_r2b" == *"not a mag command"* ]] \
+  && pass "mag revert (2e, depuis une release pré-revert) : échoue proprement (commande absente), limite documentée" \
+  || fail "mag revert (2e) : devrait échouer proprement, jamais simuler un succès (rc=$rc, out=$out_r2b)"
+
+section "update.sh — guide de refresh affiché inconditionnellement après re-ciblage (item 5, fiche 20260905175129735)"
+
+# $LINK est déjà posé et reciblé sur $RELDEP/current/bin/mag par les tests
+# ci-dessus. En ajoutant son dossier au PATH, « command -v mag » réussirait
+# DANS le process d'update.sh lui-même — exactement le cas où l'ancienne
+# condition (gardée par « command -v mag ») masquait le guide à tort, alors
+# que c'est le shell APPELANT (pas le process de l'updater) qui a le chemin
+# en cache.
+out_guide="$(PATH="$FAKEBIN:$PATH" relenv "$UPDATE" --force 2>&1)"
+[[ "$out_guide" == *"nom canonique"* && "$out_guide" == *"hash -r"* ]] \
+  && pass "update : guide de refresh affiché même quand « mag » est déjà résolu dans ce process (condition non inversée)" \
+  || fail "update : guide de refresh masqué à tort alors que « mag » est déjà résolu (out=$out_guide)"
 
 section "mag update / release — un seul poste de commande (fiche 0030)"
 
@@ -2430,6 +2575,75 @@ out_cv="$(env -i PATH="$CLIBIN:/usr/bin:/bin" HOME="$HOME" bash -c 'command -v m
 [[ -z "$out_cv" ]] \
   && pass "témoin du bug : command -v ne voit pas le lien dont la cible est absente" \
   || fail "témoin du bug : command -v aurait dû échouer sur un lien cassé"
+
+section "update.sh & deploy-local.sh --rollback — cli-link.sh capturé AVANT la bascule de current (fiche 20260905175129735 item 1)"
+
+# Reproduit le scénario précis de l'item 1 : « mag update --to <release
+# pré-helper> » lancé DEPUIS LA COPIE INSTALLÉE ($0 sous $DEPLOY_ROOT/current),
+# où la release CIBLE prédate à la fois le renommage gma/gwsa→mag et le helper
+# de re-ciblage (fiche 0081) : elle n'a que bin/gwsa (pas de bin/mag), et pas
+# de scripts/lib/cli-link.sh. Avant le fix : la bascule de current a déjà lieu
+# (via deploy-local.sh) avant que update.sh ne source le helper ; celui-ci est
+# alors cherché dans la release CIBLE (qui ne l'a pas) → le lien PATH « mag »
+# reste pointé sur .../current/bin/mag, qui n'existe plus après la bascule →
+# la commande « mag » elle-même est cassée (rc=127), pas seulement « en retard
+# d'une version ». Avec le fix, le lien est reciblé sur .../current/bin/gwsa
+# (repli légitime) et reste invocable.
+PH="$TMP/prehelper-repo"; mkdir -p "$PH/scripts/lib" "$PH/bin"
+cp scripts/update.sh scripts/deploy-local.sh scripts/lib-github-release.sh "$PH/scripts/"
+printf '#!/bin/sh\nexit 0\n' > "$PH/bin/google-mcp"; chmod +x "$PH/bin/google-mcp"
+printf '#!/bin/sh\necho mag-old-gwsa\n' > "$PH/bin/gwsa"; chmod +x "$PH/bin/gwsa"
+git -C "$PH" init -q >/dev/null 2>&1
+git -C "$PH" checkout -qb main >/dev/null 2>&1
+git -C "$PH" config user.email "test@example.invalid"
+git -C "$PH" config user.name "test"
+git -C "$PH" add -A >/dev/null 2>&1
+git -C "$PH" commit -qm "release pré-renommage, sans le helper cli-link (pré-0081)" >/dev/null 2>&1
+git -C "$PH" tag v1-nohelper
+
+# la release SUIVANTE renomme gwsa→mag et ajoute le helper — c'est celle qui
+# est déployée comme « current » et exécutera update.sh.
+cp scripts/lib/cli-link.sh "$PH/scripts/lib/"
+git -C "$PH" rm -q bin/gwsa >/dev/null 2>&1
+printf '#!/bin/sh\necho mag-helper\n' > "$PH/bin/mag"; chmod +x "$PH/bin/mag"
+git -C "$PH" add -A >/dev/null 2>&1
+git -C "$PH" commit -qam "renommage gwsa→mag + helper cli-link (post-0081/#114)" >/dev/null 2>&1
+git -C "$PH" tag v2-helper
+
+PHDEP="$TMP/prehelper-deploy"
+PHBIN="$TMP/prehelper-bin"; mkdir -p "$PHBIN"
+PHLINK="$PHBIN/mag"
+phenv() { GWSA_DEPLOY_ROOT="$PHDEP" GWSA_CLI_LINK="$PHLINK" "$@"; }
+
+# amorce : installe d'abord v2-helper (la release COURANTE, qui a le helper).
+phenv "$PH/scripts/deploy-local.sh" --tag v2-helper >/dev/null 2>&1
+ln -sfn "$PHDEP/current/bin/mag" "$PHLINK"
+
+# Rejoue le vrai vecteur : « mag update --to v1-nohelper » lancé depuis la
+# copie INSTALLÉE ($PHDEP/current/scripts/update.sh), PAS depuis $PH (le clone).
+phenv "$PHDEP/current/scripts/update.sh" --to v1-nohelper >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$PHDEP/current")")" == "v1-nohelper" ]] \
+  && pass "update --to <pré-helper> depuis l'installé : current bascule sur la release cible" \
+  || fail "update --to <pré-helper> depuis l'installé : current n'a pas basculé"
+
+"$PHLINK" >/dev/null 2>&1; rc_invoke=$?
+[[ "$(readlink "$PHLINK" 2>/dev/null)" == "$PHDEP/current/bin/gwsa" && "$rc_invoke" -ne 127 ]] \
+  && pass "update --to <pré-helper> depuis l'installé : lien PATH reciblé sur current/bin/gwsa (cli-link.sh capturé avant la bascule), commande encore invocable" \
+  || fail "update --to <pré-helper> depuis l'installé : lien PATH PAS reciblé — commande « mag » cassée après le rollback (cible=$(readlink "$PHLINK" 2>/dev/null), rc invocation=$rc_invoke)"
+
+# même scénario, mais via deploy-local.sh --rollback invoqué à travers « current ».
+phenv "$PH/scripts/deploy-local.sh" --tag v2-helper >/dev/null 2>&1   # retour à un état sain connu
+ln -sfn "$PHDEP/current/bin/mag" "$PHLINK"
+
+out_dlr_ph="$(phenv "$PHDEP/current/scripts/deploy-local.sh" --rollback v1-nohelper 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$PHDEP/current")")" == "v1-nohelper" ]] \
+  && pass "deploy-local --rollback <pré-helper> via current : current bascule sur la release cible" \
+  || fail "deploy-local --rollback <pré-helper> via current : current n'a pas basculé (out=$out_dlr_ph)"
+
+"$PHLINK" >/dev/null 2>&1; rc_invoke2=$?
+[[ "$(readlink "$PHLINK" 2>/dev/null)" == "$PHDEP/current/bin/gwsa" && "$rc_invoke2" -ne 127 ]] \
+  && pass "deploy-local --rollback <pré-helper> via current : lien PATH reciblé sur current/bin/gwsa (cli-link.sh capturé avant la bascule), commande encore invocable" \
+  || fail "deploy-local --rollback <pré-helper> via current : lien PATH PAS reciblé — commande « mag » cassée après le rollback (cible=$(readlink "$PHLINK" 2>/dev/null), rc invocation=$rc_invoke2)"
 
 section "update.sh & deploy-local.sh --rollback — rollback à travers le renommage gma→mag (fiche 0081)"
 
@@ -5825,9 +6039,40 @@ ln -sfn "$(cd "$(dirname "$GWSA")" && pwd)/mag" "$DEPR_ROOT/gma"
 # dépréciation à cette sortie utile. On le vérifie en comparant gwsa avec
 # lui-même, avertissement présent (1er appel) vs absent (2e appel, marqueur
 # déjà posé) : stdout et rc doivent être rigoureusement identiques.
+#
+# item 8 (fiche 20260905175129735) : chaque « $(...) » fait potentiellement
+# tourner l'appel dans un sous-shell distinct — en CI hors-TTY la clé de
+# session (tty/$PPID) peut donc différer entre les deux appels, et les DEUX
+# sont alors « froids » (marqueur jamais partagé) : la comparaison ne teste
+# plus vraiment froid-vs-chaud, une régression qui réémettrait l'avertissement
+# aux deux appels passerait inaperçue. Fix : forcer une clé de session COMMUNE
+# via l'override GWSA_DEPRECATION_SESSION_KEY (déjà ajouté au fix #137), pour
+# que le 2e appel soit RÉELLEMENT chaud (même marqueur que le 1er), quel que
+# soit le sous-shell qui l'exécute.
+#
+# Chaque appel (froid, puis chaud) est capturé en UNE SEULE invocation
+# (stdout et stderr vers des fichiers séparés) : les appeler deux fois de
+# plus pour ne récupérer que stderr referait tourner l'appel « froid » une
+# 2e fois, qui serait alors déjà chaud (marqueur posé par le 1er appel) —
+# ce qui viderait $GWSA_COLD_ERR à tort.
+CW_KEY="coldwarm-fixed-key"
 MAG_OUT="$(GWSA_ROOT="$GWSA_ROOT" "$GWSA" list 2>/dev/null)"; MAG_RC=$?
-GWSA_COLD_OUT="$(TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>/dev/null)"; GWSA_COLD_RC=$?
-GWSA_WARM_OUT="$(TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>/dev/null)"; GWSA_WARM_RC=$?
+
+GWSA_DEPRECATION_SESSION_KEY="$CW_KEY" TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" \
+  "$DEPR_ROOT/gwsa" list >"$TMP/cw-cold.out" 2>"$TMP/cw-cold.err"; GWSA_COLD_RC=$?
+GWSA_COLD_OUT="$(cat "$TMP/cw-cold.out")"
+GWSA_COLD_ERR="$(cat "$TMP/cw-cold.err")"
+
+GWSA_DEPRECATION_SESSION_KEY="$CW_KEY" TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" \
+  "$DEPR_ROOT/gwsa" list >"$TMP/cw-warm.out" 2>"$TMP/cw-warm.err"; GWSA_WARM_RC=$?
+GWSA_WARM_OUT="$(cat "$TMP/cw-warm.out")"
+GWSA_WARM_ERR="$(cat "$TMP/cw-warm.err")"
+
+if [[ "$GWSA_COLD_ERR" == *"deprecated"* && -z "$GWSA_WARM_ERR" ]]; then
+  pass "non-régression : comparaison réellement froid-vs-chaud (clé de session forcée, item 8) — avertissement au 1er appel, silence au 2e"
+else
+  fail "non-régression : comparaison froid-vs-chaud invalide — la clé forcée ne distingue pas les deux appels (froid=[$GWSA_COLD_ERR] chaud=[$GWSA_WARM_ERR])"
+fi
 if [[ "$GWSA_COLD_OUT" == "$GWSA_WARM_OUT" && "$GWSA_COLD_RC" -eq "$GWSA_WARM_RC" ]]; then
   pass "non-régression : stdout+rc de « gwsa list » identiques, avertissement présent ou pas"
 else
@@ -5894,6 +6139,54 @@ if echo | TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gma" list >/d
 else
   fail "gma hors TTY (pipe) : a échoué (rc=$?)"
 fi
+
+# item 6 (fiche 20260905175129735) : le chemin TTY est réutilisé par l'OS
+# après fermeture d'un terminal — sans expiration, le marqueur « déjà averti »
+# survivrait pour toujours à ce chemin. On force une clé de session commune
+# (simule le TTY réutilisé) mais avec un TTL de marqueur réduit
+# (GWSA_DEPRECATION_MARKER_TTL, override de test) : un second appel après
+# expiration doit ré-avertir, même clé de session inchangée.
+REUSE_TMPDIR="$TMP/deprecation-reuse-tty"
+rm -rf "$REUSE_TMPDIR"; mkdir -p "$REUSE_TMPDIR"
+FIRST_REUSE_ERR="$(GWSA_DEPRECATION_SESSION_KEY=reused-tty-path GWSA_DEPRECATION_MARKER_TTL=1 \
+  TMPDIR="$REUSE_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>&1 >/dev/null)"
+sleep 2
+SECOND_REUSE_ERR="$(GWSA_DEPRECATION_SESSION_KEY=reused-tty-path GWSA_DEPRECATION_MARKER_TTL=1 \
+  TMPDIR="$REUSE_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>&1 >/dev/null)"
+if [[ "$FIRST_REUSE_ERR" == *"deprecated"* && "$SECOND_REUSE_ERR" == *"deprecated"* ]]; then
+  pass "dépréciation : marqueur expiré → un terminal ultérieur qui hérite du même identifiant (tty réutilisé) ré-avertit"
+else
+  fail "dépréciation : marqueur jamais expiré, un tty réutilisé resterait muet à vie (1er=[$FIRST_REUSE_ERR] 2e=[$SECOND_REUSE_ERR])"
+fi
+
+# item 7 (fiche 20260905175129735) : marqueur prévisible dans un /tmp partagé
+# (TMPDIR vide) — un utilisateur local pourrait le pré-créer en symlink
+# pendouillant vers un chemin inscriptible par la victime ; « [[ -e ]] » ne
+# voit pas un symlink cassé comme existant, et un touch naïf le suivrait
+# (écriture arbitraire). On force la clé de session (chemin de marqueur
+# prédictible) et on pré-crée le piège exact à cet emplacement : le fichier
+# CIBLE ne doit jamais apparaître, quel que soit le sort du symlink piège
+# lui-même (neutralisé sans être suivi).
+TRAP_TMPDIR="$TMP/deprecation-trap-tmpdir"
+rm -rf "$TRAP_TMPDIR"; mkdir -p "$TRAP_TMPDIR"
+EVIL_TARGET="$TMP/deprecation-evil-target-$$"
+rm -f "$EVIL_TARGET"
+TRAP_KEY="trap-key"
+TRAP_MARKER="$TRAP_TMPDIR/.gwsa-deprecation-warned-$TRAP_KEY"
+ln -sfn "$EVIL_TARGET" "$TRAP_MARKER"
+sleep 2   # laisse le piège « expirer » (TTL réduit ci-dessous) : force le code
+          # à recréer le marqueur (rm -f + ln -s), pas seulement à le lire.
+
+out_trap="$(GWSA_DEPRECATION_SESSION_KEY="$TRAP_KEY" GWSA_DEPRECATION_MARKER_TTL=1 \
+  TMPDIR="$TRAP_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>&1 >/dev/null)"; rc=$?
+[[ "$rc" -eq 0 && ! -e "$EVIL_TARGET" ]] \
+  && pass "dépréciation : symlink pendouillant pré-créé dans /tmp partagé → jamais suivi, aucune écriture arbitraire chez la victime" \
+  || fail "dépréciation : symlink pendouillant suivi (écriture arbitraire) ou plantage (rc=$rc)"
+
+MARKER_AFTER="$(readlink "$TRAP_MARKER" 2>/dev/null)"
+[[ "$MARKER_AFTER" != "$EVIL_TARGET" ]] \
+  && pass "dépréciation : le marqueur piégé est neutralisé (recréé sans jamais suivre le lien) après expiration" \
+  || fail "dépréciation : le marqueur reste piégé vers la cible de l'attaquant (readlink=$MARKER_AFTER)"
 
 section "Message de fin d'update — guide de refresh terminal (fiche 0092)"
 if grep -q "hash -r" scripts/update.sh && grep -q "nom canonique" scripts/update.sh; then

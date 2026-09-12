@@ -121,12 +121,39 @@ deprecation_session_key() {
 
 warn_deprecated_alias() {
   [[ "$SELF" == "mag" ]] && return 0
-  local tmpdir marker
+  local tmpdir marker now mtime max_age
   tmpdir="${TMPDIR:-/tmp}"
   marker="$tmpdir/.gwsa-deprecation-warned-$(deprecation_session_key)"
-  [[ -e "$marker" ]] && return 0
+  # Durcissements (findings Codex post-merge, fiche 20260905175129735) :
+  #
+  # (item 6) La clé de session (tty, ou $PPID hors tty) peut être RÉUTILISÉE
+  # par l'OS après fermeture d'un terminal — sans expiration, un terminal
+  # ultérieur qui hérite du même chemin resterait à tort « déjà averti » pour
+  # toujours. On borne donc la validité du marqueur dans le temps (TTL
+  # surchargeable par GWSA_DEPRECATION_MARKER_TTL — les tests l'utilisent pour
+  # ne pas dépendre d'une vraie attente).
+  #
+  # (item 7) « [[ -e "$marker" ]] » seul ne voit PAS un symlink pendouillant
+  # (cible absente) comme existant, et un « touch »/« > » naïf SUIVRAIT ce
+  # symlink pour créer sa cible — un utilisateur local du même /tmp partagé
+  # (TMPDIR non positionné) pourrait ainsi piéger le chemin prévisible du
+  # marqueur pour faire écrire un fichier arbitraire chez la victime. On teste
+  # donc aussi « -L » (vrai même pour un symlink cassé), et on ne crée JAMAIS
+  # le marqueur via une primitive qui suit les liens : « ln -s » plutôt que
+  # « touch »/« > » — un lien symbolique n'est jamais suivi à sa création, et
+  # « rm -f » (pour un marqueur expiré) ne supprime que le lien lui-même,
+  # jamais sa cible.
+  max_age="${GWSA_DEPRECATION_MARKER_TTL:-14400}"  # 4h : fenêtre "même session" raisonnable
+  if [[ -e "$marker" || -L "$marker" ]]; then
+    now="$(date +%s)"
+    mtime="$(stat -f %m "$marker" 2>/dev/null || stat -c %Y "$marker" 2>/dev/null || echo 0)"
+    if (( now - mtime < max_age )); then
+      return 0
+    fi
+    rm -f "$marker" 2>/dev/null || true
+  fi
   echo "⚠ $SELF is deprecated — use \"mag\" instead (same commands). $SELF still works for now." >&2
-  touch "$marker" 2>/dev/null || true
+  ln -s "warned" "$marker" 2>/dev/null || true
 }
 
 check_alias() {
@@ -1827,6 +1854,39 @@ cmd_revert() { # mag revert — rebascule current sur « previous » (fiche 0091
   # ni de trier l'historique des versions déployées.
   local deploy_root="${GWSA_DEPLOY_ROOT:-$HOME/.local/share/google-mcp}"
   local prev_link="$deploy_root/previous"
+  # Repli rétro-compatible (fiche 20260905175129735 item 2) : une install SANS
+  # CLONE dont la 1ʳᵉ mise à jour introduisant « mag revert » a été appliquée
+  # par un ANCIEN deploy-local.sh (qui ne posait jamais « previous ») se
+  # retrouve juste après l'upgrade sans « previous », alors que l'ancienne
+  # release est encore là, à côté, non purgée. On la dérive après coup : si
+  # exactement UNE autre release existe sous $deploy_root (ni « current », ni
+  # « previous »), c'est forcément elle. Ambiguë (0 ou plusieurs candidates) :
+  # pas de choix arbitraire risqué, on laisse le die habituel s'appliquer.
+  # Repli SEULEMENT si un « current » valide existe : sans lui (current retiré,
+  # install ratée), il n'y a aucun état antérieur d'où revenir — ne pas
+  # « réactiver » une install en dérivant previous d'une release en cache et en
+  # créant current de toutes pièces (Codex PR #146, P2).
+  if [[ ! -L "$prev_link" && -L "$deploy_root/current" ]]; then
+    local cur_version candidate="" other_count=0 _d _v
+    cur_version="$(basename "$(readlink "$deploy_root/current")")"
+    for _d in "$deploy_root"/*/; do
+      [[ -d "$_d" ]] || continue
+      _v="$(basename "$_d")"
+      case "$_v" in current|previous|dev-*) continue ;; esac  # dev-* = « mag dev deploy »
+      # « mag dev deploy » (dev-*) et « mag sandbox deploy » (manifeste
+      # .sandbox.json / .couloir.json) stockent des copies NON stables dans le
+      # même GWSA_DEPLOY_ROOT. Les exclure de la découverte : sinon un revert
+      # pointerait le current STABLE sur du code dev/sandbox non taggé, ou une
+      # copie dev désactiverait le repli légitime (Codex PR #146, P1).
+      [[ -f "$_d/.sandbox.json" || -f "$_d/.couloir.json" ]] && continue
+      [[ -n "$cur_version" && "$_v" == "$cur_version" ]] && continue
+      candidate="$_v"
+      other_count=$((other_count + 1))
+    done
+    if [[ "$other_count" -eq 1 ]]; then
+      ln -sfn "$deploy_root/$candidate" "$prev_link"
+    fi
+  fi
   [[ -L "$prev_link" ]] \
     || die "no previous version recorded — nothing to revert to (use \"$SELF update --to <version>\" if you know the exact tag)"
   local prev_version; prev_version="$(basename "$(readlink "$prev_link")")"
