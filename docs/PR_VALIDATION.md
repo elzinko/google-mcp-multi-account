@@ -17,15 +17,15 @@ méthode), `⏳ reste` (avec le plan), ou `N.A.` (avec la raison) :
 |---|---|
 | **CI** | le pipeline du repo (lien du run) |
 | **Tests unitaires / hermétiques** | `./scripts/test.sh` — nouveaux cas listés |
-| **Admin / UI locale** | `gwsa admin` + parcours réel + **commandes pour rejouer** |
-| **CLI (`gwsa`)** | commandes littérales + sortie / code de sortie attendus |
+| **Admin / UI locale** | `mag admin` + parcours réel + **commandes pour rejouer** |
+| **CLI (`mag`)** | commandes littérales + sortie / code de sortie attendus |
 | **Before / after (UI)** | captures avant/après · ou **N.A.** si aucun changement UI |
 | **Preview de déploiement** | **N.A.** (pas de preview distante — outil local) |
 
 ## 2. Le bloc « Méthode de test locale » — copy-pastable
 
 Des **commandes littérales**, dans l'ordre, depuis un worktree / clone frais :
-worktree path, `gwsa admin stop` si besoin, démarrage admin, `gwsa dev …` le
+worktree path, `mag admin stop` si besoin, démarrage admin, `mag dev …` le
 cas échéant, URL à ouvrir, gestes UI. Le testeur ne doit **rien déduire**.
 
 ### Raccourci worktree / branche en cours
@@ -35,7 +35,7 @@ déployé, et affiche un résumé (id, URL, marqueur `afSearchHits`, process) :
 
 ```bash
 cd <worktree-ou-clone>
-./bin/gwsa dev test
+./bin/mag dev test
 ```
 
 Options utiles :
@@ -44,8 +44,8 @@ Options utiles :
 - `--isolated` — couloir sans comptes prod (`~/.config/gws-accounts-dev`)
 - `--open` — ouvrir `http://127.0.0.1:4877` dans le navigateur (macOS)
 
-Signal pass/fail minimal : la ligne `Marqueur PR : oui — marqueur PR afSearchHits
-présent` dans le résumé, et l'admin répond sur l'URL affichée.
+Signal pass/fail minimal : la ligne `PR marker  : yes — PR marker afSearchHits present`
+dans le résumé (sortie CLI en anglais, fiche 0019), et l'admin répond sur l'URL affichée.
 
 ## 3. Signaux observables pass/fail
 

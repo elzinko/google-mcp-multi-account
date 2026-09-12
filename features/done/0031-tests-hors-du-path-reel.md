@@ -13,8 +13,8 @@ created: 2026-07-27
 
 ## Contexte / Problème
 
-`update.sh` rebranche le `gwsa` du PATH sur la copie installée (fiche 0030).
-Quand `GWSA_CLI_LINK` n'est pas fourni, il retombe sur `command -v gwsa` —
+`update.sh` rebranche le `mag` du PATH sur la copie installée (fiche 0030).
+Quand `GWSA_CLI_LINK` n'est pas fourni, il retombe sur `command -v mag` —
 donc sur le **vrai** lien de la machine.
 
 Plusieurs tests appelaient `update.sh` sans désigner de lien : ils
@@ -22,14 +22,14 @@ s'appuyaient uniquement sur la garde « je ne reprends qu'une cible du
 projet ». C'est une protection dans le code testé, pas dans le harnais.
 
 Constaté pour de vrai le 2026-07-27, pendant un test de mutation : retirer
-cette garde a fait pointer `/opt/homebrew/bin/gwsa` vers le répertoire
+cette garde a fait pointer `/opt/homebrew/bin/mag` vers le répertoire
 temporaire de la suite —
 
 ```
-/opt/homebrew/bin/gwsa -> /var/folders/…/T/tmp.dk9jEtstIr/reldeploy/current/bin/gwsa
+/opt/homebrew/bin/mag -> /var/folders/…/T/tmp.dk9jEtstIr/reldeploy/current/bin/mag
 ```
 
-— répertoire supprimé à la fin du test. `gwsa` était donc cassé sur la machine
+— répertoire supprimé à la fin du test. `mag` était donc cassé sur la machine
 jusqu'à réparation manuelle du lien.
 
 La doctrine du projet est pourtant explicite dans l'en-tête de `scripts/test.sh` :
@@ -44,7 +44,7 @@ Deux verrous, pour que la promesse ne dépende plus d'une seule garde.
    (`GWSA_DEPLOY_ROOT`, signature d'un bac à sable) **et** que
    `GWSA_CLI_LINK` n'est pas donné, ne toucher à aucun lien — et le dire.
 2. **Dans `scripts/test.sh`** : `relenv` désigne systématiquement un lien sous
-   `$TMP`, pour qu'aucun appel ne puisse retomber sur `command -v gwsa`.
+   `$TMP`, pour qu'aucun appel ne puisse retomber sur `command -v mag`.
 
 ## Critères d'acceptation
 
@@ -52,13 +52,13 @@ Deux verrous, pour que la promesse ne dépende plus d'une seule garde.
       message explicite.
 - [x] Tous les appels de la suite désignent un lien sous `$TMP`.
 - [x] Preuve par mutation : en retirant la garde « cible hors projet », le
-      `/opt/homebrew/bin/gwsa` réel reste intact (seul le test dédié échoue).
+      `/opt/homebrew/bin/mag` réel reste intact (seul le test dédié échoue).
 - [x] `./scripts/test.sh` vert.
 
 ## Notes
 
 - Le lien réel a été réparé à la main, et pointe désormais la copie installée
-  (`~/.local/share/google-mcp/current/bin/gwsa`) — l'état visé par la fiche 0030.
+  (`~/.local/share/google-mcp/current/bin/mag`) — l'état visé par la fiche 0030.
 - Leçon : un test de mutation exécute du code volontairement cassé. Le harnais
   doit être étanche **par construction**, sans compter sur les gardes du code
   qu'il malmène.

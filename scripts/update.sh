@@ -7,13 +7,22 @@
 #
 # Usage :
 #   ./scripts/update.sh              # installe la dernière version publiée
-#   ./scripts/update.sh --to v0.1.0  # …ou une version précise
+#   ./scripts/update.sh --to v0.1.0  # …ou une version précise (rollback manuel)
 #   ./scripts/update.sh --check      # dit installé / disponible, n'écrit rien
 #   ./scripts/update.sh --force      # réinstalle même si déjà à jour
 #
 # Marche aussi depuis la copie installée (relais par « .source » vers le clone).
 # Sans clone du tout — installé par curl, ou clone supprimé — il lit la dernière
 # version et son tarball depuis GitHub, plus besoin de garder un clone (fiche 0020).
+#
+# Rollback (fiche 0091) : chaque bascule de « current » pose un lien « previous ».
+# Pour revenir en arrière après une mise à jour qui pose problème :
+#   mag revert                       # rebascule sur la version précédente, direct
+#   ./scripts/update.sh --to v0.1.0  # …ou en visant un tag précis
+#
+# Exemple :
+#   ./scripts/update.sh --to v0.1.0  # revient précisément à v0.1.0
+#   mag revert                       # revient à la version installée juste avant
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -37,7 +46,7 @@ while [[ $# -gt 0 ]]; do
     --force) FORCE=1 ;;
     --to) shift; WANT="${1:-}" ;;
     --to=*) WANT="${1#*=}" ;;
-    -h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "argument inconnu « $1 » (voir --help)" ;;
   esac
   # `|| break` : un flag à valeur en dernière position (« --to » nu) a déjà vidé
@@ -82,7 +91,7 @@ else
   command -v curl >/dev/null 2>&1 || die "curl est requis pour mettre à jour sans clone"
   [[ -f "$LIB_GH" ]] || die "lib introuvable : $LIB_GH"
   # Restaurer le dépôt d'origine : si l'install venait d'un fork (GWSA_REPO),
-  # .origin le note — mais un « gwsa update » ultérieur ne le relit pas, et on
+  # .origin le note — mais un « mag update » ultérieur ne le relit pas, et on
   # interrogerait le dépôt par défaut (mauvais repo/tags). Revue Codex P2.
   # Un GWSA_REPO explicite dans l'environnement garde la priorité.
   if [[ -z "${GWSA_REPO:-}" && -s "$HERE/.origin" ]]; then
@@ -133,9 +142,15 @@ fi
 if [[ "$INSTALLED" == "$TARGET_VERSION" && -z "$FORCE" ]]; then
   step "Rien à faire"
   ok "déjà à jour ($INSTALLED) — « --force » pour réinstaller quand même"
-  exit 0
+  # ne PAS sortir : on saute l'installation, mais on répare quand même les liens
+  # du PATH plus bas (mag + alias gma/gwsa). Sinon une install antérieure qui n'a
+  # que gma/gwsa n'obtiendrait jamais « mag » par « update » (Codex #114 round 3).
+  SKIP_INSTALL=1
 fi
 
+# Bloc sauté si « déjà à jour » : on ne réinstalle ni ne rebranche, on ne fait
+# que réparer les liens du PATH plus bas.
+if [[ -z "${SKIP_INSTALL:-}" ]]; then
 # ── installation ─────────────────────────────────────────────────
 step "Installation de $TARGET_VERSION"
 if [[ "$MODE_SRC" == "clone" ]]; then
@@ -195,51 +210,62 @@ else
   ok "CLI « claude » absent — Claude Code non branché (normal si tu n'utilises que Desktop)"
 fi
 
+fi  # fin du bloc sauté quand « déjà à jour »
+
 # ── le poste de commande suit la version installée ───────────────
-# gwsa doit être versionné comme le serveur MCP (fiche 0030) : sinon « gwsa
+# mag doit être versionné comme le serveur MCP (fiche 0030) : sinon « mag
 # unlock » exécute le code du clone sur les comptes du couloir stable.
-# Prudence : on ne reprend QUE un lien symbolique dont la cible est un bin/gwsa
+# Prudence : on ne reprend QUE un lien symbolique dont la cible est un bin/mag
 # du clone source ou d'une version déployée. Un fichier réel ou une cible
 # étrangère est laissé intact.
-link_cli() {
-  local link expected target
-  # Garde-fou de bac à sable : si le dépôt d'installation est surchargé (suite de
-  # tests) sans que le lien à gérer soit désigné explicitement, on ne touche à
-  # RIEN. Un test ne doit jamais pouvoir réécrire le gwsa du PATH réel — c'est
-  # arrivé une fois, en retirant une garde pendant un test de mutation.
-  if [[ -n "${GWSA_DEPLOY_ROOT:-}" && -z "${GWSA_CLI_LINK:-}" ]]; then
-    warn "dépôt d'installation surchargé sans GWSA_CLI_LINK — lien du PATH laissé tel quel"
-    return 0
-  fi
-  link="${GWSA_CLI_LINK:-$(command -v gwsa 2>/dev/null || true)}"
-  expected="$DEPLOY_ROOT/current/bin/gwsa"
-
-  [[ -n "$link" ]] || { warn "gwsa absent du PATH — lien non posé"; return 0; }
-  [[ -x "$expected" ]] || { warn "gwsa absent de la copie installée — lien inchangé"; return 0; }
-
-  if [[ ! -L "$link" ]]; then
-    warn "« $link » n'est pas un lien symbolique — laissé tel quel"
-    return 0
-  fi
-  target="$(readlink "$link")"
-  if [[ "$target" == "$expected" ]]; then
-    ok "gwsa du PATH déjà sur la copie installée"
-    return 0
-  fi
-  case "$target" in
-    "$SRC"/bin/gwsa|"$DEPLOY_ROOT"/*/bin/gwsa) ;;
-    *) warn "gwsa du PATH pointe « $target » (hors projet) — laissé tel quel"; return 0 ;;
-  esac
-  if ln -sfn "$expected" "$link" 2>/dev/null; then
-    ok "gwsa du PATH → $expected"
-  else
-    warn "impossible de réécrire « $link » — à refaire à la main : ln -sfn \"$expected\" \"$link\""
-  fi
-}
-link_cli
+#
+# La logique de re-ciblage est partagée avec deploy-local.sh --rollback
+# (fiche 0081, socle du cluster updater 0091/0092) — voir scripts/lib/cli-link.sh.
+# Une copie déployée avant ce partage n'a pas ce fichier : on le signale
+# plutôt que de faire échouer tout « update » (best-effort, comme le reste
+# du branchement des liens du PATH).
+LIBCLI="$(cd "$(dirname "$0")" && pwd)/lib/cli-link.sh"
+if [[ -f "$LIBCLI" ]]; then
+  # shellcheck source=scripts/lib/cli-link.sh
+  source "$LIBCLI"
+  retarget_cli_links "$SRC" "$DEPLOY_ROOT"
+else
+  warn "helper de re-ciblage introuvable ($LIBCLI) — lien du PATH non géré"
+fi
 
 step "Terminé — un dernier geste"
 echo "Redémarre Claude Desktop (Cmd-Q puis relance) : le serveur MCP est lancé"
 echo "par l'application, il ne se recharge pas tout seul."
 echo
 echo "Vérifier ensuite : le serveur doit annoncer « $TARGET_VERSION »."
+
+# Guide de refresh terminal (fiche 0092) : le nom canonique en ligne de
+# commande est désormais « mag » (gwsa/gma restent invocables, dépréciés).
+# Le shell garde en cache l'ancien chemin résolu : après une bascule, « mag »
+# peut sembler introuvable tant qu'on n'a pas rafraîchi le shell courant.
+# On n'affiche l'encart QUE si c'est pertinent : « mag » pas encore résolu
+# dans CE shell (celui qui lance update.sh), ou pas encore présent au PATH.
+if ! command -v mag >/dev/null 2>&1; then
+  echo
+  echo "${Y}Le nom canonique en ligne de commande est « mag ».${N}"
+  echo "Ce shell ne le voit pas encore (chemin mis en cache) : ouvre un nouveau"
+  echo "terminal, ou lance « hash -r » dans celui-ci, puis retape « mag »."
+  echo "(Si cet update a été lancé depuis une release pré-#114 — avant le"
+  echo "renommage gma/gwsa → mag —, l'ancien update.sh ne connaît pas « mag » :"
+  echo "relance « mag update » une fois sur une release ≥ #114.)"
+fi
+
+# Rappel de rollback (fiche 0091) : seulement quand une installation a eu lieu
+# pour de vrai (pas le cas « déjà à jour », où rien n'a bougé).
+if [[ -z "${SKIP_INSTALL:-}" ]]; then
+  PREVIOUS_VERSION=""
+  [[ -L "$DEPLOY_ROOT/previous" ]] && PREVIOUS_VERSION="$(basename "$(readlink "$DEPLOY_ROOT/previous")")"
+  echo
+  if [[ -n "$PREVIOUS_VERSION" ]]; then
+    echo "Pour revenir en arrière : mag revert (ou mag update --to $PREVIOUS_VERSION)."
+  else
+    # 1er install : aucune version précédente enregistrée — « mag revert »
+    # échouerait encore. Il deviendra utile dès la prochaine mise à jour (revue 0091 P2).
+    echo "Pour revenir en arrière après une prochaine mise à jour : mag revert."
+  fi
+fi

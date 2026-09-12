@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI élicitation signée — enroll, status, gate (appelé par bin/gwsa)."""
+"""CLI élicitation signée — enroll, status, gate (appelé par bin/mag)."""
 from __future__ import annotations
 
 import argparse
@@ -20,7 +20,7 @@ from gateway.elicitation import (  # noqa: E402
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="gwsa élicitation signée")
+    p = argparse.ArgumentParser(description="mag élicitation signée")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("status")

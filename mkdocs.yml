@@ -1,6 +1,7 @@
 site_name: google-multi-account
 site_description: Google Workspace multi-comptes pour agents LLM — 100 % local.
-site_url: https://docs.elzinko.fr/
+# URL de publication réelle — GitHub Pages (pas de domaine custom).
+site_url: https://elzinko.github.io/google-mcp-multi-account/
 repo_url: https://github.com/elzinko/google-mcp-multi-account
 repo_name: elzinko/google-mcp-multi-account
 edit_uri: edit/main/docs/
@@ -50,7 +51,11 @@ markdown_extensions:
   - toc:
       permalink: true
   - pymdownx.details
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.inlinehilite
   - pymdownx.highlight:
       anchor_linenums: true
@@ -60,6 +65,9 @@ markdown_extensions:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
 
+extra_css:
+  - stylesheets/extra.css
+
 plugins:
   - search:
       lang: fr
@@ -67,24 +75,32 @@ plugins:
 nav:
   - Accueil: index.md
   - Démarrer:
+      - Prise en main: demarrer.md
+      - Prérequis: setup-oauth.md
       - Installer & mettre à jour: mcp-setup.md
-      - OAuth / Google Cloud: setup-oauth.md
+  - Configurer:
+      - Brancher un client LLM: configurer-client.md
   - Utiliser:
-      - CLI & admin (gwsa): usage.md
-      - Modèle de policy: policies.md
+      - CLI (mag): usage.md
+      - Admin web: admin.md
   - Sécurité:
+      - Modèle de policy: policies.md
       - Modèle de menace: threat-model.md
       - Critique honnête: critique.md
   - Sous le capot:
       - Architecture: architecture.md
       - Décisions (ADR):
+          - Comment lire ces décisions: adr/index.md
           - ADR-0001 · Onboarding par élicitation: adr/ADR-0001-onboarding-par-elicitation.md
           - ADR-0002 · Email métadonnée hors verrou: adr/ADR-0002-email-metadonnee-hors-verrou.md
           - ADR-0003 · Contenu Drive via dépôt broker: adr/ADR-0003-contenu-drive-via-depot-broker.md
           - ADR-0004 · Admin master-liste accordéon: adr/ADR-0004-admin-master-liste-accordeon.md
           - ADR-0005 · Élicitation signée v2: adr/ADR-0005-elicitation-signee-v2.md
           - ADR-0006 · Fichiers reçus, répertoire dédié: adr/ADR-0006-fichiers-recus-repertoire-dedie.md
+          - ADR-0007 · Droits par session: adr/ADR-0007-droits-par-session.md
+          - ADR-0008 · Accès mobile — passkey + holder natif: adr/ADR-0008-acces-mobile-passkey-holder-natif.md
   - Contribuer:
+      - Comment contribuer: contribuer.md
       - Validation des PR: PR_VALIDATION.md
       - Sécurité GitHub: github-security.md
 

@@ -1,4 +1,4 @@
-// Authentification forte locale pour gwsa (élicitation) : Touch ID, Apple Watch
+// Authentification forte locale pour mag (élicitation) : Touch ID, Apple Watch
 // ou mot de passe de session macOS en secours (.deviceOwnerAuthentication).
 // Exit 0 = authentifié, 1 = refusé/échec, 2 = indisponible.
 // Usage : swift scripts/touchid.swift "raison affichée dans la boîte système"
@@ -7,7 +7,7 @@ import LocalAuthentication
 
 let reason = CommandLine.arguments.count > 1
     ? CommandLine.arguments[1]
-    : "autoriser cette action gwsa"
+    : "autoriser cette action mag"
 
 let ctx = LAContext()
 var err: NSError?

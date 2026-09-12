@@ -33,13 +33,13 @@ remédiation exactement dans la posture recommandée (profils verrouillés).
 Trancher par une troisième voie qui garde le résultat de (a) avec un
 mécanisme plus sûr ([ADR-0002](../../docs/adr/ADR-0002-email-metadonnee-hors-verrou.md)) :
 l'email devient une **métadonnée persistée en clair** (`<profil>/.email`),
-écrite par les gestes humains (`gwsa add`, backfill par `gwsa list` et
+écrite par les gestes humains (`mag add`, backfill par `mag list` et
 l'admin), et lue par toutes les surfaces. La gateway n'exécute **plus jamais
 gws** pour l'obtenir — verrouillé ou non.
 
 ## Critères d'acceptation
 
-- [x] `gwsa add` écrit `.email` ; `gwsa list` / l'admin backfillent les
+- [x] `mag add` écrit `.email` ; `mag list` / l'admin backfillent les
       profils existants au premier passage.
 - [x] `profiles_list` **et** `setup_status` montrent l'email d'un profil
       verrouillé (cohérents entre eux), sans exécuter gws.
@@ -48,7 +48,7 @@ gws** pour l'obtenir — verrouillé ou non.
 - [x] Invariant testé : aucun `GOOGLE_WORKSPACE_CLI_CONFIG_DIR` dans
       `gateway/` hors `broker_server.py`.
 - [x] Profil sans `.email` : email vide, IAM « unknown », `next_actions`
-      suggère `gwsa list` ; un `.email` au contenu non-email est ignoré.
+      suggère `mag list` ; un `.email` au contenu non-email est ignoré.
 
 ## Notes
 

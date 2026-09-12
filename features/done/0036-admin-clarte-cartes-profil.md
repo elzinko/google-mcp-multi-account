@@ -99,7 +99,7 @@ harmoniser les autres surfaces.
 
 - [x] La liste rend les 3 situations (déverrouillé+décompte, verrouillé,
       déconnecté grisé) aux emplacements fixes (PR #44 + #48).
-- [x] Cadenas cliquable (`lockchip`) : fermé→déverrouille (Touch ID via gwsa) ;
+- [x] Cadenas cliquable (`lockchip`) : fermé→déverrouille (Touch ID via mag) ;
       ouvert→modal `dRelock` puis reverrouille ; décompte réel, reverrouillage
       auto à zéro visible sans recharger (PR #48).
 - [x] Connexion : compte déconnecté grisé + « Reconnecter » (l'interrupteur

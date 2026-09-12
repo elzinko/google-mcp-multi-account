@@ -1,3 +1,3 @@
-# Doc en ligne (fiche 0072) — build MkDocs Material, servi sur docs.elzinko.fr.
+# Doc en ligne (fiche 0072) — build MkDocs Material, servi sur GitHub Pages (elzinko.github.io).
 #   python3 -m pip install -r requirements-docs.txt && python3 -m mkdocs build
 mkdocs-material>=9.5,<10

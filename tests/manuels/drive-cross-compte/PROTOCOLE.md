@@ -12,7 +12,7 @@ Prompt de lancement : voir [PROMPT.md](PROMPT.md).
 
 ## Comptes et rôles
 
-| Alias | Rôle dans le test | Email (vérifier via `gwsa list`) |
+| Alias | Rôle dans le test | Email (vérifier via `mag list`) |
 |---|---|---|
 | `perso` | Compte **source** A | thomas.couderc@gmail.com |
 | `mw` | Compte **destination** B | matiereweb@gmail.com |
@@ -26,14 +26,14 @@ Inverser A/B en fin de test (phase optionnelle) pour couvrir les deux sens.
    IDs connus (2026-07-29, à re-vérifier via `drive_list`) :
    - **perso** : `1JXzDlNxr-9ZMypNTTc0kK5_EyPrK370Y`
    - **mw** : `1JuH5JubmsEqkjwCinzAWO8eGUT5TIv-Z`
-2. **Profils connectés** : `gwsa list` montre `perso` et `mw` connectés.
+2. **Profils connectés** : `mag list` montre `perso` et `mw` connectés.
 3. **Partage** : la policy prudente a `drive.share: false`. Pour la
    phase 6, l'humain active le partage **temporairement** via l'admin
    (`http://127.0.0.1:4877`) ou en éditant la policy :
    - cocher **partage** sur le profil **source** (`perso` en premier run)
    - remettre `share: false` après le test si souhaité
 4. Jetons : si un compte n'a pas servi depuis > 7 jours, prévoir
-   `gwsa add <alias>` (erreur `exit code 2`).
+   `mag add <alias>` (erreur `exit code 2`).
 
 ## Tools MCP utilisés
 
@@ -50,11 +50,11 @@ Inverser A/B en fin de test (phase optionnelle) pour couvrir les deux sens.
 | `access_request` | Élicitation unlock / grant |
 
 Shell de secours (si export binaire nécessaire) :
-`GWSA_CLIENT=claude-code gwsa <alias> drive files export …`
+`GWSA_CLIENT=claude-code mag <alias> drive files export …`
 
 ## Déroulé
 
-Conventions : MCP de préférence ; shell via `GWSA_CLIENT=claude-code gwsa …`
+Conventions : MCP de préférence ; shell via `GWSA_CLIENT=claude-code mag …`
 (jamais `gws` nu). L'agent **ne déverrouille pas** et **n'accorde pas** de zone.
 
 ### Phase 0 — état des lieux (lecture seule)
@@ -73,11 +73,11 @@ Conventions : MCP de préférence ; shell via `GWSA_CLIENT=claude-code gwsa …`
 - Demander à l'humain :
 
   ```bash
-  gwsa unlock perso 30
-  gwsa unlock mw 30
+  mag unlock perso 30
+  mag unlock mw 30
   ```
 
-- Re-vérifier. `exit code 2` → `gwsa add <alias>`.
+- Re-vérifier. `exit code 2` → `mag add <alias>`.
 
 ### Phase 2 — élicitation « grant »
 
@@ -85,11 +85,11 @@ Conventions : MCP de préférence ; shell via `GWSA_CLIENT=claude-code gwsa …`
 - Demander à l'humain :
 
   ```bash
-  gwsa grant perso ZZ-TESTS 2
-  gwsa grant mw ZZ-TESTS 2
+  mag grant perso ZZ-TESTS 2
+  mag grant mw ZZ-TESTS 2
   ```
 
-- `gwsa grants perso` / `gwsa grants mw` : noter les IDs de zone.
+- `mag grants perso` / `mag grants mw` : noter les IDs de zone.
 
 ### Phase 3 — création sur le compte source (perso)
 
@@ -124,7 +124,7 @@ le contenu connu vers le compte B.
 > **Export depuis un fichier existant** (hors contenu agent) : si le test
 > doit copier un binaire ou un Doc dont l'agent n'a pas le texte, l'humain
 > ou l'agent via shell exporte d'abord :
-> `gwsa perso drive files export --params '{"fileId":"<ID>","mimeType":"text/markdown"}' -o .e2e-tmp/export.md`
+> `mag perso drive files export --params '{"fileId":"<ID>","mimeType":"text/markdown"}' -o .e2e-tmp/export.md`
 > puis `drive_create` / `files create --upload` sur mw.
 
 ### Phase 5 — lecture croisée
@@ -186,7 +186,7 @@ fait l'objet d'une **PR dédiée, non prête**. → **Skip** cette phase ici.
 |---|---|---|
 | `partage refusé par la policy` | `share: false` | Admin → cocher partage sur le profil source |
 | `dossier « ZZ-TESTS » introuvable` | Pas créé ou corbeille | Recréer/restaurer dans Drive web |
-| Fichier copié invisible sur mw | Mauvais `parent_id` ou grant expiré | `gwsa grants mw`, re-granter |
+| Fichier copié invisible sur mw | Mauvais `parent_id` ou grant expiré | `mag grants mw`, re-granter |
 | Transfert échoue | share:false ou fichier dans Shared Drive | Activer share ; tester sur My Drive |
 | `owned_by_me: null` | Drive partagé / délai API | Re-lire après quelques secondes |
 

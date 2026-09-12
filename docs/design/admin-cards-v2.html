@@ -142,7 +142,7 @@
         <li><b>Connexion en arrière-plan.</b> On suppose connecté ; « Reconnecter » n'apparaît que si le jeton a expiré. Fini l'axe « ✓ connecté » répété 5 fois.</li>
         <li><b>L'action collée à son sujet.</b> Déverrouiller sur la ligne d'accès ; chaque zone porte ses propres boutons ; Révoquer au coin du compte.</li>
         <li><b>Fenêtre effective = min(accès, zone).</b> Ce qui compte, c'est la première échéance — affichée en clair.</li>
-        <li><b>Alias gardé</b> (c'est la clé <code>gwsa &lt;alias&gt;</code>), mais l'email passe en titre.</li>
+        <li><b>Alias gardé</b> (c'est la clé <code>mag &lt;alias&gt;</code>), mais l'email passe en titre.</li>
         <li><b>Master-liste + accordéon</b>, sans routeur — <a href="#" onclick="return false" style="color:var(--acc)">ADR-0004</a>.</li>
       </ul>
     </div>
@@ -157,7 +157,7 @@
         <div class="idcol">
           <div class="idline">
             <button class="copy mail" onclick="copyIt(event,'thomas.couderc@gmail.com')">thomas.couderc@gmail.com <span class="ci">copié&nbsp;✓</span></button>
-            <span class="aliaskey">gwsa&nbsp;<b>perso</b></span>
+            <span class="aliaskey">mag&nbsp;<b>perso</b></span>
           </div>
           <div class="statusline">
             <span class="badge b-warn">🔓 Ouvert · <span class="count">3</span> min</span>
@@ -237,7 +237,7 @@
         <div class="idcol">
           <div class="idline">
             <button class="copy mail" onclick="copyIt(event,'troiszebres@gmail.com')">troiszebres@gmail.com <span class="ci">copié&nbsp;✓</span></button>
-            <span class="aliaskey">gwsa&nbsp;<b>zebra</b></span>
+            <span class="aliaskey">mag&nbsp;<b>zebra</b></span>
           </div>
           <div class="statusline">
             <span class="badge b-bad">🔒 Verrouillé</span>
@@ -280,7 +280,7 @@
         <div class="idcol">
           <div class="idline">
             <button class="copy mail" onclick="copyIt(event,'matiereweb@gmail.com')">matiereweb@gmail.com <span class="ci">copié&nbsp;✓</span></button>
-            <span class="aliaskey">gwsa&nbsp;<b>mw</b></span>
+            <span class="aliaskey">mag&nbsp;<b>mw</b></span>
           </div>
           <div class="statusline">
             <span class="badge b-off">⚠ Jeton expiré</span>
@@ -288,7 +288,7 @@
           </div>
         </div>
         <div class="acct" onclick="event.stopPropagation()">
-          <button class="tiny primary" onclick="flash(event,'gwsa add mw → navigateur')">Reconnecter…</button>
+          <button class="tiny primary" onclick="flash(event,'mag add mw → navigateur')">Reconnecter…</button>
           <button class="tiny dghost" onclick="flash(event,'Compte révoqué (démo)')">Révoquer</button>
           <span class="chev">▾</span>
         </div>

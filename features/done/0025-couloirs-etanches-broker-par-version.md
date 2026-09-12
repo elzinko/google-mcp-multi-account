@@ -43,7 +43,7 @@ des deux.
 Second défaut, qui bloque la sortie de secours : les fichiers de suivi du
 broker (`.broker-token`, `.broker.pid`) ne sont indexés que par `GWSA_ROOT`.
 Deux brokers sur deux ports, même racine → le second écrase le pidfile du
-premier, et `gwsa broker stop` arrête le mauvais process.
+premier, et `mag broker stop` arrête le mauvais process.
 
 ## Proposition
 
@@ -58,7 +58,7 @@ Faire du **port une propriété du couloir**, écrite noir sur blanc.
 3. Le script affiche la version qu'il branche (fichier `VERSION` à côté du
    binaire, sinon `dev`), pour qu'on voie ce qu'on fait.
 4. `.broker-<port>.pid` et `.broker-<port>-token` : les fichiers de suivi
-   deviennent propres à un port. `bin/gwsa broker status|stop` suit.
+   deviennent propres à un port. `bin/mag broker status|stop` suit.
 
 Les comptes (`GWSA_ROOT`) restent **partagés** entre le couloir stable et un
 couloir épinglé : on ne veut pas reconnecter cinq comptes pour tester une
@@ -75,7 +75,7 @@ version.
 - [x] Le script affiche la version branchée (`v0.1.0` ou `dev`).
 - [x] Deux brokers sur deux ports ont deux pidfiles et deux jetons distincts ;
       arrêter l'un laisse l'autre en vie.
-- [x] `gwsa broker status|stop` pilote le broker du port courant
+- [x] `mag broker status|stop` pilote le broker du port courant
       (`GWSA_BROKER_PORT`), pas celui du voisin.
 - [x] Un broker lancé avant cette version (pidfile historique) reste signalé
       comme « écoute sans pidfile », jamais annoncé « arrêté ».

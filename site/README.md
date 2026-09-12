@@ -3,7 +3,7 @@
 Landing marketing pour **google-multi-account** —
 *Multi-account Google Workspace for agents*.
 
-Les binaires du dépôt restent `gwsa` / `google-mcp` (pas encore renommés).
+Les binaires du dépôt restent `mag` / `google-mcp` (pas encore renommés).
 
 Preview locale :
 

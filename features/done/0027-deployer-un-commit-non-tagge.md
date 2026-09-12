@@ -26,13 +26,13 @@ distinct avec son propre port (fiche 0025), et ne devient **jamais** `current`.
 
 ## Livré (PR #48)
 
-Réalisé via `gwsa dev` plutôt que `deploy-local.sh --as` :
+Réalisé via `mag dev` plutôt que `deploy-local.sh --as` :
 
-- `gwsa dev deploy [--isolated]` — copie le clone courant sous
+- `mag dev deploy [--isolated]` — copie le clone courant sous
   `~/.local/share/google-mcp/<id>/` (id jetable, jamais `current`)
 - `list` / `status` / `use` (Cursor / Claude Desktop `--apply`) / `remove`
 - Option `--isolated` + seed OAuth pour un couloir sans comptes prod
-- `gwsa dev test` + couverture hermétique dans `scripts/test.sh`
+- `mag dev test` + couverture hermétique dans `scripts/test.sh`
 
 ## Critères d'acceptation
 

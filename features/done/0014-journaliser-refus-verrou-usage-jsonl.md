@@ -18,7 +18,7 @@ autorisés (`scripts/log-usage.py`, `decision:ok`) et les refus de policy
 (`scripts/policy-check.py::deny`, `decision:refus`) — mais **jamais les refus
 pour verrou**. Trois chemins sortent avant toute journalisation :
 
-1. `bin/gwsa` : `die` sur `is_locked` **avant** l'appel au `USAGE_LOGGER` ;
+1. `bin/mag` : `die` sur `is_locked` **avant** l'appel au `USAGE_LOGGER` ;
 2. `gateway/broker_server.py::handle_exec` : `GatewayError` code `locked` via
    `require_unlocked`, avant `check_policy` / journalisation ;
 3. `gateway/api.py::_run` : fail-fast `require_unlocked` local — le broker ne
@@ -36,7 +36,7 @@ sur les trois chemins, en réutilisant le logger existant :
 - `scripts/log-usage.py` : décision/raison surchargeables par environnement
   (`GWSA_LOG_DECISION`, `GWSA_LOG_REASON`) — défaut `ok`, appelants existants
   inchangés ;
-- `bin/gwsa` : journaliser avant le `die` du verrou ;
+- `bin/mag` : journaliser avant le `die` du verrou ;
 - `gateway/usage.py` (nouveau) : helper partagé `log_usage(…, decision, reason)`
   (remplace `log_ok` du broker) ; le broker et le fail-fast de `api._run`
   journalisent le refus `locked` avant de relever l'erreur.
@@ -46,7 +46,7 @@ appelé ; quand le broker refuse, il est le seul à tracer.
 
 ## Critères d'acceptation
 
-- [x] `gwsa <alias> …` sur profil verrouillé → 1 ligne `decision:refus,
+- [x] `mag <alias> …` sur profil verrouillé → 1 ligne `decision:refus,
       reason:locked` dans `usage.jsonl` (alias, cmd, client) avant l'erreur.
 - [x] Refus `locked` du broker (RPC **et** `handle_exec` direct) → même ligne.
 - [x] Refus fail-fast de `gateway/api._run` → même ligne, client = `client_id()`.

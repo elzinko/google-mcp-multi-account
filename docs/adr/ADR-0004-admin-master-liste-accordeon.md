@@ -22,12 +22,14 @@ Statut : **accepté** — implémenté (fiche 0036, maquette v11) · révisé 20
 >   toujours que sur un flag serveur (`delete`), pas sur le front.
 Fiches liées : 0036 (clarté des cartes), 0037 (sémantique de la suppression en zone)
 
+> **TL;DR** — La page web d'administration (qui gère les comptes Google connectés) abandonne les cartes dépliables « accordéon » au profit d'une liste cliquable qui bascule vers une page de détail par compte — sans adresse URL ni routeur, juste un changement d'état à l'écran — afin de rester une page unique sans dépendance ; et les droits affichés pour chaque compte sont **dérivés côté navigateur** à partir des flags de policy bruts servis par le serveur (`/api/profiles`), plutôt qu'écrits en dur dans la page.
+
 ## Contexte
 
 L'admin web local est **une seule page** HTML/CSS/JS vanilla (aucun framework,
 aucun routeur, aucun build), servie par `admin/server.js` en **Node stdlib pur
 (zéro dépendance)**. Les données arrivent en JSON (`GET /api/profiles`), les
-actions partent en `POST /api/<alias>/<action>` vers `bin/gwsa`.
+actions partent en `POST /api/<alias>/<action>` vers `bin/mag`.
 
 On veut passer d'une simple liste de cartes à :
 (a) une vue d'**ensemble** (tous les comptes, résumés) ;
