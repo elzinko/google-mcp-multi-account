@@ -1827,6 +1827,29 @@ cmd_revert() { # mag revert — rebascule current sur « previous » (fiche 0091
   # ni de trier l'historique des versions déployées.
   local deploy_root="${GWSA_DEPLOY_ROOT:-$HOME/.local/share/google-mcp}"
   local prev_link="$deploy_root/previous"
+  # Repli rétro-compatible (fiche 20260905175129735 item 2) : une install SANS
+  # CLONE dont la 1ʳᵉ mise à jour introduisant « mag revert » a été appliquée
+  # par un ANCIEN deploy-local.sh (qui ne posait jamais « previous ») se
+  # retrouve juste après l'upgrade sans « previous », alors que l'ancienne
+  # release est encore là, à côté, non purgée. On la dérive après coup : si
+  # exactement UNE autre release existe sous $deploy_root (ni « current », ni
+  # « previous »), c'est forcément elle. Ambiguë (0 ou plusieurs candidates) :
+  # pas de choix arbitraire risqué, on laisse le die habituel s'appliquer.
+  if [[ ! -L "$prev_link" ]]; then
+    local cur_version="" candidate="" other_count=0 _d _v
+    [[ -L "$deploy_root/current" ]] && cur_version="$(basename "$(readlink "$deploy_root/current")")"
+    for _d in "$deploy_root"/*/; do
+      [[ -d "$_d" ]] || continue
+      _v="$(basename "$_d")"
+      case "$_v" in current|previous) continue ;; esac
+      [[ -n "$cur_version" && "$_v" == "$cur_version" ]] && continue
+      candidate="$_v"
+      other_count=$((other_count + 1))
+    done
+    if [[ "$other_count" -eq 1 ]]; then
+      ln -sfn "$deploy_root/$candidate" "$prev_link"
+    fi
+  fi
   [[ -L "$prev_link" ]] \
     || die "no previous version recorded — nothing to revert to (use \"$SELF update --to <version>\" if you know the exact tag)"
   local prev_version; prev_version="$(basename "$(readlink "$prev_link")")"
