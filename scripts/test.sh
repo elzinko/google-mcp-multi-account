@@ -3743,6 +3743,36 @@ except GatewayError as e:
   && pass "guidage : mode off → message terminal inchangé (non-régression)" \
   || fail "guidage off ($guidoff_ok)"
 
+section "renommage GWSA_ → MAG_ : compat bi-nom (fiche 20260912000249823, lot 1)"
+compat_ok="$("$PY" -c '
+import os
+for k in ["MAG_ROOT","GWSA_ROOT","MAG_CLIENT","GWSA_CLIENT","MAG_BROKER_PORT","GWSA_BROKER_PORT","MAG_BROKER_HOST","GWSA_BROKER_HOST"]:
+    os.environ.pop(k, None)
+from gateway.config import client_id, gwsa_root
+from gateway import broker_server
+# CLIENT : MAG_ prioritaire, GWSA_ repli, defaut sinon
+os.environ["MAG_CLIENT"]="from-mag"; os.environ["GWSA_CLIENT"]="from-gwsa"
+assert client_id()=="from-mag", client_id()
+del os.environ["MAG_CLIENT"]
+assert client_id()=="from-gwsa", client_id()
+del os.environ["GWSA_CLIENT"]
+assert client_id()=="mcp", client_id()
+# ROOT : MAG_ puis GWSA_
+os.environ["MAG_ROOT"]="/tmp/mag-root-test"
+assert str(gwsa_root())=="/tmp/mag-root-test", gwsa_root()
+del os.environ["MAG_ROOT"]; os.environ["GWSA_ROOT"]="/tmp/gwsa-root-test"
+assert str(gwsa_root())=="/tmp/gwsa-root-test", gwsa_root()
+# BROKER_PORT : MAG_ prioritaire
+os.environ["MAG_BROKER_PORT"]="4999"; os.environ["GWSA_BROKER_PORT"]="4878"
+assert broker_server.broker_port()==4999, broker_server.broker_port()
+del os.environ["MAG_BROKER_PORT"]
+assert broker_server.broker_port()==4878, broker_server.broker_port()
+print("ok")
+')"
+[[ "$compat_ok" == "ok" ]] \
+  && pass "renommage : MAG_ prioritaire, GWSA_ en repli, défaut sinon (CLIENT/ROOT/BROKER_PORT)" \
+  || fail "renommage compat bi-nom ($compat_ok)"
+
 section "consume_nonce : verrou inter-process anti-TOCTOU (fiche 0084)"
 # consume_nonce fait reload → check → save sans atomicité inter-process avant
 # le correctif de la fiche 0084 : deux process concurrents peuvent tous deux
