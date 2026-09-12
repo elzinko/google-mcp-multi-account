@@ -23,7 +23,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DEPLOY_ROOT="${GWSA_DEPLOY_ROOT:-$HOME/.local/share/google-mcp}"
+DEPLOY_ROOT="${MAG_DEPLOY_ROOT:-${GWSA_DEPLOY_ROOT:-$HOME/.local/share/google-mcp}}"  # compat bi-nom (fiche 20260912000249823)
 CURRENT_LINK="$DEPLOY_ROOT/current"
 # « previous » — dernière version que current pointait AVANT la bascule en
 # cours. Posé à CHAQUE bascule (déploiement comme --rollback) : c'est ce qui

@@ -46,6 +46,12 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Compat bi-nom MAG_/GWSA_ (fiche 20260912000249823, lot 3) : réamorçage en tête ;
+# le reste du script lit ensuite $GWSA_* (valeur déjà résolue, MAG_ prioritaire).
+GWSA_ROOT="${MAG_ROOT:-${GWSA_ROOT:-}}"
+GWSA_DEPLOY_ROOT="${MAG_DEPLOY_ROOT:-${GWSA_DEPLOY_ROOT:-}}"
+GWSA_DESKTOP_CONFIG="${MAG_DESKTOP_CONFIG:-${GWSA_DESKTOP_CONFIG:-}}"
+GWSA_CURSOR_CONFIG="${MAG_CURSOR_CONFIG:-${GWSA_CURSOR_CONFIG:-}}"
 DEPLOY_ROOT="${GWSA_DEPLOY_ROOT:-$HOME/.local/share/google-mcp}"
 BROKER_BASE=4882
 ADMIN_BASE=4879

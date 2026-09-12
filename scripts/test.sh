@@ -3811,6 +3811,16 @@ else
 fi
 rm -rf "$l2dir"
 
+# Lot 3 — bin/mag (bash) réamorce MAG_ROOT en tête (compat bi-nom, MAG_ prioritaire)
+l3root="$(mktemp -d)"
+l3out="$(MAG_ROOT="$l3root" MAG_BROKER_PORT=4899 "$GWSA" broker status 2>&1 || true)"
+if [[ "$l3out" == *"$l3root"* ]]; then
+  pass "renommage lot 3 : bin/mag honore MAG_ROOT (broker status → root)"
+else
+  fail "renommage lot 3 bin/mag MAG_ROOT ($l3out)"
+fi
+rm -rf "$l3root"
+
 section "consume_nonce : verrou inter-process anti-TOCTOU (fiche 0084)"
 # consume_nonce fait reload → check → save sans atomicité inter-process avant
 # le correctif de la fiche 0084 : deux process concurrents peuvent tous deux

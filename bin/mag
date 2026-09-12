@@ -49,7 +49,25 @@
 #   mag perso workflow +agenda
 set -euo pipefail
 
-GWSA_ROOT="${GWSA_ROOT:-$HOME/.config/gws-accounts}"
+# Renommage GWSA_ → MAG_ (fiche 20260912000249823, lot 3) : compat bi-nom en tête.
+# Chaque variable LUE depuis l'environnement de l'appelant est réamorcée avec MAG_
+# prioritaire, GWSA_ en repli. Le reste du script lit ensuite $GWSA_* (valeur déjà
+# résolue) sans changement — les défauts éventuels restent posés en aval (${VAR:-…}).
+# (Les variables ÉMISES vers les sous-process — GWSA_CLIENT, GWSA_SYS_SWIFT… — sont
+#  traitées au lot 4 ; leurs lecteurs Python acceptent déjà les deux noms, lot 2.)
+GWSA_ROOT="${MAG_ROOT:-${GWSA_ROOT:-$HOME/.config/gws-accounts}}"
+GWSA_ADMIN_PORT="${MAG_ADMIN_PORT:-${GWSA_ADMIN_PORT:-}}"
+GWSA_BROKER_PORT="${MAG_BROKER_PORT:-${GWSA_BROKER_PORT:-}}"
+GWSA_SESSION_ID="${MAG_SESSION_ID:-${GWSA_SESSION_ID:-}}"
+GWSA_DEPLOY_ROOT="${MAG_DEPLOY_ROOT:-${GWSA_DEPLOY_ROOT:-}}"
+GWSA_DESKTOP_CONFIG="${MAG_DESKTOP_CONFIG:-${GWSA_DESKTOP_CONFIG:-}}"
+GWSA_CURSOR_CONFIG="${MAG_CURSOR_CONFIG:-${GWSA_CURSOR_CONFIG:-}}"
+GWSA_REMOTE_SIGNER="${MAG_REMOTE_SIGNER:-${GWSA_REMOTE_SIGNER:-}}"
+GWSA_REMOTE_RESPONSE="${MAG_REMOTE_RESPONSE:-${GWSA_REMOTE_RESPONSE:-}}"
+GWSA_ELICITATION_MOCK="${MAG_ELICITATION_MOCK:-${GWSA_ELICITATION_MOCK:-}}"
+GWSA_ADMIN_NO_OPEN="${MAG_ADMIN_NO_OPEN:-${GWSA_ADMIN_NO_OPEN:-}}"
+GWSA_DEPRECATION_SESSION_KEY="${MAG_DEPRECATION_SESSION_KEY:-${GWSA_DEPRECATION_SESSION_KEY:-}}"
+
 MASTER_SECRET="$GWSA_ROOT/client_secret.json"
 
 # Sécurité (info-disclosure) : les métadonnées de comptes (.email, usage.jsonl,
