@@ -6,7 +6,7 @@ priority: P3
 product: google-mcp-multi-account
 version:
 epic: 0060
-status: suggest
+status: idea
 ready:
 pr:
 created: 2026-09-06

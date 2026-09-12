@@ -4798,6 +4798,83 @@ print(resource)
   && pass "audit : drive files copy journalise le parent de DESTINATION (ZONE456), pas le fileId source" \
   || fail "audit : drive files copy journalise encore la source, pas ce qui a autorisé ($out_audit_copy)"
 
+section "fiche 0086 — raffinements audit + capacités de session (suite revue Codex PR #118)"
+
+# ── (1) aligner l'override « trashed » côté AUTORISATION session (pas
+# seulement côté audit) : sous policy Drive open/non-zonesOnly,
+# `_gate_drive_session` (scripts/policy-check.py) recatégorisait un
+# « files update {trashed:true} » depuis le seul nom de méthode → « update »,
+# indépendamment du reclassement « delete » déjà appliqué par `check_drive`
+# et par l'audit (`infer_call`). Une capacité de session `drive:delete`
+# devait autoriser ce triplet ; une `drive:update` seule ne devait pas ──
+L3_0086_TRASH="$TMP/mag-0086-trash-align"
+mkdir -p "$L3_0086_TRASH/alpha"
+echo '{"drive":{"read":true,"create":true,"update":true,"delete":true,"share":true,"zonesOnly":false}}' \
+  > "$L3_0086_TRASH/alpha/policy.json"
+out_0086_trash="$(GWSA_ROOT="$L3_0086_TRASH" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys, os
+def rc(cap):
+    env = dict(os.environ, GWSA_SESSION_CAPS=json.dumps([cap]))
+    r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$L3_0086_TRASH/alpha',
+                         'drive', 'files', 'update', '--params', json.dumps({'fileId': 'FILE1'}),
+                         '--json', json.dumps({'trashed': True})],
+                        env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return r.returncode
+print('delete', rc({'service': 'drive', 'operation': 'delete', 'resource': 'FILE1'}))
+print('update', rc({'service': 'drive', 'operation': 'update', 'resource': 'FILE1'}))
+")"
+[[ "$out_0086_trash" == $'delete 0\nupdate 4' ]] \
+  && pass "0086 fix#1 : capacité session sur « files update {trashed:true} » suit la catégorie delete, comme l'audit" \
+  || fail "0086 fix#1 : autorisation session désalignée de l'audit sur le trashed override ($out_0086_trash)"
+
+# ── (2) normaliser le service versionné (« calendar:v3 ») avant l'inférence
+# de ressource côté audit — sinon le mapping opérande → ressource, indexé
+# par service brut, ne matche jamais un service versionné → ressource "" ──
+out_0086_versioned="$(PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.usage import infer_call
+service, operation, resource = infer_call([
+    'calendar:v3', 'events', 'list', '--params', '{\"calendarId\": \"cal123\"}',
+])
+print(service, operation, resource)
+")"
+[[ "$out_0086_versioned" == "calendar read cal123" ]] \
+  && pass "0086 fix#2 : « calendar:v3 events list » journalise la vraie ressource (cal123), pas \"\"" \
+  || fail "0086 fix#2 : service versionné non normalisé avant l'inférence de ressource ($out_0086_versioned)"
+
+# ── (3) petit-enfant d'un parent legacy hérite des CAPACITÉS FINES
+# effectives (résolues via le repli), pas de la liste locale brute du
+# parent (vide pour un fichier legacy) — même trou que 0085 pour
+# unlock/zones, appliqué ici aux capacités fines (Codex PR #118, P2 finding
+# #2). DÉJÀ couvert par `create_child_session` (fiche 0085, qui snapshotte
+# `_effective_capabilities(parent)`) — ce test verrouille le comportement en
+# régression et est PROUVÉ non-vacuous : il vire au rouge si
+# `create_child_session` snapshotte `parent.capabilities` (liste locale
+# brute) au lieu de `_effective_capabilities(parent)` (vérifié en TDD par
+# régression temporaire lors de l'écriture de ce test, fiche 0086). ──
+L3_0086_CAPS="$TMP/mag-0086-caps-legacy"
+out_0086_caps="$(GWSA_ROOT="$L3_0086_CAPS" PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from gateway.sessions import (
+    create_session, create_child_session, session_grant_capability,
+    session_has_capability, _path,
+)
+root = create_session(client='0086-caps-root')
+session_grant_capability(root.session_id, 'alpha', 'drive', 'read', hours=1)
+mid = create_child_session(root.session_id)
+# mid devient legacy (upgrade in-place) : marqueur capabilities_snapshot
+# absent, capacités locales vides — comme un fichier écrit avant 0080.
+p = _path(mid.session_id)
+data = json.loads(p.read_text())
+data['capabilities'] = []
+data.pop('capabilities_snapshot', None)
+p.write_text(json.dumps(data))
+grandchild = create_child_session(mid.session_id)
+print(session_has_capability(grandchild.session_id, 'alpha', 'drive', 'read'))
+")"
+[[ "$out_0086_caps" == "True" ]] \
+  && pass "0086 fix#3 : petit-enfant d'un parent legacy hérite des capacités EFFECTIVES (pas la liste locale brute)" \
+  || fail "0086 fix#3 : petit-enfant d'un parent legacy a perdu les capacités héritées ($out_0086_caps)"
+
 section "sandbox remove (fiche 0041)"
 SB_DEP="$TMP/sandbox-remove"
 mkdir -p "$SB_DEP/test-sb"
@@ -4922,8 +4999,10 @@ assert stable["command"] == "/opt/stable/bin/google-mcp"
 assert name in servers
 e = servers[name]
 assert e["command"] == bin_path
-assert e["env"]["GWSA_BROKER_PORT"] == "4921"
-assert e["env"]["GWSA_CLIENT"] == "claude-desktop"
+# install-claude-desktop.sh émet MAG_ (renommage fiche 20260912000249823) ;
+# l'entrée stable, d'un autre nom, n'est pas touchée → reste en GWSA_ (assert plus haut).
+assert e["env"]["MAG_BROKER_PORT"] == "4921"
+assert e["env"]["MAG_CLIENT"] == "claude-desktop"
 assert name != "google-multi-account"
 PY
 [[ $? -eq 0 ]] \

@@ -11,6 +11,7 @@ from .categorize import (
     categorize,
     drive_files_trash_override,
     norm,
+    norm_service,
     operand_resource,
 )
 from .config import SYS_PYTHON, USAGE_LOGGER, gwsa_root
@@ -47,7 +48,14 @@ def infer_call(gws_args: list[str]) -> tuple[str, str, str]:
     """
     if not gws_args:
         return "", "", ""
-    service = gws_args[0]
+    # Normaliser le service versionné (`calendar:v3` → `calendar`, syntaxe
+    # acceptée par gws) AVANT catégorisation et lookup opérande — même
+    # normalisation que `scripts/policy-check.py` (source de vérité pour
+    # l'autorisation), sinon un appel versionné catégorise correctement (la
+    # méthode reste reconnue) mais dérive une ressource vide : le mapping
+    # opérande est indexé par service brut (`calendar`), jamais
+    # `calendar:v3` (fiche 0086).
+    service = norm_service(gws_args[0])
     positionals: list[str] = []
     for a in gws_args[1:]:
         if a.startswith("-"):

@@ -2,13 +2,17 @@
 
 > **Séquence décidée** (curée, arbitrage PO) — *quoi groomer/tirer ensuite, et dans quel ordre*.
 > Ce n'est **pas** l'index : l'index trié par priorité est [BACKLOG.md](BACKLOG.md), et le gate
-> technique de tirage reste `ready`. Décidé le **2026-09-03**.
+> technique de tirage reste `ready`. Décidé le **2026-09-03** · mis à jour **2026-09-11**.
 
-## NOW — la refonte admin d'abord, l'accès fin par session ensuite
+## NOW — Jalon A livré ; suite = groomer, ou débloquer l'accès fin par session
 
-**Jalon A — Finir l'admin (épic [0060](0060-admin-ux-ui-refresh.md)).** Série Cockpit : l'essentiel est **livré**, reste le fonctionnel et la dernière migration.
+> **État 2026-09-11 (revue backlog).** Backlog tirable **épuisé** (0 `ready`). Prochaine action :
+> groomer la tête ([0074](0074-durcir-la-v1-punch-list-lancement.md), punch-list P1) ou débloquer
+> [0108](0108-session-demande-sous-ensemble-droits-compte.md) (spike « identité par conversation », client réel).
 
-- [0094](0094-sessions-page-dediee-reactive.md) — Sessions en page dédiée réactive · **build** *(in-progress)*
+**Jalon A — Finir l'admin (épic [0060](0060-admin-ux-ui-refresh.md)) — ✅ complet.** Série Cockpit livrée ; restes mineurs capturés en idées (filtre date journal, cibles 44 px mobile, poll de fond).
+
+- ~~[0094](done/0094-sessions-page-dediee-reactive.md) — Sessions en page dédiée réactive~~ — **shipped #128** (réconcilié 2026-09-11)
 - ~~[0107](done/0107-vue-compte-droits-sur-place.md) — Vue compte : droits sur place, au grain par opération~~ — **shipped #131** (2026-09-05)
 - ~~[0098](done/0098-micro-routeur-vues.md) — Micro-routeur (VIEW + poll unifiés)~~ — **shipped #139** (2026-09-10)
 - ~~[0106](done/0106-vue-compte-orientee-sessions.md) — Vue compte orientée sessions (compteur + liste des sessions)~~ — **shipped #132** (2026-09-05)

@@ -6,11 +6,18 @@ priority: P2
 product: google-mcp-multi-account
 version:
 epic: 0060
-status: in-progress
+status: shipped
 ready: 2026-08-30
-pr:
+pr: "#128"
 created: 2026-08-30
 ---
+
+> **Réconciliation (2026-09-11).** Livré — statut « in-progress » périmé. La page Sessions
+> dédiée et réactive existe : `<section id="sessionsPage">` (plus la modale `dSessions`,
+> retirée), route `sessions` avec auto-refresh (poll 3 s du micro-routeur 0098, #139),
+> cartes + hiérarchie + actions Unlock/Zone/Révoquer/Purger, no-layout-shift. Délivré par la
+> série refonte Cockpit **#128** (0099/0105, « rattrape 0094-0106 ») puis affiné par **0098**
+> (#139). Vérifié au code + E2E navigateur (2026-09-11).
 
 ## En clair
 

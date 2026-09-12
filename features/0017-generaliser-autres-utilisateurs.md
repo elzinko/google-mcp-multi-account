@@ -5,7 +5,7 @@ type: epic
 priority: P2
 version:
 epic:
-status: idea
+status: in-progress
 ready:
 pr:
 created: 2026-07-24

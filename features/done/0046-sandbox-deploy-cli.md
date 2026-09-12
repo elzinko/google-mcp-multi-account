@@ -5,12 +5,21 @@ type: feature
 priority: P2
 version:
 epic:
-status: in-progress
+status: shipped
 ready: 2026-07-28
-pr:
+pr: "24dfd5d"
 created: 2026-07-28
-updated: 2026-07-28
+updated: 2026-09-11
 ---
+
+> **Réconciliation (2026-09-11).** v1 livrée + testée — statut « in-progress » périmé.
+> `mag sandbox deploy|list|status|wire|remove` est réel (`bin/mag` `cmd_sandbox`,
+> `scripts/sandbox.sh`), `.sandbox.json`, `couloir` déprécié, bandeau version admin,
+> ~70 assertions de tests. Livré par le commit `24dfd5d` (feat sandbox). Les 3 critères
+> non cochés sont **hors du v1** et rangés ailleurs : « scanner les configs projet Code/Cursor »
+> = **v2**, capturée en fiche d'idée `20260911120000000_sandbox-scan-configs-projet-v2.md` ;
+> « dérive config vs déployé » = **fiche [[0026]]** ; « doc dogfood 2 connecteurs » = couverte
+> par #128. Vérifié au code (2026-09-11).
 
 ## Contexte / Problème
 
