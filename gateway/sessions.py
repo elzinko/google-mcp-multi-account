@@ -105,6 +105,14 @@ def _path(session_id: str) -> Path:
     return sessions_dir() / f"{session_id}.json"
 
 
+def _lock_path(session_id: str) -> Path:
+    """Verrou par session : sérialise les read-modify-write du même fichier de
+    session (touch de `last_seen_at`, consommation de bail…) pour qu'ils ne se
+    clobberent pas (Codex PR #147, P1 — un touch non verrouillé de `get_session`
+    pouvait restaurer un budget de bail décrémenté sous verrou)."""
+    return sessions_dir() / f"{session_id}.lock"
+
+
 @dataclass
 class DriveZone:
     id: str
@@ -358,17 +366,21 @@ def get_session(session_id: str) -> SessionState | None:
     """
     if not session_id:
         return None
-    state = _load(session_id)
-    if state is None:
-        return None
-    now = time.time()
-    last_activity = state.last_seen_at or state.created_at
-    if last_activity and now - last_activity > session_ttl_sec():
-        _path(session_id).unlink(missing_ok=True)
-        return None
-    state.touch()
-    _save(state)
-    return state
+    # Touch + save sous le MÊME verrou que la consommation de bail : sinon ce
+    # save (last_seen_at) pouvait ré-écrire un budget de bail obsolète et annuler
+    # un décrément concurrent (Codex PR #147, P1).
+    with file_lock(_lock_path(session_id)):
+        state = _load(session_id)
+        if state is None:
+            return None
+        now = time.time()
+        last_activity = state.last_seen_at or state.created_at
+        if last_activity and now - last_activity > session_ttl_sec():
+            _path(session_id).unlink(missing_ok=True)
+            return None
+        state.touch()
+        _save(state)
+        return state
 
 
 def require_session(session_id: str) -> SessionState:
@@ -447,8 +459,11 @@ def try_consume_read_lease(session_id: str, alias: str) -> bool:
     True si un slot a été consommé (bail actif), False sinon — l'appelant doit
     alors obtenir un nouveau consentement. Le retrait ne dépend que du
     TTL/budget, jamais d'un geste du LLM (ADR-0011 §Décision 3)."""
-    with file_lock(_path(session_id).with_suffix(".lock")):
-        state = get_session(session_id)
+    with file_lock(_lock_path(session_id)):
+        # `_load` (brut, sans touch/save) et non `get_session` : ce dernier prend
+        # le MÊME verrou (ré-entrance) et re-sauverait l'état. On lit, on vérifie,
+        # on décrémente, on sauve — le tout sous ce verrou unique.
+        state = _load(session_id)
         if state is None:
             return False
         lease = state.read_leases.get(alias)

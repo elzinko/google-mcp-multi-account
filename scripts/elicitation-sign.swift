@@ -187,6 +187,21 @@ func promptText(from obj: [String: Any]) -> String {
     // gateway/elicitation.py:prompt_from_payload. Repli alias seul si inconnu.
     let who = email.isEmpty ? "« \(alias) »" : "« \(alias) » (\(email))"
     let acct = email.isEmpty ? alias : "\(alias) · \(email)"
+    // Consentement transactionnel (ADR-0011) — parallèle à
+    // gateway/elicitation.py:prompt_from_payload. L'action porte l'opération
+    // concrète (« transactional_mutation:drive:permissions:create »), donc on
+    // matche par préfixe pour nommer l'acte ET le compte (email) dans le vrai
+    // dialogue Touch ID (Codex PR #147, P2).
+    if action.hasPrefix("transactional_mutation") {
+        let parts = action.split(separator: ":", maxSplits: 1)
+        let op = parts.count > 1 ? String(parts[1]) : "écriture sensible"
+        return target.isEmpty
+            ? "mag : autoriser « \(op) » sur \(who)"
+            : "mag : autoriser « \(op) » sur \(who) — \(target)"
+    }
+    if action == "transactional_read_lease" {
+        return "mag : ouvrir un bail de lecture court sur \(who)"
+    }
     switch action {
     case "session_unlock":
         return "mag : déverrouiller \(who) pour la session \(sid) (\(minutes) min)"

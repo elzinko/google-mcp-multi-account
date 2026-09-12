@@ -127,7 +127,12 @@ def _classify_operation(gws_args: list[str]) -> tuple[str, str, str]:
     category = categorize(service, resources, raw_method)
     resource = operand_resource(service, resources, raw_method, gws_args)
     op_class = "lecture" if category == "read" else "mutation"
-    op_label = f"{service}:{category or raw_method}"
+    # Lier la MÉTHODE BRUTE (et les ressources), pas seulement la catégorie :
+    # categorize() rend « share » pour permissions.create ET .delete → une action
+    # signée par catégorie confondrait les deux actes (Codex PR #147, P1). Le
+    # triplet service:ressources:méthode distingue « drive:permissions:create » de
+    # « drive:permissions:delete ».
+    op_label = ":".join([service, *resources, raw_method])
     return op_class, resource, op_label
 
 
