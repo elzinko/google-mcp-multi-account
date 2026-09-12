@@ -1,6 +1,6 @@
 ---
 id: "20260911211558435"
-title: Cohérence de nommage — mag / google-multi-account / repo / GWSA
+title: Cohérence de nommage — mag / google-multi-account / repo / variables d'env
 type: chore
 priority: P3
 product: google-multi-account
@@ -22,7 +22,7 @@ jusqu'où — sachant que renommer le **serveur MCP** casse tous les clients qui
 | `mag` | le **CLI** (admin, élicitation, verrous) | l'humain, au terminal |
 | `google-multi-account` | le **serveur MCP** | les clients (Claude Desktop/Code : connecteur + serveur local) |
 | `google-mcp-multi-account` | le **dépôt / projet** | GitHub, chemins locaux |
-| `GWSA_*`, `gws-accounts` | la **plomberie** (env, dossier de config, tokens) | le code, les scripts |
+| `MAG_*` (ex-`GWSA_`), `gws-accounts` | la **plomberie** (env, dossier de config, tokens) | le code, les scripts |
 
 ## Contexte / problème
 
@@ -52,22 +52,24 @@ d'où la question « c'est quoi le bon nom du projet ? ».
    sur `mag`. Casse tous les clients : chacun doit repointer. Exige une **migration** (alias de
    transition / double-déclaration pendant N versions) et un **rollback** (cf. la contrainte de
    déploiement du projet : `current` → tag). À ne faire que si le gain de cohérence le justifie.
-4. **Renommer l'infra `GWSA_*` / `gws-accounts`** *(coût élevé, risqué)*. Touche les variables
-   d'environnement, le dossier de config **et les tokens** — fort risque de casse silencieuse.
-   Probablement hors périmètre (à laisser tel quel sauf raison forte).
+4. **Renommer l'infra** — deux cas à ne pas confondre. **(a) Variables d'env `GWSA_` → `MAG_`** :
+   **décidé et en cours** — fiche [`20260912000249823`](20260912000249823_renommage-gwsa-mag-avec-compat.md)
+   (#142), approche **compat bi-nom** (`MAG_` prioritaire, `GWSA_` en repli), faible risque. **(b) Dossier
+   `gws-accounts`** (tokens) : **jamais renommé** (perte d'accès) — hors périmètre définitif.
 
 ## Recommandation esquissée (à confirmer au grooming)
 
 - **Garder** `google-multi-account` comme nom de serveur (descriptif, stable, breaking à renommer).
 - **Garder** `mag` comme CLI (court, pour taper).
-- Faire l'**option 1** à coup sûr (doc-carte des noms), peu coûteuse.
+- **Option 1 : FAITE** — carte des noms livrée dans #142 (`docs/configurer-client.md`, § « Noms des variables »).
+- **Option 4a : EN COURS** — variables `GWSA_` → `MAG_` (fiche `20260912000249823`, #142, compat bi-nom).
 - Envisager l'**option 2** (repo) si la cohérence de branding compte.
 - **Réserver l'option 3** (serveur) à une vraie refonte, avec migration + rollback planifiés.
 
 ## Critères d'acceptation (esquisse — à compléter au grooming)
 
-- [ ] Une **carte des noms** documentée (mag / google-multi-account / repo / GWSA) — qui est quoi,
-  vu par qui.
+- [x] Une **carte des noms** documentée (mag / google-multi-account / repo / variables d'env) — qui est
+  quoi, vu par qui. **FAITE** (#142, `docs/configurer-client.md`).
 - [ ] Décision tranchée sur chaque option (1 à 4) : faite / rejetée / différée, avec la raison.
 - [ ] Si un renommage est retenu : plan de **migration** (alias/compat) + **rollback** explicite,
   et liste des points d'impact (clients, scripts, docs, tokens).
