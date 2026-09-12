@@ -1862,9 +1862,13 @@ cmd_revert() { # mag revert — rebascule current sur « previous » (fiche 0091
   # exactement UNE autre release existe sous $deploy_root (ni « current », ni
   # « previous »), c'est forcément elle. Ambiguë (0 ou plusieurs candidates) :
   # pas de choix arbitraire risqué, on laisse le die habituel s'appliquer.
-  if [[ ! -L "$prev_link" ]]; then
-    local cur_version="" candidate="" other_count=0 _d _v
-    [[ -L "$deploy_root/current" ]] && cur_version="$(basename "$(readlink "$deploy_root/current")")"
+  # Repli SEULEMENT si un « current » valide existe : sans lui (current retiré,
+  # install ratée), il n'y a aucun état antérieur d'où revenir — ne pas
+  # « réactiver » une install en dérivant previous d'une release en cache et en
+  # créant current de toutes pièces (Codex PR #146, P2).
+  if [[ ! -L "$prev_link" && -L "$deploy_root/current" ]]; then
+    local cur_version candidate="" other_count=0 _d _v
+    cur_version="$(basename "$(readlink "$deploy_root/current")")"
     for _d in "$deploy_root"/*/; do
       [[ -d "$_d" ]] || continue
       _v="$(basename "$_d")"

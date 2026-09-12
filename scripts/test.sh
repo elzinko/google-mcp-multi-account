@@ -2405,6 +2405,16 @@ out_devx2="$(GWSA_DEPLOY_ROOT="$DEVX2" GWSA_CLI_LINK="$FAKEBIN/mag-devx2" "$GW" 
   && pass "mag revert : un dev-* voisin ne casse pas le repli vers la vraie release stable" \
   || fail "mag revert : dev-* a désactivé le repli légitime (rc=$rc, current=$(basename "$(readlink "$DEVX2/current" 2>/dev/null)"))"
 
+# Repli exige un « current » VALIDE (Codex PR #146, P2) : sans current (retiré /
+# install ratée), une release en cache ne doit être ni dérivée comme previous ni
+# « réactivée » en créant current de toutes pièces.
+NOCUR="$TMP/revert-nocurrent"; mkdir -p "$NOCUR/v1.0.0/bin"
+printf '#!/bin/sh\necho v1\n' > "$NOCUR/v1.0.0/bin/mag"; chmod +x "$NOCUR/v1.0.0/bin/mag"
+out_nocur="$(GWSA_DEPLOY_ROOT="$NOCUR" GWSA_CLI_LINK="$FAKEBIN/mag-nocur" "$GW" revert 2>&1)"; rc=$?
+[[ "$rc" -ne 0 && ! -e "$NOCUR/current" && ! -L "$NOCUR/previous" ]] \
+  && pass "mag revert : sans « current » valide → refus, ni previous dérivé ni current créé (Codex #146 P2)" \
+  || fail "mag revert : repli sans current a réactivé une install (rc=$rc, out=$out_nocur)"
+
 section "mag revert — 2e revert via le lien PATH reciblé : limite documentée (item 4, fiche 20260905175129735)"
 
 # Décision PO (déjà tranchée, ne pas ré-arbitrer) : un 2e « mag revert » est
