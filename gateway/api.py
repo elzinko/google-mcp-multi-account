@@ -21,13 +21,22 @@ from .config import (
     upload_roots,
     upload_spool,
 )
+from .categorize import categorize, norm_service, operand_resource
 from .context import get_git_root
+from .elicitation import ElicitationError, run_elicitation_gate
 from .errors import GatewayError
 from .executor import run_via_broker
 from .profiles import is_locked, list_profiles as _list_profiles
 from .profiles import profile_email, validate_alias
 from .project import git_toplevel
-from .sessions import is_session_unlocked, require_session
+from .sessions import (
+    consume_read_lease,
+    is_read_lease_active,
+    is_session_unlocked,
+    open_read_lease,
+    require_session,
+    transactional_enabled,
+)
 from .setup_status import setup_status  # noqa: F401 — re-export pour le dispatch MCP
 from .usage import log_usage
 
@@ -85,6 +94,81 @@ def profiles_list() -> dict[str, Any]:
     return {"ok": True, "profiles": _list_profiles()}
 
 
+def _positionals(args: list[str]) -> list[str]:
+    """Positionnels de gauche d'un appel gws (`<service> <resource…> <method>`),
+    avant tout flag — même règle que `scripts/policy-check.py::positionals_of`
+    (ne PAS reprendre après un flag, sinon la valeur d'un flag inconnu se fait
+    passer pour la méthode)."""
+    out: list[str] = []
+    for a in args:
+        if a.startswith("-"):
+            break
+        out.append(a)
+    return out
+
+
+def _classify_operation(gws_args: list[str]) -> tuple[str, str]:
+    """Classe un appel gws en (« lecture » | « mutation », ressource opérante)
+    pour le point de contrôle transactionnel (ADR-0011).
+
+    Réutilise `gateway.categorize` — même source de vérité que
+    `scripts/policy-check.py` (autorisation) et `gateway/usage.py` (audit).
+    Fail-closed : catégorie non reconnue (tool non classé) = mutation, le
+    régime le plus strict."""
+    if not gws_args:
+        return "mutation", ""
+    service = norm_service(gws_args[0])
+    pos = _positionals(gws_args[1:])
+    if not pos:
+        return "mutation", ""
+    resources, raw_method = pos[:-1], pos[-1]
+    category = categorize(service, resources, raw_method)
+    resource = operand_resource(service, resources, raw_method, gws_args)
+    return ("lecture" if category == "read" else "mutation"), resource
+
+
+def _transactional_gate(alias: str, gws_args: list[str], sid: str) -> None:
+    """Point de contrôle unique du consentement transactionnel (ADR-0011),
+    appelé par `_run` uniquement quand `transactional_enabled()`.
+
+    - mutation (write/create/update/delete/send/share, ou tool non classé) :
+      acte signé lié à CET acte (compte × opération × ressource), usage
+      unique via `consume_nonce` (dans `run_elicitation_gate`) — aucune
+      fenêtre, un 2ᵉ acte identique redemande un geste.
+    - lecture : bail actif (TTL non écoulé ET budget restant) → budget −1 ;
+      sinon un geste (« lire maintenant ») ouvre un bail frais.
+
+    Fail-closed : un geste refusé/absent (`ElicitationError`) est toujours
+    traduit en refus (`GatewayError` code="locked"), jamais en accès."""
+    op_class, resource = _classify_operation(gws_args)
+    if op_class == "mutation":
+        try:
+            run_elicitation_gate(
+                {
+                    "action": "transactional_mutation",
+                    "alias": alias,
+                    "target": resource,
+                    "session_id": sid,
+                }
+            )
+        except ElicitationError as e:
+            raise GatewayError(f"acte refusé — {e}", code="locked") from e
+        return
+    if not is_read_lease_active(sid, alias):
+        try:
+            run_elicitation_gate(
+                {
+                    "action": "transactional_read_lease",
+                    "alias": alias,
+                    "session_id": sid,
+                }
+            )
+        except ElicitationError as e:
+            raise GatewayError(f"bail de lecture refusé — {e}", code="locked") from e
+        open_read_lease(sid, alias)
+    consume_read_lease(sid, alias)
+
+
 def _run(
     alias: str,
     gws_args: list[str],
@@ -115,7 +199,12 @@ def _run(
                 f"profil inconnu « {alias} » — le créer avec : mag add {alias}",
                 code="not_found",
             )
-        if is_locked(d) and not is_session_unlocked(sid, alias):
+        if transactional_enabled():
+            # ADR-0011 : le modèle transactionnel REMPLACE la fenêtre de
+            # minutes comme mécanique de consentement — le point de contrôle
+            # ci-dessous route lecture/mutation, indépendamment de .locked.
+            _transactional_gate(alias, gws_args, sid)
+        elif is_locked(d) and not is_session_unlocked(sid, alias):
             raise GatewayError(
                 f"profil « {alias} » verrouillé pour cette session — "
                 f"access_request kind=session_unlock",
