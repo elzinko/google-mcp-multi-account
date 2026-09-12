@@ -2382,6 +2382,29 @@ out_retro2="$(GWSA_DEPLOY_ROOT="$RETRO2" GWSA_CLI_LINK="$FAKEBIN/mag-retro2" "$G
   && pass "mag revert : plusieurs releases candidates → pas de repli automatique (ambigu), message clair" \
   || fail "mag revert : ambiguïté mal gérée (rc=$rc, out=$out_retro2)"
 
+# Exclusion dev/sandbox (Codex PR #146, P1) : « mag dev deploy » (dev-*) et
+# « mag sandbox deploy » (.sandbox.json) stockent des copies NON stables dans le
+# même GWSA_DEPLOY_ROOT. Elles ne doivent JAMAIS être dérivées comme « previous ».
+DEVX="$TMP/revert-devexclude"; mkdir -p "$DEVX/v2.0.0/bin" "$DEVX/dev-abc123/bin" "$DEVX/sbx-deadbeef/bin"
+printf '#!/bin/sh\necho v2\n' > "$DEVX/v2.0.0/bin/mag"; chmod +x "$DEVX/v2.0.0/bin/mag"
+printf '#!/bin/sh\necho dev\n' > "$DEVX/dev-abc123/bin/mag"; chmod +x "$DEVX/dev-abc123/bin/mag"
+printf '#!/bin/sh\necho sbx\n' > "$DEVX/sbx-deadbeef/bin/mag"; chmod +x "$DEVX/sbx-deadbeef/bin/mag"
+printf '{}' > "$DEVX/sbx-deadbeef/.sandbox.json"   # marqueur sandbox
+ln -sfn "$DEVX/v2.0.0" "$DEVX/current"   # aucune release stable en repli — seulement dev + sandbox
+out_devx="$(GWSA_DEPLOY_ROOT="$DEVX" GWSA_CLI_LINK="$FAKEBIN/mag-devx" "$GW" revert 2>&1)"; rc=$?
+[[ "$rc" -ne 0 && ! -L "$DEVX/previous" ]] \
+  && pass "mag revert : dev-* et sandbox (.sandbox.json) exclus du repli → aucun « previous » dérivé à tort" \
+  || fail "mag revert : dev/sandbox pris à tort comme previous (rc=$rc, previous=$(readlink "$DEVX/previous" 2>/dev/null))"
+
+# … et un dev-* voisin ne DÉSACTIVE pas le repli vers la vraie release stable.
+DEVX2="$TMP/revert-devexclude2"; mkdir -p "$DEVX2/v1.0.0/bin" "$DEVX2/v2.0.0/bin" "$DEVX2/dev-xyz/bin"
+for _d in v1.0.0 v2.0.0 dev-xyz; do printf '#!/bin/sh\necho %s\n' "$_d" > "$DEVX2/$_d/bin/mag"; chmod +x "$DEVX2/$_d/bin/mag"; done
+ln -sfn "$DEVX2/v2.0.0" "$DEVX2/current"
+out_devx2="$(GWSA_DEPLOY_ROOT="$DEVX2" GWSA_CLI_LINK="$FAKEBIN/mag-devx2" "$GW" revert 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$DEVX2/current")")" == "v1.0.0" ]] \
+  && pass "mag revert : un dev-* voisin ne casse pas le repli vers la vraie release stable" \
+  || fail "mag revert : dev-* a désactivé le repli légitime (rc=$rc, current=$(basename "$(readlink "$DEVX2/current" 2>/dev/null)"))"
+
 section "mag revert — 2e revert via le lien PATH reciblé : limite documentée (item 4, fiche 20260905175129735)"
 
 # Décision PO (déjà tranchée, ne pas ré-arbitrer) : un 2e « mag revert » est
