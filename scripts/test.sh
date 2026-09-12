@@ -2425,6 +2425,19 @@ out_r2b="$("$R2LINK" revert 2>&1)"; rc=$?
   && pass "mag revert (2e, depuis une release pré-revert) : échoue proprement (commande absente), limite documentée" \
   || fail "mag revert (2e) : devrait échouer proprement, jamais simuler un succès (rc=$rc, out=$out_r2b)"
 
+section "update.sh — guide de refresh affiché inconditionnellement après re-ciblage (item 5, fiche 20260905175129735)"
+
+# $LINK est déjà posé et reciblé sur $RELDEP/current/bin/mag par les tests
+# ci-dessus. En ajoutant son dossier au PATH, « command -v mag » réussirait
+# DANS le process d'update.sh lui-même — exactement le cas où l'ancienne
+# condition (gardée par « command -v mag ») masquait le guide à tort, alors
+# que c'est le shell APPELANT (pas le process de l'updater) qui a le chemin
+# en cache.
+out_guide="$(PATH="$FAKEBIN:$PATH" relenv "$UPDATE" --force 2>&1)"
+[[ "$out_guide" == *"nom canonique"* && "$out_guide" == *"hash -r"* ]] \
+  && pass "update : guide de refresh affiché même quand « mag » est déjà résolu dans ce process (condition non inversée)" \
+  || fail "update : guide de refresh masqué à tort alors que « mag » est déjà résolu (out=$out_guide)"
+
 section "mag update / release — un seul poste de commande (fiche 0030)"
 
 # De quoi publier : sans commit nouveau, release refuse (et le test ne dirait
@@ -5993,9 +6006,40 @@ ln -sfn "$(cd "$(dirname "$GWSA")" && pwd)/mag" "$DEPR_ROOT/gma"
 # dépréciation à cette sortie utile. On le vérifie en comparant gwsa avec
 # lui-même, avertissement présent (1er appel) vs absent (2e appel, marqueur
 # déjà posé) : stdout et rc doivent être rigoureusement identiques.
+#
+# item 8 (fiche 20260905175129735) : chaque « $(...) » fait potentiellement
+# tourner l'appel dans un sous-shell distinct — en CI hors-TTY la clé de
+# session (tty/$PPID) peut donc différer entre les deux appels, et les DEUX
+# sont alors « froids » (marqueur jamais partagé) : la comparaison ne teste
+# plus vraiment froid-vs-chaud, une régression qui réémettrait l'avertissement
+# aux deux appels passerait inaperçue. Fix : forcer une clé de session COMMUNE
+# via l'override GWSA_DEPRECATION_SESSION_KEY (déjà ajouté au fix #137), pour
+# que le 2e appel soit RÉELLEMENT chaud (même marqueur que le 1er), quel que
+# soit le sous-shell qui l'exécute.
+#
+# Chaque appel (froid, puis chaud) est capturé en UNE SEULE invocation
+# (stdout et stderr vers des fichiers séparés) : les appeler deux fois de
+# plus pour ne récupérer que stderr referait tourner l'appel « froid » une
+# 2e fois, qui serait alors déjà chaud (marqueur posé par le 1er appel) —
+# ce qui viderait $GWSA_COLD_ERR à tort.
+CW_KEY="coldwarm-fixed-key"
 MAG_OUT="$(GWSA_ROOT="$GWSA_ROOT" "$GWSA" list 2>/dev/null)"; MAG_RC=$?
-GWSA_COLD_OUT="$(TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>/dev/null)"; GWSA_COLD_RC=$?
-GWSA_WARM_OUT="$(TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>/dev/null)"; GWSA_WARM_RC=$?
+
+GWSA_DEPRECATION_SESSION_KEY="$CW_KEY" TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" \
+  "$DEPR_ROOT/gwsa" list >"$TMP/cw-cold.out" 2>"$TMP/cw-cold.err"; GWSA_COLD_RC=$?
+GWSA_COLD_OUT="$(cat "$TMP/cw-cold.out")"
+GWSA_COLD_ERR="$(cat "$TMP/cw-cold.err")"
+
+GWSA_DEPRECATION_SESSION_KEY="$CW_KEY" TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" \
+  "$DEPR_ROOT/gwsa" list >"$TMP/cw-warm.out" 2>"$TMP/cw-warm.err"; GWSA_WARM_RC=$?
+GWSA_WARM_OUT="$(cat "$TMP/cw-warm.out")"
+GWSA_WARM_ERR="$(cat "$TMP/cw-warm.err")"
+
+if [[ "$GWSA_COLD_ERR" == *"deprecated"* && -z "$GWSA_WARM_ERR" ]]; then
+  pass "non-régression : comparaison réellement froid-vs-chaud (clé de session forcée, item 8) — avertissement au 1er appel, silence au 2e"
+else
+  fail "non-régression : comparaison froid-vs-chaud invalide — la clé forcée ne distingue pas les deux appels (froid=[$GWSA_COLD_ERR] chaud=[$GWSA_WARM_ERR])"
+fi
 if [[ "$GWSA_COLD_OUT" == "$GWSA_WARM_OUT" && "$GWSA_COLD_RC" -eq "$GWSA_WARM_RC" ]]; then
   pass "non-régression : stdout+rc de « gwsa list » identiques, avertissement présent ou pas"
 else
@@ -6062,6 +6106,54 @@ if echo | TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gma" list >/d
 else
   fail "gma hors TTY (pipe) : a échoué (rc=$?)"
 fi
+
+# item 6 (fiche 20260905175129735) : le chemin TTY est réutilisé par l'OS
+# après fermeture d'un terminal — sans expiration, le marqueur « déjà averti »
+# survivrait pour toujours à ce chemin. On force une clé de session commune
+# (simule le TTY réutilisé) mais avec un TTL de marqueur réduit
+# (GWSA_DEPRECATION_MARKER_TTL, override de test) : un second appel après
+# expiration doit ré-avertir, même clé de session inchangée.
+REUSE_TMPDIR="$TMP/deprecation-reuse-tty"
+rm -rf "$REUSE_TMPDIR"; mkdir -p "$REUSE_TMPDIR"
+FIRST_REUSE_ERR="$(GWSA_DEPRECATION_SESSION_KEY=reused-tty-path GWSA_DEPRECATION_MARKER_TTL=1 \
+  TMPDIR="$REUSE_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>&1 >/dev/null)"
+sleep 2
+SECOND_REUSE_ERR="$(GWSA_DEPRECATION_SESSION_KEY=reused-tty-path GWSA_DEPRECATION_MARKER_TTL=1 \
+  TMPDIR="$REUSE_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>&1 >/dev/null)"
+if [[ "$FIRST_REUSE_ERR" == *"deprecated"* && "$SECOND_REUSE_ERR" == *"deprecated"* ]]; then
+  pass "dépréciation : marqueur expiré → un terminal ultérieur qui hérite du même identifiant (tty réutilisé) ré-avertit"
+else
+  fail "dépréciation : marqueur jamais expiré, un tty réutilisé resterait muet à vie (1er=[$FIRST_REUSE_ERR] 2e=[$SECOND_REUSE_ERR])"
+fi
+
+# item 7 (fiche 20260905175129735) : marqueur prévisible dans un /tmp partagé
+# (TMPDIR vide) — un utilisateur local pourrait le pré-créer en symlink
+# pendouillant vers un chemin inscriptible par la victime ; « [[ -e ]] » ne
+# voit pas un symlink cassé comme existant, et un touch naïf le suivrait
+# (écriture arbitraire). On force la clé de session (chemin de marqueur
+# prédictible) et on pré-crée le piège exact à cet emplacement : le fichier
+# CIBLE ne doit jamais apparaître, quel que soit le sort du symlink piège
+# lui-même (neutralisé sans être suivi).
+TRAP_TMPDIR="$TMP/deprecation-trap-tmpdir"
+rm -rf "$TRAP_TMPDIR"; mkdir -p "$TRAP_TMPDIR"
+EVIL_TARGET="$TMP/deprecation-evil-target-$$"
+rm -f "$EVIL_TARGET"
+TRAP_KEY="trap-key"
+TRAP_MARKER="$TRAP_TMPDIR/.gwsa-deprecation-warned-$TRAP_KEY"
+ln -sfn "$EVIL_TARGET" "$TRAP_MARKER"
+sleep 2   # laisse le piège « expirer » (TTL réduit ci-dessous) : force le code
+          # à recréer le marqueur (rm -f + ln -s), pas seulement à le lire.
+
+out_trap="$(GWSA_DEPRECATION_SESSION_KEY="$TRAP_KEY" GWSA_DEPRECATION_MARKER_TTL=1 \
+  TMPDIR="$TRAP_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>&1 >/dev/null)"; rc=$?
+[[ "$rc" -eq 0 && ! -e "$EVIL_TARGET" ]] \
+  && pass "dépréciation : symlink pendouillant pré-créé dans /tmp partagé → jamais suivi, aucune écriture arbitraire chez la victime" \
+  || fail "dépréciation : symlink pendouillant suivi (écriture arbitraire) ou plantage (rc=$rc)"
+
+MARKER_AFTER="$(readlink "$TRAP_MARKER" 2>/dev/null)"
+[[ "$MARKER_AFTER" != "$EVIL_TARGET" ]] \
+  && pass "dépréciation : le marqueur piégé est neutralisé (recréé sans jamais suivre le lien) après expiration" \
+  || fail "dépréciation : le marqueur reste piégé vers la cible de l'attaquant (readlink=$MARKER_AFTER)"
 
 section "Message de fin d'update — guide de refresh terminal (fiche 0092)"
 if grep -q "hash -r" scripts/update.sh && grep -q "nom canonique" scripts/update.sh; then

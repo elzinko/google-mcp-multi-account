@@ -121,12 +121,39 @@ deprecation_session_key() {
 
 warn_deprecated_alias() {
   [[ "$SELF" == "mag" ]] && return 0
-  local tmpdir marker
+  local tmpdir marker now mtime max_age
   tmpdir="${TMPDIR:-/tmp}"
   marker="$tmpdir/.gwsa-deprecation-warned-$(deprecation_session_key)"
-  [[ -e "$marker" ]] && return 0
+  # Durcissements (findings Codex post-merge, fiche 20260905175129735) :
+  #
+  # (item 6) La clé de session (tty, ou $PPID hors tty) peut être RÉUTILISÉE
+  # par l'OS après fermeture d'un terminal — sans expiration, un terminal
+  # ultérieur qui hérite du même chemin resterait à tort « déjà averti » pour
+  # toujours. On borne donc la validité du marqueur dans le temps (TTL
+  # surchargeable par GWSA_DEPRECATION_MARKER_TTL — les tests l'utilisent pour
+  # ne pas dépendre d'une vraie attente).
+  #
+  # (item 7) « [[ -e "$marker" ]] » seul ne voit PAS un symlink pendouillant
+  # (cible absente) comme existant, et un « touch »/« > » naïf SUIVRAIT ce
+  # symlink pour créer sa cible — un utilisateur local du même /tmp partagé
+  # (TMPDIR non positionné) pourrait ainsi piéger le chemin prévisible du
+  # marqueur pour faire écrire un fichier arbitraire chez la victime. On teste
+  # donc aussi « -L » (vrai même pour un symlink cassé), et on ne crée JAMAIS
+  # le marqueur via une primitive qui suit les liens : « ln -s » plutôt que
+  # « touch »/« > » — un lien symbolique n'est jamais suivi à sa création, et
+  # « rm -f » (pour un marqueur expiré) ne supprime que le lien lui-même,
+  # jamais sa cible.
+  max_age="${GWSA_DEPRECATION_MARKER_TTL:-14400}"  # 4h : fenêtre "même session" raisonnable
+  if [[ -e "$marker" || -L "$marker" ]]; then
+    now="$(date +%s)"
+    mtime="$(stat -f %m "$marker" 2>/dev/null || stat -c %Y "$marker" 2>/dev/null || echo 0)"
+    if (( now - mtime < max_age )); then
+      return 0
+    fi
+    rm -f "$marker" 2>/dev/null || true
+  fi
   echo "⚠ $SELF is deprecated — use \"mag\" instead (same commands). $SELF still works for now." >&2
-  touch "$marker" 2>/dev/null || true
+  ln -s "warned" "$marker" 2>/dev/null || true
 }
 
 check_alias() {

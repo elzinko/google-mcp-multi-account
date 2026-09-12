@@ -247,6 +247,7 @@ fi  # fin du bloc sauté quand « déjà à jour »
 # des liens du PATH).
 if [[ -n "$CLI_LINK_LOADED" ]]; then
   retarget_cli_links "$SRC" "$DEPLOY_ROOT"
+  MAG_RELINKED=1
 else
   warn "helper de re-ciblage introuvable ($LIBCLI) — lien du PATH non géré"
 fi
@@ -261,9 +262,15 @@ echo "Vérifier ensuite : le serveur doit annoncer « $TARGET_VERSION »."
 # commande est désormais « mag » (gwsa/gma restent invocables, dépréciés).
 # Le shell garde en cache l'ancien chemin résolu : après une bascule, « mag »
 # peut sembler introuvable tant qu'on n'a pas rafraîchi le shell courant.
-# On n'affiche l'encart QUE si c'est pertinent : « mag » pas encore résolu
-# dans CE shell (celui qui lance update.sh), ou pas encore présent au PATH.
-if ! command -v mag >/dev/null 2>&1; then
+#
+# item 5 (fiche 20260905175129735) : l'ancienne garde testait « command -v mag »
+# ICI, dans le PROCESS de update.sh — pas dans le shell interactif appelant.
+# Comme retarget_cli_links vient de (re)poser « mag » juste avant, ce test
+# réussit TOUJOURS dans ce process, masquant le guide précisément quand le
+# shell appelant, lui, a encore l'ancien chemin en cache (le cas visé). On
+# affiche donc le guide inconditionnellement dès qu'un (re)ciblage a eu lieu —
+# on ne peut pas déduire l'état du cache du shell appelant depuis ce process.
+if [[ -n "${MAG_RELINKED:-}" ]]; then
   echo
   echo "${Y}Le nom canonique en ligne de commande est « mag ».${N}"
   echo "Ce shell ne le voit pas encore (chemin mis en cache) : ouvre un nouveau"
