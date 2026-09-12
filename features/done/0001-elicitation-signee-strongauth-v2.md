@@ -68,7 +68,7 @@ Périmètre pressenti **ici** : les deux points d'élicitation existants, `unloc
 **État constaté le 2026-07-28** : fiche 0007 toujours `idea` (non shipped). Le user a
 autorisé l'implémentation du **chemin macOS / mag** dans ce repo sans attendre 0007
 (transport WhatsApp reste bloqué côté l'autre projet). Conception alignée sur les 4
-décisions de 0007 ; ADR local : [ADR-0005](../docs/adr/ADR-0005-elicitation-signee-v2.md).
+décisions de 0007 ; ADR local : [ADR-0005](../../docs/adr/ADR-0005-elicitation-signee-v2.md).
 
 ## Questions ouvertes (à trancher au grooming, une fois débloquée)
 
