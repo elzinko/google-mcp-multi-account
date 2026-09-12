@@ -6019,6 +6019,43 @@ print('OK' if refused else 'wrong')
   && pass "transactionnel : _run lecture — bail fermé + geste refusé → refus fail-closed" \
   || fail "transactionnel : _run lecture — accès silencieux au-delà du bail ($out_tx_run_refuse)"
 
+# 4ter) Mode « manuel » (incrément 2, vision Thomas) : chaque lecture est un acte
+#       signé — PAS de bail. Budget de bail large : en mode auto il économiserait
+#       les gestes ; en manuel, 3 lectures = 3 gestes.
+out_tx_manuel="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" GWSA_TRANSACTIONAL_CONSENT=1 \
+  GWSA_TRANSACTIONAL_MODE=manuel GWSA_ELICITATION_MOCK=1 GWSA_READ_LEASE_BUDGET=20 "$PY" -c "
+import gateway.api as api
+from gateway.sessions import create_session
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='': {'ok': True}
+s = create_session(client='txMan')
+gate_calls = {'n': 0}
+orig_gate = api.run_elicitation_gate
+def counting_gate(fields):
+    gate_calls['n'] += 1
+    return orig_gate(fields)
+api.run_elicitation_gate = counting_gate
+for _ in range(3):
+    api.gmail_list(alias='alpha', session=s.session_id)
+print('manuel_gestes', gate_calls['n'])
+")"
+[[ "$out_tx_manuel" == *"manuel_gestes 3"* ]] \
+  && pass "transactionnel : mode manuel — chaque lecture est un acte signé (3 lectures = 3 gestes, pas de bail)" \
+  || fail "transactionnel : mode manuel — le bail n'aurait pas dû s'appliquer ($out_tx_manuel)"
+
+# 4quater) Codex #148 P2 : fichier de mode présent mais ILLISIBLE (perms / FS) →
+#          fail-closed vers « manuel », jamais un downgrade silencieux vers « auto ».
+out_failclosed="$(PYTHONPATH="$(pwd)" "$PY" -c "
+import os, tempfile, pathlib
+d = tempfile.mkdtemp(); os.environ['GWSA_ROOT'] = d; os.environ.pop('GWSA_TRANSACTIONAL_MODE', None)
+(pathlib.Path(d)/'.transactional-mode').write_text('auto')   # contenu qui donnerait 'auto' SI lu
+pathlib.Path.read_text = lambda self, **k: (_ for _ in ()).throw(OSError('boom'))  # lecture échoue
+import gateway.sessions as s
+print('mode', s.transactional_mode())
+")"
+[[ "$out_failclosed" == *"mode manuel"* ]] \
+  && pass "transactionnel : fichier de mode illisible → fail-closed vers « manuel » (Codex #148 P2)" \
+  || fail "transactionnel : mode illisible downgrade à tort vers auto ($out_failclosed)"
+
 # 5) Flag ON : une mutation exige un acte signé propre à CET acte ; rejouer
 #    exactement le même reçu (même nonce) redemande un geste — usage unique.
 out_tx_mutation="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" GWSA_TRANSACTIONAL_CONSENT=1 \

@@ -27,6 +27,7 @@ DEFAULT_SESSION_TTL_SEC = 8 * 3600
 # et `_run` (gateway/api.py) se comportent exactement comme avant — la fenêtre
 # `minutes` reste le seul mécanisme (garde-fou de déploiement de la fiche).
 TRANSACTIONAL_FLAG_NAME = ".transactional-consent"
+TRANSACTIONAL_MODE_FLAG_NAME = ".transactional-mode"  # contenu « manuel » ; sinon « auto »
 DEFAULT_READ_LEASE_TTL_SEC = 90
 DEFAULT_READ_LEASE_BUDGET = 20
 
@@ -42,6 +43,32 @@ def transactional_enabled() -> bool:
     if os.environ.get("GWSA_TRANSACTIONAL_CONSENT", "").strip() in ("1", "true", "yes"):
         return True
     return transactional_flag_path().is_file()
+
+
+def transactional_mode() -> str:
+    """Mode de consentement (vision Thomas, fiche 20260911135931576) — règle le
+    curseur friction/sécurité PAR-DESSUS ADR-0011, seulement quand le modèle est actif :
+
+    - « auto » (défaut) : lecture en bail court (ADR-0011), mutation = acte signé ;
+    - « manuel » : Touch ID à CHAQUE opération, lecture COMME écriture (le plus strict) —
+      pas de bail, chaque lecture est elle aussi un acte signé à usage unique.
+
+    Lu depuis GWSA_TRANSACTIONAL_MODE (tests) ou le fichier marqueur
+    `<GWSA_ROOT>/.transactional-mode` (contenu « manuel ») ; toute autre valeur → « auto »."""
+    raw = os.environ.get("GWSA_TRANSACTIONAL_MODE", "").strip().lower()
+    if not raw:
+        p = gwsa_root() / TRANSACTIONAL_MODE_FLAG_NAME
+        # Lecture DIRECTE (pas de garde `is_file()` : is_file() avale l'OSError
+        # d'un stat en échec et rendrait False → downgrade silencieux vers « auto »,
+        # Codex PR #148 P2 round 2). On distingue « pas de fichier » (→ défaut auto)
+        # de « fichier présent mais illisible » (perms/FS/ACL → fail-closed « manuel »).
+        try:
+            raw = p.read_text(encoding="utf-8").strip().lower()
+        except FileNotFoundError:
+            raw = ""
+        except OSError:
+            return "manuel"
+    return "manuel" if raw == "manuel" else "auto"
 
 
 def read_lease_ttl_sec() -> int:
