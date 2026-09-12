@@ -14,11 +14,60 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from ._filelock import file_lock
 from .config import gwsa_root
 from .errors import GatewayError
 
 SESSIONS_DIR_NAME = ".sessions"
 DEFAULT_SESSION_TTL_SEC = 8 * 3600
+
+# --- Consentement transactionnel (ADR-0011, fiche 20260911135931576) -------
+#
+# Opt-in, OFF par défaut : tant que le flag n'est pas activé, `session_unlock`
+# et `_run` (gateway/api.py) se comportent exactement comme avant — la fenêtre
+# `minutes` reste le seul mécanisme (garde-fou de déploiement de la fiche).
+TRANSACTIONAL_FLAG_NAME = ".transactional-consent"
+DEFAULT_READ_LEASE_TTL_SEC = 90
+DEFAULT_READ_LEASE_BUDGET = 20
+
+
+def transactional_flag_path() -> Path:
+    return gwsa_root() / TRANSACTIONAL_FLAG_NAME
+
+
+def transactional_enabled() -> bool:
+    """Modèle de consentement transactionnel actif ? Opt-in : fichier marqueur
+    sous la racine de config (déploiement réel), ou GWSA_TRANSACTIONAL_CONSENT
+    (tests hermétiques) — jamais activé par défaut."""
+    if os.environ.get("GWSA_TRANSACTIONAL_CONSENT", "").strip() in ("1", "true", "yes"):
+        return True
+    return transactional_flag_path().is_file()
+
+
+def read_lease_ttl_sec() -> int:
+    """TTL du bail de lecture (secondes) — surchargeable en test via
+    GWSA_READ_LEASE_TTL_SEC. Une des DEUX limites du bail (ADR-0011 §Décision 2) ;
+    la première atteinte referme."""
+    try:
+        return max(1, int(os.environ.get("GWSA_READ_LEASE_TTL_SEC", str(DEFAULT_READ_LEASE_TTL_SEC))))
+    except ValueError:
+        return DEFAULT_READ_LEASE_TTL_SEC
+
+
+def read_lease_budget() -> int:
+    """Budget d'opérations du bail de lecture — surchargeable via
+    GWSA_READ_LEASE_BUDGET. Seconde des deux limites du bail."""
+    try:
+        return max(1, int(os.environ.get("GWSA_READ_LEASE_BUDGET", str(DEFAULT_READ_LEASE_BUDGET))))
+    except ValueError:
+        return DEFAULT_READ_LEASE_BUDGET
+
+
+def read_lease_plafond_minutes() -> int:
+    """Plafond (en minutes, arrondi au supérieur) auquel `session_unlock`
+    écrête `minutes` quand le transactionnel est actif (ADR-0011 §Décision 4) —
+    quelques minutes max, jamais 1440."""
+    return max(1, -(-read_lease_ttl_sec() // 60))
 
 
 def sessions_dir() -> Path:
@@ -35,6 +84,14 @@ def _path(session_id: str) -> Path:
     return sessions_dir() / f"{session_id}.json"
 
 
+def _lock_path(session_id: str) -> Path:
+    """Verrou par session : sérialise les read-modify-write du même fichier de
+    session (touch de `last_seen_at`, consommation de bail…) pour qu'ils ne se
+    clobberent pas (Codex PR #147, P1 — un touch non verrouillé de `get_session`
+    pouvait restaurer un budget de bail décrémenté sous verrou)."""
+    return sessions_dir() / f"{session_id}.lock"
+
+
 @dataclass
 class DriveZone:
     id: str
@@ -44,6 +101,20 @@ class DriveZone:
     def active(self, now: float | None = None) -> bool:
         t = now if now is not None else time.time()
         return bool(self.id) and self.expires_at > t
+
+
+@dataclass
+class ReadLease:
+    """Bail de lecture transactionnel (ADR-0011) : TTL ET budget, la première
+    limite atteinte referme. Le retrait ne dépend JAMAIS d'un geste du LLM —
+    calculé ici, côté broker, à chaque appel."""
+
+    expires_at: float = 0.0
+    budget: int = 0
+
+    def active(self, now: float | None = None) -> bool:
+        t = now if now is not None else time.time()
+        return self.expires_at > t and self.budget > 0
 
 
 @dataclass
@@ -84,6 +155,9 @@ class SessionState:
     drive_zones: dict[str, list[DriveZone]] = field(default_factory=dict)
     # capacités fines (compte, service, opération, ressource?) — cf. Capability
     capabilities: list[Capability] = field(default_factory=list)
+    # alias → bail de lecture transactionnel actif (ADR-0011). Propre à CETTE
+    # session (pas d'héritage parent/enfant en incrément 1 — hors périmètre).
+    read_leases: dict[str, ReadLease] = field(default_factory=dict)
     delegated: bool = False  # True = sous-session (pas d'access_request direct)
     # True dès qu'une session est créée/enregistrée par la révision 0080 (ou
     # plus récente) : `capabilities` porte déjà l'état résolu (racine : le
@@ -124,6 +198,7 @@ class SessionState:
                 for alias, zones in self.drive_zones.items()
             },
             "capabilities": [asdict(c) for c in self.capabilities],
+            "read_leases": {alias: asdict(lease) for alias, lease in self.read_leases.items()},
             "delegated": self.delegated,
             "capabilities_snapshot": self.capabilities_snapshot,
             "grants_snapshot": self.grants_snapshot,
@@ -164,6 +239,16 @@ class SessionState:
                         expires_at=float(c.get("expires_at") or 0),
                     )
                 )
+        leases_raw = data.get("read_leases") or {}
+        read_leases: dict[str, ReadLease] = {}
+        if isinstance(leases_raw, dict):
+            for alias, lease in leases_raw.items():
+                if not isinstance(lease, dict):
+                    continue
+                read_leases[str(alias)] = ReadLease(
+                    expires_at=float(lease.get("expires_at") or 0),
+                    budget=int(lease.get("budget") or 0),
+                )
         return cls(
             session_id=str(data.get("session_id") or ""),
             parent_id=str(data.get("parent_id") or ""),
@@ -173,6 +258,7 @@ class SessionState:
             unlocks={str(k): float(v) for k, v in unlocks.items()},
             drive_zones=dz,
             capabilities=capabilities,
+            read_leases=read_leases,
             delegated=bool(data.get("delegated")),
             # Absent (fichier écrit avant la fiche 0080) → False : repli
             # legacy `_ancestor_chain` dans `active_capabilities` tant que la
@@ -259,17 +345,21 @@ def get_session(session_id: str) -> SessionState | None:
     """
     if not session_id:
         return None
-    state = _load(session_id)
-    if state is None:
-        return None
-    now = time.time()
-    last_activity = state.last_seen_at or state.created_at
-    if last_activity and now - last_activity > session_ttl_sec():
-        _path(session_id).unlink(missing_ok=True)
-        return None
-    state.touch()
-    _save(state)
-    return state
+    # Touch + save sous le MÊME verrou que la consommation de bail : sinon ce
+    # save (last_seen_at) pouvait ré-écrire un budget de bail obsolète et annuler
+    # un décrément concurrent (Codex PR #147, P1).
+    with file_lock(_lock_path(session_id)):
+        state = _load(session_id)
+        if state is None:
+            return None
+        now = time.time()
+        last_activity = state.last_seen_at or state.created_at
+        if last_activity and now - last_activity > session_ttl_sec():
+            _path(session_id).unlink(missing_ok=True)
+            return None
+        state.touch()
+        _save(state)
+        return state
 
 
 def require_session(session_id: str) -> SessionState:
@@ -294,6 +384,12 @@ def _root_session(state: SessionState) -> SessionState:
 
 
 def session_unlock(session_id: str, alias: str, minutes: int) -> SessionState:
+    """Déverrouille `alias` pour la session pendant `minutes` — API inchangée.
+
+    `minutes` est **déprécié** quand le transactionnel est actif (ADR-0011
+    §Décision 4) : conservé pour compat, mais écrêté au plafond du bail de
+    lecture (quelques minutes max), jamais 1440. Flag OFF (défaut) :
+    comportement strictement inchangé — non-régression."""
     state = require_session(session_id)
     root = _root_session(state)
     if state.delegated and state.session_id != root.session_id:
@@ -301,10 +397,66 @@ def session_unlock(session_id: str, alias: str, minutes: int) -> SessionState:
             "seule la session racine (ou l'humain) peut déverrouiller un profil",
             code="error",
         )
-    mins = max(1, min(int(minutes), 1440))
+    plafond = read_lease_plafond_minutes() if transactional_enabled() else 1440
+    mins = max(1, min(int(minutes), plafond))
     state.unlocks[alias] = time.time() + mins * 60
     _save(state)
     return state
+
+
+def open_read_lease(session_id: str, alias: str) -> SessionState:
+    """Ouvre un bail de lecture (TTL + budget frais, ADR-0011 §Décision 2)
+    pour (session, compte) — un nouveau consentement remplace tout bail
+    existant sur cet alias, il ne le prolonge jamais."""
+    state = require_session(session_id)
+    state.read_leases[alias] = ReadLease(
+        expires_at=time.time() + read_lease_ttl_sec(),
+        budget=read_lease_budget(),
+    )
+    _save(state)
+    return state
+
+
+def is_read_lease_active(session_id: str, alias: str) -> bool:
+    """Bail de lecture actif pour (session, compte) ? TTL non écoulé ET
+    budget restant — la première limite atteinte referme (ADR-0011)."""
+    state = get_session(session_id)
+    if state is None:
+        return False
+    lease = state.read_leases.get(alias)
+    if lease is None:
+        return False
+    return lease.active()
+
+
+def try_consume_read_lease(session_id: str, alias: str) -> bool:
+    """Vérifie ET consomme un slot de bail de façon ATOMIQUE (verrou fichier).
+
+    Évite que deux appels concurrents sur la même session observent le même
+    dernier slot actif et dépassent le budget signé (Codex PR #147, P1) : le
+    check et la consommation étaient deux cycles load/save séparés. Retourne
+    True si un slot a été consommé (bail actif), False sinon — l'appelant doit
+    alors obtenir un nouveau consentement. Le retrait ne dépend que du
+    TTL/budget, jamais d'un geste du LLM (ADR-0011 §Décision 3)."""
+    with file_lock(_lock_path(session_id)):
+        # `_load` (brut, sans touch/save) et non `get_session` : ce dernier prend
+        # le MÊME verrou (ré-entrance) et re-sauverait l'état. On lit, on vérifie,
+        # on décrémente, on sauve — le tout sous ce verrou unique.
+        state = _load(session_id)
+        if state is None:
+            return False
+        lease = state.read_leases.get(alias)
+        if lease is None or not lease.active():
+            return False
+        lease.budget -= 1
+        _save(state)
+        return True
+
+
+def consume_read_lease(session_id: str, alias: str) -> None:
+    """Compat : consomme un slot si le bail est actif, sans valeur de retour.
+    Préférer `try_consume_read_lease` (atomique) au point de contrôle."""
+    try_consume_read_lease(session_id, alias)
 
 
 def session_grant_drive(

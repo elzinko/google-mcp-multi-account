@@ -168,6 +168,14 @@ def prompt_from_payload(payload: dict[str, Any]) -> str:
         return f"mag : révoquer les sous-sessions de {sid or target}"
     if action == "strongauth_off":
         return "mag : désactiver l'authentification forte"
+    # Consentement transactionnel (ADR-0011) : nommer le compte (email = vérité
+    # terrain) ET l'acte exact (Codex PR #147, P1/P2). L'action porte l'opération
+    # concrète (« transactional_mutation:gmail:send »).
+    if action.startswith("transactional_mutation"):
+        op = action.split(":", 1)[1] if ":" in action else "écriture sensible"
+        return f"mag : autoriser « {op} » sur {who}" + (f" — {target}" if target else "")
+    if action == "transactional_read_lease":
+        return f"mag : ouvrir un bail de lecture court sur {who}"
     return f"mag : {action} — {alias} {target}".strip()
 
 

@@ -26,7 +26,13 @@ from typing import Any
 from .config import SYS_PYTHON, POLICY_CHECKER, gwsa_root, profile_dir, upload_spool
 from .errors import GatewayError
 from .profiles import is_locked, require_unlocked
-from .sessions import active_capabilities, active_drive_zones, is_session_unlocked, purge_expired
+from .sessions import (
+    active_capabilities,
+    active_drive_zones,
+    is_session_unlocked,
+    purge_expired,
+    transactional_enabled,
+)
 from .usage import log_usage
 from .vault import gws_config_dir, migrate_all
 
@@ -199,7 +205,18 @@ def _require_access(alias: str, session_id: str) -> Path:
             code="not_found",
         )
     if session_id:
-        if is_locked(d) and not is_session_unlocked(session_id, alias):
+        # Mode transactionnel (ADR-0011) : le consentement est appliqué EN AMONT,
+        # au point de contrôle `_run` (Touch ID par acte / bail de lecture), et non
+        # par le verrou « minutes ». Le broker n'exige donc plus is_session_unlocked
+        # dans ce mode — sinon tout appel pourtant consenti échouerait ici et le
+        # gate transactionnel ne pourrait pas remplacer l'unlock minutes comme
+        # documenté (Codex PR #147, P1). Le broker n'est joignable que via la
+        # gateway (loopback + token) qui a déjà porté le geste.
+        if (
+            not transactional_enabled()
+            and is_locked(d)
+            and not is_session_unlocked(session_id, alias)
+        ):
             raise GatewayError(
                 f"profil « {alias} » verrouillé pour cette session — "
                 f"demander : mag session unlock {session_id} {alias} [minutes]",

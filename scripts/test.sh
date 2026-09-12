@@ -5909,6 +5909,230 @@ fi
 
 rm -rf "$DEPR_ROOT" "$DEPR_TMPDIR"
 
+section "Consentement transactionnel — bail de lecture + acte signé (ADR-0011, fiche 20260911135931576)"
+
+TX_ROOT="$(mktemp -d)"
+mkdir -p "$TX_ROOT/alpha"
+PY="/usr/bin/python3"; [[ -x "$PY" ]] || PY="$(command -v python3)"
+GWSA_ROOT="$TX_ROOT" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
+
+# 1) Flag OFF par défaut : `session_unlock(minutes=…)` toujours écrêté à 1440,
+#    strictement comme avant l'ADR-0011 (non-régression du chemin stable).
+out_tx_off="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import time
+from gateway.sessions import create_session, session_unlock, transactional_enabled
+s = create_session(client='txA')
+assert transactional_enabled() is False, 'flag ON par défaut !'
+s = session_unlock(s.session_id, 'alpha', 2000)
+delta = s.unlocks['alpha'] - time.time()
+print('OK' if 1439 * 60 <= delta <= 1440 * 60 + 2 else f'wrong:{delta}')
+")"
+[[ "$out_tx_off" == "OK" ]] \
+  && pass "transactionnel : flag OFF par défaut — minutes écrêté à 1440 (non-régression)" \
+  || fail "transactionnel : flag OFF — comportement minutes changé ($out_tx_off)"
+
+# 2) Flag ON : le bail de lecture se referme seul au TTL.
+out_tx_ttl="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" GWSA_TRANSACTIONAL_CONSENT=1 \
+  GWSA_READ_LEASE_TTL_SEC=1 GWSA_READ_LEASE_BUDGET=5 "$PY" -c "
+import time
+from gateway.sessions import create_session, open_read_lease, is_read_lease_active
+s = create_session(client='txB')
+open_read_lease(s.session_id, 'alpha')
+before = is_read_lease_active(s.session_id, 'alpha')
+time.sleep(1.2)
+after = is_read_lease_active(s.session_id, 'alpha')
+print('before', before, 'after', after)
+")"
+[[ "$out_tx_ttl" == *"before True"* && "$out_tx_ttl" == *"after False"* ]] \
+  && pass "transactionnel : bail de lecture — TTL écoulé referme seul" \
+  || fail "transactionnel : bail de lecture — TTL n'a pas refermé ($out_tx_ttl)"
+
+# 3) Flag ON : le bail de lecture se referme seul au budget épuisé (avant le TTL).
+out_tx_budget="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" GWSA_TRANSACTIONAL_CONSENT=1 \
+  GWSA_READ_LEASE_TTL_SEC=90 GWSA_READ_LEASE_BUDGET=2 "$PY" -c "
+from gateway.sessions import create_session, open_read_lease, is_read_lease_active, consume_read_lease
+s = create_session(client='txC')
+open_read_lease(s.session_id, 'alpha')
+consume_read_lease(s.session_id, 'alpha')
+mid = is_read_lease_active(s.session_id, 'alpha')
+consume_read_lease(s.session_id, 'alpha')
+after = is_read_lease_active(s.session_id, 'alpha')
+print('mid', mid, 'after', after)
+")"
+[[ "$out_tx_budget" == *"mid True"* && "$out_tx_budget" == *"after False"* ]] \
+  && pass "transactionnel : bail de lecture — budget épuisé referme seul (avant le TTL)" \
+  || fail "transactionnel : bail de lecture — budget non appliqué ($out_tx_budget)"
+
+# 4) Flag ON, point de contrôle _run : une lecture sous bail actif passe SANS
+#    nouveau geste (budget -1) ; le bail fermé (budget épuisé) en rouvre un —
+#    nouveau geste (nouvel appel à l'élicitation), jamais un accès silencieux.
+out_tx_run_read="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" GWSA_TRANSACTIONAL_CONSENT=1 \
+  GWSA_ELICITATION_MOCK=1 GWSA_READ_LEASE_TTL_SEC=90 GWSA_READ_LEASE_BUDGET=2 "$PY" -c "
+import gateway.api as api
+from gateway.sessions import create_session
+
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='': {'ok': True}
+s = create_session(client='txD')
+
+gate_calls = {'n': 0}
+orig_gate = api.run_elicitation_gate
+def counting_gate(fields):
+    gate_calls['n'] += 1
+    return orig_gate(fields)
+api.run_elicitation_gate = counting_gate
+
+api.gmail_list(alias='alpha', session=s.session_id)   # ouvre le bail (budget 2→1) — 1 geste
+after_1 = gate_calls['n']
+api.gmail_list(alias='alpha', session=s.session_id)   # bail actif (budget 1→0) — AUCUN nouveau geste
+after_2 = gate_calls['n']
+api.gmail_list(alias='alpha', session=s.session_id)   # budget épuisé → rouvre — nouveau geste
+after_3 = gate_calls['n']
+print('after_1', after_1, 'after_2', after_2, 'after_3', after_3)
+")"
+[[ "$out_tx_run_read" == *"after_1 1"* && "$out_tx_run_read" == *"after_2 1"* && "$out_tx_run_read" == *"after_3 2"* ]] \
+  && pass "transactionnel : _run lecture — bail actif ne redemande rien, bail fermé redemande un geste" \
+  || fail "transactionnel : _run lecture — comptage des gestes incorrect ($out_tx_run_read)"
+
+# 4bis) Flag ON : bail fermé + consentement REFUSÉ → refus fail-closed (jamais
+#       d'accès silencieux au-delà du bail).
+out_tx_run_refuse="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" GWSA_TRANSACTIONAL_CONSENT=1 \
+  GWSA_ELICITATION_MOCK=1 GWSA_READ_LEASE_BUDGET=1 "$PY" -c "
+import gateway.api as api
+import gateway.elicitation as elic
+from gateway.sessions import create_session
+
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='': {'ok': True}
+s = create_session(client='txD2')
+api.gmail_list(alias='alpha', session=s.session_id)  # ouvre le bail, budget 1→0 (fermé)
+
+orig_obtain = elic.obtain_signature
+elic.obtain_signature = lambda payload: (_ for _ in ()).throw(elic.ElicitationError('refusé (test)'))
+refused = False
+try:
+    api.gmail_list(alias='alpha', session=s.session_id)
+except api.GatewayError as e:
+    refused = (e.code == 'locked')
+elic.obtain_signature = orig_obtain
+print('OK' if refused else 'wrong')
+")"
+[[ "$out_tx_run_refuse" == "OK" ]] \
+  && pass "transactionnel : _run lecture — bail fermé + geste refusé → refus fail-closed" \
+  || fail "transactionnel : _run lecture — accès silencieux au-delà du bail ($out_tx_run_refuse)"
+
+# 5) Flag ON : une mutation exige un acte signé propre à CET acte ; rejouer
+#    exactement le même reçu (même nonce) redemande un geste — usage unique.
+out_tx_mutation="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" GWSA_TRANSACTIONAL_CONSENT=1 \
+  GWSA_ELICITATION_MOCK=1 "$PY" -c "
+import gateway.api as api
+import gateway.elicitation as elic
+from gateway.sessions import create_session
+
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='': {'ok': True}
+s = create_session(client='txE')
+
+r1 = api.gmail_create_draft(alias='alpha', to='a@b.com', subject='s1', body='b', session=s.session_id)
+r2 = api.gmail_create_draft(alias='alpha', to='a@b.com', subject='s2', body='b', session=s.session_id)
+both_ok = r1.get('ok') is True and r2.get('ok') is True
+
+orig_token_hex = elic.secrets.token_hex
+elic.secrets.token_hex = lambda n: 'fixed-nonce-test'
+first_ok = False
+second_refused = False
+try:
+    r3 = api.gmail_create_draft(alias='alpha', to='a@b.com', subject='s3', body='b', session=s.session_id)
+    first_ok = r3.get('ok') is True
+    api.gmail_create_draft(alias='alpha', to='a@b.com', subject='s4', body='b', session=s.session_id)
+except api.GatewayError as e:
+    second_refused = (e.code == 'locked')
+elic.secrets.token_hex = orig_token_hex
+print('both_ok', both_ok, 'first_ok', first_ok, 'second_refused', second_refused)
+")"
+[[ "$out_tx_mutation" == *"both_ok True"* && "$out_tx_mutation" == *"first_ok True"* && "$out_tx_mutation" == *"second_refused True"* ]] \
+  && pass "transactionnel : mutation — acte signé usage unique (rejeu du même reçu refusé)" \
+  || fail "transactionnel : mutation — usage unique non respecté ($out_tx_mutation)"
+
+# 6) Fail-closed : un tool non classé par `categorize` est traité en MUTATION
+#    (le régime le plus strict), jamais en lecture.
+out_tx_classify="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import gateway.api as api
+unknown_cls, _, _ = api._classify_operation(['unknownservice', 'weirdmethod'])
+read_cls, _, _ = api._classify_operation(['gmail', 'users', 'messages', 'list', '--params', '{}'])
+print('unknown', unknown_cls, 'read', read_cls)
+")"
+[[ "$out_tx_classify" == *"unknown mutation"* && "$out_tx_classify" == *"read lecture"* ]] \
+  && pass "transactionnel : mapping tool→lecture|mutation — non classé = mutation (fail-closed)" \
+  || fail "transactionnel : mapping tool→lecture|mutation incorrect ($out_tx_classify)"
+
+# 7) Reçu/prompt lié à l'acte (Codex #147) : la mutation nomme l'opération CONCRÈTE
+#    (P1 — pas un « transactional_mutation » générique) ET l'email du compte (P2),
+#    pour que l'humain vérifie QUOI et sur QUEL compte il autorise.
+out_tx_prompt="$(PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.elicitation import prompt_from_payload
+print('MUT', prompt_from_payload({'action':'transactional_mutation:gmail:send','alias':'perso','email':'perso@gmail.com','target':'msg-42'}))
+print('READ', prompt_from_payload({'action':'transactional_read_lease','alias':'perso','email':'perso@gmail.com'}))
+")"
+[[ "$out_tx_prompt" == *"gmail:send"* && "$out_tx_prompt" == *"perso@gmail.com"* ]] \
+  && pass "transactionnel : le prompt de mutation nomme l'opération (P1) et le compte/email (P2)" \
+  || fail "transactionnel : prompt de mutation générique/anonyme ($out_tx_prompt)"
+
+# 6bis) Codex #147 (re-review) : l'action signée distingue create/delete des
+#       permissions Drive — categorize() rend « share » pour les deux, donc
+#       l'op_label doit porter la MÉTHODE BRUTE, sinon les deux actes se confondent.
+out_tx_oplabel="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import gateway.api as api
+_, _, c = api._classify_operation(['drive','permissions','create','--params','{}'])
+_, _, d = api._classify_operation(['drive','permissions','delete','--params','{}'])
+print('create', c, 'delete', d, 'distinct', c != d)
+")"
+[[ "$out_tx_oplabel" == *"distinct True"* ]] \
+  && pass "transactionnel : action signée distingue create/delete des permissions Drive (méthode brute, Codex #147 P1)" \
+  || fail "transactionnel : op_label confond encore create/delete ($out_tx_oplabel)"
+
+# 6ter) Codex #147 (re-review) : en mode transactionnel le broker N'exige PAS
+#       is_session_unlocked (le consentement est porté par le gate _run en amont) ;
+#       sinon tout appel consenti échouerait au broker. Hors mode : verrou legacy.
+out_tx_broker="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import os, pathlib
+import gateway.broker_server as bs
+from gateway.sessions import create_session
+d = pathlib.Path('$TX_ROOT')/'beta'; d.mkdir(exist_ok=True)   # profil dédié (n'affecte pas alpha)
+(d/'.locked').write_text('1')                                  # verrouillé
+s = create_session(client='txBroker')
+os.environ.pop('GWSA_TRANSACTIONAL_CONSENT', None)
+legacy_refused = False
+try:
+    bs._require_access('beta', s.session_id)
+except bs.GatewayError as e:
+    legacy_refused = (e.code == 'locked')
+os.environ['GWSA_TRANSACTIONAL_CONSENT'] = '1'
+try:
+    bs._require_access('beta', s.session_id); tx_allowed = True
+except bs.GatewayError:
+    tx_allowed = False
+print('legacy_refused', legacy_refused, 'tx_allowed', tx_allowed)
+")"
+[[ "$out_tx_broker" == *"legacy_refused True"* && "$out_tx_broker" == *"tx_allowed True"* ]] \
+  && pass "transactionnel : broker — verrou legacy hors mode, laissé passer en mode transactionnel (Codex #147 P1)" \
+  || fail "transactionnel : broker _require_access incorrect ($out_tx_broker)"
+
+# 7) Flag ON : `session_unlock(minutes=…)` déprécié + écrêté au plafond du bail
+#    (quelques minutes max, plus 1440) — non-casse de l'API.
+out_tx_unlock_clamp="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" GWSA_TRANSACTIONAL_CONSENT=1 \
+  GWSA_READ_LEASE_TTL_SEC=90 "$PY" -c "
+import time
+from gateway.sessions import create_session, session_unlock, read_lease_plafond_minutes
+s = create_session(client='txG')
+s = session_unlock(s.session_id, 'alpha', 1440)
+delta = s.unlocks['alpha'] - time.time()
+plafond_sec = read_lease_plafond_minutes() * 60
+print('OK' if delta <= plafond_sec + 1 else f'wrong:{delta}')
+")"
+[[ "$out_tx_unlock_clamp" == "OK" ]] \
+  && pass "transactionnel : flag ON — session_unlock(minutes=…) écrêté au plafond du bail" \
+  || fail "transactionnel : flag ON — minutes non écrêté au plafond du bail ($out_tx_unlock_clamp)"
+
+rm -rf "$TX_ROOT"
+
 # --- Bilan ------------------------------------------------------------------
 
 printf '\n\033[1mBilan : %d réussis, %d échoués\033[0m\n' "$PASS" "$FAIL"
