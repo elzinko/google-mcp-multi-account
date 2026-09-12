@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from ._filelock import file_lock, try_file_lock
-from .config import PRODUCT_SLUG, REPO_DIR, SYS_PYTHON, gwsa_root
+from .config import PRODUCT_SLUG, REPO_DIR, SYS_PYTHON, env, gwsa_root
 
 ELICITATION_DIR_NAME = ".elicitation"
 PUBLIC_KEY_NAME = "public.der"
@@ -104,7 +104,7 @@ def _test_race_delay() -> None:
 
 
 def is_mock_mode() -> bool:
-    if os.environ.get("GWSA_ELICITATION_MOCK", "").strip() in ("1", "true", "yes"):
+    if (env("ELICITATION_MOCK") or "").strip() in ("1", "true", "yes"):
         return True
     return mock_key_path().is_file() and not public_key_path().is_file()
 
@@ -274,14 +274,15 @@ def _sign_helper_cmd() -> list[str]:
 
     Préfère le binaire produit compilé (dialogue Touch ID nommé d'après
     PRODUCT_SLUG, cf. fiche 0032) s'il est présent et exécutable ; à défaut,
-    `swift <script>` (dialogue système « swift-frontend »). GWSA_SIGN_BIN suit le
-    même modèle de confiance que GWSA_SYS_SWIFT : fixé par le wrapper, chemin dur
-    (REPO_DIR) par défaut.
+    `swift <script>` (dialogue système « swift-frontend »). MAG_SIGN_BIN suit le
+    même modèle de confiance que MAG_SYS_SWIFT : fixé par le wrapper, chemin dur
+    (REPO_DIR) par défaut. Les anciens GWSA_SIGN_BIN / GWSA_SYS_SWIFT restent lus
+    en repli (helper env()).
     """
-    binp = os.environ.get("GWSA_SIGN_BIN") or str(SIGN_BUILD_DIR / PRODUCT_SLUG)
+    binp = env("SIGN_BIN") or str(SIGN_BUILD_DIR / PRODUCT_SLUG)
     if binp and os.access(binp, os.X_OK):
         return [binp]
-    swift = os.environ.get("GWSA_SYS_SWIFT", "/usr/bin/swift")
+    swift = env("SYS_SWIFT", "/usr/bin/swift")
     script = REPO_DIR / "scripts" / SIGN_HELPER_NAME
     if not Path(swift).is_file():
         raise ElicitationError(f"Swift introuvable ({swift}) — xcode-select --install")
@@ -525,7 +526,7 @@ def run_elicitation_gate(fields: dict[str, Any]) -> None:
 
 def enroll_secure() -> dict[str, Any]:
     """Enrôlement macOS — SE / Keychain, sinon fichier private.p256 + Touch ID."""
-    if is_mock_mode() and os.environ.get("GWSA_ELICITATION_MOCK"):
+    if is_mock_mode() and env("ELICITATION_MOCK"):
         return enroll_mock()
     pub = public_key_path()
     proc = subprocess.run(

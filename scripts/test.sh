@@ -3773,6 +3773,44 @@ print("ok")
   && pass "renommage : MAG_ prioritaire, GWSA_ en repli, défaut sinon (CLIENT/ROOT/BROKER_PORT)" \
   || fail "renommage compat bi-nom ($compat_ok)"
 
+# Lot 2 — lectures gateway (sessions, elicitation) via le helper env()
+lot2_ok="$("$PY" -c '
+import os
+for k in ["MAG_SESSION_TTL_SEC","GWSA_SESSION_TTL_SEC","MAG_ELICITATION_MOCK","GWSA_ELICITATION_MOCK"]:
+    os.environ.pop(k, None)
+from gateway.sessions import session_ttl_sec, DEFAULT_SESSION_TTL_SEC
+from gateway.elicitation import is_mock_mode
+# SESSION_TTL_SEC : MAG_ prioritaire, GWSA_ repli, defaut sinon
+os.environ["MAG_SESSION_TTL_SEC"]="123"; os.environ["GWSA_SESSION_TTL_SEC"]="456"
+assert session_ttl_sec()==123, session_ttl_sec()
+del os.environ["MAG_SESSION_TTL_SEC"]
+assert session_ttl_sec()==456, session_ttl_sec()
+del os.environ["GWSA_SESSION_TTL_SEC"]
+assert session_ttl_sec()==DEFAULT_SESSION_TTL_SEC, session_ttl_sec()
+# ELICITATION_MOCK : MAG_ ou GWSA_ active le mode mock (court-circuit avant lecture fichier)
+os.environ["MAG_ELICITATION_MOCK"]="1"
+assert is_mock_mode() is True
+del os.environ["MAG_ELICITATION_MOCK"]; os.environ["GWSA_ELICITATION_MOCK"]="1"
+assert is_mock_mode() is True
+del os.environ["GWSA_ELICITATION_MOCK"]
+print("ok")
+')"
+[[ "$lot2_ok" == "ok" ]] \
+  && pass "renommage lot 2 : lectures gateway bi-nom (SESSION_TTL_SEC, ELICITATION_MOCK)" \
+  || fail "renommage lot 2 gateway ($lot2_ok)"
+
+# Lot 2 — script feuille log-usage.py (helper _env inline, sans dépendance gateway)
+l2dir="$(mktemp -d)"
+MAG_CLIENT="cli-mag" "$PY" scripts/log-usage.py "$l2dir" "aliasX" gmail list >/dev/null 2>&1
+GWSA_CLIENT="cli-gwsa" "$PY" scripts/log-usage.py "$l2dir" "aliasX" gmail list >/dev/null 2>&1
+l2log="$(cat "$l2dir/usage.jsonl" 2>/dev/null)"
+if [[ "$l2log" == *'"client": "cli-mag"'* && "$l2log" == *'"client": "cli-gwsa"'* ]]; then
+  pass "renommage lot 2 : log-usage.py lit MAG_CLIENT et GWSA_CLIENT (helper _env)"
+else
+  fail "renommage lot 2 log-usage ($l2log)"
+fi
+rm -rf "$l2dir"
+
 section "consume_nonce : verrou inter-process anti-TOCTOU (fiche 0084)"
 # consume_nonce fait reload → check → save sans atomicité inter-process avant
 # le correctif de la fiche 0084 : deux process concurrents peuvent tous deux

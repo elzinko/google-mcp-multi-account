@@ -16,6 +16,7 @@ from typing import Any, Optional
 from .config import (
     client_id,
     download_dir,
+    env,
     gwsa_root,
     profile_dir,
     upload_roots,
@@ -33,9 +34,10 @@ from .usage import log_usage
 
 # Borne défensive sur les pièces jointes Gmail : une PJ énorme (ou un
 # identifiant malveillant) ne doit pas pouvoir saturer le disque local.
-# 25 Mo = limite d'envoi Gmail ; surchargeable via GWSA_ATTACHMENT_MAX_MB.
+# 25 Mo = limite d'envoi Gmail ; surchargeable via MAG_ATTACHMENT_MAX_MB
+# (GWSA_ATTACHMENT_MAX_MB reste accepté en repli).
 try:
-    _ATTACHMENT_MAX_MB = int(os.environ.get("GWSA_ATTACHMENT_MAX_MB", "25"))
+    _ATTACHMENT_MAX_MB = int(env("ATTACHMENT_MAX_MB", "25"))
 except ValueError:
     _ATTACHMENT_MAX_MB = 25
 _ATTACHMENT_MAX_BYTES = max(1, _ATTACHMENT_MAX_MB) * 1024 * 1024
@@ -1030,7 +1032,7 @@ def access_request(
             from .project import grant_allowed_by_manifest, resolve_project
             from pathlib import Path
 
-            git_root = (get_git_root() or os.environ.get("GWSA_GIT_ROOT", "") or "").strip()
+            git_root = (get_git_root() or env("GIT_ROOT") or "").strip()
             start = Path(git_root) if git_root else None
             proj = resolve_project(start)
             if not proj.manifest_path:

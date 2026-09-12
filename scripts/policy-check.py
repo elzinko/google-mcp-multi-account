@@ -50,6 +50,7 @@ from gateway.categorize import (  # noqa: E402
     operand_resource,
     parse_json_flag,
 )
+from gateway.config import env  # noqa: E402 — lecture bi-nom MAG_/GWSA_ (fiche 20260912000249823)
 
 VALUE_FLAGS = {
     "--params", "--json", "--upload", "--upload-content-type", "--output",
@@ -72,7 +73,7 @@ def log_usage(profile_dir, decision, args, reason=""):
         root = os.path.dirname(os.path.abspath(profile_dir))
         entry = {
             "ts": now_iso(),
-            "client": os.environ.get("GWSA_CLIENT", "cli"),
+            "client": env("CLIENT", "cli"),
             "alias": os.path.basename(os.path.abspath(profile_dir)),
             "cmd": " ".join(args),
             "decision": decision,
@@ -104,10 +105,12 @@ def gws_json(profile_dir, args):
     # Après migration vault (fiche 0040), les creds ne sont plus dans profile_dir :
     # le broker passe le vrai CONFIG_DIR via GWSA_GWS_CONFIG_DIR (revue sécurité F1).
     # Repli sur profile_dir pour un usage direct / legacy non migré.
-    cfg = os.environ.get("GWSA_GWS_CONFIG_DIR") or profile_dir
-    env = dict(os.environ, GOOGLE_WORKSPACE_CLI_CONFIG_DIR=cfg)
+    cfg = env("GWS_CONFIG_DIR") or profile_dir
+    # NB : dict d'env du sous-process nommé `sub_env` (pas `env`) pour ne pas
+    # masquer le helper module env() appelé juste au-dessus (piège de scope Python).
+    sub_env = dict(os.environ, GOOGLE_WORKSPACE_CLI_CONFIG_DIR=cfg)
     try:
-        r = subprocess.run(["gws"] + args, env=env, capture_output=True,
+        r = subprocess.run(["gws"] + args, env=sub_env, capture_output=True,
                            text=True, timeout=20)
         return json.loads(r.stdout)
     except Exception:
@@ -166,8 +169,8 @@ def normalize_drive(drive):
 
 def active_grants(profile_dir):
     """Zones temporaires : session MCP (prioritaire) ou session-grants.json legacy."""
-    if os.environ.get("GWSA_USE_SESSION_GRANTS") == "1":
-        raw = os.environ.get("GWSA_SESSION_DRIVE_ZONES", "")
+    if env("USE_SESSION_GRANTS") == "1":
+        raw = env("SESSION_DRIVE_ZONES", "")
         if raw.strip():
             return {z.strip() for z in raw.split(",") if z.strip()}
         return set()
@@ -181,7 +184,7 @@ def active_grants(profile_dir):
 
 
 def zone_hint(alias):
-    sid = os.environ.get("GWSA_SESSION_ID", "").strip()
+    sid = (env("SESSION_ID") or "").strip()
     if sid:
         return (
             "aucune zone d'écriture active pour cette session — demander à l'utilisateur "
@@ -200,7 +203,7 @@ def zone_hint(alias):
 
 def _manifest_drive_cap(alias):
     """Plafond zones Drive du manifeste projet, ou None si pas de contrainte."""
-    git_root = os.environ.get("GWSA_GIT_ROOT", "").strip()
+    git_root = (env("GIT_ROOT") or "").strip()
     if not git_root:
         return None
     try:
@@ -376,7 +379,7 @@ def _project_fail_closed():
     """True si le manifeste projet (GWSA_GIT_ROOT) est en anti-downgrade
     (invalide/altéré/supprimé après avoir été de confiance) — ADR-0007 §3,
     défend S-07. Aucun contrainte GWSA_GIT_ROOT = pas de projet git → False."""
-    git_root = os.environ.get("GWSA_GIT_ROOT", "").strip()
+    git_root = (env("GIT_ROOT") or "").strip()
     if not git_root:
         return False
     try:
@@ -396,7 +399,7 @@ def _session_caps_from_env():
     """Capacités de session (opt-in, GWSA_SESSION_CAPS) : liste de
     {"service":…, "operation":…, "resource":…(optionnel)}. Absent/illisible
     → None (pas de contrainte — compat tests/appelants legacy)."""
-    raw = os.environ.get("GWSA_SESSION_CAPS", "").strip()
+    raw = (env("SESSION_CAPS") or "").strip()
     if not raw:
         return None
     try:
@@ -460,8 +463,8 @@ def _session_drive_ok(profile_dir, parent, cat):
         return True
     if _session_cap_allows(caps, "drive", cat, parent or ""):
         return True
-    if parent and os.environ.get("GWSA_USE_SESSION_GRANTS") == "1":
-        raw = os.environ.get("GWSA_SESSION_DRIVE_ZONES", "")
+    if parent and env("USE_SESSION_GRANTS") == "1":
+        raw = env("SESSION_DRIVE_ZONES", "")
         sz = {z.strip() for z in raw.split(",") if z.strip()}
         if sz and under_allowed(profile_dir, parent, sz):
             return True
@@ -506,7 +509,7 @@ def _gate_drive_session(profile_dir, args, pos):
 
 def _manifest_service_cap(alias, service, cat):
     """None = pas de contrainte ; True/False = plafond manifeste."""
-    git_root = os.environ.get("GWSA_GIT_ROOT", "").strip()
+    git_root = (env("GIT_ROOT") or "").strip()
     if not git_root:
         return None
     try:
