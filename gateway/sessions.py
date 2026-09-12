@@ -14,6 +14,7 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from ._filelock import file_lock
 from .config import gwsa_root
 from .errors import GatewayError
 
@@ -416,16 +417,31 @@ def is_read_lease_active(session_id: str, alias: str) -> bool:
     return lease.active()
 
 
+def try_consume_read_lease(session_id: str, alias: str) -> bool:
+    """Vérifie ET consomme un slot de bail de façon ATOMIQUE (verrou fichier).
+
+    Évite que deux appels concurrents sur la même session observent le même
+    dernier slot actif et dépassent le budget signé (Codex PR #147, P1) : le
+    check et la consommation étaient deux cycles load/save séparés. Retourne
+    True si un slot a été consommé (bail actif), False sinon — l'appelant doit
+    alors obtenir un nouveau consentement. Le retrait ne dépend que du
+    TTL/budget, jamais d'un geste du LLM (ADR-0011 §Décision 3)."""
+    with file_lock(_path(session_id).with_suffix(".lock")):
+        state = get_session(session_id)
+        if state is None:
+            return False
+        lease = state.read_leases.get(alias)
+        if lease is None or not lease.active():
+            return False
+        lease.budget -= 1
+        _save(state)
+        return True
+
+
 def consume_read_lease(session_id: str, alias: str) -> None:
-    """Décrémente d'une unité le budget d'un bail actif. N'appeler qu'après
-    avoir vérifié `is_read_lease_active` (sans effet sinon) — le retrait ne
-    dépend que du TTL/budget, jamais d'un geste du LLM (ADR-0011 §Décision 3)."""
-    state = require_session(session_id)
-    lease = state.read_leases.get(alias)
-    if lease is None or not lease.active():
-        return
-    lease.budget -= 1
-    _save(state)
+    """Compat : consomme un slot si le bail est actif, sans valeur de retour.
+    Préférer `try_consume_read_lease` (atomique) au point de contrôle."""
+    try_consume_read_lease(session_id, alias)
 
 
 def session_grant_drive(

@@ -6055,13 +6055,25 @@ print('both_ok', both_ok, 'first_ok', first_ok, 'second_refused', second_refused
 #    (le régime le plus strict), jamais en lecture.
 out_tx_classify="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
 import gateway.api as api
-unknown_cls, _ = api._classify_operation(['unknownservice', 'weirdmethod'])
-read_cls, _ = api._classify_operation(['gmail', 'users', 'messages', 'list', '--params', '{}'])
+unknown_cls, _, _ = api._classify_operation(['unknownservice', 'weirdmethod'])
+read_cls, _, _ = api._classify_operation(['gmail', 'users', 'messages', 'list', '--params', '{}'])
 print('unknown', unknown_cls, 'read', read_cls)
 ")"
 [[ "$out_tx_classify" == *"unknown mutation"* && "$out_tx_classify" == *"read lecture"* ]] \
   && pass "transactionnel : mapping tool→lecture|mutation — non classé = mutation (fail-closed)" \
   || fail "transactionnel : mapping tool→lecture|mutation incorrect ($out_tx_classify)"
+
+# 7) Reçu/prompt lié à l'acte (Codex #147) : la mutation nomme l'opération CONCRÈTE
+#    (P1 — pas un « transactional_mutation » générique) ET l'email du compte (P2),
+#    pour que l'humain vérifie QUOI et sur QUEL compte il autorise.
+out_tx_prompt="$(PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.elicitation import prompt_from_payload
+print('MUT', prompt_from_payload({'action':'transactional_mutation:gmail:send','alias':'perso','email':'perso@gmail.com','target':'msg-42'}))
+print('READ', prompt_from_payload({'action':'transactional_read_lease','alias':'perso','email':'perso@gmail.com'}))
+")"
+[[ "$out_tx_prompt" == *"gmail:send"* && "$out_tx_prompt" == *"perso@gmail.com"* ]] \
+  && pass "transactionnel : le prompt de mutation nomme l'opération (P1) et le compte/email (P2)" \
+  || fail "transactionnel : prompt de mutation générique/anonyme ($out_tx_prompt)"
 
 # 7) Flag ON : `session_unlock(minutes=…)` déprécié + écrêté au plafond du bail
 #    (quelques minutes max, plus 1440) — non-casse de l'API.

@@ -30,12 +30,11 @@ from .profiles import is_locked, list_profiles as _list_profiles
 from .profiles import profile_email, validate_alias
 from .project import git_toplevel
 from .sessions import (
-    consume_read_lease,
-    is_read_lease_active,
     is_session_unlocked,
     open_read_lease,
     require_session,
     transactional_enabled,
+    try_consume_read_lease,
 )
 from .setup_status import setup_status  # noqa: F401 — re-export pour le dispatch MCP
 from .usage import log_usage
@@ -107,24 +106,28 @@ def _positionals(args: list[str]) -> list[str]:
     return out
 
 
-def _classify_operation(gws_args: list[str]) -> tuple[str, str]:
-    """Classe un appel gws en (« lecture » | « mutation », ressource opérante)
-    pour le point de contrôle transactionnel (ADR-0011).
+def _classify_operation(gws_args: list[str]) -> tuple[str, str, str]:
+    """Classe un appel gws en (« lecture » | « mutation », ressource opérante,
+    libellé d'opération) pour le point de contrôle transactionnel (ADR-0011).
 
     Réutilise `gateway.categorize` — même source de vérité que
     `scripts/policy-check.py` (autorisation) et `gateway/usage.py` (audit).
     Fail-closed : catégorie non reconnue (tool non classé) = mutation, le
-    régime le plus strict."""
+    régime le plus strict. Le libellé (`service:catégorie`, ex. `gmail:send`)
+    part dans l'action SIGNÉE pour que le reçu dise QUOI a été approuvé
+    (Codex PR #147, P1 — pas un `transactional_mutation` générique)."""
     if not gws_args:
-        return "mutation", ""
+        return "mutation", "", "?"
     service = norm_service(gws_args[0])
     pos = _positionals(gws_args[1:])
     if not pos:
-        return "mutation", ""
+        return "mutation", "", service
     resources, raw_method = pos[:-1], pos[-1]
     category = categorize(service, resources, raw_method)
     resource = operand_resource(service, resources, raw_method, gws_args)
-    return ("lecture" if category == "read" else "mutation"), resource
+    op_class = "lecture" if category == "read" else "mutation"
+    op_label = f"{service}:{category or raw_method}"
+    return op_class, resource, op_label
 
 
 def _transactional_gate(alias: str, gws_args: list[str], sid: str) -> None:
@@ -140,13 +143,20 @@ def _transactional_gate(alias: str, gws_args: list[str], sid: str) -> None:
 
     Fail-closed : un geste refusé/absent (`ElicitationError`) est toujours
     traduit en refus (`GatewayError` code="locked"), jamais en accès."""
-    op_class, resource = _classify_operation(gws_args)
+    op_class, resource, op_label = _classify_operation(gws_args)
+    # L'email est la vérité terrain « quelle boîte » : le passer dans le payload
+    # pour que le prompt/reçu nomme le compte réel, pas juste l'alias, en
+    # multi-comptes (Codex PR #147, P2).
+    email = profile_email(alias)
     if op_class == "mutation":
         try:
             run_elicitation_gate(
                 {
-                    "action": "transactional_mutation",
+                    # opération concrète dans l'action SIGNÉE (Codex #147, P1) :
+                    # « transactional_mutation:gmail:send » ≠ « …:drive:delete ».
+                    "action": f"transactional_mutation:{op_label}",
                     "alias": alias,
+                    "email": email,
                     "target": resource,
                     "session_id": sid,
                 }
@@ -154,19 +164,27 @@ def _transactional_gate(alias: str, gws_args: list[str], sid: str) -> None:
         except ElicitationError as e:
             raise GatewayError(f"acte refusé — {e}", code="locked") from e
         return
-    if not is_read_lease_active(sid, alias):
+    # Lecture : consommer un slot de bail de façon ATOMIQUE (check + décrément
+    # sous verrou) pour ne pas dépasser le budget signé sous concurrence
+    # (Codex #147, P1). Slot indisponible → un geste « lire maintenant » ouvre
+    # un bail frais, dont on consomme aussitôt le premier slot.
+    if not try_consume_read_lease(sid, alias):
         try:
             run_elicitation_gate(
                 {
                     "action": "transactional_read_lease",
                     "alias": alias,
+                    "email": email,
                     "session_id": sid,
                 }
             )
         except ElicitationError as e:
             raise GatewayError(f"bail de lecture refusé — {e}", code="locked") from e
         open_read_lease(sid, alias)
-    consume_read_lease(sid, alias)
+        if not try_consume_read_lease(sid, alias):
+            raise GatewayError(
+                "bail de lecture indisponible après consentement", code="locked"
+            )
 
 
 def _run(
