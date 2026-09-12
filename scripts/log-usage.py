@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Journalise une exécution gwsa dans ~/.config/gws-accounts/usage.jsonl.
+"""Journalise une exécution mag dans ~/.config/gws-accounts/usage.jsonl.
 
 Décision « ok » par défaut. Un refus amont (verrou) se journalise en passant
 GWSA_LOG_DECISION=refus et GWSA_LOG_REASON=locked dans l'environnement —
@@ -28,6 +28,18 @@ try:
     reason = os.environ.get("GWSA_LOG_REASON", "")
     if reason:
         entry["reason"] = reason
+    # Audit du grain service × opération × ressource (fiche 0076 lot 3, M-08) :
+    # posé par gateway.usage.log_usage pour les appels réussis seulement —
+    # champs optionnels, un lecteur existant du journal les ignore sans casser.
+    service = os.environ.get("GWSA_LOG_SERVICE", "")
+    if service:
+        entry["service"] = service
+    operation = os.environ.get("GWSA_LOG_OPERATION", "")
+    if operation:
+        entry["operation"] = operation
+    resource = os.environ.get("GWSA_LOG_RESOURCE", "")
+    if resource:
+        entry["resource"] = resource
     with open(os.path.join(root, "usage.jsonl"), "a") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 except Exception:

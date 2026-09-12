@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script>document.documentElement.classList.add('js');</script>
   <title>Documentation — google-multi-account</title>
-  <meta name="description" content="google-multi-account documentation hub: MCP setup, gwsa usage, policies, architecture, security.">
+  <meta name="description" content="google-multi-account documentation hub: MCP setup, mag usage, policies, architecture, security.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
@@ -28,7 +28,7 @@
     <div class="page-hero reveal">
       <p class="section-kicker" data-i18n="docsKicker">Documentation</p>
       <h1 data-i18n="docsH1">Guides, not a README dump.</h1>
-      <p data-i18n="docsLede">Every page has a job. The landing introduces <strong>google-multi-account</strong>; here you connect, configure and audit. CLI <code>gwsa</code> / binary <code>google-mcp</code>.</p>
+      <p data-i18n="docsLede">Every page has a job. The landing introduces <strong>google-multi-account</strong>; here you connect, configure and audit. CLI <code>mag</code> / binary <code>google-mcp</code>.</p>
     </div>
 
     <section style="padding-top:0">
@@ -53,7 +53,7 @@
         </li>
         <li>
           <a href="https://github.com/elzinko/google-mcp-multi-account/blob/main/docs/usage.md">
-            <span class="doc-name" data-i18n="dnUsage">gwsa usage</span>
+            <span class="doc-name" data-i18n="dnUsage">mag usage</span>
             <span class="doc-desc" data-i18n="dcUsage">Profiles, locks, grants, web admin, Touch ID.</span>
           </a>
         </li>
@@ -114,11 +114,11 @@
         navDocs: 'Docs',
         docsKicker: 'Documentation',
         docsH1: 'Des guides, pas un dump de README.',
-        docsLede: 'Chaque page a un job. La landing présente <strong>google-multi-account</strong> ; ici tu branches, tu configures, tu audites. CLI <code>gwsa</code> / binaire <code>google-mcp</code>.',
+        docsLede: 'Chaque page a un job. La landing présente <strong>google-multi-account</strong> ; ici tu branches, tu configures, tu audites. CLI <code>mag</code> / binaire <code>google-mcp</code>.',
         dcREADME: 'Quickstart 3 étapes, panorama produit, versions.',
         dcMcp: 'Brancher Claude Desktop, Claude Code, Cursor ; tools exposés.',
         dcOauth: 'Projet Google Cloud, client Desktop, publication, IAM.',
-        dnUsage: 'Usage gwsa',
+        dnUsage: 'Usage mag',
         dcUsage: 'Profils, verrous, grants, admin web, Touch ID.',
         dcPolicies: 'Default-deny, services, zones Drive permanentes et temporaires.',
         dcArch: 'MCP, gateway, broker, wrapper — qui parle à qui.',
@@ -141,14 +141,14 @@
           if (v != null) n.innerHTML = v;
         });
         document.documentElement.lang = lang;
-        try { localStorage.setItem('gma-lang', lang); } catch (e) {}
+        try { localStorage.setItem('mag-lang', lang); } catch (e) {}
         if (btn) {
           btn.textContent = lang === 'fr' ? 'EN' : 'FR';
           btn.setAttribute('aria-label', lang === 'fr' ? 'Switch to English' : 'Passer en français');
         }
       }
       var saved = null;
-      try { saved = localStorage.getItem('gma-lang'); } catch (e) {}
+      try { saved = localStorage.getItem('mag-lang'); } catch (e) {}
       if (saved === 'fr') apply('fr');
       if (btn) btn.addEventListener('click', function () {
         apply(document.documentElement.lang === 'fr' ? 'en' : 'fr');

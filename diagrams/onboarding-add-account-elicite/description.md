@@ -10,10 +10,10 @@ avec la commande exacte à faire exécuter, et le rappel des prérequis côté
 projet GCP (test user si l'app est en Testing, rôle IAM).
 
 Le LLM me propose la commande. C'est moi qui l'exécute dans le terminal :
-`gwsa add <alias> <email>`. Si l'authentification forte est activée, Touch ID
+`mag add <alias> <email>`. Si l'authentification forte est activée, Touch ID
 s'affiche d'abord — un LLM ne peut pas la simuler, il faut ma présence
 physique. Puis le navigateur s'ouvre : je choisis le bon compte et j'accepte
-les accès (le consentement OAuth est la seconde barrière humaine). gwsa
+les accès (le consentement OAuth est la seconde barrière humaine). mag
 vérifie que l'email connecté est bien celui attendu, chiffre le token,
 écrit une policy prudente (default-deny) et fait une sonde IAM en lecture :
 si le compte n'a pas accès au projet, la commande de réparation s'affiche

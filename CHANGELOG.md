@@ -1,5 +1,131 @@
 # Journal des versions
 
+## v1.1.0 — 2026-08-29
+
+### Fonctionnalités
+
+- feat(install): brancher les clients LLM en opt-in, pas opt-out (#123)
+- feat(0085): figer unlock + zones Drive à la création d'une sous-session (isolation complète) (#119)
+- feat(0080): durcir la couche capacités fines de session (suite revue Codex #110) (#118)
+- feat(0078): approbation par passkey distante depuis le téléphone (POC holder Mac) (#113)
+- feat(admin): reprise UX refresh admin (épic 0060) — split propre de #84 (#112)
+- feat(0076): droits par session — implémentation Phase A (jeton porté, capacités fines signées)
+
+### Corrections
+
+- fix(remote_approval): verrou partagé inter-process contre le TOCTOU anti-clonage sign_count (#126)
+- fix(elicitation): verrou inter-process sur consume_nonce contre une course TOCTOU (#125)
+- fix(install): aide --help robuste sous « curl | bash » (#124)
+- fix(security): borne la taille des pièces jointes Gmail + doc partage/PJ (fiche 0074) (#107)
+- fix(install): préflight « gws » bloquant + commande copiable (fiche 0074) (#106)
+
+### Documentation
+
+- docs(nav): raccourcir « Prérequis — OAuth / Google Cloud » en « Prérequis »
+- docs: ajoute ALTERNATIVES.md (projets similaires / veille)
+- docs(backlog): fiches 0089-0093 — profil OAuth, statut OAuth, DX updater, bascule gwsa→mag, cohérence nommage
+- docs(backlog): ship 0083 (verrou anti-clonage sign_count) — PR #126 → done/
+- docs: règle d'écriture claire (En clair d'abord)
+- docs(backlog): ship 0084 (verrou consume_nonce TOCTOU) — PR #125 → done/
+- docs: références fiches en chemins locaux, pas d'URL GitHub (fix mkdocs --strict) (#122)
+- docs(backlog): ship 0088 (aide install.sh robuste curl|bash) — PR #124 → done/
+- docs(backlog): ship 0087 (installeur opt-in) — PR #123 → done/
+- docs: aligner README + cartes index sur le split CLI / Admin web (#120) (#121)
+- docs: toilettage du site — nav (policy→Sécurité, CLI/Admin), mag help, cartes cliquables, wording clients (#120)
+- docs(backlog): fiche 0087 — brancher les clients LLM en opt-in dans install.sh
+- docs(backlog): ship 0085 (figer unlock+zones à la création de sous-session) — PR #119 → done/
+- docs(backlog): normaliser pr: de 0080 en guillemets doubles (#118 dans l'index)
+- docs(backlog): ship 0080 (durcir capacités fines de session) — PR #118 → done/
+- docs(backlog): fiche 0086 — raffinements audit + migration capacités session (suite revue #118)
+- docs(backlog): fiche 0085 — figer unlock+zones à la création de sous-session (finding revue 0080)
+- docs(backlog): tampon ready sur 0080 (concurrence ezk-pm) — 1er sprint du build
+- docs(backlog): fiches 0083 (passkey) + 0084 (consume_nonce TOCTOU) + migration Skema v2 (#115)
+- docs(backlog): épic ombrelle 0082 « droits par session » (rattache 0045/0076/0080) (#117)
+- docs(backlog): ship épic 0060 — fiches 0061-0069 → done/ (#112) (#116)
+- docs(backlog): fiche 0078 livrée (shipped, PR #113) → done/
+- docs(sessions): archive session 2026-08-16 droits-par-session-0076
+- docs(backlog): classe la fiche 0076 en done/ (shipped #110)
+- docs(0076): fiche droits par session livrée (shipped, PR #110) (#111)
+- docs(archi): accès mobile souverain — ADR-0008 + comparateur + épic 0077/0078 (#109)
+- docs(0076): droits par session — ADR-0007 + fiche Phase A (#108)
+- docs: unifie l'install par client (page Configurer) + OAuth en préalable + gwsa→gma (#105)
+
+### Autres
+
+- chore: gitignore .vercel/ (artefact CLI Vercel)
+- chore(cli): renommer la commande gma → mag (collision oh-my-zsh) (#114)
+- chore(deps): bump actions/setup-python from 5 to 7 (#104)
+- chore(deps): bump actions/configure-pages from 5 to 6 (#103)
+- chore(deps): bump actions/checkout from 4 to 7 (#102)
+- chore(deps): bump actions/deploy-pages from 4 to 5 (#101)
+- chore(deps): bump actions/upload-pages-artifact from 3 to 5 (#100)
+
+## v1.0.1 — 2026-08-09
+
+### Corrections
+
+- fix(install): préflight gws + récap gma/email + github.io only
+
+### Documentation
+
+- docs(adr): rampe nouveau venu — glossaire curé + TL;DR (compréhensible)
+- docs(features): 0074 — note de clôture v1.0.0
+
+## v1.0.0 — 2026-08-09
+
+### Fonctionnalités
+
+- feat(cli): gma wire <client> — brancher un client MCP en une commande
+- feat(cli): désigner un compte par son email (alias = raccourci optionnel)
+- feat(cli): renommer gwsa → gma (alias déprécié conservé)
+
+### Documentation
+
+- docs: refonte pro — threat-model + policies contextualisés + page Contribuer
+- docs: refonte modèle — Prise en main (tuto) + architecture réécrite
+- docs: pré-v1 — gws, critique.md, Quickstart, mermaid, gwsa, déploiement Pages (0074)
+- docs(site): expliquer les deux noms (dépôt vs connecteur MCP)
+- docs(site): accentuer les titres de catégories du menu
+- docs(site): liens source en URLs GitHub absolues + ADRs dans la nav
+
+### Autres
+
+- test(security): garde admin (DNS-rebinding + Origin) + invariants DEFAULT_POLICY
+- chore(features): passe reconcile+review — ship 3, dédoublonner, rescope 6 (#88)
+
+## v0.4.0 — 2026-08-04
+
+### Fonctionnalités
+
+- feat(drive): grant par nom (vault) + drive_update + partage lecture/écriture (#77)
+- feat(docs): site de doc en ligne MkDocs Material (#79)
+- feat(install): installer & mettre à jour sans clone — curl + tarball GitHub (#78)
+- feat: rebrand to google-multi-account + English-first landing & README (#58)
+- feat(elicitation): nommer le compte (email) au moment d'autoriser — fiche 0047 (#75)
+- feat(0043): lire, copier et téléverser Drive + pièces jointes Gmail via MCP (#73)
+
+### Corrections
+
+- fix(elicitation): dialogue Touch ID strongauth nomme le produit (#74)
+- fix(docs): clarifier policy admin ≠ surface MCP (fiche 0041) (#52)
+
+### Documentation
+
+- docs(readme): quickstart mène avec l'install curl (sans clone)
+- docs(features): ship 0059 (#77) — grant par nom via vault
+- docs(features): ship 0020 (#78) + 0072 (#79)
+- docs(features): add 0059 vault folder resolve bug + manual test
+- docs(features): add v0.4.0 Admin UX epic 0060 and children 0061–0071
+- docs(features): ship 0047 #75
+- docs(features): ship 0044 #74
+
+### Autres
+
+- chore(backlog): ship 0043
+- chore(backlog): résout collisions d'id 0040/0041 (→0045/0046)
+- chore(deps): bump actions/checkout from 4 to 7 (#55)
+- chore(security): enable Dependabot config and document GitHub security (#53)
+
 ## v0.3.0 — 2026-07-29
 
 ### Fonctionnalités

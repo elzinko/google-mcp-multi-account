@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Interface d'admin gws multi-comptes — serveur local (127.0.0.1 uniquement).
-// Zéro dépendance : Node stdlib. Toute action passe par bin/gwsa (source de vérité).
+// Interface d'admin google-multi-account — serveur local (127.0.0.1 uniquement).
+// Zéro dépendance : Node stdlib. Toute action passe par bin/mag (source de vérité).
 // Sécurité : bind loopback, en-tête X-GWSA-Admin obligatoire sur /api (anti-CSRF,
 // un site tiers ne peut pas l'envoyer sans déclencher un préflight CORS refusé),
 // contrôle d'Origin, execFile sans shell, validation stricte des entrées.
@@ -15,7 +15,7 @@ const { execFile, execFileSync, spawn } = require("child_process");
 const PORT = Number.parseInt(process.env.GWSA_ADMIN_PORT || "4877", 10);
 const HOST = "127.0.0.1";
 const REPO = path.resolve(__dirname, "..");
-const GWSA = path.join(REPO, "bin", "gwsa");
+const GWSA = path.join(REPO, "bin", "mag");
 const ROOT = process.env.GWSA_ROOT || path.join(os.homedir(), ".config", "gws-accounts");
 const DEPLOY_ROOT = process.env.GWSA_DEPLOY_ROOT || path.join(os.homedir(), ".local", "share", "google-mcp");
 const STABLE_ADMIN_PORT = 4877;
@@ -305,36 +305,6 @@ const BOOL_KEYS = ["read", "create", "update", "delete", "send", "drafts", "labe
 
 const emailCache = new Map();
 
-// Doc « Schémas » : assemblée depuis diagrams/*/ (triplets versionnés) — les
-// sources restent les .mmd/explanation.md du repo, rien n'est dupliqué ici.
-function buildSchemas() {
-  const dir = path.join(REPO, "diagrams");
-  const rdf = (f) => { try { return fs.readFileSync(f, "utf8"); } catch { return ""; } };
-  let slugs = [];
-  try {
-    slugs = fs.readdirSync(dir, { withFileTypes: true })
-      .filter((e) => e.isDirectory() && fs.existsSync(path.join(dir, e.name, "diagram.mmd")))
-      .map((e) => e.name);
-  } catch { return ""; }
-  const PREF = ["onboarding-setup-initial", "lecture-donnees-elicitee",
-    "onboarding-add-account-elicite", "onboarding-reparation-iam"];
-  slugs.sort((a, b) => {
-    const ia = PREF.indexOf(a); const ib = PREF.indexOf(b);
-    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
-  });
-  const parts = ["# Les scénarios clés, en séquence",
-    "> Schémas versionnés dans `diagrams/` (prose → mermaid → image) — rendus ici en local, sans service externe."];
-  for (const s of slugs) {
-    const m = rdf(path.join(dir, s, "meta.yaml")).match(/^title:\s*"?(.*?)"?\s*$/m);
-    parts.push("## " + ((m && m[1]) || s));
-    const expl = rdf(path.join(dir, s, "explanation.md")).trim();
-    if (expl) parts.push(expl);
-    const mmd = rdf(path.join(dir, s, "diagram.mmd")).trim();
-    if (mmd) parts.push("```mermaid\n" + mmd + "\n```");
-  }
-  return slugs.length ? parts.join("\n\n") : "";
-}
-
 // Timeout court pour les commandes snappy (list/lock/…). Unlock/grant/add
 // attendent Touch ID : 20 s tuait le child au milieu du dialogue → connexion
 // HTTP coupée côté navigateur (« Failed to fetch ») si le process admin
@@ -350,7 +320,7 @@ function gwsaExitCode(err) {
   return 1;
 }
 
-function gwsa(args, timeout = GWSA_TIMEOUT_SHORT_MS) {
+function mag(args, timeout = GWSA_TIMEOUT_SHORT_MS) {
   return new Promise((resolve) => {
     execFile(GWSA, args, { timeout, killSignal: "SIGTERM" }, (err, stdout, stderr) => {
       const timedOut = !!(err && (err.killed || err.code === "ETIMEDOUT"));
@@ -405,7 +375,7 @@ function provision(args, timeout = 20000) {
 
 // Appels Drive en LECTURE SEULE pour le sélecteur de dossiers de l'admin.
 // Passent par gws directement (panneau de l'utilisateur : le verrou 🔒, qui
-// cible les LLM via gwsa, ne s'applique pas ici).
+// cible les LLM via mag, ne s'applique pas ici).
 function gwsDrive(alias, params) {
   return new Promise((resolve) => {
     execFile("gws", ["drive", "files", "list", "--params", JSON.stringify(params)], {
@@ -459,7 +429,7 @@ async function folderAncestors(alias, id) {
 
 function gwsEmail(alias) {
   if (emailCache.has(alias)) return Promise.resolve(emailCache.get(alias));
-  // Métadonnée .email écrite par gwsa add/list (ADR-0002) — évite d'exécuter gws.
+  // Métadonnée .email écrite par mag add/list (ADR-0002) — évite d'exécuter gws.
   // Non autoritative si corrompue : un contenu non-email retombe sur le backfill
   // (sinon un mauvais .email resterait coincé — retour Codex, PR #18).
   try {
@@ -521,7 +491,7 @@ async function listProfiles() {
   return out.sort((a, b) => a.alias.localeCompare(b.alias));
 }
 
-/** Sessions LLM (registre `.sessions/`, fiche 0040) — lecture directe, mutations via gwsa. */
+/** Sessions LLM (registre `.sessions/`, fiche 0040) — lecture directe, mutations via mag. */
 function listSessions() {
   const dir = path.join(ROOT, ".sessions");
   let files = [];
@@ -658,11 +628,6 @@ const server = http.createServer(async (req, res) => {
   if (p === "/" || p === "/index.html") {
     return send(res, 200, fs.readFileSync(path.join(__dirname, "index.html")), "text/html; charset=utf-8");
   }
-  if (p.startsWith("/vendor/")) {
-    const f = path.join(__dirname, "vendor", path.basename(p));
-    if (!fs.existsSync(f)) return send(res, 404, { error: "introuvable" });
-    return send(res, 200, fs.readFileSync(f), "application/javascript; charset=utf-8");
-  }
   if (!p.startsWith("/api/")) return send(res, 404, { error: "introuvable" });
 
   // Anti-DNS-rebinding : n'accepter que l'hôte loopback sur lequel on écoute.
@@ -706,7 +671,7 @@ const server = http.createServer(async (req, res) => {
       if (!/^[A-Za-z0-9._-]{1,120}$/.test(id) || id === "current") {
         return send(res, 400, { error: "id sandbox invalide" });
       }
-      const r = await gwsa(["sandbox", "remove", id], 60000);
+      const r = await mag(["sandbox", "remove", id], 60000);
       return send(res, r.code ? 500 : 200, {
         ok: !r.code,
         out: (r.stdout + r.stderr).trim(),
@@ -730,7 +695,7 @@ const server = http.createServer(async (req, res) => {
         const b = await readBody(req);
         if (!ALIAS_RE.test(b.alias || "")) return send(res, 400, { error: "alias invalide" });
         const mins = String(Math.min(1440, Math.max(1, parseInt(b.minutes, 10) || 60)));
-        const r = await gwsa(["session", "unlock", sid, b.alias, mins], 90000);
+        const r = await mag(["session", "unlock", sid, b.alias, mins], 90000);
         return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).trim() });
       }
       if (action === "grant") {
@@ -739,15 +704,15 @@ const server = http.createServer(async (req, res) => {
         const target = String(b.target || "").trim().replace(/[\x00-\x1f"'\\]/g, "");
         if (!target || target.length > 200) return send(res, 400, { error: "dossier invalide" });
         const h = Math.min(168, Math.max(1, parseInt(b.hours, 10) || 8));
-        const r = await gwsa(["session", "grant", sid, b.alias, target, String(h)], 90000);
+        const r = await mag(["session", "grant", sid, b.alias, target, String(h)], 90000);
         return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).trim() });
       }
       if (action === "revoke-descendants") {
-        const r = await gwsa(["session", "revoke-descendants", sid]);
+        const r = await mag(["session", "revoke-descendants", sid]);
         return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).trim() });
       }
       if (action === "close") {
-        const r = await gwsa(["session", "close", sid]);
+        const r = await mag(["session", "close", sid]);
         return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).trim() });
       }
     }
@@ -771,15 +736,6 @@ const server = http.createServer(async (req, res) => {
       holdHttpForAuth(req, res);
       const r = await provision(["sync-iam", "--yes"], GWSA_TIMEOUT_AUTH_MS);
       return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).slice(-1500) });
-    }
-    if (req.method === "GET" && p === "/api/doc") {
-      const rd = (f) => { try { return fs.readFileSync(path.join(REPO, f), "utf8"); } catch { return ""; } };
-      return send(res, 200, {
-        readme: rd("README.md"),
-        oauth: rd("docs/setup-oauth.md"),
-        mcp: rd("docs/mcp-setup.md"),
-        schemas: buildSchemas(),
-      });
     }
     const anc = p.match(/^\/api\/profiles\/([^/]+)\/ancestors$/);
     if (req.method === "GET" && anc) {
@@ -829,7 +785,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && p === "/api/lockall") {
       const profiles = await listProfiles();
-      for (const pr of profiles) await gwsa(["lock", pr.alias]);
+      for (const pr of profiles) await mag(["lock", pr.alias]);
       return send(res, 200, { ok: true });
     }
 
@@ -839,7 +795,7 @@ const server = http.createServer(async (req, res) => {
       if (!ALIAS_RE.test(alias)) return send(res, 400, { error: "alias invalide" });
       if (!fs.existsSync(path.join(ROOT, alias))) return send(res, 404, { error: "profil inconnu" });
       if (action === "lock") {
-        const r = await gwsa(["lock", alias]);
+        const r = await mag(["lock", alias]);
         return send(res, r.code ? 500 : 200, { ok: !r.code, out: r.stdout + r.stderr });
       }
       if (action === "unlock") {
@@ -847,12 +803,12 @@ const server = http.createServer(async (req, res) => {
         const b = await readBody(req);
         const arg = b.minutes === "off" ? "off"
           : String(Math.min(1440, Math.max(1, parseInt(b.minutes, 10) || 60)));
-        const r = await gwsa(["unlock", alias, arg], GWSA_TIMEOUT_AUTH_MS);
+        const r = await mag(["unlock", alias, arg], GWSA_TIMEOUT_AUTH_MS);
         const packed = authGwsaResult(r);
         return send(res, packed.status, packed.body);
       }
       if (action === "revoke") {
-        const r = await gwsa(["remove", alias]);
+        const r = await mag(["remove", alias]);
         emailCache.delete(alias);
         return send(res, r.code ? 500 : 200, { ok: !r.code, out: r.stdout + r.stderr });
       }
@@ -868,9 +824,12 @@ const server = http.createServer(async (req, res) => {
           args = ["grant", alias, target, String(h)];
           timeout = GWSA_TIMEOUT_AUTH_MS;
         } else {
-          args = ["policy", alias, "allow", target];
+          // Mutation zone-seule (fiche 0107) : « policy allow » forçait create/update à
+          // true en douce quand le bloc drive était absent (défaut sûr). zone-add ne
+          // touche que writeFolders/zonesOnly, jamais les flags d'opération existants.
+          args = ["policy", alias, "zone-add", target];
         }
-        const r = await gwsa(args, timeout);
+        const r = await mag(args, timeout);
         if (action === "grant") {
           const packed = authGwsaResult(r);
           return send(res, packed.status, packed.body);
@@ -881,8 +840,8 @@ const server = http.createServer(async (req, res) => {
         const b = await readBody(req);
         const id = String(b.id || "");
         if (!/^[A-Za-z0-9_-]{5,128}$/.test(id)) return send(res, 400, { error: "id invalide" });
-        const args = action === "grant-revoke" ? ["grant", alias, "revoke", id] : ["policy", alias, "revoke", id];
-        const r = await gwsa(args);
+        const args = action === "grant-revoke" ? ["grant", alias, "revoke", id] : ["policy", alias, "zone-remove", id];
+        const r = await mag(args);
         return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).trim() });
       }
       if (action === "policy") {
@@ -916,5 +875,5 @@ server.on("error", (err) => {
 server.requestTimeout = Math.max(server.requestTimeout || 0, GWSA_TIMEOUT_AUTH_MS + 30000);
 server.headersTimeout = Math.max(server.headersTimeout || 0, GWSA_TIMEOUT_AUTH_MS + 60000);
 server.listen(PORT, HOST, () => {
-  console.log(`Admin gws multi-comptes : http://${HOST}:${PORT} (local uniquement)`);
+  console.log(`Admin google-multi-account : http://${HOST}:${PORT} (local uniquement)`);
 });

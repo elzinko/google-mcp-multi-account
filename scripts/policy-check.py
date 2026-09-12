@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Contrôleur de policy par service pour gwsa.
+"""Contrôleur de policy par service pour mag.
 
-Appelé par bin/gwsa (et la gateway MCP) avant TOUTE commande quand le profil
+Appelé par bin/mag (et la gateway MCP) avant TOUTE commande quand le profil
 possède un policy.json. Default-deny : un service absent du policy.json est
 refusé (sauf passthrough auth/schema). Un service présent = fail closed :
 seules les catégories explicitement autorisées passent.
@@ -24,10 +24,10 @@ policy.json (dans ~/.config/gws-accounts/<alias>/) :
 Drive, modèle par zones : lecture partout ; en zonesOnly, écritures uniquement
 sous les dossiers autorisés (sous-dossiers compris, remontée des parents via
 l'API). Zones = writeFolders (permanentes, policy) ∪ session-grants.json
-(temporaires, accordées par l'utilisateur via `gwsa grant`, expiration auto).
+(temporaires, accordées par l'utilisateur via `mag grant`, expiration auto).
 Par défaut (zonesOnly sans zones) : aucune écriture possible.
 
-Sortie : exit 0 = autorisé (gwsa exécute), exit 4 = refusé (message stderr).
+Sortie : exit 0 = autorisé (mag exécute), exit 4 = refusé (message stderr).
 Les refus sont journalisés dans ~/.config/gws-accounts/usage.jsonl.
 """
 import datetime
@@ -37,6 +37,22 @@ import subprocess
 import sys
 import time
 
+# Catégorisation service-aware (méthode + ressource) partagée avec
+# gateway/usage.py — même triplet pour AUTORISER (ici) et AUDITER (fiche 0080).
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+from gateway.categorize import (  # noqa: E402
+    READ_METHODS,
+    SHARE_RESOURCES,
+    categorize,
+    drive_files_trash_override,
+    norm,
+    norm_service,
+    operand_resource,
+    parse_json_flag,
+)
+
 VALUE_FLAGS = {
     "--params", "--json", "--upload", "--upload-content-type", "--output",
     "--format", "--api-version", "--page-limit", "--page-delay", "--scopes",
@@ -45,25 +61,6 @@ VALUE_FLAGS = {
 SERVICE_ALIASES = {"wf": "workflow", "reports": "admin-reports"}
 # Introspection / auth locale — pas des APIs données ; hors modèle policy.
 PASSTHROUGH_SERVICES = frozenset({"auth", "schema"})
-
-READ_METHODS = {
-    "list", "get", "export", "download", "search", "query", "getprofile",
-    "lookup", "generateids", "instances", "freebusy", "colors", "watch",
-    "batchget", "getbatch", "read",
-}
-CREATE_METHODS = {
-    "create", "insert", "copy", "append", "upload", "import", "add",
-    "quickadd", "batchcreate", "push", "subscribe",
-}
-UPDATE_METHODS = {
-    "update", "patch", "move", "modify", "batchupdate", "batchmodify",
-    "rename", "setdefault", "set", "renew", "untrash",
-}
-DELETE_METHODS = {
-    "delete", "remove", "trash", "batchdelete", "emptytrash", "clear",
-    "stop", "revoke",
-}
-SHARE_RESOURCES = {"permissions", "acl", "members"}
 
 DRIVE_READ_FILES = {"list", "get", "export", "download", "watch", "generateids"}
 
@@ -90,17 +87,13 @@ def log_usage(profile_dir, decision, args, reason=""):
         pass
 
 
-def norm(method):
-    return method.lstrip("+").replace("-", "").replace("_", "").lower()
-
-
 def deny(profile_dir, args, service, msg):
     alias = os.path.basename(os.path.abspath(profile_dir))
     log_usage(profile_dir, "refus", args, msg)
     sys.stderr.write(
-        "gwsa : ✗ policy %s — %s\n"
+        "mag : ✗ policy %s — %s\n"
         "       Élicitation : demander à l'utilisateur d'élargir la policy\n"
-        "       (« gwsa policy %s show » pour voir, interface admin pour modifier).\n"
+        "       (« mag policy %s show » pour voir, interface admin pour modifier).\n"
         % (service, msg, alias)
     )
     sys.exit(4)
@@ -119,26 +112,6 @@ def gws_json(profile_dir, args):
         r = subprocess.run(["gws"] + args, env=env, capture_output=True,
                            text=True, timeout=20)
         return json.loads(r.stdout)
-    except Exception:
-        return {}
-
-
-def flag_value(args, flag):
-    for i, a in enumerate(args):
-        if a == flag and i + 1 < len(args):
-            return args[i + 1]
-        if a.startswith(flag + "="):
-            return a.split("=", 1)[1]
-    return None
-
-
-def parse_json_flag(args, flag):
-    raw = flag_value(args, flag)
-    if raw is None:
-        return {}
-    try:
-        d = json.loads(raw)
-        return d if isinstance(d, dict) else {}
     except Exception:
         return {}
 
@@ -214,15 +187,15 @@ def zone_hint(alias):
     if sid:
         return (
             "aucune zone d'écriture active pour cette session — demander à l'utilisateur "
-            "« gwsa session grant %s %s \"<dossier>\" [heures] » ou access_request "
+            "« mag session grant %s %s \"<dossier>\" [heures] » ou access_request "
             "kind=session_grant (zone limitée à cette conversation)"
             % (sid, alias)
         )
     return (
         "aucune zone d'écriture active — demander une autorisation temporaire "
-        "(« gwsa session grant <session_id> %s \"<dossier>\" » via MCP, ou legacy "
-        "« gwsa grant %s \"<dossier>\" » partagé poste entier, déprécié) ou permanente "
-        "(« gwsa policy %s allow <dossier> » / interface admin)"
+        "(« mag session grant <session_id> %s \"<dossier>\" » via MCP, ou legacy "
+        "« mag grant %s \"<dossier>\" » partagé poste entier, déprécié) ou permanente "
+        "(« mag policy %s allow <dossier> » / interface admin)"
         % (alias, alias, alias)
     )
 
@@ -258,16 +231,24 @@ def _apply_manifest_cap(alias, zones):
 def check_drive(profile_dir, drive_raw, args, pos):
     drive = normalize_drive(drive_raw)
     if drive is None:
+        # Policy « open » : aucune restriction de compte. Mais si la session porte des
+        # capacités fines, l'op Drive doit y être couverte (intersection fail-closed,
+        # ADR-0007 §Décision 3) — sinon une session limitée écrirait partout.
+        if _session_caps_from_env() is not None:
+            _gate_drive_session(profile_dir, args, pos)
         return
     alias = os.path.basename(os.path.abspath(profile_dir))
     resource, method = pos[0], norm(pos[-1])
 
     if resource == "files" and method in DRIVE_READ_FILES:
+        check_session_caps(profile_dir, args, "drive", "read")
         return
     if resource in SHARE_RESOURCES and method in ("list", "get"):
+        check_session_caps(profile_dir, args, "drive", "read")
         return
     if resource not in ("files",) and resource not in SHARE_RESOURCES \
             and method in READ_METHODS:
+        check_session_caps(profile_dir, args, "drive", "read")
         return
 
     if method == "emptytrash":
@@ -277,6 +258,7 @@ def check_drive(profile_dir, drive_raw, args, pos):
         if not drive.get("share"):
             deny(profile_dir, args, "drive",
                  "partage refusé par la policy (« %s %s »)" % (resource, pos[-1]))
+        check_session_caps(profile_dir, args, "drive", "share")
         return
 
     if pos[-1].startswith("+") or resource != "files":
@@ -290,6 +272,7 @@ def check_drive(profile_dir, drive_raw, args, pos):
             deny(profile_dir, args, "drive",
                  "« %s %s » non vérifiable par zones — utiliser files create/update "
                  "avec un parent autorisé" % (resource, pos[-1]))
+        check_session_caps(profile_dir, args, "drive", cat)
         return
 
     if method in ("create", "copy"):
@@ -316,6 +299,10 @@ def check_drive(profile_dir, drive_raw, args, pos):
              "%s refusé·e par la policy (« files %s »)" % (LABELS_FR.get(cat, cat), pos[-1]))
 
     if not drive.get("zonesOnly"):
+        # Policy sans zones : la policy autorise l'écriture partout, mais une session
+        # à capacités fines reste bornée (intersection fail-closed, ADR-0007 §3).
+        if _session_caps_from_env() is not None:
+            _gate_drive_session(profile_dir, args, pos)
         return
 
     zones = set(drive.get("writeFolders") or []) | active_grants(profile_dir)
@@ -335,8 +322,12 @@ def check_drive(profile_dir, drive_raw, args, pos):
         if not parents:
             deny(profile_dir, args, "drive",
                  "files %s sans parent dans --json — préciser \"parents\": "
-                 "[<dossier autorisé>] (zones actives : gwsa grants %s)" % (pos[-1], alias))
+                 "[<dossier autorisé>] (zones actives : mag grants %s)" % (pos[-1], alias))
         for p in parents:
+            if not _session_drive_ok(profile_dir, p, cat):
+                deny(profile_dir, args, "drive",
+                     "« drive:%s » vers %s hors capacités/zones de session — "
+                     "mag session grant-capability" % (cat, p))
             if not under_allowed(profile_dir, p, zones):
                 deny(profile_dir, args, "drive",
                      "parent/destination %s hors zone d'écriture autorisée" % p)
@@ -349,11 +340,15 @@ def check_drive(profile_dir, drive_raw, args, pos):
     # Option B (fiche 0037) : la RACINE d'une zone est une frontière immuable —
     # jamais corbeillée / renommée / déplacée, même sous delete:true. Seul son
     # CONTENU (les descendants) est modifiable. « Retirer une zone » est un geste
-    # de config (« gwsa grant revoke »), pas une opération Drive.
+    # de config (« mag grant revoke »), pas une opération Drive.
     if fid in zones:
         deny(profile_dir, args, "drive",
              "cible %s = racine d'une zone (frontière immuable) — créer/modifier "
-             "seulement DEDANS ; retirer la zone via « gwsa grant revoke »" % fid)
+             "seulement DEDANS ; retirer la zone via « mag grant revoke »" % fid)
+    if not _session_drive_ok(profile_dir, fid, cat):
+        deny(profile_dir, args, "drive",
+             "« drive:%s » vers %s hors capacités/zones de session — "
+             "mag session grant-capability" % (cat, fid))
     if not under_allowed(profile_dir, fid, zones):
         deny(profile_dir, args, "drive", "cible %s hors zone d'écriture autorisée" % fid)
     # Un déplacement (addParents/removeParents, dans --params OU --json) peut faire
@@ -372,45 +367,151 @@ def check_drive(profile_dir, drive_raw, args, pos):
              "sortir le fichier de sa zone ; réancrer explicitement via addParents")
 
 
-def categorize(service, resources, raw_method):
-    """Catégorie d'action, ou None si inconnue (→ fail closed)."""
-    m = norm(raw_method)
-    res = [r.lower() for r in resources]
-
-    if service == "gmail":
-        if m == "send" or m.endswith("send") or m in ("reply", "replyall", "forward"):
-            return "send"
-        if any("settings" in r for r in res):
-            return "settings"
-        if "drafts" in res and m in ("create", "update"):
-            return "drafts"
-        if "labels" in res and m not in READ_METHODS:
-            return "labels"
-        if m in ("triage", "watch"):
-            return "read"
-
-    if res and res[0] in SHARE_RESOURCES and m not in READ_METHODS:
-        return "share"
-    if m in READ_METHODS:
-        return "read"
-    if m in CREATE_METHODS:
-        return "create"
-    if m in UPDATE_METHODS:
-        return "update"
-    if m in DELETE_METHODS:
-        return "delete"
-    if raw_method.startswith("+"):
-        if m in ("agenda", "standupreport", "meetingprep", "weeklydigest"):
-            return "read"
-        return None
-    return None
-
-
 LABELS_FR = {
     "read": "lecture", "create": "création", "update": "modification",
     "delete": "suppression", "send": "envoi", "drafts": "brouillons",
     "labels": "libellés", "share": "partage", "settings": "réglages",
 }
+
+
+def _project_fail_closed():
+    """True si le manifeste projet (GWSA_GIT_ROOT) est en anti-downgrade
+    (invalide/altéré/supprimé après avoir été de confiance) — ADR-0007 §3,
+    défend S-07. Aucun contrainte GWSA_GIT_ROOT = pas de projet git → False."""
+    git_root = os.environ.get("GWSA_GIT_ROOT", "").strip()
+    if not git_root:
+        return False
+    try:
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if repo not in sys.path:
+            sys.path.insert(0, repo)
+        from gateway.project import resolve_project
+        from pathlib import Path
+
+        proj = resolve_project(Path(git_root))
+        return bool(proj.fail_closed)
+    except Exception:
+        return False
+
+
+def _session_caps_from_env():
+    """Capacités de session (opt-in, GWSA_SESSION_CAPS) : liste de
+    {"service":…, "operation":…, "resource":…(optionnel)}. Absent/illisible
+    → None (pas de contrainte — compat tests/appelants legacy)."""
+    raw = os.environ.get("GWSA_SESSION_CAPS", "").strip()
+    if not raw:
+        return None
+    try:
+        caps = json.loads(raw)
+    except Exception:
+        return None
+    return caps if isinstance(caps, list) else None
+
+
+def _session_cap_allows(caps, service, operation, resource=""):
+    for c in caps:
+        if not isinstance(c, dict):
+            continue
+        c_service = c.get("service")
+        c_operation = c.get("operation")
+        # Capacité joker (service="*"/operation="*") : matérialise un
+        # « session unlock <alias> » — compte entier, borné ensuite par la
+        # policy du compte comme n'importe quel autre appel (ADR-0007 §3).
+        if not (c_service in ("*", service) and c_operation in ("*", operation)):
+            continue
+        cap_res = c.get("resource") or ""
+        # Ressource absente sur la capacité = service×opération entier
+        # (borné par la policy compte, jamais un wildcard au-delà). Ressource
+        # présente = seulement cette ressource exacte (ex. zone Drive).
+        if not cap_res or cap_res == resource:
+            return True
+    return False
+
+
+def check_session_caps(profile_dir, args, service, operation, resource=""):
+    """Si GWSA_SESSION_CAPS est présent (un appel porte un session_id), l'appel
+    doit être couvert par une capacité de session — sinon refus (deny-all sur
+    ensemble vide, ADR-0007 §3, revue Codex P1 sur PR #110). Le broker pose
+    toujours la variable dès qu'une session existe, y compris vide ; une
+    capacité joker service=*/opération=* matérialise un `session unlock`.
+    Sans GWSA_SESSION_CAPS (appel legacy sans session_id) : pas de contrainte
+    (unlock/zones legacy restent le seul mécanisme, tests existants inchangés)."""
+    caps = _session_caps_from_env()
+    if caps is None:
+        return
+    if not _session_cap_allows(caps, service, operation, resource):
+        deny(
+            profile_dir, args, service,
+            "%s « %s » hors capacités de session%s — access_request "
+            "kind=session_grant_capability"
+            % (
+                LABELS_FR.get(operation, operation), service,
+                (" (%s:%s)" % (service, resource)) if resource else " (%s:%s)" % (service, operation),
+            ),
+        )
+
+
+def _session_drive_ok(profile_dir, parent, cat):
+    """La SESSION autorise-t-elle l'écriture drive:<cat> vers `parent` ?
+    Sans GWSA_SESSION_CAPS (appel legacy sans session_id) → True (zones/unlock
+    legacy seuls). Sinon (y compris ensemble vide → False, deny-all) :
+    couvert par une capacité fine `drive:<cat>` (globale ou sur `parent`), OU `parent`
+    sous une zone Drive accordée à la SESSION (une zone de session EST une capacité)."""
+    caps = _session_caps_from_env()
+    if caps is None:
+        return True
+    if _session_cap_allows(caps, "drive", cat, parent or ""):
+        return True
+    if parent and os.environ.get("GWSA_USE_SESSION_GRANTS") == "1":
+        raw = os.environ.get("GWSA_SESSION_DRIVE_ZONES", "")
+        sz = {z.strip() for z in raw.split(",") if z.strip()}
+        if sz and under_allowed(profile_dir, parent, sz):
+            return True
+    return False
+
+
+def _drive_target_id(args):
+    p = parse_json_flag(args, "--params")
+    return p.get("fileId") or p.get("id") or ""
+
+
+def _gate_drive_session(profile_dir, args, pos):
+    """Intersection fail-closed des capacités de session sur une op Drive quand la
+    policy compte est permissive (« open » ou non-`zonesOnly`). Appelée UNIQUEMENT
+    si GWSA_SESSION_CAPS est présent — sinon le comportement legacy est inchangé."""
+    resource, method = pos[0], norm(pos[-1])
+    if (resource == "files" and method in DRIVE_READ_FILES) \
+            or (resource in SHARE_RESOURCES and method in ("list", "get")) \
+            or (resource not in ("files",) and resource not in SHARE_RESOURCES
+                and method in READ_METHODS):
+        check_session_caps(profile_dir, args, "drive", "read")
+        return
+    if resource in SHARE_RESOURCES:
+        check_session_caps(profile_dir, args, "drive", "share")
+        return
+    if method in ("create", "copy"):
+        cat = "create"
+    elif method in ("delete", "trash", "batchdelete"):
+        cat = "delete"
+    elif method in ("update", "patch", "modify", "untrash", "upload"):
+        cat = "update"
+    else:
+        cat = "update"
+    # Même override qu'en tête de `check_drive` (Option A, fiche 0037) : une
+    # mise à la corbeille via « files update {"trashed": true} » doit être
+    # traitée comme une suppression pour l'intersection de capacités de
+    # session — sinon une capacité `drive:update` autoriserait ici un appel
+    # que l'audit (`infer_call`) journalise pourtant en `delete`, et le
+    # triplet journalisé ne correspondrait plus à la capacité qui a
+    # réellement autorisé l'appel (fiche 0086).
+    cat = drive_files_trash_override(pos[:-1], pos[-1], cat, args)
+    parents = parse_json_flag(args, "--json").get("parents") or []
+    targets = parents if (cat == "create" and parents) else [_drive_target_id(args)]
+    for t in targets:
+        if not _session_drive_ok(profile_dir, t, cat):
+            deny(profile_dir, args, "drive",
+                 "« drive:%s »%s hors capacités/zones de session — access_request "
+                 "kind=session_grant_capability" % (cat, (" %s" % t) if t else ""))
 
 
 def _manifest_service_cap(alias, service, cat):
@@ -438,8 +539,8 @@ def main():
         return
     profile_dir, args = sys.argv[1], sys.argv[2:]
     policy_path = os.path.join(profile_dir, "policy.json")
-    # Absence de policy = le checker n'est pas appelé par gwsa (profil legacy).
-    # Les profils créés via `gwsa add` reçoivent une policy prudente automatiquement.
+    # Absence de policy = le checker n'est pas appelé par mag (profil legacy).
+    # Les profils créés via `mag add` reçoivent une policy prudente automatiquement.
     # Un policy.json PRÉSENT et illisible doit refuser — fail closed.
     if not os.path.exists(policy_path):
         return
@@ -449,18 +550,33 @@ def main():
     except Exception:
         log_usage(profile_dir, "refus", args, "policy.json illisible/corrompu")
         sys.stderr.write(
-            "gwsa : ✗ policy — policy.json présent mais illisible (corrompu) : "
+            "mag : ✗ policy — policy.json présent mais illisible (corrompu) : "
             "refus par sécurité. Corriger ou recréer la policy du profil.\n"
         )
         sys.exit(4)
 
     # Normaliser le service AVANT le lookup policy : retirer un éventuel suffixe
     # de version (`gmail:v1`, `drive:v3` — syntaxe acceptée par gws) et la casse,
-    # sinon `pol.get("gmail:v1")` = None ferait tout passer hors policy.
-    raw_service = args[0].split(":", 1)[0].lower()
+    # sinon `pol.get("gmail:v1")` = None ferait tout passer hors policy. Même
+    # normalisation que `gateway.categorize.norm_service`, réutilisée aussi
+    # côté audit (`gateway.usage.infer_call`, fiche 0086) pour que les deux
+    # chemins s'accordent sur le même service normalisé.
+    raw_service = norm_service(args[0])
     service = SERVICE_ALIASES.get(raw_service, raw_service)
     if service in PASSTHROUGH_SERVICES:
         return
+
+    # Anti-downgrade (ADR-0007 §3, S-07) : un manifeste projet déjà de
+    # confiance qui devient invalide/altéré/supprimé ne doit JAMAIS retomber
+    # silencieusement sur policy ∩ session — refus global, avant tout calcul
+    # de catégorie (fail-closed, prime sur toute autre autorisation).
+    if _project_fail_closed():
+        deny(
+            profile_dir, args, service,
+            "manifeste projet invalide/altéré/supprimé après confiance — refus "
+            "(anti-downgrade) — reconstituer/signer .gwsa/manifest.json "
+            "(« mag project sign »)",
+        )
 
     pos = positionals_of(args[1:])
     if not pos:
@@ -497,10 +613,19 @@ def main():
         deny(
             profile_dir, args, service,
             "%s « %s » hors périmètre manifeste projet (.gwsa/manifest.json) — "
-            "éditer le manifeste puis « gwsa project sign », ou access_request "
+            "éditer le manifeste puis « mag project sign », ou access_request "
             "kind=project_grant"
             % (LABELS_FR.get(cat, cat), service),
         )
+    # Ressource propre au service (Gmail labelId, Calendar calendarId, …) —
+    # sans elle, la granularité ressource des capacités de session ne
+    # fonctionnait que sur Drive (fiche 0080, raffinement #1). Dérivée d'un
+    # mapping EXPLICITE (service, ressource, méthode) → paramètre, jamais
+    # d'une priorité générique attaquable par un leurre (P0, revue adverse).
+    check_session_caps(
+        profile_dir, args, service, cat,
+        operand_resource(service, resources, raw_method, args),
+    )
 
 
 if __name__ == "__main__":

@@ -1,13 +1,29 @@
-# Modèle de menace — google-mcp-multi-account
+# Sécurité — le modèle de menace
 
-Document frère : architecture détaillée → [architecture.md](architecture.md).
+Cette page dit **honnêtement** ce que le projet protège, et ce qu'il ne protège
+*pas*. Pas de promesse marketing : un outil qui touche à vos mails mérite d'être
+clair là-dessus. Le détail des composants est dans [l'architecture](architecture.md).
 
-## Objectif
+## En clair, d'abord
 
-Permettre à un ou plusieurs clients LLM (Claude Desktop, Cursor, Claude Code, …)
-d’accéder à **plusieurs comptes Google** en local, **sans faire confiance au LLM
-par défaut** : lecture/écriture limitées par policy, verrous, zones Drive, et
-élicitation humaine pour élargir l’accès.
+Le but : laisser un assistant IA accéder à **plusieurs comptes Google**, en local,
+**sans lui faire confiance par défaut**. Ce que ça garantit — et ce que ça ne
+garantit pas :
+
+- ✅ **Protégé.** Un assistant *coopératif* (qui passe par l'outil) ne peut pas
+  envoyer un mail, écrire hors des dossiers que vous avez ouverts, toucher un compte
+  verrouillé, ni s'accorder un accès tout seul. Un compte neuf est en lecture +
+  brouillons, **zéro envoi**.
+- ⚠️ **Pas protégé.** Un assistant qui a un **shell libre** sur votre machine peut
+  contourner tout ça en appelant l'outil Google directement (détaillé plus bas, dans
+  « ce qui n'est *pas* garanti »). L'élicitation discipline le *comportement* ; elle
+  ne retire pas la *capacité* tant que les identifiants sont lisibles sur le disque.
+  La parade : restreindre le shell de l'agent (voir la mitigation) ; le vault qui
+  ferme cette brèche est prévu (Phase 2.1).
+
+**En résumé : très solide pour un agent coopératif, mais pas une prison contre un
+agent adverse ayant accès au disque.** Le reste de la page détaille chaque garantie,
+phase par phase.
 
 ## Surfaces de confiance
 
@@ -15,19 +31,20 @@ par défaut** : lecture/écriture limitées par policy, verrous, zones Drive, et
 |-----------|------|-----------|
 | Humain | unlock, grant, policy, OAuth | Racine de confiance |
 | Admin `127.0.0.1:4877` | Cockpit | Processus local ; pas d’auth app |
-| `bin/gwsa` + `scripts/policy-check.py` | Garde-fous CLI | Appliqués si on passe par eux |
+| `bin/mag` + `scripts/policy-check.py` | Garde-fous CLI | Appliqués si on passe par eux |
 | `gateway/` + `bin/google-mcp` | Porte d’entrée MCP | Même policy/lock ; tools curatés (pas de send) |
 | `gws` + `~/.config/gws-accounts/` | Tokens + appels Google | **Capacité réelle** d’accès aux données |
 
 ## Phase 1 (actuelle) — ce qui est garanti
 
-- Profil créé via `gwsa add` → **policy prudente** (Drive zones vides, Gmail sans envoi, services non listés refusés).
+- Profil créé via `mag add` → **policy prudente** (Drive zones vides, Gmail sans envoi, services non listés refusés).
 - Service absent de `policy.json` → **default-deny** (sauf `auth` / `schema`).
-- Profil verrouillé → refus via `gwsa` **et** via MCP.
+- Profil verrouillé → refus via `mag` **et** via MCP.
 - Tools MCP : Gmail lecture + brouillons + pièce jointe (→ `.downloads`), Drive lecture (métadonnées + contenu) + create/copy/upload + **update** (remplacement de contenu, fichiers non-natifs seulement) **sous zones** ; **partage et transfert de propriété** (`drive_permissions_*`) — jamais de partage **public** (`type` fixé à `user`) ; **pas** d’envoi Gmail ni de suppression définitive.
-- ⚠ **Partage / transfert** ne sont gardés que par la policy `drive.share:true` (flag **persistant**), **pas** par les zones ni par un grant de session : une fois `share` activé, l’agent peut partager/transférer tout fichier possédé vers tout email (jamais public). Transfert = notifié (email Google non désactivable). **Durcissement à trancher** (revue sécurité F2) : grant de session pour partager, Touch ID pour le transfert.
+- ⚠ **Partage / transfert** ne sont gardés que par la policy `drive.share:true` (flag **persistant**), **pas** par les zones ni par un grant de session : une fois `share` activé, l’agent peut partager/transférer tout fichier possédé vers tout email (jamais public — `type=user`). Transfert = notifié (email Google non désactivable). **Durcissement à trancher** (revue sécurité F2) : grant de session pour partager, Touch ID pour le transfert.
 - `access_request` propose unlock/grant **sans les exécuter**.
-- Touch ID (`gwsa strongauth`) : présence physique pour unlock/grant (chemins absolus `/usr/bin/swift` + `/usr/bin/swiftc` + scripts repo — jamais via le PATH).
+- Touch ID (`mag strongauth`) : présence physique pour unlock/grant (chemins absolus `/usr/bin/swift` + `/usr/bin/swiftc` + scripts repo — jamais via le PATH).
+- **Droits par session** ([ADR-0007](https://github.com/elzinko/google-mcp-multi-account/blob/main/docs/adr/ADR-0007-droits-par-session.md)) : chaque conversation porte un **jeton** signé ; ses capacités (service × opération × ressource) sont **isolées** des autres sessions et **signées à chaque octroi** ; droits effectifs = policy ∩ manifeste projet ∩ capacités session ; un manifeste projet **altéré** referme tout (anti-downgrade). Cycle de vie TTL / révocation (la déconnexion MCP ne purge rien). Reste **coopératif** tant que le vault n'est pas là.
 
 ## Phase 1 — ce qui n’est **pas** garanti
 
@@ -46,7 +63,7 @@ utilisables par `gws` hors gateway.
 - Chemin supporté pour les données Google = **MCP uniquement** (`bin/google-mcp`).
 - Restreindre / refuser dans les permissions bash : `gws`, `GOOGLE_WORKSPACE_CLI_CONFIG_DIR=…`,
   lecture/écriture de `~/.config/gws-accounts/`.
-- Ne pas mettre `gws` dans le PATH de l’agent si possible ; l’humain garde `gwsa` pour l’admin.
+- Ne pas mettre `gws` dans le PATH de l’agent si possible ; l’humain garde `mag` pour l’admin.
 
 ## Phase 2 A (actuelle) — broker loopback
 
@@ -58,14 +75,14 @@ utilisables par `gws` hors gateway.
 
 Les credentials restent dans `~/.config/gws-accounts/`. Un agent avec shell libre
 peut toujours appeler `gws` directement. Mitigation : restreindre le shell ;
-évolution = vault ([features/0003](../features/0003-vault-credentials-hors-perimetre-agent.md)).
+évolution = vault (`features/0003-vault-credentials-hors-perimetre-agent.md`).
 
 ## Email = métadonnée d'identité (hors verrou)
 
 L'email d'un profil reste lisible même verrouillé — c'est la **seule**
 métadonnée exposée (diagnostic IAM de `setup_status`, SECURITY.md). Depuis
 [ADR-0002](adr/ADR-0002-email-metadonnee-hors-verrou.md), il vient d'un
-fichier `.email` écrit au geste humain `gwsa add` (backfill : `gwsa list`,
+fichier `.email` écrit au geste humain `mag add` (backfill : `mag list`,
 admin) — **jamais** d'une exécution `gws`. Invariant testé : verrou ⇒ zéro
 exécution gws ; aucun `GOOGLE_WORKSPACE_CLI_CONFIG_DIR` dans `gateway/`
 hors `broker_server.py`.
@@ -118,5 +135,7 @@ par le checker tant que tu n’en poses pas une. Pour basculer : préréglage
 
 `~/.config/gws-accounts/usage.jsonl` — appels autorisés (`decision:ok`), refus
 de policy et refus de verrou (`decision:refus`, `reason:locked`), sur les trois
-chemins (`gwsa`, broker, fail-fast gateway). Champ `client` via `GWSA_CLIENT`
-(`mcp`, `claude-code`, `cli`, …). Spoofable : utile pour le debug, pas une identité forte.
+chemins (`mag`, broker, fail-fast gateway). Champ `client` via `GWSA_CLIENT`
+(`mcp`, `claude-code`, `cli`, …). Les appels **réussis** portent en plus le
+`session_id` et le service / opération / ressource (attribution par session).
+Spoofable (`GWSA_CLIENT`) : utile pour le debug, pas une identité forte.

@@ -189,7 +189,7 @@
     if(a.state==='locked')return{badge:'<span class="badge b-bad">🔒 Verrouillé</span>',
       actions:'<button class="tiny primary" onclick="stop(event);toast(\'Touch ID → déverrouillé\')">Déverrouiller…</button>',can:true};
     return{badge:'<span class="badge b-off" tabindex="0" title="Le jeton OAuth a expiré (app en mode test, 7 jours). « Déverrouiller » ne suffirait pas : il faut RECONNECTER le compte (navigateur). Zones et policy conservées.">⚠ Jeton expiré</span>',
-      actions:'<button class="tiny primary" onclick="stop(event);toast(\'gwsa add mw → navigateur\')">Reconnecter…</button>',can:false};
+      actions:'<button class="tiny primary" onclick="stop(event);toast(\'mag add mw → navigateur\')">Reconnecter…</button>',can:false};
   }
   function renderList(){var v=document.getElementById('listView');v.innerHTML='<div class="plist">'+Object.keys(ACCTS).map(function(id){
     var a=ACCTS[id],s=stateInfo(a),cls=a.state==='open'?'open':(a.state==='expired'?'off':'');

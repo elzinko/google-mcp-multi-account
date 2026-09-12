@@ -25,8 +25,15 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEPLOY_ROOT="${GWSA_DEPLOY_ROOT:-$HOME/.local/share/google-mcp}"
 CURRENT_LINK="$DEPLOY_ROOT/current"
+# « previous » — dernière version que current pointait AVANT la bascule en
+# cours. Posé à CHAQUE bascule (déploiement comme --rollback) : c'est ce qui
+# permet à « mag revert » (fiche 0091) de revenir en arrière sans connaître le
+# tag exact, sans avoir à trier l'historique des versions déployées.
+PREVIOUS_LINK="$DEPLOY_ROOT/previous"
 # Source « GitHub sans clone » (fiche 0020) — sourcée à la demande dans --github.
 LIB_GH="$(cd "$(dirname "$0")" && pwd)/lib-github-release.sh"
+# Re-ciblage des liens PATH mag/gma/gwsa — partagé avec update.sh (fiche 0081).
+LIB_CLI="$(cd "$(dirname "$0")" && pwd)/lib/cli-link.sh"
 
 # ── affichage (même convention que provision-gcp.sh) ─────────────
 if [[ -t 1 ]]; then
@@ -89,14 +96,24 @@ current_version() { # nom de la version pointée par current (vide si aucune)
   basename "$(readlink "$CURRENT_LINK")"
 }
 
-point_current_at() { # point_current_at <version> — bascule atomique du symlink
-  ln -sfn "$DEPLOY_ROOT/$1" "$CURRENT_LINK"
+point_current_at() { # point_current_at <version> — bascule atomique du symlink,
+  # en posant/rafraîchissant « previous » AVANT si current pointait déjà
+  # ailleurs (fiche 0091 — socle de « mag revert »).
+  local target="$1" old
+  old="$(current_version)"
+  if [[ -n "$old" && "$old" != "$target" ]]; then
+    ln -sfn "$DEPLOY_ROOT/$old" "$PREVIOUS_LINK"
+  fi
+  ln -sfn "$DEPLOY_ROOT/$target" "$CURRENT_LINK"
 }
 
 stop_broker() { # recycle le broker du couloir stable, sinon l'ancien code reste servi
-  local gwsa="$CURRENT_LINK/bin/gwsa"
-  [[ -x "$gwsa" ]] || { warn "gwsa introuvable dans la version déployée — broker non recyclé"; return 0; }
-  "$gwsa" broker stop || warn "arrêt du broker en échec — le relancer à la main si besoin"
+  local mag="$CURRENT_LINK/bin/mag"
+  # rollback vers une release pré-renommage : le binaire s'appelle gwsa/gma
+  [[ -x "$mag" ]] || mag="$CURRENT_LINK/bin/gwsa"
+  [[ -x "$mag" ]] || mag="$CURRENT_LINK/bin/gma"
+  [[ -x "$mag" ]] || { warn "binaire introuvable dans la version déployée — broker non recyclé"; return 0; }
+  "$mag" broker stop || warn "arrêt du broker en échec — le relancer à la main si besoin"
 }
 
 # ── --list ───────────────────────────────────────────────────────
@@ -126,6 +143,19 @@ if [[ "$MODE" == "rollback" ]]; then
   point_current_at "$ROLLBACK_TO"
   ok "current → $ROLLBACK_TO"
   stop_broker
+  # Sans ça, un rollback vers une release pré-renommage (bin/gwsa/bin/gma
+  # seulement) laisse les liens PATH pointer vers un bin/mag qui n'existe
+  # plus : toutes les commandes cassées après un rollback « réussi » (Codex
+  # #114 round 5, fiche 0081). Même cible que le repli déjà appliqué par
+  # stop_broker ci-dessus. Best-effort : une copie déployée avant ce partage
+  # n'a pas ce fichier — on le signale plutôt que de faire échouer le rollback.
+  if [[ -f "$LIB_CLI" ]]; then
+    # shellcheck source=scripts/lib/cli-link.sh
+    source "$LIB_CLI"
+    retarget_cli_links "$REPO_ROOT" "$DEPLOY_ROOT"
+  else
+    warn "helper de re-ciblage introuvable ($LIB_CLI) — liens du PATH non gérés"
+  fi
   echo; echo "Redémarre Claude Desktop pour recharger le serveur."
   exit 0
 fi
@@ -187,7 +217,7 @@ if [[ -d "$TARGET" ]]; then
   # Cible RÉUTILISÉE : valider avant de basculer (revue Codex, cibles réutilisées).
   if [[ "$SOURCE_TYPE" == "github" ]]; then
     # (a) une version legacy (ancien deploy clone) n'a pas d'updater sans clone —
-    #     ne jamais y basculer current/gwsa, sinon « gwsa update » redeviendrait
+    #     ne jamais y basculer current/mag, sinon « mag update » redeviendrait
     #     dépendant d'un clone (P1).
     [[ -f "$TARGET/scripts/lib-github-release.sh" ]] \
       || die "$VERSION déjà déployé mais antérieur à l'update sans clone — current n'est pas basculé dessus (supprime « $TARGET » ou passe par un clone)"
@@ -211,9 +241,9 @@ else
   if [[ "$SOURCE_TYPE" == "github" ]]; then
     gh_download_version "$VERSION" "$tmp" \
       || { rm -rf "$tmp"; die "téléchargement/extraction du tarball $VERSION en échec (GitHub joignable ? tag existant ?)"; }
-    # Garde-fou (revue Codex P1) : ne jamais basculer « current » — donc le gwsa
+    # Garde-fou (revue Codex P1) : ne jamais basculer « current » — donc le mag
     # du PATH — sur une version ANTÉRIEURE à l'update sans clone. Son update.sh
-    # exigerait un clone (.git/.source), et tout « gwsa update » suivant mourrait.
+    # exigerait un clone (.git/.source), et tout « mag update » suivant mourrait.
     [[ -f "$tmp/scripts/lib-github-release.sh" ]] \
       || { rm -rf "$tmp"; die "$VERSION est antérieure à l'update sans clone (aucun updater intégré) — installe-la depuis un clone si tu y tiens"; }
     # Marqueur d'origine : update.sh sait qu'il doit re-tirer depuis GitHub, pas
@@ -227,7 +257,7 @@ else
     # Le clone source, pour que « update.sh » sache où chercher les versions
     # quand il est lancé depuis la copie installée (qui n'a pas de .git).
     printf '%s\n' "$REPO_ROOT" > "$tmp/.source"
-    # Provenance : note aussi le dépôt distant pour qu'un « gwsa update » vise le
+    # Provenance : note aussi le dépôt distant pour qu'un « mag update » vise le
     # BON dépôt si le clone est supprimé (fallback GitHub) — sinon un déploiement
     # depuis un fork retomberait sur upstream (revue Codex). Best-effort.
     _ori="$(clone_github_origin "$REPO_ROOT")"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Suite de tests de gwsa — contrôleur de policy + garde-fous du wrapper.
+# Suite de tests de mag — contrôleur de policy + garde-fous du wrapper.
 #
 # Hermétique : aucun compte réel, aucun appel réseau, aucun binaire `gws` requis
 # (le contrôleur fail closed quand gws est absent). Tout se passe dans un
@@ -11,7 +11,7 @@ set -uo pipefail
 
 cd "$(dirname "$0")/.."
 CHECKER="scripts/policy-check.py"
-GWSA="bin/gwsa"
+GWSA="bin/mag"
 
 TMP="$(mktemp -d)"
 export GWSA_ROOT="$TMP/root"
@@ -38,7 +38,7 @@ check() { # check <code-attendu> <description> <args du checker…>
   fi
 }
 
-cli() { # cli <code-attendu> <description> <args de gwsa…>
+cli() { # cli <code-attendu> <description> <args de mag…>
   local want="$1" desc="$2"; shift 2
   "$GWSA" "$@" >/dev/null 2>&1
   local got=$?
@@ -64,7 +64,7 @@ section "Syntaxe des scripts — avec le bash DU SYSTÈME (macOS = 3.2)"
 # local, avec /bin/bash et pas le bash du PATH.
 SYS_BASH="/bin/bash"
 [[ -x "$SYS_BASH" ]] || SYS_BASH="$(command -v bash)"
-for f in bin/gwsa scripts/*.sh; do
+for f in install.sh bin/mag scripts/*.sh scripts/lib/*.sh; do
   if "$SYS_BASH" -n "$f" 2>/dev/null; then
     PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m %s : syntaxe valide (%s)\n' "$f" "$("$SYS_BASH" --version | head -1 | sed 's/.*version \([0-9.]*\).*/\1/')"
   else
@@ -72,6 +72,26 @@ for f in bin/gwsa scripts/*.sh; do
     "$SYS_BASH" -n "$f" 2>&1 | head -3 | sed 's/^/      /'
   fi
 done
+
+section "install.sh — aide (-h/--help) robuste au lancement « curl | bash » (fiche 0088)"
+# Bug hors-diff repéré en revue de la 0087 : la branche --help lisait l'en-tête
+# du script via « sed … "$0" ». Or « curl …/install.sh | bash -s -- --help »
+# lit le script sur stdin → « $0 » = « bash » (pas un fichier) → aide VIDE.
+# L'aide doit donc être portée par le script (usage() heredoc), robuste quel que
+# soit le lancement. On vérifie les deux voies : fichier ET stdin (le cas cassé).
+HELP_MARK="installer google-multi-account"
+# (a) lancement fichier (clone / copie déployée) : « $0 » est un chemin valide.
+if bash install.sh --help 2>/dev/null | grep -qF "$HELP_MARK"; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m %s\n' "install.sh --help (fichier) : aide non vide"
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m %s\n' "install.sh --help (fichier) : aide vide ou sans repère « $HELP_MARK »"
+fi
+# (b) lancement « curl | bash » simulé : script sur stdin, « $0 » ≠ fichier (LE bug).
+if printf '%s' "$(cat install.sh)" | bash -s -- --help 2>/dev/null | grep -qF "$HELP_MARK"; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m %s\n' "install.sh --help (stdin, « curl | bash ») : aide non vide"
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m %s\n' "install.sh --help (stdin, « curl | bash ») : aide vide → régression du bug 0088"
+fi
 
 section "Policy par service — préréglage prudent (Gmail sans envoi, Drive lecture seule)"
 policy <<'EOF'
@@ -183,7 +203,7 @@ PATH="$F1BIN:$PATH" \
 if [[ $? -eq 4 ]]; then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "F1 : sans CONFIG_DIR vault → refusé (le trou d'avant le fix est exercé)"; else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "F1 : sans vault, refus attendu"; fi
 
 # ── F4 (revue sécurité) : resolve_folder échappe le nom en JSON, pas d'injection ──
-# Réplique l'algo d'échappement de bin/gwsa (\ puis apostrophe pour le langage q,
+# Réplique l'algo d'échappement de bin/mag (\ puis apostrophe pour le langage q,
 # PUIS json.dumps). Un nom malveillant portant ",": doit rester DANS la valeur q,
 # jamais devenir une clé --params ; et un " ne doit pas casser le JSON.
 F4KEYS="$(python3 -c '
@@ -205,7 +225,7 @@ GP="$(python3 -c 'import json,sys; print(json.dumps({"action":"grant","alias":sy
 GT="$(printf '%s' "$GP" | python3 -c 'import json,sys; print(json.load(sys.stdin)["target"])' 2>/dev/null)"
 if [[ "$GT" == "$GTGT" ]]; then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "P1 : payload de grant en JSON — cible malveillante préservée, pas d'injection de clé"; else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "P1 : payload de grant injectable ($GT)"; fi
 
-section "Drive par zones — autorisation temporaire (élicitation gwsa grant)"
+section "Drive par zones — autorisation temporaire (élicitation mag grant)"
 policy <<'EOF'
 {"drive": {"read": true, "create": true, "update": true, "delete": false,
            "share": false, "zonesOnly": true, "writeFolders": []}}
@@ -309,19 +329,19 @@ policy <<'EOF'
 EOF
 check 0 "gmail labels create autorisé si labels:true"                    gmail users labels create --json '{}'
 
-# --- 3. Garde-fous du wrapper gwsa ------------------------------------------
+# --- 3. Garde-fous du wrapper mag ------------------------------------------
 
-section "Wrapper gwsa — validation des arguments"
+section "Wrapper mag — validation des arguments"
 rm -f "$PROFILE/policy.json"
 
 cli 3 "alias invalide (slash) rejeté"                        "bad/alias" auth status
-reserved() { # reserved <mot> — le refus doit CITER « mot réservé »
+reserved() { # reserved <mot> — le refus doit CITER « reserved word »
   local word="$1" out rc
   out="$("$GWSA" add "$word" 2>&1)"; rc=$?
-  if [[ "$rc" -eq 3 && "$out" == *"mot réservé"* ]]; then
-    PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m « %s » refusé comme alias (mot réservé)\n' "$word"
+  if [[ "$rc" -eq 3 && "$out" == *"reserved word"* ]]; then
+    PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m « %s » refusé comme alias (reserved word)\n' "$word"
   else
-    FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m « %s » devrait être refusé comme mot réservé (rc=%s)\n' "$word" "$rc"
+    FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m « %s » devrait être refusé comme reserved word (rc=%s)\n' "$word" "$rc"
   fi
 }
 reserved list
@@ -344,7 +364,156 @@ cli 3 "policy allow sans dossier rejeté"                     policy testprof al
 cli 3 "alias '..' (path-traversal) rejeté"                   ".." auth status
 cli 3 "alias avec espace rejeté"                             "a b" auth status
 
-section "Wrapper gwsa — verrou « accès sur demande »"
+section "Drive — mutation zone-seule (policy zone-add / zone-remove, fiche 0107)"
+# Piège relevé par la revue : « mag policy allow » crée le bloc drive avec
+# create/update forcés à true (setdefault) — sur un compte dont la policy omet
+# Drive (défaut sûr), ajouter une zone activerait deux opérations en douce.
+# zone-add / zone-remove doivent être des mutations PURES de writeFolders qui
+# préservent exactement les flags d'opération existants (absent reste absent,
+# false reste false).
+cli 3 "policy zone-add sans dossier rejeté"                  policy testprof zone-add
+cli 3 "policy zone-remove sans id rejeté"                    policy testprof zone-remove
+
+rm -f "$PROFILE/policy.json"
+"$GWSA" policy testprof zone-add "$ZONE" >/dev/null 2>&1
+if python3 - "$PROFILE/policy.json" "$ZONE" <<'PYEOF'
+import json, sys
+path, zone = sys.argv[1], sys.argv[2]
+d = json.load(open(path))
+drv = d.get("drive", {})
+assert zone in drv.get("writeFolders", []), "zone absente de writeFolders"
+assert drv.get("zonesOnly") is True, "zonesOnly non posé"
+assert drv.get("create") is not True, "create forcé à true en douce"
+assert drv.get("update") is not True, "update forcé à true en douce"
+PYEOF
+then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "zone-add sur policy SANS bloc drive — n'active create/update en douce"
+else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "zone-add sur policy sans drive — create/update activés à tort (piège allow)"
+fi
+
+printf '%s\n' '{"drive": {"read": true, "create": false, "update": false, "delete": false, "share": false}}' \
+  > "$PROFILE/policy.json"
+"$GWSA" policy testprof zone-add "$ZONE" >/dev/null 2>&1
+if python3 - "$PROFILE/policy.json" "$ZONE" <<'PYEOF'
+import json, sys
+path, zone = sys.argv[1], sys.argv[2]
+d = json.load(open(path))
+drv = d.get("drive", {})
+assert zone in drv.get("writeFolders", []), "zone absente de writeFolders"
+assert drv.get("zonesOnly") is True, "zonesOnly non posé"
+assert drv.get("create") is False, "create préexistant (false) écrasé en douce"
+assert drv.get("update") is False, "update préexistant (false) écrasé en douce"
+assert drv.get("read") is True, "read préexistant perdu"
+PYEOF
+then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "zone-add sur policy create:false/update:false — flags préservés tels quels"
+else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "zone-add sur policy create:false/update:false — flags altérés"
+fi
+
+"$GWSA" policy testprof zone-remove "$ZONE" >/dev/null 2>&1
+if python3 - "$PROFILE/policy.json" "$ZONE" <<'PYEOF'
+import json, sys
+path, zone = sys.argv[1], sys.argv[2]
+d = json.load(open(path))
+drv = d.get("drive", {})
+assert zone not in drv.get("writeFolders", []), "zone toujours présente après zone-remove"
+assert zone not in drv.get("writeFolderNames", {}), "writeFolderNames pas nettoyé"
+assert drv.get("create") is False, "create altéré par zone-remove"
+assert drv.get("update") is False, "update altéré par zone-remove"
+PYEOF
+then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "zone-remove — retire la zone et préserve les flags d'opération"
+else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "zone-remove — flags altérés ou zone non retirée"
+fi
+rm -f "$PROFILE/policy.json"
+
+section "Drive — zone-add traduit l'ancien schéma «mode» (fiche 0107, revue Codex P2)"
+# mode:restricted encode create/update implicites ; retirer «mode» sans les
+# traduire les perdrait → zone ajoutée mais inutilisable. On les fige d'abord.
+printf '%s\n' '{"drive": {"mode": "restricted"}}' > "$PROFILE/policy.json"
+"$GWSA" policy testprof zone-add "$ZONE" >/dev/null 2>&1
+if python3 - "$PROFILE/policy.json" "$ZONE" <<'PYEOF'
+import json, sys
+path, zone = sys.argv[1], sys.argv[2]
+d = json.load(open(path)); drv = d.get("drive", {})
+assert "mode" not in drv, "mode legacy pas retiré"
+assert zone in drv.get("writeFolders", []), "zone absente"
+assert drv.get("zonesOnly") is True, "zonesOnly non posé"
+assert drv.get("create") is True, "create implicite (restricted) perdu"
+assert drv.get("update") is True, "update implicite (restricted) perdu"
+PYEOF
+then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "zone-add sur mode:restricted — traduit le mode, préserve create/update"
+else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "zone-add sur mode:restricted — create/update perdus (mode non traduit)"
+fi
+printf '%s\n' '{"drive": {"mode": "readonly"}}' > "$PROFILE/policy.json"
+"$GWSA" policy testprof zone-add "$ZONE" >/dev/null 2>&1
+if python3 - "$PROFILE/policy.json" "$ZONE" <<'PYEOF'
+import json, sys
+path, zone = sys.argv[1], sys.argv[2]
+d = json.load(open(path)); drv = d.get("drive", {})
+assert zone in drv.get("writeFolders", []), "zone absente"
+assert drv.get("create") is False, "readonly : create ne doit pas être activé"
+assert drv.get("update") is False, "readonly : update ne doit pas être activé"
+PYEOF
+then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "zone-add sur mode:readonly — traduit le mode sans activer d'écriture"
+else FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "zone-add sur mode:readonly — écriture activée à tort"
+fi
+rm -f "$PROFILE/policy.json"
+
+section "Admin — matérialisation policy par bascule (buildTogglePolicy, fiche 0107, revue #1)"
+# Logique JS PURE de admin/index.html, exécutée hors DOM via node:vm (pas de
+# framework JS dans le projet). Verrouille l'invariant AC1 : basculer UNE
+# opération n'en active/perd JAMAIS une autre en douce. C'est là que vivait le
+# NO-GO de la 1re revue (service absent d'une policy existante matérialisé
+# « libre » au lieu de default-deny), non couvert jusqu'ici.
+TOGGLE_OUT="$(node "$(pwd)/scripts/test-policy-toggle.mjs" 2>&1)"; TOGGLE_RC=$?
+printf '%s\n' "$TOGGLE_OUT" | grep -E '✓|✗' || true
+np=$(printf '%s' "$TOGGLE_OUT" | grep -c '✓' || true); nf=$(printf '%s' "$TOGGLE_OUT" | grep -c '✗' || true)
+PASS=$((PASS + np)); FAIL=$((FAIL + nf))
+if [[ "$TOGGLE_RC" -ne 0 && "$nf" -eq 0 ]]; then
+  FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "test-policy-toggle.mjs a échoué (rc=$TOGGLE_RC) : $(printf '%s' "$TOGGLE_OUT" | head -c 200)"
+fi
+
+section "Admin — vue compte orientée sessions (sessionsForAccount/accountSessionCounts, fiche 0106)"
+# Même motif que ci-dessus : logique JS PURE de admin/index.html, hors DOM via
+# node:vm. Verrouille ce qu'un compte compte comme "session le référençant" (via
+# unlocks OU drive_zones) et ce que le compteur X déverrouillées / Y verrouillées
+# doit refléter, avant que le rendu (hors-scope ici) ne s'en serve.
+SESSVIEW_OUT="$(node "$(pwd)/scripts/test-sessions-account-view.mjs" 2>&1)"; SESSVIEW_RC=$?
+printf '%s\n' "$SESSVIEW_OUT" | grep -E '✓|✗' || true
+np=$(printf '%s' "$SESSVIEW_OUT" | grep -c '✓' || true); nf=$(printf '%s' "$SESSVIEW_OUT" | grep -c '✗' || true)
+PASS=$((PASS + np)); FAIL=$((FAIL + nf))
+if [[ "$SESSVIEW_RC" -ne 0 && "$nf" -eq 0 ]]; then
+  FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "test-sessions-account-view.mjs a échoué (rc=$SESSVIEW_RC) : $(printf '%s' "$SESSVIEW_OUT" | head -c 200)"
+fi
+
+section "Admin — socle de rendu sûr (html\`\` échappant par défaut, fiche 0096)"
+# Même motif que ci-dessus : logique JS PURE de admin/index.html, hors DOM via
+# node:vm. Verrouille que html`` échappe chaque interpolation par défaut (test
+# d'injection "><script> obligatoire), que raw() insère un fragment déjà sûr
+# sans le casser, et que les fonctions de rendu pures qui s'appuient dessus
+# (normDrive, ckCapsHtml, fmtMins, mdToHtml) restent correctes et sans injection.
+HTMLREND_OUT="$(node "$(pwd)/scripts/test-html-render.mjs" 2>&1)"; HTMLREND_RC=$?
+printf '%s\n' "$HTMLREND_OUT" | grep -E '✓|✗' || true
+np=$(printf '%s' "$HTMLREND_OUT" | grep -c '✓' || true); nf=$(printf '%s' "$HTMLREND_OUT" | grep -c '✗' || true)
+PASS=$((PASS + np)); FAIL=$((FAIL + nf))
+if [[ "$HTMLREND_RC" -ne 0 && "$nf" -eq 0 ]]; then
+  FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "test-html-render.mjs a échoué (rc=$HTMLREND_RC) : $(printf '%s' "$HTMLREND_OUT" | head -c 200)"
+fi
+
+section "Admin — micro-routeur de vues (go()/registre de poll par route, fiche 0098)"
+# Même motif que ci-dessus : logique JS PURE de admin/index.html, hors DOM via
+# node:vm (les render*() réels touchent le DOM, hors-scope ici). Verrouille
+# l'AC1 (renderList/renderDetail ne réassignent plus VIEW — rendre n'est plus
+# naviguer) et le contrat de go() (fixe VIEW, accorde le chrome, dispatche vers
+# la route, coupe le timer de la route précédente avant d'en démarrer un autre :
+# un seul poll actif à la fois, piloté par VIEW.mode).
+ROUTER_OUT="$(node "$(pwd)/scripts/test-router-view.mjs" 2>&1)"; ROUTER_RC=$?
+printf '%s\n' "$ROUTER_OUT" | grep -E '✓|✗' || true
+np=$(printf '%s' "$ROUTER_OUT" | grep -c '✓' || true); nf=$(printf '%s' "$ROUTER_OUT" | grep -c '✗' || true)
+PASS=$((PASS + np)); FAIL=$((FAIL + nf))
+if [[ "$ROUTER_RC" -ne 0 && "$nf" -eq 0 ]]; then
+  FAIL=$((FAIL+1)); printf '  \033[31m✗\033[0m %s\n' "test-router-view.mjs a échoué (rc=$ROUTER_RC) : $(printf '%s' "$ROUTER_OUT" | head -c 200)"
+fi
+
+section "Wrapper mag — verrou « accès sur demande »"
 "$GWSA" lock testprof >/dev/null 2>&1
 cli 3 "profil verrouillé → toute commande refusée"           testprof gmail users messages list
 rm -f "$GWSA_ROOT/usage.jsonl"
@@ -386,6 +555,7 @@ import os
 from pathlib import Path
 from gateway.api import access_request, profiles_list
 from gateway.errors import GatewayError
+from gateway.sessions import create_session
 from gateway import api
 
 root = Path(os.environ["GWSA_ROOT"])
@@ -403,7 +573,7 @@ pl = profiles_list()
 assert pl["ok"] and any(p["alias"] == alias for p in pl["profiles"]), pl
 
 r = access_request(alias, "unlock", minutes=30)
-assert r.get("elicitation") and "gwsa unlock" in r["suggested_command"], r
+assert r.get("elicitation") and "mag unlock" in r["suggested_command"], r
 assert not (d / ".unlock-until").exists(), "access_request ne doit pas déverrouiller"
 
 log = root / "usage.jsonl"
@@ -411,8 +581,12 @@ try:
     log.unlink()
 except FileNotFoundError:
     pass
+# Jeton de session PORTÉ par l'appel (fiche 0076) — une session existe mais
+# n'a jamais été déverrouillée pour cet alias : le profil verrouillé refuse
+# quand même (policy compte, indépendante du jeton).
+sid = create_session(client="test").session_id
 try:
-    api.gmail_list(alias)
+    api.gmail_list(alias, session=sid)
     raise SystemExit("gmail_list aurait dû refuser (locked)")
 except GatewayError as e:
     assert e.code == "locked", e.code
@@ -425,9 +599,9 @@ assert entries[0]["client"] == os.environ["GWSA_CLIENT"], entries
 
 # fiche 0043 : les nouveaux tools restent derrière le verrou, refus journalisé.
 for call in (
-    lambda: api.drive_read(alias, "FILE1"),
-    lambda: api.drive_copy(alias, "SRC1", "FOLDER"),
-    lambda: api.gmail_attachment_get(alias, "MSG1", "ATT1"),
+    lambda: api.drive_read(alias, "FILE1", session=sid),
+    lambda: api.drive_copy(alias, "SRC1", "FOLDER", session=sid),
+    lambda: api.gmail_attachment_get(alias, "MSG1", "ATT1", session=sid),
 ):
     try:
         call()
@@ -438,13 +612,13 @@ entries = [json.loads(x) for x in log.read_text().splitlines()]
 assert len(entries) == 4 and all(e["reason"] == "locked" for e in entries), entries
 
 r2 = access_request(alias, "grant", folder="LLM", hours=4)
-assert "gwsa grant" in r2["suggested_command"] and "LLM" in r2["suggested_command"], r2
+assert "mag grant" in r2["suggested_command"] and "LLM" in r2["suggested_command"], r2
 
 # add_account : élicitation pour un compte qui n'existe pas encore — aucune
 # création de profil, email obligatoire, prérequis IAM rappelés.
 r3 = access_request("nouveaucompte", "add_account", email="exemple@gmail.com")
 assert r3.get("elicitation") and r3["kind"] == "add_account", r3
-assert r3["suggested_command"] == "gwsa add nouveaucompte exemple@gmail.com", r3
+assert r3["suggested_command"] == "mag add nouveaucompte exemple@gmail.com", r3
 assert "sync-iam" in r3["message"], r3
 assert not (root / "nouveaucompte").exists(), "add_account ne doit rien créer"
 try:
@@ -501,7 +675,7 @@ REPLY = {
 }
 
 
-def fake_run(alias, args, timeout=60):
+def fake_run(alias, args, timeout=60, **_kw):
     """Remplace l'aller-retour broker : on inspecte la commande gws construite."""
     CALLS.append(args)
     if "--upload" in args:  # capturer le média AVANT que la gateway ne l'efface
@@ -670,7 +844,7 @@ def method_of(args):
                                           if a.startswith("-")), len(args))])
 
 
-def fake_run(alias, args, timeout=60, raw_output=False):
+def fake_run(alias, args, timeout=60, raw_output=False, **_kw):
     CALLS.append(args)
     ALL.append(args)
     if "--upload" in args:  # capturer le média AVANT que la gateway ne l'efface
@@ -976,7 +1150,7 @@ CALLS = []
 UPLOAD = {}
 
 
-def fake_run(alias, args, timeout=60):
+def fake_run(alias, args, timeout=60, **_kw):
     CALLS.append(args)
     if "--upload" in args:
         from pathlib import Path
@@ -1097,7 +1271,7 @@ assert out["deleted"] == "permXYZ"
 
 # F5 (revue sécurité) : content sur un fichier Google NATIF → refus (pas de
 # corruption / échec silencieux) ; drive_update lit d'abord le vrai mimeType.
-def fake_run_native(alias, args, timeout=60):
+def fake_run_native(alias, args, timeout=60, **_kw):
     if method_of(args) == ("drive", "files", "get"):
         return {"id": "FILE1", "mimeType": "application/vnd.google-apps.document"}
     return {"id": "FILE1"}
@@ -1110,7 +1284,7 @@ except GatewayError as e:
 
 # F5 : sur un fichier NON-natif (blob), content passe et est bien uploadé
 UP2 = {}
-def fake_run_blob(alias, args, timeout=60):
+def fake_run_blob(alias, args, timeout=60, **_kw):
     if "--upload" in args:
         from pathlib import Path
         UP2["data"] = Path(args[args.index("--upload") + 1]).read_bytes()
@@ -1225,7 +1399,7 @@ assert r["ok"] and "accounts" in r and "next_actions" in r, r
 assert r["project_id"] is None and r["iam_checked"] is False, r
 assert all(a["iam"] == "unknown" for a in r["accounts"]), r
 # Profil verrouillé → commande unlock proposée ; rien n'est exécuté.
-assert any("gwsa unlock acct1" in a for a in r["next_actions"]), r["next_actions"]
+assert any("mag unlock acct1" in a for a in r["next_actions"]), r["next_actions"]
 assert (d / ".locked").exists() and not (d / ".unlock-until").exists(), "setup_status ne doit rien muter"
 print("ok")
 PY
@@ -1259,7 +1433,7 @@ accs = {a["alias"]: a for a in r["accounts"]}
 assert accs["acct1"]["email"] == "alice@gmail.com", accs  # cohérent avec profiles_list
 assert accs["acct2"]["email"] == "", accs
 # Profil sans .email → suggérer le geste humain qui la renseigne.
-assert any(a.startswith("gwsa list") for a in r["next_actions"]), r["next_actions"]
+assert any(a.startswith("mag list") for a in r["next_actions"]), r["next_actions"]
 
 # Contenu non-email → ignoré (pas de confiance aveugle dans le fichier).
 (d2 / ".email").write_text("pas-un-email\n")
@@ -1281,15 +1455,15 @@ else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m gateway/ contient un GOOGLE_WORKSPACE_CLI_CONFIG_DIR hors broker_server.py\n'
 fi
 
-# gwsa list lit .email sans gws (métadonnée posée → email affiché tel quel)
+# mag list lit .email sans gws (métadonnée posée → email affiché tel quel)
 mkdir -p "$GWSA_ROOT/emailprof"
 touch "$GWSA_ROOT/emailprof/credentials.enc"
 printf 'bob@gmail.com\n' > "$GWSA_ROOT/emailprof/.email"
 list_out="$("$GWSA" list 2>/dev/null)"   # pas de pipe direct : grep -q + pipefail = SIGPIPE
 if echo "$list_out" | grep -q 'emailprof.*bob@gmail.com'; then
-  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m gwsa list lit la métadonnée .email (aucun gws requis)\n'
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m mag list lit la métadonnée .email (aucun gws requis)\n'
 else
-  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m gwsa list devrait afficher bob@gmail.com via .email\n'
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m mag list devrait afficher bob@gmail.com via .email\n'
 fi
 
 # .email corrompu (contenu non-email) → non autoritatif : jamais affiché tel quel,
@@ -1300,7 +1474,7 @@ touch "$GWSA_ROOT/badmeta/credentials.enc"
 printf 'pas-un-email\n' > "$GWSA_ROOT/badmeta/.email"
 bad_out="$("$GWSA" list 2>/dev/null)"
 if ! echo "$bad_out" | grep -q 'pas-un-email'; then
-  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m .email corrompu ignoré par gwsa list (pas de court-circuit du backfill)\n'
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m .email corrompu ignoré par mag list (pas de court-circuit du backfill)\n'
 else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m .email corrompu ne doit pas être affiché tel quel\n'
 fi
@@ -1738,7 +1912,7 @@ PY
   && pass "version : « dev » sans VERSION, contenu du fichier sinon, « dev » si vide" \
   || fail "version : « dev » sans VERSION, contenu du fichier sinon"
 
-section "Pilotage du broker — gwsa broker status|stop"
+section "Pilotage du broker — mag broker status|stop"
 
 # Port dédié : sans ça, un vrai broker écoutant sur 4878 rendrait le test
 # « status sans pidfile » instable selon la machine.
@@ -1749,13 +1923,13 @@ BPID="$GWSA_ROOT/.broker-4977.pid"
 rm -f "$BPID"
 
 out="$("$GWSA" broker status 2>&1)"; rc=$?
-[[ "$rc" -eq 0 && "$out" == *"arrêté"* ]] \
-  && pass "broker status sans pidfile → « arrêté », exit 0" \
-  || fail "broker status sans pidfile → « arrêté », exit 0"
+[[ "$rc" -eq 0 && "$out" == *"stopped"* ]] \
+  && pass "broker status sans pidfile → « stopped », exit 0" \
+  || fail "broker status sans pidfile → « stopped », exit 0"
 
 echo "999999" > "$BPID"          # pid qui n'existe pas → pidfile obsolète
 out="$("$GWSA" broker status 2>&1)"; rc=$?
-[[ "$rc" -eq 0 && "$out" == *"obsolète"* ]] \
+[[ "$rc" -eq 0 && "$out" == *"stale"* ]] \
   && pass "broker status sur pidfile obsolète → le signale, exit 0" \
   || fail "broker status sur pidfile obsolète → le signale"
 
@@ -1763,7 +1937,7 @@ out="$("$GWSA" broker status 2>&1)"; rc=$?
 # sont recyclés, un pidfile périmé ne doit pas condamner un process innocent.
 echo "$$" > "$BPID"
 out="$("$GWSA" broker status 2>&1)"; rc=$?
-[[ "$rc" -eq 0 && "$out" == *"obsolète"* ]] \
+[[ "$rc" -eq 0 && "$out" == *"stale"* ]] \
   && pass "broker status : pid vivant mais non-broker → obsolète (pas de faux positif)" \
   || fail "broker status : pid vivant mais non-broker → obsolète"
 
@@ -1783,7 +1957,7 @@ reserved broker
 
 # Deux couloirs, deux brokers : arrêter l'un ne doit pas toucher l'autre.
 # Sans le port dans le nom du pidfile, le second broker écrasait le fichier du
-# premier et « gwsa broker stop » visait le mauvais process (fiche 0025).
+# premier et « mag broker stop » visait le mauvais process (fiche 0025).
 VOISIN="$GWSA_ROOT/.broker-4988.pid"
 echo "999999" > "$BPID"        # couloir courant (4977), pidfile obsolète
 echo "424242" > "$VOISIN"      # couloir voisin (4988), intact attendu
@@ -1792,7 +1966,7 @@ echo "424242" > "$VOISIN"      # couloir voisin (4988), intact attendu
   && pass "deux couloirs : stop n'efface que le pidfile de SON port" \
   || fail "deux couloirs : stop a touché le pidfile du voisin"
 
-# Et le pidfile lu par gwsa est bien celui que le broker Python écrirait.
+# Et le pidfile lu par mag est bien celui que le broker Python écrirait.
 if python3 -c '
 import os, sys
 os.environ["GWSA_BROKER_PORT"] = "4988"
@@ -1900,12 +2074,13 @@ section "release.sh — semver déduit des commits, CHANGELOG, tag annoté"
 REL="$TMP/relrepo"
 RELDEP="$TMP/reldeploy"
 RELCONF="$TMP/reldesktop.json"
-mkdir -p "$REL/scripts" "$REL/bin"
+mkdir -p "$REL/scripts/lib" "$REL/bin"
 cp scripts/release.sh scripts/update.sh scripts/deploy-local.sh \
    scripts/lib-github-release.sh scripts/install-claude-desktop.sh "$REL/scripts/"
+cp scripts/lib/cli-link.sh "$REL/scripts/lib/"
 printf '#!/bin/sh\nexit 0\n' > "$REL/scripts/test.sh"; chmod +x "$REL/scripts/test.sh"
 printf '#!/bin/sh\necho faux-mcp\n' > "$REL/bin/google-mcp"; chmod +x "$REL/bin/google-mcp"
-cp bin/gwsa "$REL/bin/gwsa"   # embarqué dans les copies déployées (cf. link_cli)
+cp bin/mag "$REL/bin/mag"   # embarqué dans les copies déployées (cf. link_cli)
 echo "coeur" > "$REL/app.txt"
 git -C "$REL" init -q >/dev/null 2>&1
 git -C "$REL" checkout -qb main >/dev/null 2>&1
@@ -1915,11 +2090,11 @@ git -C "$REL" add -A >/dev/null 2>&1
 git -C "$REL" commit -qm "feat(x): premiere fonctionnalite" >/dev/null 2>&1
 UPDATE="$REL/scripts/update.sh"
 # Le lien « PATH » manipulé par les tests vit sous $TMP — jamais le vrai
-# /opt/homebrew/bin/gwsa. relenv le désigne systématiquement : sans ça, un
-# update.sh lancé par un test retomberait sur « command -v gwsa », donc sur le
+# /opt/homebrew/bin/mag. relenv le désigne systématiquement : sans ça, un
+# update.sh lancé par un test retomberait sur « command -v mag », donc sur le
 # lien réel de la machine.
 FAKEBIN="$TMP/fakebin"; mkdir -p "$FAKEBIN"
-LINK="$FAKEBIN/gwsa"
+LINK="$FAKEBIN/mag"
 relenv() {
   GWSA_DEPLOY_ROOT="$RELDEP" GWSA_DESKTOP_CONFIG="$RELCONF" \
   GWSA_CLI_LINK="${GWSA_CLI_LINK:-$LINK}" "$@"
@@ -2060,10 +2235,15 @@ out_u="$(relenv "$UPDATE" 2>&1)"; rc=$?
   && pass "update : relancé sans rien à faire → « déjà à jour » (idempotent)" \
   || fail "update : devrait être idempotent"
 
-relenv "$UPDATE" --to v0.1.0 >/dev/null 2>&1; rc=$?
+out_u="$(relenv "$UPDATE" --to v0.1.0 2>&1)"; rc=$?
 [[ "$rc" -eq 0 && "$(basename "$(readlink "$RELDEP/current")")" == "v0.1.0" ]] \
   && pass "update --to : installe une version précise (retour arrière)" \
   || fail "update --to : version précise non installée"
+
+# fiche 0091 : après un update réussi, la sortie rappelle comment revenir en arrière.
+[[ "$out_u" == *"revert"* ]] \
+  && pass "update : message post-update rappelle « mag revert »" \
+  || fail "update : aucun rappel de rollback après update réussi"
 
 relenv "$UPDATE" --to v9.9.9 >/dev/null 2>&1; rc=$?
 [[ "$rc" -ne 0 && "$(basename "$(readlink "$RELDEP/current")")" == "v0.1.0" ]] \
@@ -2076,54 +2256,132 @@ out_u="$(relenv "$RELDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
   && pass "update : lancé depuis la copie installée, retrouve le clone via .source" \
   || fail "update : ne retrouve pas le clone depuis la copie installée"
 
-section "gwsa update / release — un seul poste de commande (fiche 0030)"
+section "update.sh --help — documente --to et le rollback (fiche 0091)"
+
+out_h="$(relenv "$UPDATE" --help 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$out_h" == *"--to"* ]] \
+  && pass "update --help : documente --to" \
+  || fail "update --help : --to absent"
+[[ "$out_h" == *"revert"* ]] \
+  && pass "update --help : documente le rollback (mag revert)" \
+  || fail "update --help : rollback non documenté"
+[[ "$out_h" == *"Exemple"* || "$out_h" == *"exemple"* ]] \
+  && pass "update --help : donne un exemple" \
+  || fail "update --help : aucun exemple"
+
+section "mag revert — rollback ergonomique sans connaître le tag (fiche 0091)"
+
+# GW/gwenv sont normalement introduits plus bas (section suivante) : on les
+# définit ici, avant leur premier usage, pour ce bloc de tests sur « revert ».
+GW="$REL/bin/mag"
+gwenv() { GWSA_DEPLOY_ROOT="$RELDEP" GWSA_DESKTOP_CONFIG="$RELCONF" "$@"; }
+
+# À ce stade, RELDEP a bascule current v1.0.0 → v0.1.0 (via « update --to v0.1.0 »
+# ci-dessus) : point_current_at a donc posé « previous » → v1.0.0. Deux versions
+# non purgées, previous connu : le cas nominal de la fiche.
+[[ "$(basename "$(readlink "$RELDEP/previous" 2>/dev/null)")" == "v1.0.0" ]] \
+  && pass "bascule de current : « previous » posé automatiquement (v1.0.0)" \
+  || fail "bascule de current : « previous » non posé"
+
+# lien PATH pré-existant (posé par un « update » précédent), pointant sur la
+# copie installée courante (v0.1.0) — état réaliste avant un revert.
+ln -sfn "$RELDEP/current/bin/mag" "$LINK"
+
+out_rv="$(GWSA_CLI_LINK="$LINK" gwenv "$GW" revert 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$RELDEP/current")")" == "v1.0.0" ]] \
+  && pass "mag revert : current rebascule sur la version précédente (v1.0.0)" \
+  || fail "mag revert : current n'a pas rebasculé (obtenu « $out_rv »)"
+
+[[ "$(readlink "$LINK")" == "$RELDEP/current/bin/mag" ]] \
+  && pass "mag revert : le lien PATH mag reste invocable (reciblé via retarget_cli_links)" \
+  || fail "mag revert : lien PATH non reciblé après revert"
+
+# le revert est un bascule comme une autre : previous devient à son tour v0.1.0
+# (symétrie avec point_current_at) — un second revert doit donc y revenir.
+out_rv2="$(GWSA_CLI_LINK="$LINK" gwenv "$GW" revert 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$RELDEP/current")")" == "v0.1.0" ]] \
+  && pass "mag revert : un second revert fait l'aller-retour (toggle current/previous)" \
+  || fail "mag revert : le second revert ne re-bascule pas (obtenu « $out_rv2 »)"
+
+# cas « aucune version précédente » : dépôt de déploiement neuf, jamais basculé.
+NOPREV="$TMP/no-previous-deploy"
+mkdir -p "$NOPREV"
+out_np="$(GWSA_DEPLOY_ROOT="$NOPREV" GWSA_CLI_LINK="$FAKEBIN/mag-noprev" "$GW" revert 2>&1)"; rc=$?
+[[ "$rc" -ne 0 && "$out_np" == *"previous"* && "$out_np" != *"Traceback"* ]] \
+  && pass "mag revert : aucune version précédente → message clair, sortie propre" \
+  || fail "mag revert : cas « pas de previous » mal géré (rc=$rc, obtenu « $out_np »)"
+
+"$GW" help 2>&1 | grep -q "mag revert" \
+  && pass "mag help : « revert » listé dans l'usage" \
+  || fail "mag help : « revert » absent de l'usage"
+
+# cas « previous PRÉSENT mais cible PURGÉE » (fiche « Comment vérifier » + 0028) :
+# distinct du cas « aucun previous » — c'est une autre garde (-d sur le dossier cible).
+PURGED="$TMP/purged-previous-deploy"
+mkdir -p "$PURGED/vkeep/bin" "$PURGED/vgone/bin"
+printf '#!/bin/sh\necho vkeep\n' > "$PURGED/vkeep/bin/mag"; chmod +x "$PURGED/vkeep/bin/mag"
+ln -sfn "$PURGED/vkeep" "$PURGED/current"
+ln -sfn "$PURGED/vgone" "$PURGED/previous"
+rm -rf "$PURGED/vgone"   # previous pendouille : sa cible a été purgée (0028)
+out_pg="$(GWSA_DEPLOY_ROOT="$PURGED" GWSA_CLI_LINK="$FAKEBIN/mag-purged" "$GW" revert 2>&1)"; rc=$?
+[[ "$rc" -ne 0 && "$(basename "$(readlink "$PURGED/current")")" == "vkeep" && "$out_pg" != *"Traceback"* ]] \
+  && pass "mag revert : previous pointe une version purgée → refus, current inchangé" \
+  || fail "mag revert : previous purgé mal géré (rc=$rc, current=$(basename "$(readlink "$PURGED/current")"), obtenu « $out_pg »)"
+
+# revert refuse tout argument (c'est update qui prend --to, pas revert).
+out_ra="$(GWSA_DEPLOY_ROOT="$RELDEP" "$GW" revert extra 2>&1)"; rc=$?
+[[ "$rc" -ne 0 ]] \
+  && pass "mag revert : refuse tout argument (revert seul)" \
+  || fail "mag revert : argument accepté à tort (rc=$rc)"
+
+section "mag update / release — un seul poste de commande (fiche 0030)"
 
 # De quoi publier : sans commit nouveau, release refuse (et le test ne dirait
 # rien de la délégation).
 git -C "$REL" commit -q --allow-empty -m "feat(cli): un verbe de plus" >/dev/null 2>&1
-GW="$REL/bin/gwsa"
+GW="$REL/bin/mag"
 gwenv() { GWSA_DEPLOY_ROOT="$RELDEP" GWSA_DESKTOP_CONFIG="$RELCONF" "$@"; }
 
-"$GW" help 2>&1 | grep -q "gwsa update" \
-  && "$GW" help 2>&1 | grep -q "gwsa release" \
-  && pass "gwsa help : les deux verbes sont listés" \
-  || fail "gwsa help : verbes absents"
+"$GW" help 2>&1 | grep -q "mag update" \
+  && "$GW" help 2>&1 | grep -q "mag release" \
+  && pass "mag help : les deux verbes sont listés" \
+  || fail "mag help : verbes absents"
 
 reserved update
 reserved release
 
-# délégation : gwsa update passe la main au script, arguments compris
+# délégation : mag update passe la main au script, arguments compris
 out_g="$(gwenv "$GW" update --check 2>&1)"; rc=$?
 [[ "$rc" -eq 0 && "$out_g" == *"disponible"* ]] \
-  && pass "gwsa update : délègue au script (--check transmis)" \
-  || fail "gwsa update : délégation cassée"
+  && pass "mag update : délègue au script (--check transmis)" \
+  || fail "mag update : délégation cassée"
 
 out_g="$(gwenv "$GW" release --print 2>&1)"; rc=$?
 [[ "$rc" -eq 0 && "$out_g" == *"publierait"* ]] \
-  && pass "gwsa release : délègue au script (--print transmis)" \
-  || fail "gwsa release : délégation cassée"
+  && pass "mag release : délègue au script (--print transmis)" \
+  || fail "mag release : délégation cassée"
 
 # depuis la copie installée : release retrouve le clone via .source
-out_g="$(gwenv "$RELDEP/current/bin/gwsa" release --print 2>&1)"; rc=$?
+out_g="$(gwenv "$RELDEP/current/bin/mag" release --print 2>&1)"; rc=$?
 [[ "$rc" -eq 0 && "$out_g" == *"publierait"* ]] \
-  && pass "gwsa release : depuis la copie installée, relais par .source" \
-  || fail "gwsa release : relais .source cassé"
+  && pass "mag release : depuis la copie installée, relais par .source" \
+  || fail "mag release : relais .source cassé"
 
 # … et sans .source, refus explicite plutôt qu'un comportement au hasard
 NOSRC="$TMP/nosource"
 mkdir -p "$NOSRC/bin" "$NOSRC/scripts"
-cp bin/gwsa "$NOSRC/bin/"
-out_g="$("$NOSRC/bin/gwsa" release --print 2>&1)"; rc=$?
+cp bin/mag "$NOSRC/bin/"
+out_g="$("$NOSRC/bin/mag" release --print 2>&1)"; rc=$?
 [[ "$rc" -ne 0 && "$out_g" == *".source"* ]] \
-  && pass "gwsa release : sans .git ni .source → refus qui dit quoi faire" \
-  || fail "gwsa release : devrait refuser hors dépôt source"
+  && pass "mag release : sans .git ni .source → refus qui dit quoi faire" \
+  || fail "mag release : devrait refuser hors dépôt source"
 
 section "update.sh — le lien PATH suit la version installée (fiche 0030)"
 
 # lien vers le clone (l'état posé par le quickstart) → doit passer sur current
-ln -sfn "$REL/bin/gwsa" "$LINK"
+ln -sfn "$REL/bin/mag" "$LINK"
 GWSA_CLI_LINK="$LINK" relenv "$UPDATE" --force >/dev/null 2>&1
-[[ "$(readlink "$LINK")" == "$RELDEP/current/bin/gwsa" ]] \
+[[ "$(readlink "$LINK")" == "$RELDEP/current/bin/mag" ]] \
   && pass "lien PATH : le lien vers le clone passe sur la copie installée" \
   || fail "lien PATH : pas rebranché sur current"
 
@@ -2144,7 +2402,7 @@ out_l="$(GWSA_CLI_LINK="$LINK" relenv "$UPDATE" --force 2>&1)"
 out_l="$(GWSA_DEPLOY_ROOT="$RELDEP" GWSA_DESKTOP_CONFIG="$RELCONF" "$UPDATE" --force 2>&1)"
 [[ "$out_l" == *"sans GWSA_CLI_LINK"* ]] \
   && pass "lien PATH : dépôt surchargé sans GWSA_CLI_LINK → aucun lien touché" \
-  || fail "lien PATH : un test pourrait atteindre le gwsa réel du PATH"
+  || fail "lien PATH : un test pourrait atteindre le mag réel du PATH"
 
 # fichier réel (pas un lien) → on ne touche pas non plus
 rm -f "$LINK"
@@ -2153,6 +2411,120 @@ out_l="$(GWSA_CLI_LINK="$LINK" relenv "$UPDATE" --force 2>&1)"
 [[ ! -L "$LINK" && "$(cat "$LINK")" == *"vrai fichier"* && "$out_l" == *"pas un lien"* ]] \
   && pass "lien PATH : fichier réel jamais remplacé par un lien" \
   || fail "lien PATH : a écrasé un fichier réel"
+
+section "lib/cli-link.sh — localiser un lien cassé sans command -v (fiche 0081, Codex #114 r5)"
+
+# command -v IGNORE un symlink dont la cible n'existe plus : c'est exactement
+# ce qui arrive après qu'un rollback a basculé « current » avant le
+# re-ciblage des liens. resolve_cli_link doit trouver le lien lui-même
+# (test -L), pas sa cible. Isolé de tout GWSA_DEPLOY_ROOT : ce n'est pas
+# retarget_cli_links qu'on teste ici (son garde-fou de bac à sable
+# désactiverait tout), mais la primitive de résolution seule.
+CLIBIN="$TMP/cli-link-bin"; mkdir -p "$CLIBIN"
+ln -sfn "$CLIBIN/current-absent/bin/mag" "$CLIBIN/mag"   # symlink cassé : cible absente
+
+out_rcl="$(env -i PATH="$CLIBIN:/usr/bin:/bin" HOME="$HOME" bash -c '
+  set -euo pipefail
+  source "'"$PWD"'/scripts/lib/cli-link.sh"
+  resolve_cli_link
+')"
+[[ "$out_rcl" == "$CLIBIN/mag" ]] \
+  && pass "resolve_cli_link : localise un lien cassé (cible absente) sans command -v" \
+  || fail "resolve_cli_link : lien cassé non localisé (obtenu « $out_rcl »)"
+
+# command -v, lui, échoue bien sur ce même lien cassé — la preuve que le bug
+# décrit par la fiche est réel, et que resolve_cli_link le contourne.
+out_cv="$(env -i PATH="$CLIBIN:/usr/bin:/bin" HOME="$HOME" bash -c 'command -v mag' 2>/dev/null || true)"
+[[ -z "$out_cv" ]] \
+  && pass "témoin du bug : command -v ne voit pas le lien dont la cible est absente" \
+  || fail "témoin du bug : command -v aurait dû échouer sur un lien cassé"
+
+section "update.sh & deploy-local.sh --rollback — rollback à travers le renommage gma→mag (fiche 0081)"
+
+# Reproduit le point de bascule #114 : une version « avant renommage » n'a que
+# bin/gwsa, une version « après » a bin/mag. Dépôt jouet dédié (indépendant de
+# $REL) pour ne pas perturber les sections précédentes.
+RB="$TMP/rollback-repo"; mkdir -p "$RB/scripts/lib" "$RB/bin"
+cp scripts/update.sh scripts/deploy-local.sh scripts/lib-github-release.sh "$RB/scripts/"
+cp scripts/lib/cli-link.sh "$RB/scripts/lib/"
+printf '#!/bin/sh\nexit 0\n' > "$RB/bin/google-mcp"; chmod +x "$RB/bin/google-mcp"
+cp bin/mag "$RB/bin/gwsa"; chmod +x "$RB/bin/gwsa"   # avant #114 : le binaire s'appelait gwsa
+git -C "$RB" init -q >/dev/null 2>&1
+git -C "$RB" checkout -qb main >/dev/null 2>&1
+git -C "$RB" config user.email "test@example.invalid"
+git -C "$RB" config user.name "test"
+git -C "$RB" add -A >/dev/null 2>&1
+git -C "$RB" commit -qm "avant le renommage : bin/gwsa" >/dev/null 2>&1
+git -C "$RB" tag v0.9.0-pre-mag
+
+git -C "$RB" mv bin/gwsa bin/mag >/dev/null 2>&1   # #114 : renommage gma/gwsa → mag
+git -C "$RB" commit -qam "apres le renommage : bin/mag" >/dev/null 2>&1
+git -C "$RB" tag v1.0.0-post-mag
+
+RBDEP="$TMP/rollback-deploy"
+RBBIN="$TMP/rollback-bin"; mkdir -p "$RBBIN"
+RBLINK="$RBBIN/mag"
+rbenv() { GWSA_DEPLOY_ROOT="$RBDEP" GWSA_CLI_LINK="$RBLINK" "$@"; }
+
+# amorce : lien vers le clone, comme au premier quickstart
+ln -sfn "$RB/bin/mag" "$RBLINK"
+rbenv "$RB/scripts/update.sh" --to v1.0.0-post-mag >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$RBDEP/current")")" == "v1.0.0-post-mag" \
+   && "$(readlink "$RBLINK")" == "$RBDEP/current/bin/mag" ]] \
+  && pass "update --to : install post-renommage, lien PATH → current/bin/mag" \
+  || fail "update --to : amorce post-renommage en échec"
+
+# LE scénario de la fiche : rollback vers le tag PRÉ-renommage (current n'a
+# plus que bin/gwsa) → mag/gma/gwsa doivent suivre, sans réinstall.
+rbenv "$RB/scripts/update.sh" --to v0.9.0-pre-mag >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$RBDEP/current")")" == "v0.9.0-pre-mag" ]] \
+  && pass "update --to <pré-renommage> : current bascule sur la version legacy" \
+  || fail "update --to <pré-renommage> : current n'a pas basculé"
+
+[[ ! -e "$RBDEP/current/bin/mag" && -x "$RBDEP/current/bin/gwsa" ]] \
+  && pass "update --to <pré-renommage> : la version déployée n'a bien que bin/gwsa" \
+  || fail "update --to <pré-renommage> : fixture incorrecte (bin/mag ne devrait pas exister)"
+
+for _n in mag gma gwsa; do
+  [[ "$(readlink "$RBBIN/$_n" 2>/dev/null)" == "$RBDEP/current/bin/gwsa" ]] \
+    && pass "update --to <pré-renommage> : lien « $_n » repointé sur current/bin/gwsa" \
+    || fail "update --to <pré-renommage> : lien « $_n » pas repointé sur current/bin/gwsa"
+done
+
+"$RBLINK" help >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 ]] \
+  && pass "update --to <pré-renommage> : mag du PATH reste invocable (récupérable sans réinstall)" \
+  || fail "update --to <pré-renommage> : mag du PATH cassé après rollback"
+
+# --- même scénario, mais via deploy-local.sh --rollback directement ---------
+# (pas via « mag update ») : c'est LUI qui, avant ce fix, ne reciblait rien.
+rbenv "$RB/scripts/deploy-local.sh" --rollback v1.0.0-post-mag >/dev/null 2>&1   # retour à un état "sain" connu
+ln -sfn "$RBDEP/current/bin/mag" "$RBLINK"
+ln -sfn "$RBDEP/current/bin/mag" "$RBBIN/gma"
+ln -sfn "$RBDEP/current/bin/mag" "$RBBIN/gwsa"
+
+out_dlr="$(rbenv "$RB/scripts/deploy-local.sh" --rollback v0.9.0-pre-mag 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$(basename "$(readlink "$RBDEP/current")")" == "v0.9.0-pre-mag" ]] \
+  && pass "deploy-local --rollback <pré-renommage> : current bascule sur la version legacy" \
+  || fail "deploy-local --rollback <pré-renommage> : current n'a pas basculé"
+
+for _n in mag gma gwsa; do
+  [[ "$(readlink "$RBBIN/$_n" 2>/dev/null)" == "$RBDEP/current/bin/gwsa" ]] \
+    && pass "deploy-local --rollback <pré-renommage> : lien « $_n » reciblé (broker recyclé)" \
+    || fail "deploy-local --rollback <pré-renommage> : lien « $_n » PAS reciblé (commandes cassées)"
+done
+
+"$RBLINK" help >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 ]] \
+  && pass "deploy-local --rollback <pré-renommage> : mag du PATH reste invocable" \
+  || fail "deploy-local --rollback <pré-renommage> : mag du PATH cassé après rollback"
+
+# bac à sable sans GWSA_CLI_LINK : deploy-local --rollback ne doit toucher à
+# AUCUN lien réel du PATH (même garde-fou que côté update.sh).
+out_dlr2="$(GWSA_DEPLOY_ROOT="$RBDEP" "$RB/scripts/deploy-local.sh" --rollback v1.0.0-post-mag 2>&1)"; rc=$?
+[[ "$rc" -eq 0 && "$out_dlr2" == *"sans GWSA_CLI_LINK"* ]] \
+  && pass "deploy-local --rollback : dépôt surchargé sans GWSA_CLI_LINK → aucun lien touché" \
+  || fail "deploy-local --rollback : un test pourrait atteindre le mag réel du PATH"
 
 section "install.sh / update --github — installer & mettre à jour SANS clone (fiche 0020)"
 
@@ -2183,22 +2555,65 @@ grep -q "^github:" "$GHDEP/v0.1.0/.origin" 2>/dev/null && [[ ! -e "$GHDEP/v0.1.0
   || fail "--github : marqueurs d'origine incohérents"
 
 # install.sh : premier install SANS aucun clone (résout le dernier tag via GitHub)
-ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" GWSA_SKIP_WIRE=1 \
+ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/mag" GWSA_ALLOW_NO_GWS=1 \
   bash install.sh >/dev/null 2>&1; rc=$?
 [[ "$rc" -eq 0 && "$(basename "$(readlink "$GHDEP/current")")" == "v1.0.0" ]] \
   && pass "install.sh : sans clone, installe la dernière version (v1.0.0) et bascule current" \
   || fail "install.sh : n'installe pas la dernière version"
 
-[[ -L "$GHBIN/gwsa" ]] \
-  && pass "install.sh : pose gwsa sur le PATH (lien désigné)" \
-  || fail "install.sh : gwsa non posé sur le PATH"
+[[ -L "$GHBIN/mag" ]] \
+  && pass "install.sh : pose mag sur le PATH (lien désigné)" \
+  || fail "install.sh : mag non posé sur le PATH"
 
 [[ -e "$GHDEP/current/.origin" && ! -e "$GHDEP/current/.source" ]] \
   && pass "install.sh : copie marquée github, prête pour un update sans clone" \
   || fail "install.sh : marqueurs d'origine incohérents"
 
+# --- fiche 0087 : branchement des clients LLM en OPT-IN ----------------------
+# Défaut (ni --wire ni GWSA_WIRE) : install.sh n'écrit AUCUN config client — il
+# imprime seulement le geste (doctrine « l'agent propose, tu exécutes »). Opt-in
+# explicite (--wire / GWSA_WIRE=1) branche Desktop (+ Code si `claude` présent).
+# Hermétique : Desktop → GWSA_DESKTOP_CONFIG (tmp) ; Code → CLAUDE_BIN neutralisé.
+OI_FAKE_CLAUDE="$TMP/optin-fakeclaude"
+printf '#!/bin/sh\nexit 0\n' > "$OI_FAKE_CLAUDE"; chmod +x "$OI_FAKE_CLAUDE"
+
+OI_DESK="$TMP/optin-desktop.json"; rm -f "$OI_DESK"
+out_oi="$(ghenv GWSA_DEPLOY_ROOT="$TMP/optin1" GWSA_CLI_LINK="$TMP/optin1/mag" \
+  GWSA_DESKTOP_CONFIG="$OI_DESK" CLAUDE_BIN="$OI_FAKE_CLAUDE" GWSA_ALLOW_NO_GWS=1 \
+  bash install.sh 2>&1)"; rc=$?
+if [[ "$rc" -eq 0 && ! -e "$OI_DESK" ]]; then
+  pass "install.sh : défaut ⇒ AUCUNE mutation de config client (opt-in, fiche 0087)"
+else
+  fail "install.sh : défaut a muté un config client (devrait être opt-in)"
+fi
+if [[ "$out_oi" == *"mag wire desktop"* ]]; then
+  pass "install.sh : défaut ⇒ imprime le geste de branchement (mag wire)"
+else
+  fail "install.sh : défaut n'imprime pas le geste de branchement"
+fi
+
+OI_DESK2="$TMP/optin-desktop2.json"; rm -f "$OI_DESK2"
+ghenv GWSA_DEPLOY_ROOT="$TMP/optin2" GWSA_CLI_LINK="$TMP/optin2/mag" \
+  GWSA_DESKTOP_CONFIG="$OI_DESK2" CLAUDE_BIN="$OI_FAKE_CLAUDE" GWSA_ALLOW_NO_GWS=1 \
+  bash install.sh --wire >/dev/null 2>&1; rc=$?
+if [[ "$rc" -eq 0 && -f "$OI_DESK2" ]] && grep -q "google-multi-account" "$OI_DESK2" 2>/dev/null; then
+  pass "install.sh --wire : opt-in ⇒ branche Desktop (config écrit)"
+else
+  fail "install.sh --wire : opt-in n'a pas branché Desktop"
+fi
+
+OI_DESK3="$TMP/optin-desktop3.json"; rm -f "$OI_DESK3"
+ghenv GWSA_DEPLOY_ROOT="$TMP/optin3" GWSA_CLI_LINK="$TMP/optin3/mag" \
+  GWSA_DESKTOP_CONFIG="$OI_DESK3" CLAUDE_BIN="$OI_FAKE_CLAUDE" GWSA_WIRE=1 GWSA_ALLOW_NO_GWS=1 \
+  bash install.sh >/dev/null 2>&1; rc=$?
+if [[ "$rc" -eq 0 && -f "$OI_DESK3" ]] && grep -q "google-multi-account" "$OI_DESK3" 2>/dev/null; then
+  pass "install.sh : GWSA_WIRE=1 ⇒ opt-in par env (branche Desktop)"
+else
+  fail "install.sh : GWSA_WIRE=1 n'a pas branché"
+fi
+
 # update --check depuis la copie installée SANS clone : lit GitHub, se dit à jour
-out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
+out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/mag" \
          "$GHDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
 [[ "$rc" -eq 0 && "$out_u" == *"à jour"* ]] \
   && pass "update --check : sans clone, interroge GitHub et se dit à jour" \
@@ -2210,21 +2625,21 @@ git -C "$REL" tag v2.0.0
 git -C "$REL" archive --format=tar.gz --prefix="pkg-2.0.0/" v2.0.0 > "$GHTB/v2.0.0.tar.gz"
 printf '[{"name":"v2.0.0"},{"name":"v1.0.0"},{"name":"v0.1.0"}]\n' > "$GHTAGS"
 ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_DESKTOP_CONFIG="$TMP/ghdesktop.json" \
-  GWSA_CLI_LINK="$GHBIN/gwsa" "$GHDEP/current/scripts/update.sh" >/dev/null 2>&1; rc=$?
+  GWSA_CLI_LINK="$GHBIN/mag" "$GHDEP/current/scripts/update.sh" >/dev/null 2>&1; rc=$?
 [[ "$rc" -eq 0 && "$(basename "$(readlink "$GHDEP/current")")" == "v2.0.0" ]] \
   && pass "update : sans clone, installe une nouvelle version publiée (v2.0.0)" \
   || fail "update sans clone : n'a pas installé la nouvelle version"
 
 # GitHub injoignable (tags introuvables) → refus explicite, current intact
 out_u="$(GWSA_TAGS_URL="file://$TMP/inexistant.json" GWSA_TARBALL_BASE="file://$GHTB" \
-         GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
+         GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/mag" \
          "$GHDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
 [[ "$rc" -ne 0 && "$(basename "$(readlink "$GHDEP/current")")" == "v2.0.0" ]] \
   && pass "update : GitHub injoignable → refus, current inchangé (v2.0.0)" \
   || fail "update : mauvais comportement quand GitHub est injoignable"
 
 # --check --to <tag inexistant> : sans clone, refus (comme refs/tags côté clone). Codex P2.
-out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
+out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/mag" \
          "$GHDEP/current/scripts/update.sh" --check --to v9.9.9 2>&1)"; rc=$?
 [[ "$rc" -ne 0 && "$out_u" == *"introuvable"* ]] \
   && pass "update --check --to : tag inexistant refusé (validé contre GitHub)" \
@@ -2232,7 +2647,7 @@ out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
 
 # --to <version self-updatable> : rollback sans clone OK (v0.1.0 embarque l'updater)
 ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_DESKTOP_CONFIG="$TMP/ghdesktop.json" \
-  GWSA_CLI_LINK="$GHBIN/gwsa" "$GHDEP/current/scripts/update.sh" --to v0.1.0 >/dev/null 2>&1; rc=$?
+  GWSA_CLI_LINK="$GHBIN/mag" "$GHDEP/current/scripts/update.sh" --to v0.1.0 >/dev/null 2>&1; rc=$?
 [[ "$rc" -eq 0 && "$(basename "$(readlink "$GHDEP/current")")" == "v0.1.0" ]] \
   && pass "update --to : rollback sans clone vers une version self-updatable (v0.1.0)" \
   || fail "update --to : rollback sans clone en échec"
@@ -2258,15 +2673,15 @@ ghenv GWSA_DEPLOY_ROOT="$LEG2" "$REL/scripts/deploy-local.sh" --github v0.5.0 >/
 
 # idem côté install.sh : un dossier legacy du dernier tag déjà présent → refus
 LEG3="$TMP/legacydep3"; mkdir -p "$LEG3/v2.0.0/scripts"
-ghenv GWSA_DEPLOY_ROOT="$LEG3" GWSA_CLI_LINK="$LEG3/gwsa" GWSA_SKIP_WIRE=1 \
+ghenv GWSA_DEPLOY_ROOT="$LEG3" GWSA_CLI_LINK="$LEG3/mag" GWSA_ALLOW_NO_GWS=1 \
   bash install.sh >/dev/null 2>&1; rc=$?
 [[ "$rc" -ne 0 && ! -e "$LEG3/current" ]] \
   && pass "install.sh : cible legacy pré-existante refusée (current pas basculé)" \
   || fail "install.sh : a basculé sur une cible legacy pré-existante"
 
-# fork : « gwsa update » sans clone restaure GWSA_REPO depuis .origin. Codex P2.
+# fork : « mag update » sans clone restaure GWSA_REPO depuis .origin. Codex P2.
 printf 'github:someone/fork\n' > "$GHDEP/current/.origin"
-out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
+out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/mag" \
          "$GHDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
 [[ "$out_u" == *"someone/fork"* ]] \
   && pass "update sans clone : repo restauré depuis .origin (fork préservé)" \
@@ -2287,15 +2702,15 @@ ghenv GWSA_DEPLOY_ROOT="$LEG4" "$REL/scripts/deploy-local.sh" --github v0.7.0 >/
 # « git rev-parse » remontait jusqu'à ce .git → mode clone → « aucune version ».
 GA="$TMP/git-ancestor"; mkdir -p "$GA"; git -C "$GA" init -q >/dev/null 2>&1
 GADEP="$GA/.local/share/google-mcp"
-ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/gwsa" GWSA_SKIP_WIRE=1 bash install.sh >/dev/null 2>&1
-out_u="$(ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/gwsa" \
+ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/mag" GWSA_ALLOW_NO_GWS=1 bash install.sh >/dev/null 2>&1
+out_u="$(ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/mag" \
          "$GADEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
 [[ "$rc" -eq 0 && "$out_u" == *"GitHub"* && "$out_u" != *"aucune version"* ]] \
   && pass "update : install sous un dépôt git ancêtre → mode github (marqueurs, pas walk-up)" \
   || fail "update : détecté à tort comme clone sous un ancêtre git"
 
 # régression P3 : « update --to » sans valeur → pas d'abandon silencieux (retombe latest)
-out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/gwsa" \
+out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/mag" \
          "$GHDEP/current/scripts/update.sh" --check --to 2>&1)"; rc=$?
 [[ "$rc" -eq 0 && "$out_u" == *"disponible"* ]] \
   && pass "update --to sans valeur : retombe sur latest (pas d'abandon silencieux)" \
@@ -2308,21 +2723,21 @@ out_d="$(ghenv GWSA_DEPLOY_ROOT="$TMP/dghnoval" "$REL/scripts/deploy-local.sh" -
   || fail "deploy-local --github sans valeur : abandon silencieux"
 
 # install.sh recycle le broker après bascule current (revue Codex round-4) : le
-# gwsa de la copie doit recevoir « broker stop ». Tag dont le gwsa logue l'appel.
+# mag de la copie doit recevoir « broker stop ». Tag dont le mag logue l'appel.
 BRK="$TMP/brokerpkg"; mkdir -p "$BRK/scripts" "$BRK/bin"
 cp "$REL/scripts/lib-github-release.sh" "$BRK/scripts/"
-cat > "$BRK/bin/gwsa" <<EOF
+cat > "$BRK/bin/mag" <<EOF
 #!/usr/bin/env bash
 [ "\$1 \$2" = "broker stop" ] && : > "$TMP/broker-stop.log"
 exit 0
 EOF
-chmod +x "$BRK/bin/gwsa"
+chmod +x "$BRK/bin/mag"
 git -C "$BRK" init -q >/dev/null 2>&1; git -C "$BRK" config user.email t@t; git -C "$BRK" config user.name t
 git -C "$BRK" add -A >/dev/null 2>&1; git -C "$BRK" commit -qm x >/dev/null 2>&1; git -C "$BRK" tag v3.0.0
 git -C "$BRK" archive --format=tar.gz --prefix="pkg-3.0.0/" v3.0.0 > "$GHTB/v3.0.0.tar.gz"
 printf '[{"name":"v3.0.0"},{"name":"v2.0.0"},{"name":"v1.0.0"},{"name":"v0.1.0"}]\n' > "$GHTAGS"
 rm -f "$TMP/broker-stop.log"
-ghenv GWSA_DEPLOY_ROOT="$TMP/brokerdep" GWSA_CLI_LINK="$TMP/brokerdep/gwsa" GWSA_SKIP_WIRE=1 \
+ghenv GWSA_DEPLOY_ROOT="$TMP/brokerdep" GWSA_CLI_LINK="$TMP/brokerdep/mag" GWSA_ALLOW_NO_GWS=1 \
   bash install.sh >/dev/null 2>&1
 [[ -f "$TMP/broker-stop.log" ]] \
   && pass "install.sh : recycle le broker après bascule current (broker stop appelé)" \
@@ -2332,7 +2747,7 @@ ghenv GWSA_DEPLOY_ROOT="$TMP/brokerdep" GWSA_CLI_LINK="$TMP/brokerdep/gwsa" GWSA
 # clone est supprimé, l'update sans clone vise le BON dépôt, pas upstream. Codex round-4.
 FORK="$TMP/forkclone"; mkdir -p "$FORK/scripts" "$FORK/bin"
 cp "$REL/scripts/lib-github-release.sh" "$REL/scripts/deploy-local.sh" "$REL/scripts/update.sh" "$FORK/scripts/"
-cp "$REL/bin/gwsa" "$FORK/bin/"; printf '#!/bin/sh\nexit 0\n' > "$FORK/bin/google-mcp"; chmod +x "$FORK/bin/"*
+cp "$REL/bin/mag" "$FORK/bin/"; printf '#!/bin/sh\nexit 0\n' > "$FORK/bin/google-mcp"; chmod +x "$FORK/bin/"*
 git -C "$FORK" init -q >/dev/null 2>&1; git -C "$FORK" config user.email t@t; git -C "$FORK" config user.name t
 git -C "$FORK" remote add origin https://github.com/someone/forkrepo.git
 git -C "$FORK" add -A >/dev/null 2>&1; git -C "$FORK" commit -qm x >/dev/null 2>&1; git -C "$FORK" tag v1.0.0
@@ -2354,7 +2769,7 @@ XDEP="$TMP/xrepodep"; mkdir -p "$XDEP/v1.0.0"
 printf 'github:elzinko/upstream\n' > "$XDEP/v1.0.0/.origin"        # dossier « upstream »
 XFORK="$TMP/xfork"; mkdir -p "$XFORK/scripts" "$XFORK/bin"
 cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$XFORK/scripts/"
-printf '#!/bin/sh\nexit 0\n' > "$XFORK/bin/gwsa"; chmod +x "$XFORK/bin/gwsa"
+printf '#!/bin/sh\nexit 0\n' > "$XFORK/bin/mag"; chmod +x "$XFORK/bin/mag"
 git -C "$XFORK" init -q >/dev/null 2>&1; git -C "$XFORK" config user.email t@t; git -C "$XFORK" config user.name t
 git -C "$XFORK" remote add origin https://github.com/someone/other.git
 git -C "$XFORK" add -A >/dev/null 2>&1; git -C "$XFORK" commit -qm x >/dev/null 2>&1; git -C "$XFORK" tag v1.0.0
@@ -2366,7 +2781,7 @@ env GWSA_DEPLOY_ROOT="$XDEP" "$XFORK/scripts/deploy-local.sh" --tag v1.0.0 >/dev
 # provenance ssh:// URI bien normalisée en .origin (Codex round-5).
 SSHC="$TMP/sshclone"; mkdir -p "$SSHC/scripts" "$SSHC/bin"
 cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$SSHC/scripts/"
-printf '#!/bin/sh\nexit 0\n' > "$SSHC/bin/gwsa"; chmod +x "$SSHC/bin/gwsa"
+printf '#!/bin/sh\nexit 0\n' > "$SSHC/bin/mag"; chmod +x "$SSHC/bin/mag"
 git -C "$SSHC" init -q >/dev/null 2>&1; git -C "$SSHC" config user.email t@t; git -C "$SSHC" config user.name t
 git -C "$SSHC" remote add origin ssh://git@github.com/someone/sshrepo.git
 git -C "$SSHC" add -A >/dev/null 2>&1; git -C "$SSHC" commit -qm x >/dev/null 2>&1; git -C "$SSHC" tag v1.0.0
@@ -2378,7 +2793,7 @@ env GWSA_DEPLOY_ROOT="$TMP/sshdep" "$SSHC/scripts/deploy-local.sh" --tag v1.0.0 
 # provenance ssh:// avec PORT explicite bien normalisée (Codex round-6).
 PORTC="$TMP/portclone"; mkdir -p "$PORTC/scripts" "$PORTC/bin"
 cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$PORTC/scripts/"
-printf '#!/bin/sh\nexit 0\n' > "$PORTC/bin/gwsa"; chmod +x "$PORTC/bin/gwsa"
+printf '#!/bin/sh\nexit 0\n' > "$PORTC/bin/mag"; chmod +x "$PORTC/bin/mag"
 git -C "$PORTC" init -q >/dev/null 2>&1; git -C "$PORTC" config user.email t@t; git -C "$PORTC" config user.name t
 git -C "$PORTC" remote add origin ssh://git@github.com:22/someone/portrepo.git
 git -C "$PORTC" add -A >/dev/null 2>&1; git -C "$PORTC" commit -qm x >/dev/null 2>&1; git -C "$PORTC" tag v1.0.0
@@ -2390,7 +2805,7 @@ env GWSA_DEPLOY_ROOT="$TMP/portdep" "$PORTC/scripts/deploy-local.sh" --tag v1.0.
 # hôte non-GitHub qui CONTIENT « github.com » → jamais pris pour GitHub (Codex round-7).
 NGH="$TMP/notgithub"; mkdir -p "$NGH/scripts" "$NGH/bin"
 cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$NGH/scripts/"
-printf '#!/bin/sh\nexit 0\n' > "$NGH/bin/gwsa"; chmod +x "$NGH/bin/gwsa"
+printf '#!/bin/sh\nexit 0\n' > "$NGH/bin/mag"; chmod +x "$NGH/bin/mag"
 git -C "$NGH" init -q >/dev/null 2>&1; git -C "$NGH" config user.email t@t; git -C "$NGH" config user.name t
 git -C "$NGH" remote add origin https://notgithub.com/someone/repo.git
 git -C "$NGH" add -A >/dev/null 2>&1; git -C "$NGH" commit -qm x >/dev/null 2>&1; git -C "$NGH" tag v1.0.0
@@ -2402,7 +2817,7 @@ env GWSA_DEPLOY_ROOT="$TMP/nghdep" "$NGH/scripts/deploy-local.sh" --tag v1.0.0 >
 # clone SANS provenance GitHub, supprimé → update REFUSE (pas de fallback upstream) (Codex round-7).
 NOG="$TMP/nogithub"; mkdir -p "$NOG/scripts" "$NOG/bin"
 cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$REL/scripts/update.sh" "$NOG/scripts/"
-cp "$REL/bin/gwsa" "$NOG/bin/"; printf '#!/bin/sh\nexit 0\n' > "$NOG/bin/google-mcp"; chmod +x "$NOG/bin/"*
+cp "$REL/bin/mag" "$NOG/bin/"; printf '#!/bin/sh\nexit 0\n' > "$NOG/bin/google-mcp"; chmod +x "$NOG/bin/"*
 git -C "$NOG" init -q >/dev/null 2>&1; git -C "$NOG" config user.email t@t; git -C "$NOG" config user.name t
 git -C "$NOG" add -A >/dev/null 2>&1; git -C "$NOG" commit -qm x >/dev/null 2>&1; git -C "$NOG" tag v1.0.0
 NOGDEP="$TMP/nogdep"
@@ -2422,7 +2837,7 @@ out_u="$(env GWSA_TAGS_URL="file://$GHTAGS" GWSA_TARBALL_BASE="file://$GHTB" \
 # owner/repo reste sensible à la casse (Codex round-8).
 CASE="$TMP/caseclone"; mkdir -p "$CASE/scripts" "$CASE/bin"
 cp "$REL/scripts/deploy-local.sh" "$REL/scripts/lib-github-release.sh" "$CASE/scripts/"
-printf '#!/bin/sh\nexit 0\n' > "$CASE/bin/gwsa"; chmod +x "$CASE/bin/gwsa"
+printf '#!/bin/sh\nexit 0\n' > "$CASE/bin/mag"; chmod +x "$CASE/bin/mag"
 git -C "$CASE" init -q >/dev/null 2>&1; git -C "$CASE" config user.email t@t; git -C "$CASE" config user.name t
 git -C "$CASE" remote add origin https://GitHub.com/someone/CaseRepo.git
 git -C "$CASE" add -A >/dev/null 2>&1; git -C "$CASE" commit -qm x >/dev/null 2>&1; git -C "$CASE" tag v1.0.0
@@ -2439,7 +2854,7 @@ tags_url_def="$(unset GWSA_TAGS_URL; GWSA_REPO=owner/repo; . "$REL/scripts/lib-g
 
 section "sessions + vault (fiche 0040)"
 
-SESS_ROOT="$TMP/gwsa-sessions"
+SESS_ROOT="$TMP/mag-sessions"
 mkdir -p "$SESS_ROOT/alpha"
 echo '{"drive":{"read":true,"create":true,"zonesOnly":true,"writeFolders":[]}}' > "$SESS_ROOT/alpha/policy.json"
 touch "$SESS_ROOT/alpha/.locked"
@@ -2447,6 +2862,11 @@ PY="/usr/bin/python3"
 [[ -x "$PY" ]] || PY="$(command -v python3)"
 
 export GWSA_ROOT="$SESS_ROOT" PYTHONPATH="$(pwd)"
+# fiche 0076 (lot 2) : toute création/élargissement de capacité de SESSION
+# (unlock, grant, grant-capability via GWSA_SESSION_ID) exige désormais une
+# élicitation signée TOUJOURS (indépendamment de .strong-auth — ADR-0007 §3).
+# Enrôlement mock une fois pour toute cette section (clé HMAC de test).
+GWSA_ROOT="$SESS_ROOT" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
 out_s="$("$PY" -c "
 from gateway.sessions import create_session, session_unlock, session_grant_drive, active_drive_zones, create_child_session, revoke_descendants
 s1 = create_session(client='test')
@@ -2508,6 +2928,124 @@ u2_ok="$("$PY" -c "from gateway.sessions import is_session_unlocked; print(is_se
   && pass "unlock session : isolation entre sessions parallèles" \
   || fail "unlock session : autre session hérite ($u2_ok)"
 
+# ── fiche 0076 : droits par session — jeton porté PAR L'APPEL (pas de global) ──
+# ADR-0007 §Décision 2 : gateway.api._run lit le jeton du paramètre `session`
+# de CET appel, jamais un état global de process. On mocke run_via_broker pour
+# rester hermétique (zéro réseau, zéro gws réel) et exercer uniquement
+# l'autorisation portée par le jeton.
+out_call_iso="$("$PY" -c "
+import gateway.api as api
+from gateway.sessions import create_session, session_unlock
+
+def fake_broker(alias, args, timeout=60, raw_output=False, session_id=''):
+    return {'files': [], '_sid': session_id}
+api.run_via_broker = fake_broker
+
+s1 = create_session(client='t076')
+s2 = create_session(client='t076')
+session_unlock(s1.session_id, 'alpha', 30)
+
+ok1 = True
+try:
+    api.gmail_list(alias='alpha', session=s1.session_id)
+except api.GatewayError:
+    ok1 = False
+
+ok2 = True
+code2 = ''
+try:
+    api.gmail_list(alias='alpha', session=s2.session_id)
+except api.GatewayError as e:
+    ok2 = False
+    code2 = e.code
+
+print('ok1', ok1, 'ok2', ok2, 'code2', code2)
+")"
+[[ "$out_call_iso" == *"ok1 True"* && "$out_call_iso" == *"ok2 False"* && "$out_call_iso" == *"code2 locked"* ]] \
+  && pass "api._run : jeton porté par l'appel — deux sessions isolées (pas de global)" \
+  || fail "api._run : isolation par jeton d'appel ($out_call_iso)"
+
+out_no_token="$("$PY" -c "
+import gateway.api as api
+try:
+    api.gmail_list(alias='alpha', session='')
+    print('no-raise')
+except api.GatewayError as e:
+    print('OK' if e.code == 'session' else 'wrong:' + e.code)
+")"
+[[ "$out_no_token" == "OK" ]] \
+  && pass "api._run : appel SANS jeton de session → refus (fail-closed)" \
+  || fail "api._run : appel sans jeton non refusé ($out_no_token)"
+
+out_ttl="$(GWSA_SESSION_TTL_SEC=1 "$PY" -c "
+import time
+from gateway.sessions import create_session, get_session
+s = create_session(client='ttl076')
+time.sleep(1.2)
+print(get_session(s.session_id))
+")"
+[[ "$out_ttl" == "None" ]] \
+  && pass "sessions : TTL expiré → get_session refuse dès l'accès (pas seulement au GC périodique)" \
+  || fail "sessions : TTL non appliqué à l'accès ($out_ttl)"
+
+out_ttl_run="$(GWSA_SESSION_TTL_SEC=1 "$PY" -c "
+import time
+import gateway.api as api
+from gateway.sessions import create_session
+api.run_via_broker = lambda *a, **k: {'files': []}
+s = create_session(client='ttl076run')
+time.sleep(1.2)
+try:
+    api.gmail_list(alias='alpha', session=s.session_id)
+    print('no-raise')
+except api.GatewayError as e:
+    # require_session() lève avec code='error' (« session inconnue ou expirée ») —
+    # ce qui compte pour la DoD est le REFUS, pas le code précis.
+    print('OK' if 'expirée' in str(e) or 'inconnue' in str(e) else 'wrong:' + str(e))
+")"
+[[ "$out_ttl_run" == "OK" ]] \
+  && pass "api._run : session expirée (TTL) → refus au moment de l'appel MCP" \
+  || fail "api._run : session expirée non refusée ($out_ttl_run)"
+
+out_touch="$("$PY" -c "
+import time
+from gateway.sessions import create_session, get_session
+s = create_session(client='touch076')
+created = s.created_at
+time.sleep(0.05)
+s2 = get_session(s.session_id)
+print(s2.last_seen_at > created)
+")"
+[[ "$out_touch" == "True" ]] \
+  && pass "sessions : last_seen_at avance après un accès autorisé (bug 0076 corrigé)" \
+  || fail "sessions : last_seen_at ne bouge pas après accès ($out_touch)"
+
+sid_close076="$("$PY" -c "from gateway.sessions import create_session; print(create_session(client='closecmd076').session_id)")"
+GWSA_ROOT="$SESS_ROOT" "$GWSA" session close "$sid_close076" >/dev/null 2>&1
+gone_close076="$("$PY" -c "from gateway.sessions import get_session; print(get_session('$sid_close076'))")"
+[[ "$gone_close076" == "None" ]] \
+  && pass "mag session close : révocation explicite purge la session (cycle de vie découplé de la connexion)" \
+  || fail "mag session close : session non purgée ($gone_close076)"
+
+# GC câblé au balayage/accès (pas à la déconnexion) : gateway.broker_server.handle_exec
+# appelle purge_expired() — vérifié directement sur la fonction (hermétique, sans broker
+# réel). Racine DÉDIÉE (isolée de SESS_ROOT, qui accumule des sessions d'autres tests
+# depuis longtemps) pour que le compte purgé soit exactement celui créé ici.
+GC_ROOT076="$TMP/mag-sessions-gc076"
+mkdir -p "$GC_ROOT076"
+out_gc="$(GWSA_ROOT="$GC_ROOT076" GWSA_SESSION_TTL_SEC=1 "$PY" -c "
+import time
+from gateway.sessions import create_session, sessions_dir, purge_expired
+s = create_session(client='gc076')
+path = sessions_dir() / (s.session_id + '.json')
+time.sleep(1.2)
+n = purge_expired()
+print(n, path.is_file())
+")"
+[[ "$out_gc" == "1 False" ]] \
+  && pass "sessions : purge_expired() GC les sessions expirées (câblée côté broker à chaque accès)" \
+  || fail "sessions : purge_expired() n'a pas purgé ($out_gc)"
+
 # list_sessions + admin API sessions (fiche 0040 phase C)
 sid_list="$("$PY" -c "
 from gateway.sessions import create_session, session_unlock, list_sessions
@@ -2524,8 +3062,8 @@ n_list="${sid_list##* }"
 
 out_slist="$(GWSA_ROOT="$SESS_ROOT" "$GWSA" session list 2>/dev/null)"
 [[ "$out_slist" == *"$sid_list_id"* && "$out_slist" == *'"sessions"'* ]] \
-  && pass "gwsa session list : JSON avec session_id" \
-  || fail "gwsa session list ($out_slist)"
+  && pass "mag session list : JSON avec session_id" \
+  || fail "mag session list ($out_slist)"
 
 ADMIN_PORT=$((49000 + RANDOM % 1000))
 GWSA_ROOT="$SESS_ROOT" GWSA_ADMIN_PORT="$ADMIN_PORT" node "$(pwd)/admin/server.js" >/dev/null 2>&1 &
@@ -2549,7 +3087,7 @@ if [[ "$admin_ready" -eq 1 ]]; then
     "http://127.0.0.1:$ADMIN_PORT/api/sessions/$sid_admin/unlock")"
   u_admin="$("$PY" -c "from gateway.sessions import is_session_unlocked; print(is_session_unlocked('$sid_admin', 'alpha'))")"
   [[ "$admin_un" == *'"ok":true'* && "$u_admin" == "True" ]] \
-    && pass "admin POST unlock session via gwsa" \
+    && pass "admin POST unlock session via mag" \
     || fail "admin POST unlock ($admin_un unlock=$u_admin)"
 
   admin_close="$(curl -sf -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
@@ -2564,6 +3102,22 @@ if [[ "$admin_ready" -eq 1 ]]; then
   [[ "$code_csrf" == "403" ]] \
     && pass "admin /api/sessions : refuse sans X-GWSA-Admin" \
     || fail "admin CSRF sessions (code=$code_csrf)"
+
+  # anti DNS-rebinding : un Host non-loopback est refusé, même AVEC l'en-tête admin
+  code_host="$(curl -s -o /dev/null -w '%{http_code}' \
+    -H 'X-GWSA-Admin: 1' -H "Host: evil.example:$ADMIN_PORT" \
+    "http://127.0.0.1:$ADMIN_PORT/api/sessions")"
+  [[ "$code_host" == "403" ]] \
+    && pass "admin : refuse un Host non-loopback (anti DNS-rebinding)" \
+    || fail "admin Host guard (code=$code_host)"
+
+  # anti-CSRF : une Origin étrangère est refusée (Host loopback par défaut)
+  code_origin="$(curl -s -o /dev/null -w '%{http_code}' \
+    -H 'X-GWSA-Admin: 1' -H 'Origin: http://evil.example' \
+    "http://127.0.0.1:$ADMIN_PORT/api/sessions")"
+  [[ "$code_origin" == "403" ]] \
+    && pass "admin : refuse une Origin étrangère" \
+    || fail "admin Origin guard (code=$code_origin)"
 else
   fail "admin server sessions : démarrage timeout port $ADMIN_PORT"
 fi
@@ -2582,7 +3136,50 @@ print('parent', get_session(pid), 'child', get_session(cid))
   && pass "close_session : purge parent + descendants" \
   || fail "close_session : purge incomplète ($out_close)"
 
-PROJ_ROOT="$TMP/gwsa-proj-inside"
+# ── DEFAULT_POLICY : invariants de sûreté du default-deny livré par `mag add` ──
+# Garde le point d'entrée : basculer send/share/delete ou ouvrir les zones ferait
+# passer la CI au vert tout en livrant un défaut permissif à chaque nouveau compte.
+pol_inv="$("$PY" -c "
+from gateway.default_policy import DEFAULT_POLICY as P
+# Exhaustif : TOUT flag qui envoie / partage / supprime / écrit doit être False,
+# sur tous les services — sinon une dérive (ex. calendar.delete=True) passerait.
+must_be_false = [
+    ('gmail','send'), ('gmail','delete'), ('gmail','update'), ('gmail','settings'),
+    ('drive','delete'), ('drive','share'),
+    ('calendar','create'), ('calendar','update'), ('calendar','delete'), ('calendar','share'),
+    ('keep','update'), ('keep','delete'),
+    ('docs','create'), ('docs','update'),
+    ('sheets','create'), ('sheets','update'),
+    ('tasks','create'), ('tasks','update'), ('tasks','delete'),
+]
+bad = [f'{s}.{k}' for s, k in must_be_false if P.get(s, {}).get(k) is not False]
+if P['drive'].get('zonesOnly') is not True: bad.append('drive.zonesOnly')
+if P['drive'].get('writeFolders') != []: bad.append('drive.writeFolders')
+print('OK' if not bad else 'BAD:' + ','.join(bad))
+")"
+[[ "$pol_inv" == "OK" ]] \
+  && pass "DEFAULT_POLICY : invariants de sûreté (tous services : envoi/partage/suppression/écriture=false · zones fermées)" \
+  || fail "DEFAULT_POLICY invariants ($pol_inv)"
+
+# ── gmail_attachment_get : borne défensive sur la taille des pièces jointes (0074) ──
+# Une PJ énorme ne doit pas saturer le disque : la borne lève AVANT toute écriture.
+att_inv="$("$PY" -c "
+import base64
+import gateway.api as api
+api.validate_alias = lambda a: None            # isoler la borne (pas de profil réel)
+api._run = lambda *a, **k: {'data': base64.urlsafe_b64encode(b'x' * 200).decode()}
+api._ATTACHMENT_MAX_BYTES = 100                 # borne basse pour le test
+try:
+    api.gmail_attachment_get('alpha', 'm1', 'a1')
+    print('no-raise')
+except api.GatewayError as e:
+    print('OK' if 'volumineuse' in str(e) else 'wrong-msg')
+")"
+[[ "$att_inv" == "OK" ]] \
+  && pass "gmail_attachment_get : borne la taille des pièces jointes (refus au-delà, avant écriture)" \
+  || fail "borne pièce jointe ($att_inv)"
+
+PROJ_ROOT="$TMP/mag-proj-inside"
 rm -rf "$PROJ_ROOT"
 git_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 rm -rf "$git_root/.gwsa"
@@ -2630,13 +3227,12 @@ print(len(active_drive_zones(sid, 'alpha')))
 pg_out="$("$PY" -c "
 import os
 from unittest.mock import patch
-from gateway.context import set_session_id
 from gateway.api import access_request
 from gateway.project import ProjectContext
 from gateway.sessions import create_session
 
+# jeton porté PAR L'APPEL (fiche 0076) — plus de set_session_id global.
 sid = create_session(client='t').session_id
-set_session_id(sid)
 m = {'capabilities': {'alpha': {
   'drive': {'zones': [{'id': 'folderAAA'}]},
   'gmail': {'read': True, 'drafts': False},
@@ -2645,9 +3241,9 @@ ctx = ProjectContext(manifest_valid=True, manifest=m, git_root='/tmp',
                      manifest_path='/tmp/.gwsa/manifest.json')
 os.environ['GWSA_GIT_ROOT'] = '/tmp'
 with patch('gateway.project.resolve_project', return_value=ctx):
-    ok = access_request('alpha', 'project_grant', folder='folderAAA', hours=2)
+    ok = access_request('alpha', 'project_grant', folder='folderAAA', hours=2, session=sid)
     assert ok.get('kind') == 'project_grant' and 'session grant' in ok.get('suggested_command','')
-    blocked = access_request('alpha', 'project_grant', folder='folderBBB', hours=2)
+    blocked = access_request('alpha', 'project_grant', folder='folderBBB', hours=2, session=sid)
     assert blocked.get('blocked_by_manifest') is True
 from gateway.project import manifest_allows_service
 assert manifest_allows_service(m, 'alpha', 'gmail', 'read') is True
@@ -2719,7 +3315,7 @@ assert not has_credentials('beta')
   || fail "vault : migration"
 
 section "élicitation signée (fiche 0001)"
-ELIC_ROOT="$TMP/gwsa-elicitation"
+ELIC_ROOT="$TMP/mag-elicitation"
 mkdir -p "$ELIC_ROOT/alpha"
 touch "$ELIC_ROOT/.strong-auth"
 export GWSA_ROOT="$ELIC_ROOT" GWSA_ELICITATION_MOCK=1 PYTHONPATH="$(pwd)"
@@ -2781,15 +3377,15 @@ print('ok')
 pec_dir="$TMP/pec"; mkdir -p "$pec_dir/valid" "$pec_dir/missing" "$pec_dir/corrupt"
 printf 'alice@gmail.com\n' > "$pec_dir/valid/.email"
 printf 'pas-un-email\n'    > "$pec_dir/corrupt/.email"
-eval "$(sed -n '/^profile_email_cached()/,/^}/p' bin/gwsa)"
+eval "$(sed -n '/^profile_email_cached()/,/^}/p' bin/mag)"
 r_valid="$(profile_email_cached "$pec_dir/valid")"
 r_missing="$(profile_email_cached "$pec_dir/missing")"
 r_corrupt="$(profile_email_cached "$pec_dir/corrupt")"
-n_cached="$(grep -c 'profile_email_cached "' bin/gwsa || true)"  # appels seuls (pas la déf)
-# Sous `set -euo pipefail` (comme bin/gwsa) et la forme appelante exacte
+n_cached="$(grep -c 'profile_email_cached "' bin/mag || true)"  # appels seuls (pas la déf)
+# Sous `set -euo pipefail` (comme bin/mag) et la forme appelante exacte
 # « local email; email="$(…)" », la fonction ne doit JAMAIS avorter — même sur
 # .email corrompu (sinon unlock/grant meurt avant le gate — retour Codex P2).
-pec_fn="$TMP/pec_fn.sh"; sed -n '/^profile_email_cached()/,/^}/p' bin/gwsa > "$pec_fn"
+pec_fn="$TMP/pec_fn.sh"; sed -n '/^profile_email_cached()/,/^}/p' bin/mag > "$pec_fn"
 sete_rc=0
 bash -euo pipefail -c '
   . "$1"
@@ -2798,18 +3394,1072 @@ bash -euo pipefail -c '
   c "$3" >/dev/null   # .email absent
 ' _ "$pec_fn" "$pec_dir/corrupt" "$pec_dir/missing" || sete_rc=$?
 if [[ "$r_valid" == "alice@gmail.com" && -z "$r_missing" && -z "$r_corrupt" ]] \
-  && [[ "$n_cached" == 4 && "$sete_rc" == 0 ]] \
-  && ! sed -n '/^profile_email_cached()/,/^}/p' bin/gwsa | sed 's/#.*//' | grep -q 'gws'; then
+  && [[ "$n_cached" == 6 && "$sete_rc" == 0 ]] \
+  && ! sed -n '/^profile_email_cached()/,/^}/p' bin/mag | sed 's/#.*//' | grep -q 'gws'; then
   pass "elicitation : email lu cache-only aux points d'autorisation, zéro exec gws (fiche 0047)"
 else
   fail "elicitation : cache-only (valid=$r_valid missing=[$r_missing] corrupt=[$r_corrupt] sites=$n_cached set-e_rc=$sete_rc)"
 fi
 
+# ── Résolution email → alias sur les commandes humaines (lock/unlock/grant/policy) ──
+er_root="$TMP/email-resolve"; mkdir -p "$er_root/perso"; printf 'thomas@gmail.com\n' > "$er_root/perso/.email"
+GWSA_ROOT="$er_root" "$GWSA" lock thomas@gmail.com >/dev/null 2>&1   # email → profil « perso »
+er_by_email=$([ -f "$er_root/perso/.locked" ] && echo ok || echo no)
+rm -f "$er_root/perso/.locked"
+GWSA_ROOT="$er_root" "$GWSA" lock perso >/dev/null 2>&1              # l'alias reste accepté
+er_by_alias=$([ -f "$er_root/perso/.locked" ] && echo ok || echo no)
+er_unknown="$(GWSA_ROOT="$er_root" "$GWSA" lock inconnu@example.com 2>&1)"; er_rc=$?
+if [[ "$er_by_email" == ok && "$er_by_alias" == ok && "$er_rc" != 0 && "$er_unknown" == *"no account connected"* ]]; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m commandes : email résolu vers son profil (alias toujours OK ; email inconnu refusé clairement)\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m résolution email (email=%s alias=%s rc=%s msg=%s)\n' "$er_by_email" "$er_by_alias" "$er_rc" "$er_unknown"
+fi
+
+# ── mag wire : brancher un client en une commande (dry-run, sans écrire) ──
+w_cfg="$TMP/wire-desktop.json"
+w_out="$(GWSA_ROOT="$TMP/wire-root" "$GWSA" wire desktop --print --config "$w_cfg" 2>&1)"
+w_cursor="$(GWSA_ROOT="$TMP/wire-root" "$GWSA" wire cursor 2>&1)"; w_cur_rc=$?
+if [[ "$w_out" == *"Dry-run"* && ! -f "$w_cfg" && "$w_cur_rc" != 0 && "$w_cursor" == *"Cursor"* ]]; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m mag wire desktop --print : dry-run sans écriture ; wire cursor renvoie vers la doc\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m mag wire (out=%s cursor_rc=%s)\n' "$w_out" "$w_cur_rc"
+fi
+
 sid_e="$("$PY" -c 'from gateway.sessions import create_session; print(create_session(client="t").session_id)')"
 GWSA_ROOT="$ELIC_ROOT" GWSA_SESSION_ID="$sid_e" GWSA_ELICITATION_MOCK=1 \
   "$GWSA" session unlock "$sid_e" alpha 15 >/dev/null 2>&1 \
-  && pass "elicitation : gwsa session unlock avec strongauth+mock" \
-  || fail "elicitation : gwsa session unlock strongauth"
+  && pass "elicitation : mag session unlock avec strongauth+mock" \
+  || fail "elicitation : mag session unlock strongauth"
+
+section "consume_nonce : verrou inter-process anti-TOCTOU (fiche 0084)"
+# consume_nonce fait reload → check → save sans atomicité inter-process avant
+# le correctif de la fiche 0084 : deux process concurrents peuvent tous deux
+# voir « nonce absent », passer le check et sauver → même nonce accepté deux
+# fois (rejeu d'une approbation signée). On le prouve avec 2 VRAIS sous-process
+# python3 (pas des threads, pas un objet partagé) synchronisés par une barrière
+# de démarrage, et on force la fenêtre de course avec le hook de test
+# GWSA_ELICITATION_TEST_RACE_DELAY_MS (sleep entre check et save, inactif hors
+# test — cf. gateway/elicitation.py::_test_race_delay).
+NONCE_RACE_ROOT="$TMP/mag-nonce-race"
+mkdir -p "$NONCE_RACE_ROOT"
+RACE_NONCE="racecondition0084"
+RACE_EXP=$(( $(date +%s) + 300 ))
+
+nonce_race_worker() {
+  # $1 = mon fichier « prêt », $2 = fichier « prêt » de l'autre, $3 = résultat
+  local my_ready="$1" other_ready="$2" out="$3"
+  GWSA_ROOT="$ELIC_ROOT" GWSA_ELICITATION_MOCK=1 GWSA_ELICITATION_TEST_RACE_DELAY_MS=150 \
+    "$PY" -c "
+import time
+from pathlib import Path
+Path('$my_ready').write_text('1')
+while not Path('$other_ready').is_file():
+    time.sleep(0.005)
+from gateway.elicitation import consume_nonce, ElicitationError
+try:
+    consume_nonce('$RACE_NONCE', expires_at=$RACE_EXP)
+    Path('$out').write_text('ok')
+except ElicitationError as e:
+    Path('$out').write_text('replay:' + str(e))
+except Exception as e:
+    Path('$out').write_text('error:' + str(e))
+"
+}
+
+NR1="$NONCE_RACE_ROOT/ready1"; NR2="$NONCE_RACE_ROOT/ready2"
+NO1="$NONCE_RACE_ROOT/out1"; NO2="$NONCE_RACE_ROOT/out2"
+rm -f "$NR1" "$NR2" "$NO1" "$NO2" "$ELIC_ROOT/.elicitation/nonces.json" "$ELIC_ROOT/.elicitation/nonces.lock"
+nonce_race_worker "$NR1" "$NR2" "$NO1" &
+NRPID1=$!
+nonce_race_worker "$NR2" "$NR1" "$NO2" &
+NRPID2=$!
+wait "$NRPID1" "$NRPID2"
+
+nr_o1=$(cat "$NO1" 2>/dev/null)
+nr_o2=$(cat "$NO2" 2>/dev/null)
+nr_ok=0; nr_replay=0
+[[ "$nr_o1" == "ok" ]] && nr_ok=$((nr_ok + 1))
+[[ "$nr_o2" == "ok" ]] && nr_ok=$((nr_ok + 1))
+[[ "$nr_o1" == replay:* ]] && nr_replay=$((nr_replay + 1))
+[[ "$nr_o2" == replay:* ]] && nr_replay=$((nr_replay + 1))
+if [[ $nr_ok -eq 1 && $nr_replay -eq 1 ]]; then
+  pass "consume_nonce : course multi-process — exactement un gagnant, l'autre voit le rejeu"
+else
+  fail "consume_nonce : TOCTOU — ok=$nr_ok replay=$nr_replay (out1=$nr_o1 out2=$nr_o2)"
+fi
+
+# Ré-vérification de l'expiration SOUS le verrou (revue Codex PR #125) : si
+# l'attente d'acquisition du verrou franchit expires_at, un défi expiré ne doit
+# PAS être consommé. On tient le verrou de l'extérieur au-delà du TTL pendant
+# qu'un thread appelle consume_nonce ; il doit ressortir « défi expiré ».
+exp_out="$(GWSA_ROOT="$ELIC_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c "
+import fcntl, os, time, threading
+from gateway.elicitation import consume_nonce, ElicitationError, nonces_lock_path
+lp = nonces_lock_path(); lp.parent.mkdir(parents=True, exist_ok=True)
+fd = os.open(str(lp), os.O_CREAT | os.O_RDWR, 0o600)
+fcntl.flock(fd, fcntl.LOCK_EX)          # on tient le verrou
+exp = int(time.time()) + 1              # TTL court : 1 s
+res = {}
+def w():
+    try:
+        consume_nonce('expiry-under-lock', expires_at=exp)
+        res['r'] = 'ok'
+    except ElicitationError as e:
+        res['r'] = 'expired' if 'expiré' in str(e) else 'other:' + str(e)
+t = threading.Thread(target=w); t.start()
+time.sleep(2)                           # on tient le verrou au-delà du TTL
+fcntl.flock(fd, fcntl.LOCK_UN); os.close(fd)
+t.join(5)
+print(res.get('r', 'timeout'))
+")"
+if [[ "$exp_out" == "expired" ]]; then
+  pass "consume_nonce : expiration re-vérifiée SOUS le verrou (défi expiré pendant l'attente refusé)"
+else
+  fail "consume_nonce : défi expiré pendant l'attente du verrou consommé (out=$exp_out)"
+fi
+
+section "droits par session — lot 2 (fiche 0076, capacités fines)"
+
+# ── (a) capacité gmail:read autorise la lecture, pas gmail:send ni drive:write ──
+CAP_ROOT="$TMP/mag-caps"
+mkdir -p "$CAP_ROOT/alpha"
+echo '{"gmail":{"read":true,"send":true,"drafts":true},"drive":{"read":true,"create":true,"zonesOnly":true,"writeFolders":["zoneA","zoneB"]}}' \
+  > "$CAP_ROOT/alpha/policy.json"
+out_cap_a="$(GWSA_ROOT="$CAP_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'gmail','operation':'read'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+def rc(args):
+    r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_ROOT/alpha'] + args, env=env)
+    return r.returncode
+print('read', rc(['gmail','messages','list']))
+print('send', rc(['gmail','messages','send','--json','{}']))
+print('drivewrite', rc(['drive','files','create','--json','{\"parents\":[\"zoneA\"]}']))
+")"
+[[ "$out_cap_a" == *"read 0"* && "$out_cap_a" == *"send 4"* && "$out_cap_a" == *"drivewrite 4"* ]] \
+  && pass "capacités session : gmail:read autorise la lecture, refuse send/drive:write" \
+  || fail "capacités session : gmail:read trop large ou trop étroit ($out_cap_a)"
+
+# ── (b) capacité drive:create:zoneA autorise zoneA, pas zoneB ──
+out_cap_b="$(GWSA_ROOT="$CAP_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'drive','operation':'create','resource':'zoneA'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+def rc(zone):
+    r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_ROOT/alpha',
+                         'drive','files','create','--json', json.dumps({'parents':[zone]})], env=env)
+    return r.returncode
+print('zoneA', rc('zoneA'))
+print('zoneB', rc('zoneB'))
+")"
+[[ "$out_cap_b" == *"zoneA 0"* && "$out_cap_b" == *"zoneB 4"* ]] \
+  && pass "capacités session : drive:create:zoneA autorise zoneA, refuse zoneB" \
+  || fail "capacités session : isolation par ressource Drive ($out_cap_b)"
+
+# ── (c) ressource absente sur Gmail = lecture bornée par la policy (pas de fuite) ──
+out_cap_c="$(GWSA_ROOT="$CAP_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'gmail','operation':'read'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_ROOT/alpha','gmail','messages','list'], env=env)
+print(r.returncode)
+")"
+[[ "$out_cap_c" == "0" ]] \
+  && pass "capacités session : ressource Gmail absente = lecture bornée par la policy" \
+  || fail "capacités session : lecture Gmail sans ressource ($out_cap_c)"
+
+# ── (h) fail-closed sur policy Drive PERMISSIVE — non-zonesOnly (revue sécu P0) ──
+# La garantie de session ne doit PAS tomber quand la policy Drive du compte est
+# ouverte : une session limitée (gmail:read) ne peut pas écrire dans Drive.
+CAP_OPEN="$TMP/mag-caps-open"
+mkdir -p "$CAP_OPEN/alpha"
+echo '{"gmail":{"read":true},"drive":{"read":true,"create":true,"update":true,"zonesOnly":false}}' \
+  > "$CAP_OPEN/alpha/policy.json"
+out_cap_h="$(GWSA_ROOT="$CAP_OPEN" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys, os
+env = dict(os.environ, GWSA_SESSION_CAPS=json.dumps([{'service':'gmail','operation':'read'}]))
+env_legacy = dict(os.environ); env_legacy.pop('GWSA_SESSION_CAPS', None)
+def rc(args, e):
+    return subprocess.run([sys.executable,'scripts/policy-check.py','$CAP_OPEN/alpha']+args, env=e).returncode
+print('create', rc(['drive','files','create','--json','{\"parents\":[\"F123\"]}'], env))
+print('update', rc(['drive','files','update','--params','{\"fileId\":\"F1\"}','--json','{}'], env))
+print('legacy', rc(['drive','files','create','--json','{\"parents\":[\"F123\"]}'], env_legacy))
+")"
+[[ "$out_cap_h" == *"create 4"* && "$out_cap_h" == *"update 4"* && "$out_cap_h" == *"legacy 0"* ]] \
+  && pass "capacités session : Drive non-zonesOnly reste fail-closed (session gmail:read refusée en écriture)" \
+  || fail "capacités session : FAIL-OPEN sur Drive non-zonesOnly ($out_cap_h)"
+
+# ── (i) fail-closed sur policy Drive « mode:open » (revue sécu P0) ──
+CAP_MOPEN="$TMP/mag-caps-mopen"
+mkdir -p "$CAP_MOPEN/alpha"
+echo '{"gmail":{"read":true},"drive":{"mode":"open"}}' > "$CAP_MOPEN/alpha/policy.json"
+out_cap_i="$(GWSA_ROOT="$CAP_MOPEN" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys, os
+env = dict(os.environ, GWSA_SESSION_CAPS=json.dumps([{'service':'gmail','operation':'read'}]))
+env_legacy = dict(os.environ); env_legacy.pop('GWSA_SESSION_CAPS', None)
+def rc(e):
+    return subprocess.run([sys.executable,'scripts/policy-check.py','$CAP_MOPEN/alpha','drive','files','create','--json','{\"parents\":[\"X\"]}'], env=e).returncode
+print('sess', rc(env)); print('legacy', rc(env_legacy))
+")"
+[[ "$out_cap_i" == *"sess 4"* && "$out_cap_i" == *"legacy 0"* ]] \
+  && pass "capacités session : Drive mode:open reste fail-closed pour une session limitée" \
+  || fail "capacités session : FAIL-OPEN sur Drive mode:open ($out_cap_i)"
+
+# ── (j) zone de session + capacité fine cohabitent (revue P1 — composition) ──
+out_cap_j="$(GWSA_ROOT="$CAP_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys, os
+env = dict(os.environ, GWSA_USE_SESSION_GRANTS='1', GWSA_SESSION_DRIVE_ZONES='zoneA',
+           GWSA_SESSION_CAPS=json.dumps([{'service':'gmail','operation':'read'}]))
+def rc(zone):
+    return subprocess.run([sys.executable,'scripts/policy-check.py','$CAP_ROOT/alpha',
+                           'drive','files','create','--json', json.dumps({'parents':[zone]})], env=env).returncode
+print('zoneA', rc('zoneA')); print('zoneB', rc('zoneB'))
+")"
+[[ "$out_cap_j" == *"zoneA 0"* && "$out_cap_j" == *"zoneB 4"* ]] \
+  && pass "capacités session : zone de session utilisable malgré une capacité fine (composition)" \
+  || fail "capacités session : zone de session cassée par une capacité fine ($out_cap_j)"
+
+# ── (d) octroi de capacité sans élicitation signée → refus ──
+CAP_UNSIGNED="$TMP/mag-caps-unsigned"
+mkdir -p "$CAP_UNSIGNED/alpha"
+cp "$CAP_ROOT/alpha/policy.json" "$CAP_UNSIGNED/alpha/policy.json"
+sid_uc="$(GWSA_ROOT="$CAP_UNSIGNED" PYTHONPATH="$(pwd)" "$PY" -c 'from gateway.sessions import create_session; print(create_session(client="t").session_id)')"
+gc_unsigned_rc=0
+GWSA_ROOT="$CAP_UNSIGNED" "$GWSA" session grant-capability "$sid_uc" alpha gmail read "" 1 >/dev/null 2>&1 || gc_unsigned_rc=$?
+[[ "$gc_unsigned_rc" != 0 ]] \
+  && pass "capacités session : octroi sans élicitation signée (pas d'enrôlement) → refus" \
+  || fail "capacités session : octroi non signé accepté à tort"
+
+# ── octroi SIGNÉ (mock) : mag session grant-capability écrit bien la capacité ──
+gc_ok=0
+GWSA_ROOT="$CAP_UNSIGNED" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
+GWSA_ROOT="$CAP_UNSIGNED" GWSA_ELICITATION_MOCK=1 \
+  "$GWSA" session grant-capability "$sid_uc" alpha gmail read "" 1 >/dev/null 2>&1 || gc_ok=$?
+has_cap="$(GWSA_ROOT="$CAP_UNSIGNED" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import session_has_capability
+print(session_has_capability('$sid_uc', 'alpha', 'gmail', 'read'))
+")"
+[[ "$gc_ok" == 0 && "$has_cap" == "True" ]] \
+  && pass "capacités session : mag session grant-capability (signé, mock) octroie la capacité" \
+  || fail "capacités session : grant-capability signé ($gc_ok has_cap=$has_cap)"
+
+# ── (e) service/opération non déclarés dans les capacités de session → refus ──
+out_cap_e="$(GWSA_ROOT="$CAP_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'gmail','operation':'read'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_ROOT/alpha','gmail','drafts','create','--json','{}'], env=env)
+print(r.returncode)
+")"
+[[ "$out_cap_e" == "4" ]] \
+  && pass "capacités session : opération non déclarée (gmail:drafts) → refus" \
+  || fail "capacités session : opération non déclarée acceptée à tort ($out_cap_e)"
+
+# ── (f) sans manifeste projet : policy ∩ session (pas de plafond manifeste) ──
+NOMANI_REPO="$TMP/mag-caps-nomanifest-repo"
+mkdir -p "$NOMANI_REPO"
+git -C "$NOMANI_REPO" init -q
+out_cap_f="$(GWSA_ROOT="$CAP_ROOT" GWSA_GIT_ROOT="$NOMANI_REPO" PYTHONPATH="$(pwd)" "$PY" -c "
+import subprocess, sys
+r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_ROOT/alpha','gmail','messages','list'])
+print(r.returncode)
+")"
+[[ "$out_cap_f" == "0" ]] \
+  && pass "manifeste absent (jamais configuré) : policy ∩ session — pas de plafond" \
+  || fail "manifeste absent : refus à tort ($out_cap_f)"
+
+# ── (g) manifeste altéré après confiance → refus (anti-downgrade, S-07) ──
+ANTIDOWN_ROOT="$TMP/mag-antidowngrade-root"
+ANTIDOWN_REPO="$TMP/mag-antidowngrade-repo"
+mkdir -p "$ANTIDOWN_REPO"
+git -C "$ANTIDOWN_REPO" init -q
+git -C "$ANTIDOWN_REPO" config user.email t@t.com
+git -C "$ANTIDOWN_REPO" config user.name t
+mkdir -p "$ANTIDOWN_ROOT"
+touch "$ANTIDOWN_ROOT/.strong-auth"
+GWSA_ROOT="$ANTIDOWN_ROOT" GWSA_ELICITATION_MOCK=1 PYTHONPATH="$(pwd)" "$PY" -c "
+from pathlib import Path
+from gateway.elicitation import enroll_mock
+enroll_mock()
+from gateway.project import init_project, sign_manifest
+root = Path('$ANTIDOWN_REPO')
+init_project(root)
+r = sign_manifest(root)
+assert r['ok'], r
+"
+before_trust="$(GWSA_ROOT="$ANTIDOWN_ROOT" GWSA_GIT_ROOT="$ANTIDOWN_REPO" PYTHONPATH="$(pwd)" "$PY" -c "
+import subprocess, sys
+r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_ROOT/alpha','gmail','messages','list'])
+print(r.returncode)
+")"
+# Altération : le fichier manifeste change de contenu sans re-signature.
+printf '{"schema":1,"project_id":"tampered","capabilities":{}}' > "$ANTIDOWN_REPO/.gwsa/manifest.json"
+after_tamper="$(GWSA_ROOT="$ANTIDOWN_ROOT" GWSA_GIT_ROOT="$ANTIDOWN_REPO" PYTHONPATH="$(pwd)" "$PY" -c "
+import subprocess, sys
+r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_ROOT/alpha','gmail','messages','list'])
+print(r.returncode)
+")"
+[[ "$before_trust" == "0" && "$after_tamper" == "4" ]] \
+  && pass "anti-downgrade : manifeste altéré après confiance → refus (S-07)" \
+  || fail "anti-downgrade : manifeste altéré non refusé (before=$before_trust after=$after_tamper)"
+
+section "droits par session — P1 sécu (fiche 0076, session nue = deny-all)"
+
+# Profil déverrouillé (poste), policy permissive gmail/calendar/drive — le
+# verrou GLOBAL du profil ne doit jamais se substituer aux octrois de LA
+# session (revue Codex P1 sur PR #110).
+P1_ROOT="$TMP/mag-p1-nudeny"
+mkdir -p "$P1_ROOT/alpha"
+echo '{"gmail":{"read":true,"send":true},"calendar":{"read":true},"drive":{"read":true,"create":true,"zonesOnly":true,"writeFolders":["zoneA"]}}' \
+  > "$P1_ROOT/alpha/policy.json"
+
+out_p1="$(GWSA_ROOT="$P1_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import gateway.broker_server as bs
+from gateway.sessions import create_session, session_unlock, session_grant_capability
+from gateway.errors import GatewayError
+
+bs.run_gws_local = lambda *a, **k: {'ok': True}
+
+def call(session_id, args):
+    try:
+        bs.handle_exec('alpha', args, 'test', session_id=session_id)
+        return 'ok'
+    except GatewayError as e:
+        return 'refus:' + e.code
+
+# (a) session nue (aucun octroi) sur profil déverrouillé → refus Gmail ET Calendar.
+s_naked = create_session(client='t').session_id
+print('naked_gmail', call(s_naked, ['gmail', 'users', 'messages', 'list']))
+print('naked_calendar', call(s_naked, ['calendar', 'events', 'list']))
+
+# (b) session avec session unlock → lecture Gmail autorisée (policy).
+s_unlocked = create_session(client='t').session_id
+session_unlock(s_unlocked, 'alpha', minutes=15)
+print('unlocked_gmail', call(s_unlocked, ['gmail', 'users', 'messages', 'list']))
+print('unlocked_calendar', call(s_unlocked, ['calendar', 'events', 'list']))
+
+# (c) session avec seulement grant-capability gmail:read → lit Gmail, refuse
+# Calendar/Drive.
+s_fine = create_session(client='t').session_id
+session_grant_capability(s_fine, 'alpha', 'gmail', 'read', hours=1)
+print('fine_gmail', call(s_fine, ['gmail', 'users', 'messages', 'list']))
+print('fine_calendar', call(s_fine, ['calendar', 'events', 'list']))
+print('fine_drive', call(s_fine, ['drive', 'files', 'create', '--json', '{\"parents\":[\"zoneA\"]}']))
+
+# (d) legacy sans session_id → inchangé (autorisé par policy).
+print('legacy_gmail', call('', ['gmail', 'users', 'messages', 'list']))
+")"
+
+[[ "$out_p1" == *"naked_gmail refus:policy"* && "$out_p1" == *"naked_calendar refus:policy"* \
+  && "$out_p1" == *"unlocked_gmail ok"* && "$out_p1" == *"unlocked_calendar ok"* \
+  && "$out_p1" == *"fine_gmail ok"* && "$out_p1" == *"fine_calendar refus:policy"* \
+  && "$out_p1" == *"fine_drive refus:policy"* && "$out_p1" == *"legacy_gmail ok"* ]] \
+  && pass "P1 sécu : session nue = deny-all (verrou poste n'y substitue pas ; unlock/capacité/legacy inchangés)" \
+  || fail "P1 sécu : session nue accède sans octroi ($out_p1)"
+
+section "droits par session — lot 3 (fiche 0076, session list + sous-agents + bootstrap + audit)"
+
+# ── (a) mag session list : ≥2 sessions actives, configs DISTINCTES (capacités,
+# unlocks, TTL restant, parent/delegated) ──
+L3_ROOT="$TMP/mag-lot3-list"
+mkdir -p "$L3_ROOT"
+out_list_cfg="$(GWSA_ROOT="$L3_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from gateway.sessions import create_session, session_unlock, session_grant_capability, list_sessions
+
+s1 = create_session(client='c1')
+s2 = create_session(client='c2')
+session_unlock(s1.session_id, 'alpha', 30)
+session_grant_capability(s2.session_id, 'alpha', 'gmail', 'read', hours=2)
+
+rows = {r['session_id']: r for r in list_sessions()}
+r1, r2 = rows[s1.session_id], rows[s2.session_id]
+assert 'alpha' in r1['unlocks'] and not r1['capabilities'], r1
+assert r2['capabilities'] and r2['capabilities'][0]['service'] == 'gmail', r2
+assert not r2['unlocks'], r2
+assert r1['ttl_seconds_left'] > 0 and r2['ttl_seconds_left'] > 0, (r1, r2)
+print('ok')
+")"
+[[ "$out_list_cfg" == "ok" ]] \
+  && pass "mag session list : ≥2 sessions, configs distinctes (capacités/unlocks/TTL)" \
+  || fail "mag session list : configs non distinctes ($out_list_cfg)"
+
+# ── (a-bis) mag session show affiche aussi les capacités fines (lot 2) ──
+sid_show3="$(GWSA_ROOT="$L3_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, session_grant_capability
+s = create_session(client='show3')
+session_grant_capability(s.session_id, 'alpha', 'drive', 'read', hours=1)
+print(s.session_id)
+")"
+out_show3="$(GWSA_ROOT="$L3_ROOT" "$GWSA" session show "$sid_show3" 2>&1)"
+[[ "$out_show3" == *'"service": "drive"'* && "$out_show3" == *'"operation": "read"'* ]] \
+  && pass "mag session show : affiche les capacités fines (lot 2)" \
+  || fail "mag session show : capacités fines absentes ($out_show3)"
+
+# ── (b) sous-agent : héritage ⊆ parent, jamais plus ──
+out_inherit="$(GWSA_ROOT="$L3_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import (
+    create_session, create_child_session, session_grant_capability,
+    session_has_capability,
+)
+root = create_session(client='root3')
+session_grant_capability(root.session_id, 'alpha', 'gmail', 'read', hours=1)
+child = create_child_session(root.session_id)
+# le parent a la capacité, jamais accordée directement à l'enfant → l'enfant la
+# VOIT via la chaîne d'ancêtres (héritage), mais rien de PLUS que le parent.
+child_has = session_has_capability(child.session_id, 'alpha', 'gmail', 'read')
+child_lacks_more = session_has_capability(child.session_id, 'alpha', 'drive', 'read')
+print(child_has, child_lacks_more)
+")"
+[[ "$out_inherit" == "True False" ]] \
+  && pass "sous-agents : héritage ⊆ parent (l'enfant voit exactement les capacités du parent)" \
+  || fail "sous-agents : héritage incorrect ($out_inherit)"
+
+# ── (c) sous-agent : ne peut PAS élargir (session_grant_capability / unlock / grant refusés) ──
+out_child_widen="$(GWSA_ROOT="$L3_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, create_child_session, session_grant_capability, session_unlock, session_grant_drive
+from gateway.errors import GatewayError
+root = create_session(client='root3b')
+child = create_child_session(root.session_id)
+results = []
+for fn, args in (
+    (session_grant_capability, (child.session_id, 'alpha', 'gmail', 'read')),
+    (session_unlock, (child.session_id, 'alpha', 30)),
+    (session_grant_drive, (child.session_id, 'alpha', 'fid123')),
+):
+    try:
+        fn(*args)
+        results.append('no-raise')
+    except GatewayError as e:
+        results.append('refused' if e.code == 'error' else 'wrong:' + e.code)
+print(' '.join(results))
+")"
+[[ "$out_child_widen" == "refused refused refused" ]] \
+  && pass "sous-agents : élargissement (grant-capability/unlock/grant) refusé depuis un enfant" \
+  || fail "sous-agents : élargissement non bloqué ($out_child_widen)"
+
+# ── (c-bis) sous-agent : access_request (élargissement) refusé depuis un enfant ──
+out_child_ar="$(GWSA_ROOT="$L3_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import gateway.api as api
+from gateway.sessions import create_session, create_child_session
+root = api.__dict__['create_session'] if False else create_session(client='root3c')
+child = create_child_session(root.session_id)
+try:
+    api.access_request(alias='alpha', kind='session_unlock', session=child.session_id)
+    print('no-raise')
+except api.GatewayError as e:
+    print('OK' if e.code == 'delegated' else 'wrong:' + e.code)
+")"
+[[ "$out_child_ar" == "OK" ]] \
+  && pass "sous-agents : access_request (élargissement) refusé depuis un enfant" \
+  || fail "sous-agents : access_request enfant non bloqué ($out_child_ar)"
+
+# ── (c-ter) la CRÉATION d'un enfant n'exige pas de signature (aucun droit nouveau) ──
+out_child_create="$(GWSA_ROOT="$L3_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, create_child_session
+root = create_session(client='root3d')
+child = create_child_session(root.session_id)
+print(child.delegated, len(child.capabilities))
+")"
+[[ "$out_child_create" == "True 0" ]] \
+  && pass "sous-agents : création d'enfant sans signature (zéro droit nouveau)" \
+  || fail "sous-agents : création d'enfant ($out_child_create)"
+
+# ── (d) revoke-descendants : purge les descendants, PAS la racine ──
+L3_REVOKE="$TMP/mag-lot3-revoke"
+mkdir -p "$L3_REVOKE"
+touch "$L3_REVOKE/.strong-auth" 2>/dev/null || true
+read root_id child_id grandchild_id <<< "$(GWSA_ROOT="$L3_REVOKE" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, create_child_session
+root = create_session(client='rootrv')
+child = create_child_session(root.session_id)
+grandchild = create_child_session(child.session_id)
+print(root.session_id, child.session_id, grandchild.session_id)
+")"
+GWSA_ROOT="$L3_REVOKE" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
+GWSA_ROOT="$L3_REVOKE" GWSA_ELICITATION_MOCK=1 "$GWSA" session revoke-descendants "$root_id" >/dev/null 2>&1
+out_after_revoke="$(GWSA_ROOT="$L3_REVOKE" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import get_session
+print(get_session('$root_id') is not None, get_session('$child_id') is None, get_session('$grandchild_id') is None)
+")"
+[[ "$out_after_revoke" == "True True True" ]] \
+  && pass "sous-agents : revoke-descendants purge toute la descendance, PAS la racine" \
+  || fail "sous-agents : revoke-descendants ($out_after_revoke)"
+
+# ── (e) bootstrap : mag session open crée une session racine SIGNÉE + imprime le jeton ──
+L3_OPEN="$TMP/mag-lot3-open"
+mkdir -p "$L3_OPEN"
+GWSA_ROOT="$L3_OPEN" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
+sid_opened="$(GWSA_ROOT="$L3_OPEN" GWSA_ELICITATION_MOCK=1 "$GWSA" session open test-client 2>/dev/null)"
+out_opened_state="$(GWSA_ROOT="$L3_OPEN" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import get_session
+s = get_session('$sid_opened')
+print(s is not None, s.client if s else None, s.capabilities if s else None, s.delegated if s else None)
+")"
+[[ -n "$sid_opened" && "$out_opened_state" == "True test-client [] False" ]] \
+  && pass "mag session open : crée une session racine signée, zéro capacité, jeton imprimé" \
+  || fail "mag session open : session ($sid_opened → $out_opened_state)"
+
+# ── (e-bis) mag session open SANS enrôlement → refus ──
+L3_OPEN_UNENROLLED="$TMP/mag-lot3-open-unenrolled"
+mkdir -p "$L3_OPEN_UNENROLLED"
+GWSA_ROOT="$L3_OPEN_UNENROLLED" "$GWSA" session open test-client >/dev/null 2>&1
+open_unenrolled_rc=$?
+[[ "$open_unenrolled_rc" != 0 ]] \
+  && pass "mag session open : refus sans enrôlement (pas de session sans geste signé)" \
+  || fail "mag session open : accepté sans enrôlement à tort"
+
+# ── (f) bootstrap sans jeton : access_request ne peut QUE pointer vers la création,
+# jamais un accès aux données ──
+out_bootstrap_ar="$(PYTHONPATH="$(pwd)" GWSA_ROOT="$L3_OPEN" "$PY" -c "
+import gateway.api as api
+r = api.access_request(alias='alpha', kind='session_unlock', session='')
+print(r.get('kind'), 'mag session open' in r.get('suggested_command', ''))
+")"
+[[ "$out_bootstrap_ar" == "session_open True" ]] \
+  && pass "bootstrap sans jeton : access_request sans session pointe vers « mag session open »" \
+  || fail "bootstrap sans jeton : access_request ($out_bootstrap_ar)"
+
+out_bootstrap_data="$(PYTHONPATH="$(pwd)" GWSA_ROOT="$L3_OPEN" "$PY" -c "
+import gateway.api as api
+try:
+    api.gmail_list(alias='alpha', session='')
+    print('no-raise')
+except api.GatewayError as e:
+    print('OK' if e.code == 'session' else 'wrong:' + e.code)
+")"
+[[ "$out_bootstrap_data" == "OK" ]] \
+  && pass "bootstrap sans jeton : aucun accès donnée sans jeton (fail-closed, gmail_list)" \
+  || fail "bootstrap sans jeton : accès donnée accepté sans jeton à tort ($out_bootstrap_data)"
+
+# ── (g) audit : un appel RÉUSSI journalise session_id + service + opération + ressource ──
+L3_AUDIT="$TMP/mag-lot3-audit"
+mkdir -p "$L3_AUDIT/alpha"
+out_audit="$(GWSA_ROOT="$L3_AUDIT" PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from pathlib import Path
+import gateway.broker_server as bs
+from gateway.sessions import create_session
+
+s = create_session(client='audit3')
+
+# NB : monkeypatcher subprocess.run directement toucherait AUSSI l'appel
+# subprocess.run interne de gateway.usage.log_usage (même module partagé) —
+# on stubbe run_gws_local à la place, pour laisser le vrai log-usage.py tourner.
+bs.run_gws_local = lambda *a, **k: {'ok': True}
+log = Path('$L3_AUDIT') / 'usage.jsonl'
+log.unlink(missing_ok=True)
+bs.handle_exec('alpha', ['gmail', 'users', 'messages', 'list'], 'audit-client', session_id=s.session_id)
+entries = [json.loads(x) for x in log.read_text().splitlines()]
+e = entries[-1]
+print(e.get('decision'), e.get('session_id') == s.session_id, e.get('service'), e.get('operation'))
+")"
+[[ "$out_audit" == "ok True gmail read" ]] \
+  && pass "audit : appel réussi journalise session_id + service + opération (pas seulement les refus)" \
+  || fail "audit : appel réussi mal journalisé ($out_audit)"
+
+section "droits par session — fiche 0080 (raffinements revue Codex #110)"
+
+# ── (1) ressource pour les services non-Drive : Calendar, VRAI paramètre (calendarId) ──
+CAP_NONDRIVE="$TMP/mag-0080-nondrive"
+mkdir -p "$CAP_NONDRIVE/alpha"
+echo '{"calendar":{"read":true,"create":true},"gmail":{"read":true}}' > "$CAP_NONDRIVE/alpha/policy.json"
+out_res_cal="$(GWSA_ROOT="$CAP_NONDRIVE" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'calendar','operation':'read','resource':'cal123'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+def rc(cal_id):
+    r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_NONDRIVE/alpha',
+                         'calendar','events','list','--params', json.dumps({'calendarId': cal_id})], env=env)
+    return r.returncode
+print('own', rc('cal123'))
+print('other', rc('cal999'))
+")"
+[[ "$out_res_cal" == *"own 0"* && "$out_res_cal" == *"other 4"* ]] \
+  && pass "capacités session : calendar:read:cal123 autorise cet agenda, refuse un autre" \
+  || fail "capacités session : granularité ressource Calendar cassée ($out_res_cal)"
+
+# ── (1) ressource pour les services non-Drive : Gmail, VRAI paramètre (labelIds, pluriel) ──
+out_res_gmail="$(GWSA_ROOT="$CAP_NONDRIVE" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'gmail','operation':'read','resource':'LABEL_A'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+def rc(label_id):
+    r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_NONDRIVE/alpha',
+                         'gmail','users','messages','list','--params',
+                         json.dumps({'labelIds': [label_id]})], env=env)
+    return r.returncode
+print('own', rc('LABEL_A'))
+print('other', rc('LABEL_B'))
+")"
+[[ "$out_res_gmail" == *"own 0"* && "$out_res_gmail" == *"other 4"* ]] \
+  && pass "capacités session : gmail:read:LABEL_A autorise ce libellé (labelIds), refuse un autre" \
+  || fail "capacités session : granularité ressource Gmail cassée ($out_res_gmail)"
+
+# ── (1-P0) leurre : un « id » quelconque dans --params NE DOIT PAS usurper
+# le paramètre opérant réel (labelId/calendarId) — revue adverse post-#110.
+# gmail:read:LABEL_A ; appel ciblant en réalité LABEL_VICTIME (via le
+# paramètre historiquement mal priorisé « labelId » singulier, absent du
+# mapping) + un « id » = LABEL_A glissé en leurre → doit être REFUSÉ (aucun
+# opérande fiable dérivable pour « messages list » hors labelIds pluriel).
+out_res_decoy_gmail="$(GWSA_ROOT="$CAP_NONDRIVE" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'gmail','operation':'read','resource':'LABEL_A'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_NONDRIVE/alpha',
+                     'gmail','users','messages','list','--params',
+                     json.dumps({'labelId': 'LABEL_VICTIME', 'id': 'LABEL_A'})], env=env)
+print(r.returncode)
+")"
+[[ "$out_res_decoy_gmail" == "4" ]] \
+  && pass "P0 sécu : leurre --params (id=capacité accordée, labelId=cible réelle) refusé" \
+  || fail "P0 sécu : leurre gmail accepté à tort — fail-open ($out_res_decoy_gmail)"
+
+# ── (1-P0) même leurre côté Calendar : calendarId réel ≠ id leurré ──
+out_res_decoy_cal="$(GWSA_ROOT="$CAP_NONDRIVE" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'calendar','operation':'read','resource':'cal123'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_NONDRIVE/alpha',
+                     'calendar','events','get','--params',
+                     json.dumps({'calendarId': 'cal999', 'id': 'cal123'})], env=env)
+print(r.returncode)
+")"
+[[ "$out_res_decoy_cal" == "4" ]] \
+  && pass "P0 sécu : leurre --params calendar (id=capacité accordée, calendarId=cible réelle) refusé" \
+  || fail "P0 sécu : leurre calendar accepté à tort — fail-open ($out_res_decoy_cal)"
+
+# ── (1-P0) calendar events get : le VRAI paramètre calendarId reste utilisable ──
+out_res_cal_get="$(GWSA_ROOT="$CAP_NONDRIVE" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'calendar','operation':'read','resource':'cal123'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_NONDRIVE/alpha',
+                     'calendar','events','get','--params',
+                     json.dumps({'calendarId': 'cal123', 'eventId': 'evt1'})], env=env)
+print(r.returncode)
+")"
+[[ "$out_res_cal_get" == "0" ]] \
+  && pass "P0 sécu : calendar events get avec le vrai calendarId (pas eventId) reste autorisé" \
+  || fail "P0 sécu : calendar events get sur-refusé à tort ($out_res_cal_get)"
+
+# ── (1-P0) ops porteuses d'un « id » ambigu sans mapping (messages get,
+# attachments get) : opérande non identifiable → fail-closed pour une
+# capacité SCOPÉE, même si le « id » présent coïncide avec la ressource
+# accordée (ce n'est pas un labelId, juste un homonyme de valeur) ──
+out_res_ambiguous="$(GWSA_ROOT="$CAP_NONDRIVE" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'gmail','operation':'read','resource':'LABEL_A'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+def rc(args):
+    r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_NONDRIVE/alpha'] + args, env=env)
+    return r.returncode
+print('messages_get', rc(['gmail','users','messages','get','--params', json.dumps({'id':'LABEL_A'})]))
+print('attachments_get', rc(['gmail','users','messages','attachments','get','--params',
+                              json.dumps({'userId':'me','messageId':'m','id':'LABEL_A'})]))
+")"
+[[ "$out_res_ambiguous" == *"messages_get 4"* && "$out_res_ambiguous" == *"attachments_get 4"* ]] \
+  && pass "P0 sécu : messages/attachments get sans opérande fiable → fail-closed sous capacité scopée" \
+  || fail "P0 sécu : opérande ambigu accepté à tort ($out_res_ambiguous)"
+
+# ── (P2 finding #3, Codex PR #118) : forme --flag=valeur (pas seulement
+# --flag valeur séparé) doit être reconnue par operand_resource — sinon une
+# capacité scopée VALIDE se voyait refusée à tort (fail-closed par accident,
+# pas une faille, mais une régression fonctionnelle). ──
+out_res_eqform="$(GWSA_ROOT="$CAP_NONDRIVE" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'gmail','operation':'read','resource':'LABEL_A'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_NONDRIVE/alpha',
+                     'gmail','users','messages','list',
+                     '--params=' + json.dumps({'labelIds': ['LABEL_A']})], env=env)
+print(r.returncode)
+")"
+[[ "$out_res_eqform" == "0" ]] \
+  && pass "P2 finding #3 : forme --params=<json> (avec =) reconnue, capacité scopée valide autorisée" \
+  || fail "P2 finding #3 : forme --params=<json> refusée à tort ($out_res_eqform)"
+
+# ── (P2 finding #4, Codex PR #118) : calendar events import portait
+# calendarId mais était absent du mapping → une cap calendar:create:cal123
+# refusait à tort un import dans cet agenda. ──
+out_res_import="$(GWSA_ROOT="$CAP_NONDRIVE" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys
+caps = json.dumps([{'service':'calendar','operation':'create','resource':'cal123'}])
+env = dict(__import__('os').environ, GWSA_SESSION_CAPS=caps)
+r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$CAP_NONDRIVE/alpha',
+                     'calendar','events','import',
+                     '--params=' + json.dumps({'calendarId': 'cal123'})], env=env)
+print(r.returncode)
+")"
+[[ "$out_res_import" == "0" ]] \
+  && pass "P2 finding #4 : calendar:create:cal123 autorise events import dans cet agenda" \
+  || fail "P2 finding #4 : events import refusé à tort — mapping calendarId manquant ($out_res_import)"
+
+# ── (2) capacités déléguées figées à la création (snapshot) ──
+L3_SNAPSHOT="$TMP/mag-0080-snapshot"
+mkdir -p "$L3_SNAPSHOT"
+out_snapshot="$(GWSA_ROOT="$L3_SNAPSHOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import (
+    create_session, create_child_session, session_grant_capability,
+    session_has_capability,
+)
+root = create_session(client='snap-root')
+child = create_child_session(root.session_id)
+# octroi au PARENT après la création de l'enfant : ne doit PAS s'exposer à
+# l'enfant déjà créé (le payload signé de l'enfant ne nommait que le parent
+# au moment T, pas ses octrois futurs).
+session_grant_capability(root.session_id, 'alpha', 'drive', 'read', hours=1)
+print(session_has_capability(child.session_id, 'alpha', 'drive', 'read'),
+      session_has_capability(root.session_id, 'alpha', 'drive', 'read'))
+")"
+[[ "$out_snapshot" == "False True" ]] \
+  && pass "sous-agents : capacités figées à la création — octroi ultérieur au parent n'élargit pas l'enfant" \
+  || fail "sous-agents : capacités NON figées — fuite passive vers l'enfant ($out_snapshot)"
+
+# ── (2-bis) le snapshot capture bien ce que le parent possédait AVANT la création ──
+out_snapshot_before="$(GWSA_ROOT="$L3_SNAPSHOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import (
+    create_session, create_child_session, session_grant_capability,
+    session_has_capability,
+)
+root = create_session(client='snap-root2')
+session_grant_capability(root.session_id, 'alpha', 'gmail', 'read', hours=1)
+child = create_child_session(root.session_id)
+print(session_has_capability(child.session_id, 'alpha', 'gmail', 'read'))
+")"
+[[ "$out_snapshot_before" == "True" ]] \
+  && pass "sous-agents : le snapshot capture les capacités déjà accordées au moment de la création" \
+  || fail "sous-agents : snapshot manquant à la création ($out_snapshot_before)"
+
+# ── (2-ter, P2 finding #2, Codex PR #118) : une sous-session ÉCRITE PAR
+# L'ANCIENNE révision (upgrade in-place, fichier JSON sans le marqueur
+# capabilities_snapshot, capabilities locales vides comme le faisait l'ancien
+# create_child_session) doit continuer à voir les capacités actives de son
+# parent via le repli legacy (_ancestor_chain) — pas les perdre d'un coup. ──
+out_legacy_migration="$(GWSA_ROOT="$L3_SNAPSHOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from gateway.sessions import (
+    create_session, create_child_session, session_grant_capability,
+    session_has_capability, _path,
+)
+root = create_session(client='legacy-root')
+session_grant_capability(root.session_id, 'alpha', 'tasks', 'read', hours=1)
+child = create_child_session(root.session_id)
+# Réécrit le fichier de l'enfant comme le faisait l'ANCIENNE révision : pas de
+# marqueur, capabilities locales vides (l'ancien create_child_session ne
+# stockait que parent_id, jamais de snapshot).
+p = _path(child.session_id)
+data = json.loads(p.read_text())
+data['capabilities'] = []
+data.pop('capabilities_snapshot', None)
+p.write_text(json.dumps(data))
+print(session_has_capability(child.session_id, 'alpha', 'tasks', 'read'))
+")"
+[[ "$out_legacy_migration" == "True" ]] \
+  && pass "P2 finding #2 : sous-session pré-snapshot (upgrade in-place) garde ses capacités héritées (repli legacy)" \
+  || fail "P2 finding #2 : sous-session pré-snapshot a perdu ses capacités héritées ($out_legacy_migration)"
+
+# ── fiche 0085 : unlock + zones Drive figés à la création de la sous-session
+# (même patron que le snapshot des capacités, fiche 0080) ──
+L3_0085="$TMP/mag-0085-snapshot"
+mkdir -p "$L3_0085"
+
+# ── (1) unlock accordé au parent APRÈS la création d'un enfant ne s'expose
+# pas passivement à l'enfant déjà créé ──
+out_0085_unlock="$(GWSA_ROOT="$L3_0085" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, create_child_session, session_unlock, is_session_unlocked
+root = create_session(client='0085-unlock-root')
+child = create_child_session(root.session_id)
+session_unlock(root.session_id, 'alpha', 30)
+print(is_session_unlocked(child.session_id, 'alpha'), is_session_unlocked(root.session_id, 'alpha'))
+")"
+[[ "$out_0085_unlock" == "False True" ]] \
+  && pass "fiche 0085 : unlock figé à la création — unlock ultérieur du parent n'élargit pas l'enfant" \
+  || fail "fiche 0085 : unlock NON figé — fuite passive vers l'enfant ($out_0085_unlock)"
+
+# ── (1-bis) le snapshot capture bien l'unlock déjà actif AVANT la création ──
+out_0085_unlock_before="$(GWSA_ROOT="$L3_0085" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, create_child_session, session_unlock, is_session_unlocked
+root = create_session(client='0085-unlock-root2')
+session_unlock(root.session_id, 'alpha', 30)
+child = create_child_session(root.session_id)
+print(is_session_unlocked(child.session_id, 'alpha'))
+")"
+[[ "$out_0085_unlock_before" == "True" ]] \
+  && pass "fiche 0085 : le snapshot capture l'unlock déjà actif au moment de la création" \
+  || fail "fiche 0085 : snapshot d'unlock manquant à la création ($out_0085_unlock_before)"
+
+# ── (2) zone Drive accordée au parent APRÈS la création d'un enfant ne
+# s'expose pas passivement à l'enfant déjà créé ──
+out_0085_zone="$(GWSA_ROOT="$L3_0085" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, create_child_session, session_grant_drive, active_drive_zones
+root = create_session(client='0085-zone-root')
+child = create_child_session(root.session_id)
+session_grant_drive(root.session_id, 'alpha', 'FOLDERX123456789012')
+print('FOLDERX123456789012' in active_drive_zones(child.session_id, 'alpha'),
+      'FOLDERX123456789012' in active_drive_zones(root.session_id, 'alpha'))
+")"
+[[ "$out_0085_zone" == "False True" ]] \
+  && pass "fiche 0085 : zone Drive figée à la création — grant ultérieur du parent n'élargit pas l'enfant" \
+  || fail "fiche 0085 : zone Drive NON figée — fuite passive vers l'enfant ($out_0085_zone)"
+
+# ── (2-bis) le snapshot capture bien la zone Drive déjà active AVANT la création ──
+out_0085_zone_before="$(GWSA_ROOT="$L3_0085" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, create_child_session, session_grant_drive, active_drive_zones
+root = create_session(client='0085-zone-root2')
+session_grant_drive(root.session_id, 'alpha', 'FOLDERY123456789012')
+child = create_child_session(root.session_id)
+print('FOLDERY123456789012' in active_drive_zones(child.session_id, 'alpha'))
+")"
+[[ "$out_0085_zone_before" == "True" ]] \
+  && pass "fiche 0085 : le snapshot capture la zone Drive déjà active au moment de la création" \
+  || fail "fiche 0085 : snapshot de zone Drive manquant à la création ($out_0085_zone_before)"
+
+# ── (3) sous-session pré-snapshot (legacy, upgrade in-place, sans marqueur
+# capabilities_snapshot) garde son héritage LIVE pour unlock + zones Drive
+# (même repli legacy que les capacités fines) ──
+out_0085_legacy="$(GWSA_ROOT="$L3_0085" PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from gateway.sessions import (
+    create_session, create_child_session, session_unlock, session_grant_drive,
+    is_session_unlocked, active_drive_zones, _path,
+)
+root = create_session(client='0085-legacy-root')
+child = create_child_session(root.session_id)
+# Réécrit le fichier de l'enfant comme le faisait l'ANCIENNE révision (pré-0085) :
+# pas de marqueur, unlocks/drive_zones locaux vides.
+p = _path(child.session_id)
+data = json.loads(p.read_text())
+data['unlocks'] = {}
+data['drive_zones'] = {}
+data.pop('capabilities_snapshot', None)
+data.pop('grants_snapshot', None)
+p.write_text(json.dumps(data))
+# Octroi au parent APRÈS l'écriture du fichier legacy : une session non
+# marquée retombe sur la résolution live (comme pour les capacités) donc DOIT
+# le voir.
+session_unlock(root.session_id, 'alpha', 30)
+session_grant_drive(root.session_id, 'alpha', 'FOLDERZ123456789012')
+print(is_session_unlocked(child.session_id, 'alpha'),
+      'FOLDERZ123456789012' in active_drive_zones(child.session_id, 'alpha'))
+")"
+[[ "$out_0085_legacy" == "True True" ]] \
+  && pass "fiche 0085 : sous-session pré-snapshot garde l'héritage live (unlock + zones Drive, repli legacy)" \
+  || fail "fiche 0085 : sous-session pré-snapshot a perdu son héritage live ($out_0085_legacy)"
+
+# ── (4) non-régression : la révocation/nettoyage côté parent reste correcte
+# (une session révoquée reste invisible, snapshot ou pas) ──
+out_0085_revoke="$(GWSA_ROOT="$L3_0085" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, create_child_session, session_unlock, close_session, get_session
+root = create_session(client='0085-revoke-root')
+session_unlock(root.session_id, 'alpha', 30)
+child = create_child_session(root.session_id)
+close_session(root.session_id)
+print(get_session(root.session_id) is None, get_session(child.session_id) is None)
+")"
+[[ "$out_0085_revoke" == "True True" ]] \
+  && pass "fiche 0085 : non-régression — fermer le parent purge aussi l'enfant snapshotté" \
+  || fail "fiche 0085 : non-régression revoke ($out_0085_revoke)"
+
+# ── (5) petit-enfant d'un parent LEGACY (upgrade in-place) : le snapshot du
+# petit-fils doit se construire depuis l'état EFFECTIF résolu du parent (via
+# son repli legacy), pas sa seule liste locale brute — sinon il perd tout
+# (finding #2, Codex PR #118, étendu à unlock/zones par la fiche 0085) ──
+out_0085_grandchild="$(GWSA_ROOT="$L3_0085" PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from gateway.sessions import (
+    create_session, create_child_session, session_unlock, session_grant_drive,
+    is_session_unlocked, active_drive_zones, _path,
+)
+root = create_session(client='0085-gc-root')
+session_unlock(root.session_id, 'beta', 30)
+session_grant_drive(root.session_id, 'beta', 'FOLDERW123456789012')
+mid = create_child_session(root.session_id)
+# mid devient legacy (upgrade in-place) : marqueur absent, locaux vides — mais
+# mid GARDE l'accès live à root via le repli legacy (test 3 ci-dessus).
+p = _path(mid.session_id)
+data = json.loads(p.read_text())
+data['unlocks'] = {}
+data['drive_zones'] = {}
+data.pop('capabilities_snapshot', None)
+data.pop('grants_snapshot', None)
+p.write_text(json.dumps(data))
+grandchild = create_child_session(mid.session_id)
+print(is_session_unlocked(grandchild.session_id, 'beta'),
+      'FOLDERW123456789012' in active_drive_zones(grandchild.session_id, 'beta'))
+")"
+[[ "$out_0085_grandchild" == "True True" ]] \
+  && pass "fiche 0085 : petit-enfant d'un parent legacy hérite via l'état effectif résolu (pas la liste locale brute)" \
+  || fail "fiche 0085 : petit-enfant d'un parent legacy a perdu l'héritage ($out_0085_grandchild)"
+
+# ── (6, Codex PR #119 finding P1) : un fichier de sous-session au format
+# 0080 (marqueur capabilities_snapshot présent, marqueur grants_snapshot
+# 0085 ABSENT, unlocks/drive_zones locaux vides — parce qu'à l'époque 0080
+# ces deux grains n'étaient jamais figés, seulement les capacités) doit
+# CONTINUER à voir en LIVE l'unlock + la zone Drive de son parent après
+# l'upgrade vers 0085 — seules ses capacités suivent, elles, le snapshot ──
+out_0085_format0080="$(GWSA_ROOT="$L3_0085" PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from gateway.sessions import (
+    create_session, create_child_session, session_unlock, session_grant_drive,
+    session_grant_capability, is_session_unlocked, active_drive_zones,
+    session_has_capability, _path,
+)
+root = create_session(client='0085-fmt0080-root')
+session_grant_capability(root.session_id, 'alpha', 'gmail', 'read', hours=1)
+child = create_child_session(root.session_id)
+# Réécrit le fichier de l'enfant comme le faisait la révision 0080 :
+# capabilities_snapshot=True (les capacités, elles, étaient déjà figées),
+# mais AUCUN marqueur 0085 (grants_snapshot) et unlocks/drive_zones locaux
+# vides — l'ancien create_child_session ne figeait pas ces deux grains.
+p = _path(child.session_id)
+data = json.loads(p.read_text())
+data['unlocks'] = {}
+data['drive_zones'] = {}
+data.pop('grants_snapshot', None)
+p.write_text(json.dumps(data))
+# Octrois au parent APRÈS l'écriture du fichier 0080 :
+session_unlock(root.session_id, 'alpha', 30)
+session_grant_drive(root.session_id, 'alpha', 'FOLDERV123456789012')
+session_grant_capability(root.session_id, 'alpha', 'drive', 'read', hours=1)
+print(
+    is_session_unlocked(child.session_id, 'alpha'),
+    'FOLDERV123456789012' in active_drive_zones(child.session_id, 'alpha'),
+    session_has_capability(child.session_id, 'alpha', 'gmail', 'read'),
+    session_has_capability(child.session_id, 'alpha', 'drive', 'read'),
+)
+")"
+[[ "$out_0085_format0080" == "True True True False" ]] \
+  && pass "fiche 0085 (Codex P1) : sous-session format 0080 garde unlock/zones EN LIVE, capacités restent figées au snapshot" \
+  || fail "fiche 0085 (Codex P1) : marqueur réutilisé à tort — régression sur unlock/zones d'une session 0080 ($out_0085_format0080)"
+
+# ── (3) audit : la catégorie journalisée suit l'autorisation (drafts/share…) ──
+L3_AUDIT_CAT="$TMP/mag-0080-audit-cat"
+mkdir -p "$L3_AUDIT_CAT/alpha"
+out_audit_cat="$(GWSA_ROOT="$L3_AUDIT_CAT" PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from pathlib import Path
+import gateway.broker_server as bs
+from gateway.sessions import create_session
+
+s = create_session(client='audit-cat')
+bs.run_gws_local = lambda *a, **k: {'ok': True}
+log = Path('$L3_AUDIT_CAT') / 'usage.jsonl'
+log.unlink(missing_ok=True)
+bs.handle_exec('alpha', ['gmail', 'users', 'drafts', 'create', '--json', '{}'], 'audit-client', session_id=s.session_id)
+bs.handle_exec('alpha', ['drive', 'permissions', 'create', '--params', '{\"fileId\":\"f1\"}'], 'audit-client', session_id=s.session_id)
+entries = [json.loads(x) for x in log.read_text().splitlines()]
+print(entries[-2].get('operation'), entries[-1].get('operation'))
+")"
+[[ "$out_audit_cat" == "drafts share" ]] \
+  && pass "audit : catégorie service-aware (gmail drafts, drive share) — pas juste « create »" \
+  || fail "audit : catégorie d'audit non alignée sur l'autorisation ($out_audit_cat)"
+
+# ── (P2) audit : drive files update {trashed:true} → « delete » (Option A,
+# fiche 0037), pas « update » — même reclassement que policy-check.py ──
+out_audit_trash="$(PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.usage import infer_call
+print(infer_call(['drive', 'files', 'update', '--params', '{\"fileId\":\"f1\"}',
+                   '--json', '{\"trashed\": true}'])[1])
+print(infer_call(['drive', 'files', 'update', '--params', '{\"fileId\":\"f1\"}',
+                   '--json', '{\"trashed\": false}'])[1])
+")"
+[[ "$out_audit_trash" == $'delete\nupdate' ]] \
+  && pass "audit : drive files update {trashed:true} journalisé « delete », {false} reste « update »" \
+  || fail "audit : trashed→delete non répercuté côté audit ($out_audit_trash)"
+
+# ── (P2 finding #1, Codex PR #118) : un « drive files copy » réussi doit
+# être audité sur le PARENT DE DESTINATION (ce que check_drive autorise
+# réellement, via --json.parents), pas le fileId SOURCE (--params) — sinon
+# le triplet journalisé n'identifie pas la capacité qui a autorisé l'appel. ──
+out_audit_copy="$(PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.usage import infer_call
+service, operation, resource = infer_call([
+    'drive', 'files', 'copy', '--params', '{\"fileId\":\"SRC123\"}',
+    '--json', '{\"parents\":[\"ZONE456\"]}',
+])
+print(resource)
+")"
+[[ "$out_audit_copy" == "ZONE456" ]] \
+  && pass "audit : drive files copy journalise le parent de DESTINATION (ZONE456), pas le fileId source" \
+  || fail "audit : drive files copy journalise encore la source, pas ce qui a autorisé ($out_audit_copy)"
+
+section "fiche 0086 — raffinements audit + capacités de session (suite revue Codex PR #118)"
+
+# ── (1) aligner l'override « trashed » côté AUTORISATION session (pas
+# seulement côté audit) : sous policy Drive open/non-zonesOnly,
+# `_gate_drive_session` (scripts/policy-check.py) recatégorisait un
+# « files update {trashed:true} » depuis le seul nom de méthode → « update »,
+# indépendamment du reclassement « delete » déjà appliqué par `check_drive`
+# et par l'audit (`infer_call`). Une capacité de session `drive:delete`
+# devait autoriser ce triplet ; une `drive:update` seule ne devait pas ──
+L3_0086_TRASH="$TMP/mag-0086-trash-align"
+mkdir -p "$L3_0086_TRASH/alpha"
+echo '{"drive":{"read":true,"create":true,"update":true,"delete":true,"share":true,"zonesOnly":false}}' \
+  > "$L3_0086_TRASH/alpha/policy.json"
+out_0086_trash="$(GWSA_ROOT="$L3_0086_TRASH" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, subprocess, sys, os
+def rc(cap):
+    env = dict(os.environ, GWSA_SESSION_CAPS=json.dumps([cap]))
+    r = subprocess.run([sys.executable, 'scripts/policy-check.py', '$L3_0086_TRASH/alpha',
+                         'drive', 'files', 'update', '--params', json.dumps({'fileId': 'FILE1'}),
+                         '--json', json.dumps({'trashed': True})],
+                        env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return r.returncode
+print('delete', rc({'service': 'drive', 'operation': 'delete', 'resource': 'FILE1'}))
+print('update', rc({'service': 'drive', 'operation': 'update', 'resource': 'FILE1'}))
+")"
+[[ "$out_0086_trash" == $'delete 0\nupdate 4' ]] \
+  && pass "0086 fix#1 : capacité session sur « files update {trashed:true} » suit la catégorie delete, comme l'audit" \
+  || fail "0086 fix#1 : autorisation session désalignée de l'audit sur le trashed override ($out_0086_trash)"
+
+# ── (2) normaliser le service versionné (« calendar:v3 ») avant l'inférence
+# de ressource côté audit — sinon le mapping opérande → ressource, indexé
+# par service brut, ne matche jamais un service versionné → ressource "" ──
+out_0086_versioned="$(PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.usage import infer_call
+service, operation, resource = infer_call([
+    'calendar:v3', 'events', 'list', '--params', '{\"calendarId\": \"cal123\"}',
+])
+print(service, operation, resource)
+")"
+[[ "$out_0086_versioned" == "calendar read cal123" ]] \
+  && pass "0086 fix#2 : « calendar:v3 events list » journalise la vraie ressource (cal123), pas \"\"" \
+  || fail "0086 fix#2 : service versionné non normalisé avant l'inférence de ressource ($out_0086_versioned)"
+
+# ── (3) petit-enfant d'un parent legacy hérite des CAPACITÉS FINES
+# effectives (résolues via le repli), pas de la liste locale brute du
+# parent (vide pour un fichier legacy) — même trou que 0085 pour
+# unlock/zones, appliqué ici aux capacités fines (Codex PR #118, P2 finding
+# #2). DÉJÀ couvert par `create_child_session` (fiche 0085, qui snapshotte
+# `_effective_capabilities(parent)`) — ce test verrouille le comportement en
+# régression et est PROUVÉ non-vacuous : il vire au rouge si
+# `create_child_session` snapshotte `parent.capabilities` (liste locale
+# brute) au lieu de `_effective_capabilities(parent)` (vérifié en TDD par
+# régression temporaire lors de l'écriture de ce test, fiche 0086). ──
+L3_0086_CAPS="$TMP/mag-0086-caps-legacy"
+out_0086_caps="$(GWSA_ROOT="$L3_0086_CAPS" PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from gateway.sessions import (
+    create_session, create_child_session, session_grant_capability,
+    session_has_capability, _path,
+)
+root = create_session(client='0086-caps-root')
+session_grant_capability(root.session_id, 'alpha', 'drive', 'read', hours=1)
+mid = create_child_session(root.session_id)
+# mid devient legacy (upgrade in-place) : marqueur capabilities_snapshot
+# absent, capacités locales vides — comme un fichier écrit avant 0080.
+p = _path(mid.session_id)
+data = json.loads(p.read_text())
+data['capabilities'] = []
+data.pop('capabilities_snapshot', None)
+p.write_text(json.dumps(data))
+grandchild = create_child_session(mid.session_id)
+print(session_has_capability(grandchild.session_id, 'alpha', 'drive', 'read'))
+")"
+[[ "$out_0086_caps" == "True" ]] \
+  && pass "0086 fix#3 : petit-enfant d'un parent legacy hérite des capacités EFFECTIVES (pas la liste locale brute)" \
+  || fail "0086 fix#3 : petit-enfant d'un parent legacy a perdu les capacités héritées ($out_0086_caps)"
 
 section "sandbox remove (fiche 0041)"
 SB_DEP="$TMP/sandbox-remove"
@@ -3129,10 +4779,13 @@ AF_HTML=admin/index.html
 AF_LOGIC=scripts/af-selection-logic.js
 
 # Markers UI / handlers : auraient attrapé « Sélectionner → Zones vides »
+# Fiche 0097 (AC3) : la durée d'autorisation est un panneau inline (#afAuthorize)
+# dans dAddFolder, plus un <dialog id="dAuthorizeFolder"> empilé par-dessus.
 if grep -q 'data-af-action="select"' "$AF_HTML" \
   && grep -q 'afOpenAuthorize()' "$AF_HTML" \
   && grep -q 'onclick="afConfirm()"' "$AF_HTML" \
-  && grep -q 'id="dAuthorizeFolder"' "$AF_HTML" \
+  && grep -q 'id="afAuthorize"' "$AF_HTML" \
+  && ! grep -q 'id="dAuthorizeFolder"' "$AF_HTML" \
   && grep -q '/drive-folder"' "$AF_HTML" \
   && grep -q '"/grant"' "$AF_HTML"; then
   pass "wiring : Sélectionner → durée → Valider appelle drive-folder/grant"
@@ -3160,8 +4813,9 @@ else
   fail "wiring : marqueurs loading Valider manquants"
 fi
 
-# Footer picker = Annuler seul (entre dAddFolder et dAuthorizeFolder)
-picker_footer="$(awk '/id="dAddFolder"/,/id="dAuthorizeFolder"/' "$AF_HTML")"
+# Footer picker : pas de bouton « Autoriser… » dédié (Sélectionner suffit),
+# le footer bascule Annuler/Valider en panneau inline (fiche 0097, AC3).
+picker_footer="$(awk '/id="dAddFolder"/,/^<\/dialog>$/' "$AF_HTML")"
 if echo "$picker_footer" | grep -q 'dAddFolder.close()' \
   && ! echo "$picker_footer" | grep -q 'Autoriser'; then
   pass "UI : footer picker = Annuler uniquement"
@@ -3169,7 +4823,9 @@ else
   fail "UI : footer picker encore trop chargé"
 fi
 
-# Régression critique : afOpenAuthorize ne doit PAS fermer le picker
+# Régression critique : afOpenAuthorize ne doit PAS fermer le picker, et bascule
+# en panneau inline (#afAuthorize) plutôt que d'ouvrir un second <dialog>
+# (l'ancien dAuthorizeFolder, retiré par la fiche 0097 — AC3, empilement réduit).
 if node -e '
 const fs = require("fs");
 const html = fs.readFileSync("admin/index.html", "utf8");
@@ -3180,14 +4836,18 @@ if (body.includes("dAddFolder.close")) {
   console.error("afOpenAuthorize ferme encore dAddFolder (reprise Zones prématurée)");
   process.exit(1);
 }
-if (!body.includes("dAuthorizeFolder.showModal")) {
-  console.error("afOpenAuthorize n'\''ouvre pas dAuthorizeFolder");
+if (!body.includes("afShowAuthorizeUI(true)")) {
+  console.error("afOpenAuthorize n'\''affiche pas le panneau inline afAuthorize");
+  process.exit(1);
+}
+if (html.includes("id=\"dAuthorizeFolder\"")) {
+  console.error("dialog dAuthorizeFolder encore présent (empilement non retiré)");
   process.exit(1);
 }
 ' ; then
-  pass "régression : afOpenAuthorize garde le picker ouvert sous le dialog durée"
+  pass "régression : afOpenAuthorize garde le picker ouvert, panneau durée inline"
 else
-  fail "régression : afOpenAuthorize referme le picker (bug zones vides)"
+  fail "régression : afOpenAuthorize referme le picker ou rouvre un dialog empilé"
 fi
 
 # Navigation efface la sélection (afClearSelection dans afOpen / afJump / afEnterFolder)
@@ -3229,11 +4889,11 @@ else
 fi
 
 if grep -qE 'PRODUCT_SLUG *= *"[A-Za-z0-9._-]+"' gateway/config.py \
-  && grep -q 'SYS_SWIFTC="/usr/bin/swiftc"' bin/gwsa \
-  && grep -q 'ensure_sign_bin' bin/gwsa \
-  && grep -qE '^[[:space:]]*"\$SYS_SWIFTC"' bin/gwsa \
-  && ! grep -qE '^[[:space:]]*command -v swiftc' bin/gwsa \
-  && ! grep -qE '^[[:space:]]*swiftc ' bin/gwsa; then
+  && grep -q 'SYS_SWIFTC="/usr/bin/swiftc"' bin/mag \
+  && grep -q 'ensure_sign_bin' bin/mag \
+  && grep -qE '^[[:space:]]*"\$SYS_SWIFTC"' bin/mag \
+  && ! grep -qE '^[[:space:]]*command -v swiftc' bin/mag \
+  && ! grep -qE '^[[:space:]]*swiftc ' bin/mag; then
   pass "touchid : PRODUCT_SLUG + swiftc en chemin absolu (SYS_SWIFTC)"
 else
   fail "touchid : PRODUCT_SLUG / SYS_SWIFTC / ensure_sign_bin manquant (ou swiftc via PATH)"
@@ -3257,8 +4917,8 @@ touch "$GWSA_ROOT/.strong-auth"
 out_add="$("$GWSA" add newacct 2>&1)"; rc_add=$?
 rm -f "$GWSA_ROOT/.strong-auth"
 if [[ "$rc_add" -eq 3 ]] \
-  && echo "$out_add" | grep -q 'email requis quand strongauth'; then
-  pass "touchid : gwsa add sans email refusé sous strongauth (exit 3)"
+  && echo "$out_add" | grep -q 'email required when strongauth'; then
+  pass "touchid : mag add sans email refusé sous strongauth (exit 3)"
 else
   fail "touchid : add sans email sous strongauth — rc=$rc_add out=$(echo "$out_add" | head -c 160)"
 fi
@@ -3269,7 +4929,7 @@ if grep -q 'GWSA_TIMEOUT_AUTH_MS = 120000' admin/server.js \
   && grep -q 'authGwsaResult' admin/server.js \
   && grep -q 'server.on("error"' admin/server.js \
   && grep -q 'connexion perdue avec l'\''admin' admin/index.html \
-  && grep -q 'pidfile fantôme' bin/gwsa; then
+  && grep -q 'pidfile fantôme' bin/mag; then
   pass "admin : timeout Touch ID 120s + listen error + message Failed to fetch"
 else
   fail "admin : garde-fous Touch ID / Failed to fetch manquants"
@@ -3331,11 +4991,121 @@ if [[ "$AF_CODE" == "200" ]] \
 else
   fail "API profiles : zone absente du payload refresh"
 fi
+# Piège relevé par la revue (fiche 0107) : sur un compte SANS bloc drive (défaut
+# sûr), la route /drive-folder ne doit PAS activer create/update en douce
+# (c'était le cas quand elle appelait « mag policy allow », qui setdefault ces
+# deux flags à true). Elle doit passer par la mutation zone-seule zone-add.
+AF_ALIAS2=zonesapinodrivepiege
+AF_DIR2="$GWSA_ROOT/$AF_ALIAS2"
+mkdir -p "$AF_DIR2"
+rm -f "$AF_DIR2/policy.json"   # aucune policy drive déclarée — défaut sûr
+AF_CODE="$(af_api POST "/api/profiles/${AF_ALIAS2}/drive-folder" "{\"target\":\"${AF_FID}\"}")"
+if [[ "$AF_CODE" == "200" ]] \
+  && grep -q "$AF_FID" "$AF_DIR2/policy.json" 2>/dev/null \
+  && python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1]))
+drv = d.get("drive", {})
+assert drv.get("zonesOnly") is True
+assert drv.get("create") is not True
+assert drv.get("update") is not True
+' "$AF_DIR2/policy.json" 2>/dev/null; then
+  pass "API drive-folder : zone ajoutée SANS activer create/update en douce (piège allow corrigé)"
+else
+  fail "API drive-folder : create/update activés à tort sur un compte sans bloc drive"
+fi
+AF_CODE="$(af_api POST "/api/profiles/${AF_ALIAS2}/drive-folder-remove" "{\"id\":\"${AF_FID}\"}")"
+if [[ "$AF_CODE" == "200" ]] \
+  && ! grep -q "$AF_FID" "$AF_DIR2/policy.json" 2>/dev/null; then
+  pass "API drive-folder-remove : retire la zone (mutation zone-seule)"
+else
+  fail "API drive-folder-remove : HTTP $AF_CODE — zone toujours présente"
+fi
+
 if [[ -n "$AF_PID" ]]; then kill "$AF_PID" 2>/dev/null || true; wait "$AF_PID" 2>/dev/null || true; fi
 
-# --- gwsa dev test — déploiement + admin + marqueur PR ----------------------
+section "admin : design system Cockpit — coquille modale + Policy/Setup/Dev (fiche 0097)"
 
-section "gwsa dev test — déployer, redémarrer l'admin, vérifier afSearchHits"
+CK_HTML=admin/index.html
+
+# AC1 : tous les <dialog> subsistants portent la coquille .ck-modal (les seuls
+# <dialog ...> restants dans le markup, hors mentions en commentaire).
+CK_DIALOG_TAGS="$(grep -oE '<dialog id="[A-Za-z]+"[^>]*>' "$CK_HTML")"
+CK_DIALOG_COUNT="$(echo "$CK_DIALOG_TAGS" | grep -c '<dialog ')"
+CK_DIALOG_WITH_SHELL="$(echo "$CK_DIALOG_TAGS" | grep -c 'class="[^"]*\bck-modal\b')"
+if [[ "$CK_DIALOG_COUNT" -ge 14 ]] && [[ "$CK_DIALOG_COUNT" == "$CK_DIALOG_WITH_SHELL" ]] \
+  && grep -q 'ck-modal__head' "$CK_HTML" && grep -q 'ck-modal__body' "$CK_HTML" \
+  && grep -q 'ck-modal__foot' "$CK_HTML"; then
+  pass "coquille modale : les $CK_DIALOG_COUNT <dialog> subsistants portent .ck-modal (tête/corps/pied)"
+else
+  fail "coquille modale : dialog(s) sans .ck-modal ($CK_DIALOG_WITH_SHELL/$CK_DIALOG_COUNT) ou classes ck-modal__* absentes"
+fi
+
+# Régression (revue Codex #133 P1) : « .ck-modal { display:flex } » est une règle
+# AUTEUR — elle bat la règle UA « dialog:not([open]){display:none} », donc SANS ce
+# garde les 15 dialogs s'affichent au chargement. Le bug avait passé l'E2E (qui ne
+# regardait que des modales OUVERTES). On verrouille la présence du garde.
+if grep -Eq 'dialog\.ck-modal:not\(\[open\]\)[^{]*\{[^}]*display:[[:space:]]*none' "$CK_HTML"; then
+  pass "coquille modale : un <dialog> fermé reste caché (garde dialog.ck-modal:not([open]))"
+else
+  fail "coquille modale : garde manquant — les .ck-modal fermés seraient visibles au chargement (Codex #133 P1)"
+fi
+
+# Régression (revue Codex #133 P2) : .ck-modal--wide doit surcharger max-width,
+# sinon « dialog { max-width:660px } » plafonne les dialogues larges sous 780px.
+if grep -Eq '\.ck-modal--wide[^{]*\{[^}]*max-width' "$CK_HTML"; then
+  pass "coquille modale : .ck-modal--wide surcharge max-width (dialogues larges non plafonnés à 660px)"
+else
+  fail "coquille modale : .ck-modal--wide sans max-width — plafonné à 660px (Codex #133 P2)"
+fi
+
+# AC2 : Policy migrée — plus de faux onglets (class="tabs"), préréglages en
+# contrôle segmenté, notes en callouts (plus de <p class="note"> dans dPolicy).
+DPOLICY_BLOCK="$(awk '/<dialog id="dPolicy"/,/^<\/dialog>$/' "$CK_HTML")"
+if ! echo "$DPOLICY_BLOCK" | grep -q 'class="tabs"' \
+  && echo "$DPOLICY_BLOCK" | grep -q 'ck-segmented' \
+  && echo "$DPOLICY_BLOCK" | grep -q 'onclick="applyPreset(' \
+  && ! echo "$DPOLICY_BLOCK" | grep -q '<p class="note">' \
+  && echo "$DPOLICY_BLOCK" | grep -qc 'ck-callout' ; then
+  pass "policy : préréglages en .ck-segmented (fin des faux onglets), notes en .ck-callout"
+else
+  fail "policy : faux onglets, préréglages ou callouts manquants dans dPolicy"
+fi
+
+# AC3 : Zones (navigateur afPick) — panneau inline (#afAuthorize) plutôt qu'un
+# second <dialog> empilé pour le choix de durée.
+if grep -q 'id="afAuthorize"' "$CK_HTML" \
+  && grep -q 'function afShowAuthorizeUI' "$CK_HTML" \
+  && ! grep -q 'id="dAuthorizeFolder"' "$CK_HTML"; then
+  pass "zones : durée d'autorisation en panneau inline (afAuthorize), pas un dialog empilé"
+else
+  fail "zones : panneau inline afAuthorize manquant ou dialog empilé encore présent"
+fi
+
+# AC4 : Setup et Dev migrés — plus de class="note" / badge b-ok, badges ck-badge.
+SETUP_DEV_JS="$(awk '/^async function renderSetup/,0' "$CK_HTML" | sed -n '1,260p')"
+if ! grep -q 'class="note">Erreur\|<p class="note">Aucun compte connecté' "$CK_HTML" \
+  && ! grep -qE 'badge b-(ok|warn|mut|bad)"' "$CK_HTML" \
+  && grep -q 'ck-badge ck-badge--ok' "$CK_HTML" \
+  && grep -q 'ck-badge ck-badge--bad' "$CK_HTML"; then
+  pass "setup/dev : classes .ck-* (plus de class=\"note\" / badge b-ok)"
+else
+  fail "setup/dev : anciennes classes note/badge b-ok encore présentes"
+fi
+
+# AC4bis : l'écran Dev bascule ses sections en .ck-segmented (aria-pressed),
+# plus l'ancien class="tabs devtabs".
+if grep -q 'id="devTabs" class="ck-segmented"' "$CK_HTML" \
+  && grep -q 'aria-pressed=.*switchDevTab\|switchDevTab.*aria-pressed' "$CK_HTML" \
+  && ! grep -q 'class="tabs devtabs"' "$CK_HTML"; then
+  pass "dev : sections en .ck-segmented (aria-pressed), fin de class=\"tabs devtabs\""
+else
+  fail "dev : devTabs pas migré en .ck-segmented"
+fi
+
+# --- mag dev test — déploiement + admin + marqueur PR ----------------------
+
+section "mag dev test — déployer, redémarrer l'admin, vérifier afSearchHits"
 
 DEVTEST_DEP="$TMP/devdeploy"
 DEVTEST_ROOT="$TMP/devgwsa"
@@ -3343,18 +5113,18 @@ DEVTEST_ROOT="$TMP/devgwsa"
 DEVTEST_PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
 mkdir -p "$DEVTEST_ROOT"
 
-if "$GWSA" dev test --help 2>&1 | grep -q 'gwsa dev test'; then
+if "$GWSA" dev test --help 2>&1 | grep -q 'mag dev test'; then
   pass "dev test --help : usage affiché"
 else
   fail "dev test --help : usage manquant"
 fi
 
-if grep -q 'cmd_dev_test' bin/gwsa \
-  && grep -q 'afSearchHits' bin/gwsa \
-  && grep -q 'GWSA_ADMIN_NO_OPEN' bin/gwsa; then
+if grep -q 'cmd_dev_test' bin/mag \
+  && grep -q 'afSearchHits' bin/mag \
+  && grep -q 'GWSA_ADMIN_NO_OPEN' bin/mag; then
   pass "dev test : implémentation + marqueur afSearchHits + no-open admin"
 else
-  fail "dev test : marqueurs d'implémentation manquants dans gwsa"
+  fail "dev test : marqueurs d'implémentation manquants dans mag"
 fi
 
 if command -v node >/dev/null 2>&1; then
@@ -3367,11 +5137,11 @@ if command -v node >/dev/null 2>&1; then
     GWSA_ADMIN_PORT="$DEVTEST_PORT" \
     "$GWSA" dev test 2>&1)" || true
   if [[ -d "$DEVTEST_DEP/$dev_id" ]] \
-    && echo "$out" | grep -q "Déploiement : $dev_id" \
+    && echo "$out" | grep -q "Deployment  : $dev_id" \
     && echo "$out" | grep -q "http://127.0.0.1:$DEVTEST_PORT" \
-    && echo "$out" | grep -q 'Marqueur PR  : oui' \
+    && echo "$out" | grep -q 'PR marker  : yes' \
     && echo "$out" | grep -q 'afSearchHits' \
-    && echo "$out" | grep -q './bin/gwsa dev test'; then
+    && echo "$out" | grep -q './bin/mag dev test'; then
     pass "dev test : déploiement + admin + marqueur afSearchHits (hermétique)"
   else
     fail "dev test : résumé incomplet — $(echo "$out" | tail -20 | tr '\n' ' ')"
@@ -3390,7 +5160,7 @@ else
   printf '  \033[33m⊘\033[0m dev test hermétique : node absent — ignoré\n'
 fi
 
-section "gwsa dev — deploy isolé, use, list, status, remove (hermétique)"
+section "mag dev — deploy isolé, use, list, status, remove (hermétique)"
 # HOME factice : DEV_PROD_ROOT / DEV_ISOLATED_ROOT vivent sous ~/.config/…
 # (jamais le vrai $HOME). client_secret.json = fixture OAuth, pas un secret réel.
 
@@ -3415,7 +5185,7 @@ server_name="google-mcp-$dev_corr_id"
 out_iso="$(HOME="$DEVCORR_HOME" GWSA_DEPLOY_ROOT="$DEVCORR_DEP" \
   "$GWSA" dev deploy --isolated 2>&1)" || true
 if [[ -d "$dev_corr_target" ]] \
-  && echo "$out_iso" | grep -q '(isolé)' \
+  && echo "$out_iso" | grep -q '(isolated)' \
   && [[ -f "$DEVCORR_ISO/client_secret.json" ]] \
   && cmp -s "$DEVCORR_PROD/client_secret.json" "$DEVCORR_ISO/client_secret.json" \
   && DEVCORR_ISO="$DEVCORR_ISO" DEVCORR_TARGET="$dev_corr_target" python3 - <<'PY'
@@ -3498,11 +5268,654 @@ fi
 
 rm_stable_out="$(HOME="$DEVCORR_HOME" GWSA_DEPLOY_ROOT="$DEVCORR_DEP" \
   "$GWSA" dev remove v1.0.0 2>&1)" || true
-if echo "$rm_stable_out" | grep -q "n'est pas une version dev"; then
+if echo "$rm_stable_out" | grep -q "is not a dev version"; then
   pass "dev remove : refuse une version stable (dev-* uniquement)"
 else
   fail "dev remove : aurait dû refuser une version stable — $rm_stable_out"
 fi
+
+section "approbation par passkey distante (fiche 0078, ADR-0009)"
+
+# Simulateur de signeur téléphone (paire P-256 de test, via openssl — aucune
+# dépendance ajoutée) : tests/testlib/phone_signer.py. Hermétique : ni compte
+# réel, ni vrai téléphone, ni réseau (InMemoryChannel, ADR-0009 §4).
+
+# CA6 — enrôlement device-bound : refuse BE (backup-eligible) armé et PIN,
+# accepte device-bound + biométrie. Refusé À L'ENROLEMENT, pas seulement à
+# la vérification (ADR-0009 §3).
+RA6="$TMP/mag-remote-approval-ca6"
+out_ca6="$(GWSA_ROOT="$RA6" "$PY" -c "
+import sys; sys.path.insert(0, 'tests')
+import tempfile
+from pathlib import Path
+from testlib.phone_signer import generate_keypair
+from gateway.remote_approval import enroll_phone, RemoteApprovalError
+
+tmp = Path(tempfile.mkdtemp())
+_, pub = generate_keypair(tmp)
+out = []
+try:
+    enroll_phone({'credential_id': 'c', 'aaguid': 'a', 'public_key': pub, 'uv': 'biometric', 'be': True})
+    out.append('BE:accepted')
+except RemoteApprovalError:
+    out.append('BE:refused')
+try:
+    enroll_phone({'credential_id': 'c', 'aaguid': 'a', 'public_key': pub, 'uv': 'pin', 'be': False})
+    out.append('PIN:accepted')
+except RemoteApprovalError:
+    out.append('PIN:refused')
+enr = enroll_phone({'credential_id': 'cred1', 'aaguid': 'a', 'public_key': pub, 'uv': 'biometric', 'be': False, 'sign_count': 0})
+out.append('DEVICE_BOUND:' + enr.credential_id)
+print(' '.join(out))
+")"
+[[ "$out_ca6" == "BE:refused PIN:refused DEVICE_BOUND:cred1" ]] \
+  && pass "remote_approval : enrôlement refuse BE armé / PIN, accepte device-bound + biométrie (CA6)" \
+  || fail "remote_approval : enrôlement CA6 ($out_ca6)"
+
+# CA4 — l'enrôlement ne persiste QUE la clé publique (+ credential_id/aaguid/
+# sign_count) : aucun secret Google côté « téléphone », dossier 0700.
+out_ca4="$(GWSA_ROOT="$RA6" "$PY" -c "
+import json, os
+from gateway.remote_approval import enrollment_path, remote_approval_dir
+data = json.loads(enrollment_path().read_text())
+perm = oct(remote_approval_dir().stat().st_mode)[-3:]
+print(sorted(data.keys()), perm)
+")"
+[[ "$out_ca4" == "['aaguid', 'credential_id', 'public_key', 'sign_count'] 700" ]] \
+  && pass "remote_approval : enrôlement ne persiste que la clé publique, dossier 0700 (CA4)" \
+  || fail "remote_approval : persistance enrôlement CA4 ($out_ca4)"
+
+# CA1 — nonce/signature valide et fraîche → exécuté ; assertion rejouée
+# (même signature 2×) → refusée. CA2 — WYSIWYS exact dérivé du payload signé.
+# CA7 — assertion signée pour session_id=A présentée pour la session B → refus.
+out_core="$(GWSA_ROOT="$TMP/mag-remote-approval-core" "$PY" -c "
+import sys; sys.path.insert(0, 'tests')
+import tempfile
+from pathlib import Path
+from testlib.phone_signer import generate_keypair, sign_challenge
+from gateway.approval_channel import InMemoryChannel
+from gateway.elicitation import consume_nonce, prompt_from_payload
+from gateway.remote_approval import (
+    enroll_phone, forge_challenge, load_enrollment, run_remote_approval_gate,
+    verify_assertion, RemoteApprovalError,
+)
+
+tmp = Path(tempfile.mkdtemp())
+priv, pub = generate_keypair(tmp)
+enroll_phone({'credential_id': 'cred1', 'aaguid': 'a', 'public_key': pub, 'uv': 'biometric', 'be': False, 'sign_count': 0})
+
+out = []
+
+# CA1 (nominal) + CA2 (WYSIWYS)
+fields = {'action': 'session_grant', 'alias': 'alpha', 'email': 'a@x.com', 'session_id': 'sidA', 'target': 'MonDossier', 'hours': 4}
+
+class RespondingChannel(InMemoryChannel):
+    def __init__(self):
+        super().__init__()
+        self.sc = 0
+    def send_challenge(self, envelope):
+        rid = super().send_challenge(envelope)
+        self.sc += 1
+        assertion = sign_challenge(envelope['payload'], priv, credential_id='cred1', sign_count=self.sc)
+        self.respond(rid, assertion)
+        return rid
+
+ch = RespondingChannel()
+signed = run_remote_approval_gate(fields, ch)
+out.append('EXEC:' + signed['session_id'])
+wysiwys = prompt_from_payload(signed)
+out.append('WYSIWYS_OK' if ('MonDossier' in wysiwys and 'sidA' in wysiwys and '4 h' in wysiwys) else 'WYSIWYS_FAIL:' + wysiwys)
+
+# CA1 (replay) — même assertion signée soumise deux fois via verify_assertion+consume_nonce
+envelope = forge_challenge({'action': 'unlock', 'alias': 'beta', 'minutes': 10})
+assertion = sign_challenge(envelope.payload, priv, credential_id='cred1', sign_count=100)
+enr = load_enrollment()
+ok1 = verify_assertion(envelope, assertion, enr)
+consume_nonce(envelope.payload['nonce'], expires_at=envelope.payload['expires_at'])
+try:
+    consume_nonce(envelope.payload['nonce'], expires_at=envelope.payload['expires_at'])
+    out.append('NONCE_REPLAY:accepted')
+except Exception:
+    out.append('NONCE_REPLAY:refused')
+ok2 = verify_assertion(envelope, assertion, load_enrollment())
+out.append('REPLAY:' + ('refused' if (ok1 and not ok2) else 'accepted'))
+
+# CA7 — assertion signée pour session_id=A rejouée sous une session B
+envA = forge_challenge({'action': 'session_unlock', 'alias': 'alpha', 'session_id': 'sidA', 'minutes': 5})
+assertA = sign_challenge(envA.payload, priv, credential_id='cred1', sign_count=200)
+envB = forge_challenge({'action': 'session_unlock', 'alias': 'alpha', 'session_id': 'sidB', 'minutes': 5})
+cross_ok = verify_assertion(envB, assertA, load_enrollment())
+out.append('CROSS_SESSION:' + ('refused' if not cross_ok else 'accepted'))
+
+print(' '.join(out))
+")"
+echo "$out_core" | grep -q "^EXEC:sidA " \
+  && pass "remote_approval : nonce/signature valide et fraîche → exécuté avec la session_id du payload signé (CA1)" \
+  || fail "remote_approval : exécution nominale CA1 ($out_core)"
+echo "$out_core" | grep -q "WYSIWYS_OK" \
+  && pass "remote_approval : WYSIWYS exact (compte, cible, durée) depuis prompt_from_payload(payload signé) (CA2)" \
+  || fail "remote_approval : WYSIWYS CA2 ($out_core)"
+echo "$out_core" | grep -q "NONCE_REPLAY:refused" \
+  && pass "remote_approval : nonce rejoué → consume_nonce refuse (registre partagé avec Touch ID, CA1)" \
+  || fail "remote_approval : nonce rejoué non refusé CA1 ($out_core)"
+echo "$out_core" | grep -q "REPLAY:refused" \
+  && pass "remote_approval : assertion rejouée (même signature 2×) → verify_assertion refuse (CA1)" \
+  || fail "remote_approval : assertion rejouée non refusée CA1 ($out_core)"
+echo "$out_core" | grep -q "CROSS_SESSION:refused" \
+  && pass "remote_approval : assertion signée pour session A présentée pour session B → refus (CA7)" \
+  || fail "remote_approval : rejeu cross-session non refusé CA7 ($out_core)"
+
+# CA3 — refus explicite | nonce expiré | signature invalide → AUCUNE mutation
+# (fail-closed) : on vérifie qu'aucun de ces trois chemins ne renvoie un
+# payload exécutable, et qu'une session témoin reste totalement inchangée.
+out_ca3="$(GWSA_ROOT="$TMP/mag-remote-approval-ca3" "$PY" -c "
+import sys; sys.path.insert(0, 'tests')
+import tempfile
+from pathlib import Path
+from testlib.phone_signer import generate_keypair, sign_challenge
+from gateway.approval_channel import InMemoryChannel
+from gateway.sessions import create_session, is_session_unlocked
+from gateway.remote_approval import enroll_phone, forge_challenge, verify_assertion, load_enrollment, run_remote_approval_gate, RemoteApprovalError
+
+tmp = Path(tempfile.mkdtemp())
+priv, pub = generate_keypair(tmp)
+enroll_phone({'credential_id': 'cred1', 'aaguid': 'a', 'public_key': pub, 'uv': 'biometric', 'be': False, 'sign_count': 0})
+
+out = []
+sess = create_session(client='ca3')
+
+# 1) refus explicite (le téléphone ne répond jamais — channel vide)
+fields = {'action': 'session_unlock', 'alias': 'gamma', 'session_id': sess.session_id, 'minutes': 30}
+ch = InMemoryChannel()
+try:
+    run_remote_approval_gate(fields, ch, timeout=1)
+    out.append('EXPLICIT_REFUSAL:executed')
+except RemoteApprovalError:
+    out.append('EXPLICIT_REFUSAL:blocked')
+
+# 2) nonce/défi expiré
+envelope = forge_challenge(fields)
+envelope.payload['expires_at'] = 1  # dans le passé
+assertion = sign_challenge(envelope.payload, priv, credential_id='cred1', sign_count=1)
+ok_expired = verify_assertion(envelope, assertion, load_enrollment())
+out.append('EXPIRED:' + ('blocked' if not ok_expired else 'executed'))
+
+# 3) signature invalide (mauvaise clé)
+_, wrong_pub = generate_keypair(tmp)
+envelope2 = forge_challenge(fields)
+assertion2 = sign_challenge(envelope2.payload, priv, credential_id='cred1', sign_count=2)
+import gateway.remote_approval as ra
+bad_enrollment = ra.PhoneEnrollment(credential_id='cred1', aaguid='a', public_key=wrong_pub, sign_count=0)
+ok_bad_sig = verify_assertion(envelope2, assertion2, bad_enrollment)
+out.append('BAD_SIG:' + ('blocked' if not ok_bad_sig else 'executed'))
+
+# Aucune mutation : la session témoin n'a jamais été déverrouillée
+out.append('NO_MUTATION:' + ('ok' if not is_session_unlocked(sess.session_id, 'gamma') else 'FAIL'))
+print(' '.join(out))
+")"
+[[ "$out_ca3" == "EXPLICIT_REFUSAL:blocked EXPIRED:blocked BAD_SIG:blocked NO_MUTATION:ok" ]] \
+  && pass "remote_approval : refus explicite | nonce expiré | signature invalide → aucune exécution (CA3, fail-closed)" \
+  || fail "remote_approval : fail-closed CA3 incomplet ($out_ca3)"
+
+# CA5 — devant le Mac, mag unlock SANS --remote reste inchangé (Touch ID mock,
+# chemin existant) : non-régression du chemin run_elicitation_gate.
+RA5="$TMP/mag-remote-approval-ca5"
+mkdir -p "$RA5/prof5"
+echo '{"defaults":{"services":{"gmail":"read"}}}' > "$RA5/prof5/policy.json"
+touch "$RA5/prof5/.locked"
+touch "$RA5/.strong-auth"
+GWSA_ROOT="$RA5" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
+out_ca5="$(GWSA_ROOT="$RA5" GWSA_ELICITATION_MOCK=1 "$GWSA" unlock prof5 15 2>&1)"
+[[ -f "$RA5/prof5/.unlock-until" ]] \
+  && pass "mag unlock (sans --remote) sous .strong-auth : chemin Touch ID inchangé (CA5, non-régression)" \
+  || fail "mag unlock sans --remote : chemin Touch ID cassé ($out_ca5)"
+
+# --remote sans enrôlement téléphone → refus distinct (fail-closed), preuve
+# que le câblage --remote emprunte bien le frère `require_remote_approval`
+# (message « approbation distante », pas « élicitation signée »).
+RA5B="$TMP/mag-remote-approval-ca5b"
+mkdir -p "$RA5B/prof5b"
+echo '{"defaults":{"services":{"gmail":"read"}}}' > "$RA5B/prof5b/policy.json"
+sid5b="$(GWSA_ROOT="$RA5B" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1; "$PY" -c "
+import sys; sys.path.insert(0, '.')
+import os
+os.environ['GWSA_ROOT'] = '$RA5B'
+from gateway.sessions import create_session
+print(create_session(client='ca5b').session_id)
+")"
+out_ca5b="$(GWSA_ROOT="$RA5B" "$GWSA" session unlock "$sid5b" prof5b 10 --remote 2>&1)"
+echo "$out_ca5b" | grep -q "remote approval" \
+  && pass "mag session unlock --remote : emprunte le chemin frère require_remote_approval (fail-closed sans enrôlement)" \
+  || fail "mag session unlock --remote : chemin inattendu ($out_ca5b)"
+
+# --- Fix Codex P1 (PR #113) : échange en deux temps, réellement hors-process ---
+#
+# L'ancien `remote-approval-cli.py gate --response <fichier>` chargeait
+# l'assertion AVANT de forger le défi (dont le nonce est frais à chaque
+# appel) : aucun téléphone hors-process ne pouvait donc jamais produire une
+# réponse valide. Les tests ci-dessous pilotent `challenge` puis `verify`
+# comme DEUX PROCESSUS SÉPARÉS (deux appels `subprocess.run`, aucun état
+# Python partagé entre eux — contrairement à l'ancien `InMemoryChannel`
+# in-process) pour prouver que l'échange fonctionne réellement.
+
+RA_OOP="$TMP/mag-remote-approval-oop"
+mkdir -p "$RA_OOP"
+"$PY" -c "
+import sys; sys.path.insert(0, 'tests')
+from pathlib import Path
+from testlib.phone_signer import generate_keypair
+import json, os
+os.environ['GWSA_ROOT'] = '$RA_OOP'
+from gateway.remote_approval import enroll_phone
+tmp = Path('$RA_OOP')
+priv, pub = generate_keypair(tmp)
+enroll_phone({'credential_id': 'cred-oop', 'aaguid': 'a', 'public_key': pub, 'uv': 'biometric', 'be': False, 'sign_count': 0})
+Path('$RA_OOP/priv.pem').write_text(priv.read_text())
+" >/dev/null
+
+# Processus A : publie le défi (out-of-process : c'est un subprocess.run distinct).
+challenge_json="$(GWSA_ROOT="$RA_OOP" "$PY" scripts/remote-approval-cli.py challenge \
+  --json '{"action":"session_unlock","alias":"alpha","email":"a@x.com","session_id":"sidOOP","minutes":15}')"
+
+# Le "téléphone" (aucun accès au process A : il ne voit QUE l'envelope publié)
+# signe exactement ce qui a été publié.
+response_file="$TMP/oop-response.json"
+"$PY" -c "
+import sys; sys.path.insert(0, 'tests')
+import json
+from pathlib import Path
+from testlib.phone_signer import sign_challenge
+out = json.loads('''$challenge_json''')
+envelope_payload = out['envelope']['payload']
+assertion = sign_challenge(envelope_payload, Path('$RA_OOP/priv.pem'), credential_id='cred-oop', sign_count=1)
+Path('$response_file').write_text(json.dumps(assertion))
+"
+
+challenge_id="$("$PY" -c "import json; print(json.loads('''$challenge_json''')['challenge_id'])")"
+
+# Processus B : vérifie et exécute — SANS avoir jamais partagé d'état Python
+# avec le processus A (deux invocations `python3` distinctes, communication
+# uniquement via le pending publié sur disque + le fichier réponse).
+verify_out="$(GWSA_ROOT="$RA_OOP" "$PY" scripts/remote-approval-cli.py verify \
+  --challenge-id "$challenge_id" --response "$response_file" 2>&1)"
+echo "$verify_out" | grep -q '"session_id": *"sidOOP"' \
+  && pass "remote_approval CLI : échange challenge → verify réussit réellement hors-process (répond à Codex P1, PR #113)" \
+  || fail "remote_approval CLI : échange hors-process en échec ($verify_out)"
+
+# Rejeu du pending : réutiliser le même challenge_id après un `verify` déjà
+# consommé (one-shot) doit être refusé — la 2ᵉ tentative n'a plus de défi à
+# consommer, même avec une nouvelle signature valide.
+sign_count2=2
+response_file2="$TMP/oop-response-replay.json"
+"$PY" -c "
+import sys; sys.path.insert(0, 'tests')
+import json
+from pathlib import Path
+from testlib.phone_signer import sign_challenge
+out = json.loads('''$challenge_json''')
+envelope_payload = out['envelope']['payload']
+assertion = sign_challenge(envelope_payload, Path('$RA_OOP/priv.pem'), credential_id='cred-oop', sign_count=$sign_count2)
+Path('$response_file2').write_text(json.dumps(assertion))
+"
+replay_out="$(GWSA_ROOT="$RA_OOP" "$PY" scripts/remote-approval-cli.py verify \
+  --challenge-id "$challenge_id" --response "$response_file2" 2>&1)"
+replay_rc=$?
+[[ "$replay_rc" != "0" ]] && echo "$replay_out" | grep -q "approbation distante" \
+  && pass "remote_approval CLI : rejeu d'un challenge_id déjà clos (« verify ») → refusé (pending one-shot)" \
+  || fail "remote_approval CLI : rejeu de challenge_id non refusé ($replay_out, rc=$replay_rc)"
+
+# Anti-traversée (Codex P2, PR #113) : un challenge_id malveillant (« ../ »,
+# chemin absolu) doit être refusé AVANT toute construction de chemin — sinon
+# `verify --challenge-id ../../x` lirait/supprimerait hors du dossier pending.
+trav_out="$(GWSA_ROOT="$RA_OOP" "$PY" scripts/remote-approval-cli.py verify \
+  --challenge-id "../../etc/passwd" --response "$response_file" 2>&1)"
+trav_rc=$?
+[[ "$trav_rc" != "0" ]] && echo "$trav_out" | grep -qi "challenge_id invalide" \
+  && pass "remote_approval CLI : challenge_id de traversée (../) refusé (Codex P2, PR #113)" \
+  || fail "remote_approval CLI : traversée de challenge_id non refusée ($trav_out, rc=$trav_rc)"
+
+# --- mag --remote : exécute avec le payload signé, pas les variables shell ---
+#
+# Nit de revue (PR #113) : `require_remote_approval` doit exécuter avec le
+# payload SIGNÉ renvoyé par `verify`, jamais avec ses variables shell
+# pré-signature. On le prouve avec un aller-retour RÉEL de bout en bout via
+# `mag session unlock … --remote` — GWSA_REMOTE_SIGNER joue le rôle du
+# téléphone : un PROCESSUS SÉPARÉ qui ne reçoit l'envelope QUE lorsqu'il est
+# publié (stdin), preuve que l'échange marche vraiment hors-process, pas
+# seulement au niveau du CLI nu.
+RA_E2E="$TMP/mag-remote-approval-e2e"
+mkdir -p "$RA_E2E/prof-e2e"
+echo '{"defaults":{"services":{"gmail":"read"}}}' > "$RA_E2E/prof-e2e/policy.json"
+touch "$RA_E2E/prof-e2e/.locked"
+
+"$PY" -c "
+import sys; sys.path.insert(0, 'tests')
+from pathlib import Path
+from testlib.phone_signer import generate_keypair
+import os
+os.environ['GWSA_ROOT'] = '$RA_E2E'
+from gateway.remote_approval import enroll_phone
+priv, pub = generate_keypair(Path('$RA_E2E'))
+enroll_phone({'credential_id': 'cred-e2e', 'aaguid': 'a', 'public_key': pub, 'uv': 'biometric', 'be': False, 'sign_count': 0})
+Path('$RA_E2E/priv.pem').write_text(priv.read_text())
+"
+sid_e2e="$("$PY" -c "
+import sys, os; sys.path.insert(0, '.')
+os.environ['GWSA_ROOT'] = '$RA_E2E'
+from gateway.sessions import create_session
+print(create_session(client='e2e').session_id)
+")"
+
+signer_e2e="$TMP/phone-signer-e2e.py"
+cat > "$signer_e2e" <<PYEOF
+#!/usr/bin/env python3
+import sys, json
+sys.path.insert(0, "tests")
+from testlib.phone_signer import sign_challenge
+from pathlib import Path
+challenge = json.load(sys.stdin)
+payload = challenge["envelope"]["payload"]
+assertion = sign_challenge(payload, Path("$RA_E2E/priv.pem"), credential_id="cred-e2e", sign_count=1)
+print(json.dumps(assertion))
+PYEOF
+chmod +x "$signer_e2e"
+
+out_e2e="$(GWSA_ROOT="$RA_E2E" GWSA_REMOTE_SIGNER="$signer_e2e" "$GWSA" session unlock "$sid_e2e" prof-e2e 45 --remote 2>&1)"
+unlocked_e2e="$("$PY" -c "
+import sys, os; sys.path.insert(0, '.')
+os.environ['GWSA_ROOT'] = '$RA_E2E'
+from gateway.sessions import is_session_unlocked
+print(is_session_unlocked('$sid_e2e', 'prof-e2e'))
+")"
+[[ "$unlocked_e2e" == "True" ]] \
+  && pass "mag session unlock --remote : échange deux-temps réel (téléphone hors-process) exécute effectivement le déverrouillage (nit, PR #113)" \
+  || fail "mag session unlock --remote : déverrouillage non exécuté ($out_e2e)"
+
+section "remote_approval : verrou anti-clonage inter-process sur sign_count (fiche 0083)"
+# verify_assertion refuse un sign_count non strictement croissant (anti-clonage,
+# ligne « if sign_count <= enrollment.sign_count »), mais AVANT le correctif
+# l'enrôlement est chargé par l'appelant AVANT verify_assertion — deux
+# `close_remote_challenge` concurrents (deux `gwsa … --remote` en parallèle)
+# chargent le même sign_count périmé, passent tous deux le check, et
+# écrasent tous deux phone.json : une passkey CLONÉE rejouée contourne
+# l'anti-clonage. On le prouve avec 2 VRAIS sous-process python3 (pas des
+# threads), chacun forgeant SON PROPRE défi frais (sinon on ne testerait que
+# la liaison au défi, pas la course, cf. remote_approval.py:320-322) et
+# signant une assertion « état d'authentificateur cloné » portant le MÊME
+# prochain sign_count — synchronisés par une barrière de démarrage, fenêtre
+# de course forcée par le hook de test GWSA_REMOTE_APPROVAL_TEST_RACE_DELAY_MS
+# (sleep juste avant le check anti-clonage, inactif hors test — cf.
+# gateway/remote_approval.py::_test_race_delay, même gabarit que la fiche 0084).
+RA_CLONE="$TMP/mag-remote-approval-clone-race"
+mkdir -p "$RA_CLONE"
+"$PY" -c "
+import sys; sys.path.insert(0, 'tests'); sys.path.insert(0, '.')
+from pathlib import Path
+from testlib.phone_signer import generate_keypair
+import os
+os.environ['GWSA_ROOT'] = '$RA_CLONE'
+from gateway.remote_approval import enroll_phone
+priv, pub = generate_keypair(Path('$RA_CLONE'))
+enroll_phone({'credential_id': 'cred-clone', 'aaguid': 'a', 'public_key': pub, 'uv': 'biometric', 'be': False, 'sign_count': 0})
+Path('$RA_CLONE/priv.pem').write_text(priv.read_text())
+" >/dev/null
+
+clone_race_worker() {
+  # $1 = mon fichier « prêt », $2 = fichier « prêt » de l'autre, $3 = résultat,
+  # $4 = session_id (défi frais et distinct par worker)
+  local my_ready="$1" other_ready="$2" out="$3" sid="$4"
+  GWSA_ROOT="$RA_CLONE" GWSA_REMOTE_APPROVAL_TEST_RACE_DELAY_MS=150 "$PY" -c "
+import sys, time
+sys.path.insert(0, 'tests'); sys.path.insert(0, '.')
+from pathlib import Path
+from testlib.phone_signer import sign_challenge
+from gateway.remote_approval import open_remote_challenge, close_remote_challenge, RemoteApprovalError
+
+envelope, challenge_id = open_remote_challenge(
+    {'action': 'session_unlock', 'alias': 'clone', 'session_id': '$sid', 'minutes': 5}
+)
+# Assertion « authentificateur cloné » : signée par la MÊME clé privée, pour
+# CE défi frais à elle, mais avec le même prochain sign_count que l'autre
+# worker — simule deux clones de la même passkey répondant chacun à leur
+# propre défi.
+assertion = sign_challenge(envelope.payload, Path('$RA_CLONE/priv.pem'), credential_id='cred-clone', sign_count=1)
+
+Path('$my_ready').write_text('1')
+while not Path('$other_ready').is_file():
+    time.sleep(0.005)
+
+try:
+    close_remote_challenge(challenge_id, assertion)
+    Path('$out').write_text('ok')
+except RemoteApprovalError as e:
+    Path('$out').write_text('refused:' + str(e))
+except Exception as e:
+    Path('$out').write_text('error:' + str(e))
+"
+}
+
+CR1="$RA_CLONE/ready1"; CR2="$RA_CLONE/ready2"
+CO1="$RA_CLONE/out1"; CO2="$RA_CLONE/out2"
+clone_race_worker "$CR1" "$CR2" "$CO1" "sidClone-A" &
+CRPID1=$!
+clone_race_worker "$CR2" "$CR1" "$CO2" "sidClone-B" &
+CRPID2=$!
+wait "$CRPID1" "$CRPID2"
+
+cr_o1=$(cat "$CO1" 2>/dev/null)
+cr_o2=$(cat "$CO2" 2>/dev/null)
+cr_ok=0; cr_refused=0
+[[ "$cr_o1" == "ok" ]] && cr_ok=$((cr_ok + 1))
+[[ "$cr_o2" == "ok" ]] && cr_ok=$((cr_ok + 1))
+[[ "$cr_o1" == refused:*invalide* ]] && cr_refused=$((cr_refused + 1))
+[[ "$cr_o2" == refused:*invalide* ]] && cr_refused=$((cr_refused + 1))
+if [[ $cr_ok -eq 1 && $cr_refused -eq 1 ]]; then
+  pass "remote_approval : course de clones (2 défis frais, même sign_count) — exactement un accepté, l'autre refusé (fiche 0083)"
+else
+  fail "remote_approval : anti-clonage TOCTOU — ok=$cr_ok refused=$cr_refused (out1=$cr_o1 out2=$cr_o2)"
+fi
+
+# Interleaving enroll ↔ vérif : un `enroll_phone` pendant la fenêtre
+# verrouillée d'un vérifieur ne doit ni être écrasé (perte silencieuse d'un
+# nouvel enrôlement) ni corrompre le fichier. Avant le correctif, verify
+# charge l'enrôlement AVANT le verrou (ou sans verrou du tout) : un
+# `enroll_phone` concurrent écrit sa nouvelle passkey, puis le vérifieur —
+# qui tient toujours l'ANCIEN objet enrôlement en mémoire — sauvegarde par
+# dessus et efface silencieusement le nouvel enrôlement (`enroll_phone`
+# aurait pourtant renvoyé « ok » à l'appelant). Avec le correctif, les deux
+# opérations sont sérialisées par le même verrou : quel que soit l'ordre,
+# l'enrôlement final est TOUJOURS celui posé par `enroll_phone` (qui
+# remplace intégralement, sans fusion) — jamais un état corrompu ou perdu.
+RA_INTER="$TMP/mag-remote-approval-interleave"
+mkdir -p "$RA_INTER"
+"$PY" -c "
+import sys; sys.path.insert(0, 'tests'); sys.path.insert(0, '.')
+from pathlib import Path
+from testlib.phone_signer import generate_keypair
+import os
+os.environ['GWSA_ROOT'] = '$RA_INTER'
+from gateway.remote_approval import enroll_phone
+priv, pub = generate_keypair(Path('$RA_INTER'))
+enroll_phone({'credential_id': 'cred-interleave', 'aaguid': 'a', 'public_key': pub, 'uv': 'biometric', 'be': False, 'sign_count': 0})
+Path('$RA_INTER/priv.pem').write_text(priv.read_text())
+" >/dev/null
+
+IR1="$RA_INTER/ready1"; IR2="$RA_INTER/ready2"
+IO1="$RA_INTER/out1"; IO2="$RA_INTER/out2"
+
+GWSA_ROOT="$RA_INTER" GWSA_REMOTE_APPROVAL_TEST_RACE_DELAY_MS=300 "$PY" -c "
+import sys, time
+sys.path.insert(0, 'tests'); sys.path.insert(0, '.')
+from pathlib import Path
+from testlib.phone_signer import sign_challenge
+from gateway.remote_approval import open_remote_challenge, close_remote_challenge, RemoteApprovalError
+
+envelope, challenge_id = open_remote_challenge(
+    {'action': 'session_unlock', 'alias': 'orig', 'session_id': 'sidInterleave', 'minutes': 5}
+)
+assertion = sign_challenge(envelope.payload, Path('$RA_INTER/priv.pem'), credential_id='cred-interleave', sign_count=1)
+
+Path('$IR1').write_text('1')
+while not Path('$IR2').is_file():
+    time.sleep(0.005)
+
+try:
+    close_remote_challenge(challenge_id, assertion)
+    Path('$IO1').write_text('ok')
+except RemoteApprovalError as e:
+    Path('$IO1').write_text('refused:' + str(e))
+except Exception as e:
+    Path('$IO1').write_text('error:' + str(e))
+" &
+INTER_VERIFY_PID=$!
+
+"$PY" -c "
+import sys, time
+sys.path.insert(0, 'tests'); sys.path.insert(0, '.')
+from pathlib import Path
+from testlib.phone_signer import generate_keypair
+import os
+os.environ['GWSA_ROOT'] = '$RA_INTER'
+from gateway.remote_approval import enroll_phone
+
+_, pub_new = generate_keypair(Path('$RA_INTER'))
+
+Path('$IR2').write_text('1')
+while not Path('$IR1').is_file():
+    time.sleep(0.005)
+# Fenêtre délibérée : laisse le vérifieur charger son enrôlement AVANT notre
+# écriture, pour forcer le pire ordre d'entrelacement (celui qui perdrait
+# silencieusement l'enrôlement sans le correctif).
+time.sleep(0.05)
+
+enroll_phone({
+    'credential_id': 'cred-B', 'aaguid': 'b', 'public_key': pub_new,
+    'uv': 'biometric', 'be': False, 'sign_count': 0,
+})
+Path('$IO2').write_text('ok')
+" &
+INTER_ENROLL_PID=$!
+
+wait "$INTER_VERIFY_PID" "$INTER_ENROLL_PID"
+
+inter_final="$(GWSA_ROOT="$RA_INTER" "$PY" -c "
+import json, os
+os.environ['GWSA_ROOT'] = '$RA_INTER'
+from gateway.remote_approval import enrollment_path
+data = json.loads(enrollment_path().read_text())
+print(sorted(data.keys()), data.get('credential_id'), data.get('sign_count'))
+")"
+inter_verify_out=$(cat "$IO1" 2>/dev/null)
+inter_enroll_out=$(cat "$IO2" 2>/dev/null)
+if [[ "$inter_enroll_out" == "ok" \
+   && "$inter_final" == "['aaguid', 'credential_id', 'public_key', 'sign_count'] cred-B 0" ]]; then
+  pass "remote_approval : entrelacement enroll ↔ vérif sous verrou — nouvel enrôlement jamais écrasé/corrompu (fiche 0083)"
+else
+  fail "remote_approval : entrelacement enroll ↔ vérif — enrôlement corrompu/écrasé (verify=$inter_verify_out enroll=$inter_enroll_out final=$inter_final)"
+fi
+
+section "Dépréciation douce gwsa/gma → mag (fiche 0092)"
+# gwsa/gma restent invocables (rollback interne 0081) mais annoncent mag comme
+# nom canonique. Non-régression n°1 : stdout + rc de « gwsa <cmd> » doivent
+# être STRICTEMENT identiques à « mag <cmd> » — seul stderr peut différer
+# (l'avertissement de dépréciation n'est jamais mêlé à la sortie utile).
+DEPR_ROOT="$TMP/deprecation"
+mkdir -p "$DEPR_ROOT"
+DEPR_TMPDIR="$TMP/deprecation-tmpdir"
+mkdir -p "$DEPR_TMPDIR"
+ln -sfn "$(cd "$(dirname "$GWSA")" && pwd)/mag" "$DEPR_ROOT/gwsa"
+ln -sfn "$(cd "$(dirname "$GWSA")" && pwd)/mag" "$DEPR_ROOT/gma"
+
+# « mag <cmd> » et « gwsa <cmd> » produisent le même comportement UTILE (même
+# code, $SELF s'y substitue déjà avant 0092 dans les messages — ex. « relancer :
+# mag add x » vs « relancer : gwsa add x » — ce n'est pas une régression de
+# cette fiche). Ce que 0092 ne doit JAMAIS faire : mêler l'avertissement de
+# dépréciation à cette sortie utile. On le vérifie en comparant gwsa avec
+# lui-même, avertissement présent (1er appel) vs absent (2e appel, marqueur
+# déjà posé) : stdout et rc doivent être rigoureusement identiques.
+MAG_OUT="$(GWSA_ROOT="$GWSA_ROOT" "$GWSA" list 2>/dev/null)"; MAG_RC=$?
+GWSA_COLD_OUT="$(TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>/dev/null)"; GWSA_COLD_RC=$?
+GWSA_WARM_OUT="$(TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>/dev/null)"; GWSA_WARM_RC=$?
+if [[ "$GWSA_COLD_OUT" == "$GWSA_WARM_OUT" && "$GWSA_COLD_RC" -eq "$GWSA_WARM_RC" ]]; then
+  pass "non-régression : stdout+rc de « gwsa list » identiques, avertissement présent ou pas"
+else
+  fail "non-régression : l'avertissement de dépréciation change le stdout/rc utile (froid=[$GWSA_COLD_OUT]/$GWSA_COLD_RC chaud=[$GWSA_WARM_OUT]/$GWSA_WARM_RC)"
+fi
+if [[ "$GWSA_COLD_RC" -eq "$MAG_RC" ]]; then
+  pass "non-régression : même code retour entre gwsa list et mag list"
+else
+  fail "non-régression : code retour différent entre gwsa list ($GWSA_COLD_RC) et mag list ($MAG_RC)"
+fi
+
+rm -rf "$DEPR_TMPDIR"; mkdir -p "$DEPR_TMPDIR"
+GWSA_STDERR="$(TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>&1 >/dev/null)"
+if [[ "$GWSA_STDERR" == *"deprecated"* && "$GWSA_STDERR" == *"mag"* ]]; then
+  pass "gwsa affiche un avertissement de dépréciation (stderr) pointant vers mag"
+else
+  fail "gwsa n'affiche pas l'avertissement de dépréciation attendu (stderr=[$GWSA_STDERR])"
+fi
+
+rm -rf "$DEPR_TMPDIR"; mkdir -p "$DEPR_TMPDIR"
+MAG_STDERR="$(TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$GWSA" list 2>&1 >/dev/null)"
+if [[ "$MAG_STDERR" != *"deprecated"* ]]; then
+  pass "mag (nom canonique) n'affiche jamais l'avertissement de dépréciation"
+else
+  fail "mag affiche à tort l'avertissement de dépréciation (stderr=[$MAG_STDERR])"
+fi
+
+# Une fois par session : deux invocations gwsa DANS LE MÊME shell (donc même
+# $PPID vu par bin/mag — le marqueur once-per-session est keyé sur tty/$PPID)
+# → un seul avertissement. Un « nouveau terminal » = un nouveau $PPID.
+# NOTE technique : on capture via redirection vers fichier, PAS via
+# « $(cmd) » — la substitution de commande forkerait un sous-shell par appel,
+# ce qui changerait $PPID à chaque fois et fausserait le test (gwsa serait
+# invoqué avec un parent différent à chaque appel, alors qu'un vrai shell
+# interactif garde le même PPID pour deux commandes tapées à la suite).
+rm -rf "$DEPR_TMPDIR"; mkdir -p "$DEPR_TMPDIR"
+TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list >/dev/null 2>"$TMP/once-1.err"
+TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list >/dev/null 2>"$TMP/once-2.err"
+FIRST_STDERR="$(cat "$TMP/once-1.err")"
+SECOND_STDERR="$(cat "$TMP/once-2.err")"
+if [[ "$FIRST_STDERR" == *"deprecated"* && -z "$SECOND_STDERR" ]]; then
+  pass "avertissement une seule fois par session (2e appel gwsa, même session : silencieux)"
+else
+  fail "avertissement pas limité à une fois par session (1er=[$FIRST_STDERR] 2e=[$SECOND_STDERR])"
+fi
+
+# Nouveau terminal (nouvelle session) → ré-avertit. On rend le test DÉTERMINISTE
+# via l'override GWSA_DEPRECATION_SESSION_KEY (2 clés distinctes = 2 « terminaux »)
+# plutôt que de dépendre du tty/$PPID réel : sous un vrai terminal interactif, deux
+# sous-shells frères partagent le même tty contrôlant → même clé → faux échec (revue 0092 P1).
+rm -rf "$DEPR_TMPDIR"; mkdir -p "$DEPR_TMPDIR"
+NEWSHELL_STDERR="$(GWSA_DEPRECATION_SESSION_KEY=term-a TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>&1 >/dev/null)"
+NEWSHELL2_STDERR="$(GWSA_DEPRECATION_SESSION_KEY=term-b TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gwsa" list 2>&1 >/dev/null)"
+if [[ "$NEWSHELL_STDERR" == *"deprecated"* && "$NEWSHELL2_STDERR" == *"deprecated"* ]]; then
+  pass "un nouveau terminal (nouvelle session) ré-avertit"
+else
+  fail "un nouveau terminal ne ré-avertit pas (1er=[$NEWSHELL_STDERR] 2e=[$NEWSHELL2_STDERR])"
+fi
+
+# Dégradation propre hors TTY (pipe/CI) : gma via un pipe ne doit jamais planter.
+rm -rf "$DEPR_TMPDIR"; mkdir -p "$DEPR_TMPDIR"
+if echo | TMPDIR="$DEPR_TMPDIR" GWSA_ROOT="$GWSA_ROOT" "$DEPR_ROOT/gma" list >/dev/null 2>&1; then
+  pass "gma hors TTY (pipe) : dégrade proprement, ne casse rien"
+else
+  fail "gma hors TTY (pipe) : a échoué (rc=$?)"
+fi
+
+section "Message de fin d'update — guide de refresh terminal (fiche 0092)"
+if grep -q "hash -r" scripts/update.sh && grep -q "nom canonique" scripts/update.sh; then
+  pass "scripts/update.sh mentionne le refresh terminal (hash -r) et le nom canonique mag"
+else
+  fail "scripts/update.sh ne guide pas le refresh terminal / ne nomme pas mag"
+fi
+if grep -q "pré-#114\|pre-#114\|avant #114\|pré-renommage" scripts/update.sh; then
+  pass "scripts/update.sh mentionne le cas update lancé depuis une release pré-#114"
+else
+  fail "scripts/update.sh ne mentionne pas le cas pré-#114"
+fi
+
+rm -rf "$DEPR_ROOT" "$DEPR_TMPDIR"
 
 # --- Bilan ------------------------------------------------------------------
 

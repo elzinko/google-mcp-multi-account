@@ -38,14 +38,14 @@ def require_unlocked(alias: str) -> Path:
     d = profile_dir(alias)
     if not d.is_dir():
         raise GatewayError(
-            f"profil inconnu « {alias} » — le créer avec : gwsa add {alias}",
+            f"profil inconnu « {alias} » — le créer avec : mag add {alias}",
             code="not_found",
         )
     if is_locked(d):
         raise GatewayError(
             f"profil « {alias} » verrouillé — accès sur demande. "
-            f"Demander à l'utilisateur d'exécuter « gwsa unlock {alias} [minutes] » "
-            f"ou via l'interface admin (http://127.0.0.1:4877 — démarrer : « gwsa admin »). "
+            f"Demander à l'utilisateur d'exécuter « mag unlock {alias} [minutes] » "
+            f"ou via l'interface admin (http://127.0.0.1:4877 — démarrer : « mag admin »). "
             f"Ne pas tenter de contourner (gws nu / édition de fichiers).",
             code="locked",
         )
@@ -56,11 +56,11 @@ _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]+")
 
 
 def _profile_email(dir_path: Path) -> str:
-    """Email du compte : métadonnée `.email` écrite par gwsa add/list (ADR-0002).
+    """Email du compte : métadonnée `.email` écrite par mag add/list (ADR-0002).
 
     Jamais d'exécution gws ici — le broker est le seul exécuteur côté gateway.
     Fichier absent (profil d'avant la fiche 0014) ou contenu non-email : chaîne
-    vide ; un passage humain `gwsa list` le renseigne.
+    vide ; un passage humain `mag list` le renseigne.
     """
     try:
         text = (dir_path / ".email").read_text(encoding="utf-8").strip()

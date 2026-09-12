@@ -23,30 +23,36 @@
 - **The human holds every door** — unlock, Drive grant, new account, IAM fix: the agent *proposes the exact command* (elicitation), you run it.
 - **Default-deny by design** — any undeclared service is refused; Gmail tools stop at the draft (no sending); Drive writes stay inside granted folders.
 - **100 % local** — encrypted tokens (AES-256-GCM, master key in the macOS Keychain), per-client audit log. The only cloud step is a one-shot OAuth credential.
-- **Scope today** — **Gmail + Drive** through MCP; **Calendar next**. Docs, Sheets and Tasks are reachable through the `gwsa` CLI.
+- **Scope today** — **Gmail + Drive** through MCP; **Calendar next**. Docs, Sheets and Tasks are reachable through the `mag` CLI.
 
 ## 🚀 Quickstart
 
-macOS Apple Silicon. Three steps — full detail in [docs/setup-oauth.md](docs/setup-oauth.md) and [docs/mcp-setup.md](docs/mcp-setup.md).
+macOS Apple Silicon.
+
+**Prerequisite** — the upstream [`gws` CLI](https://github.com/googleworkspace/cli) (the Google Workspace CLI this project wraps) and Python 3:
 
 ```bash
-# 1 · Provision the Google Cloud project (once, ~10 min)
-git clone https://github.com/elzinko/google-mcp-multi-account.git
-cd google-mcp-multi-account
-brew install googleworkspace-cli                    # the gws CLI
-ln -sf "$PWD/bin/gwsa" "$(brew --prefix)/bin/gwsa"  # wrapper on PATH (bootstrap)
-./scripts/provision-gcp.sh                          # creates the project, guides the 2 manual steps
-
-# 2 · Install the server and wire your Claude clients (once)
-./scripts/update.sh                                 # installs outside the clone, wires Desktop + Code
+brew install googleworkspace-cli
 ```
 
-**3 ·** Restart Claude Desktop (Cmd-Q) and ask the LLM: *“give me a rundown of my Google setup”*. It reads the setup state and proposes the exact command for each missing step — you run them. Each connected account becomes a profile:
+**1. Install** — no clone needed:
 
 ```bash
-gwsa add personal     # "personal" = your alias · browser → pick account → accept
-gwsa list             # profiles + state
+curl -fsSL https://raw.githubusercontent.com/elzinko/google-mcp-multi-account/main/install.sh | bash
 ```
+
+This puts the latest release on your machine and `mag` on your PATH. By default it **wires no client** — it prints the command to connect each one (`mag wire desktop` / `mag wire code`, Cursor manual); pass `--wire` to connect them during install.
+
+**2. Google setup** (~10 min, once) — an OAuth project in Google Cloud: [docs/setup-oauth.md](docs/setup-oauth.md). No account connects and no Google data flows until it's done — `setup_status` still runs to guide you.
+
+**3. Connect an account**, then restart Claude Desktop (Cmd-Q):
+
+```bash
+mag add perso your.email@gmail.com    # "perso" = short name · the email pins the account
+mag list             # profiles + state
+```
+
+Ask the agent: *“give me a rundown of my Google setup”* — it reads the state and proposes the exact command for each missing step; you run them. Update later, still clone-free: **`mag update`**. Full detail: [docs/mcp-setup.md](docs/mcp-setup.md) · [docs/setup-oauth.md](docs/setup-oauth.md).
 
 ## 🧭 How it works
 
@@ -60,17 +66,25 @@ The LLM **can never widen its own access**. Every door opens by a human gesture 
 
 ```mermaid
 flowchart LR
-    USER["🧑 Human — unlock / grant / policy"]
+    USER["🧑 Human"]
     LLM["LLM clients — Desktop / Code / Cursor"]
     MCP["bin/google-mcp — MCP stdio"]
-    GW["gateway/ — policy + locks"]
-    GWSA["bin/gwsa — profiles · locks · grants"]
+    GW["gateway/ — enforces policy + locks"]
+    STATE["locks · grants · policy"]
+    GWSA["bin/mag"]
     GOOGLE["Google APIs"]
-    USER --> GWSA
-    LLM --> MCP --> GW --> GWSA --> GOOGLE
+    LLM --> MCP --> GW --> GOOGLE
+    GW -.->|reads| STATE
+    USER -->|unlock / grant / policy| GWSA -->|writes| STATE
 ```
 
 Why a wrapper, the local broker, who talks to whom: [docs/architecture.md](docs/architecture.md). Step-by-step walkthroughs: [diagrams/](diagrams/).
+
+## 👥 Usage by persona
+
+- **Daily user (agent operator)** — you chat with the agent in Claude Desktop, Code or Cursor. It reads your setup and *proposes* the exact `mag` command for anything it can't do itself — unlock a profile, grant a Drive folder, connect an account — and you run it. Nothing is sent or widened without your gesture. Start at [Quickstart](#-quickstart).
+- **Admin / owner** — you decide *what each account may do*. Per-profile policy (default-deny), locks with optional Touch ID, temporary Drive zones, and per-conversation session rights — all from the local web admin (`mag admin` → `http://127.0.0.1:4877`) or the `mag` CLI. See [docs/admin.md](docs/admin.md) and [docs/policies.md](docs/policies.md).
+- **Contributor** — you build against the local backlog under [`features/`](features/), run the hermetic tests, and open one PR per feature. See [Contributing](#-contributing).
 
 ## 🔒 Security
 
@@ -82,13 +96,13 @@ Stance: **don’t trust the LLM by default** — it can *ask*, only a human open
 ./scripts/test.sh     # hermetic suite (policy, wrapper, gateway, broker) — no real account, no network
 ```
 
-- **Commands** — `gwsa help` is the index of everything. LLM-guided manual tests: [tests/manuels/](tests/manuels/).
-- **Releases** — the git **tag** is the source of truth; `gwsa release` derives semver from [conventional commits](https://www.conventionalcommits.org/). History: [CHANGELOG.md](CHANGELOG.md).
+- **Commands** — `mag help` is the index of everything. LLM-guided manual tests: [tests/manuels/](tests/manuels/).
+- **Releases** — the git **tag** is the source of truth; `mag release` derives semver from [conventional commits](https://www.conventionalcommits.org/). History: [CHANGELOG.md](CHANGELOG.md).
 
 ### Project structure
 
 ```
-bin/       # google-mcp (MCP server) · gwsa (CLI wrapper) · google-broker
+bin/       # google-mcp (MCP server) · mag (CLI wrapper) · google-broker
 gateway/   # policy, locks, MCP server, signed elicitation
 scripts/   # provision-gcp · update · release · test
 docs/      # setup, usage, policies, architecture, security, critique
@@ -99,8 +113,23 @@ features/  # backlog — one card per feature/bug
 <details>
 <summary><b>Naming</b> — product vs repo vs CLI</summary>
 
-Product / MCP server `google-multi-account` (source of truth: `gateway/config.py` `PRODUCT_SLUG`) · git repo `google-mcp-multi-account` · CLI `gwsa` · MCP binary `google-mcp`.
+Product / MCP server `google-multi-account` (source of truth: `gateway/config.py` `PRODUCT_SLUG`) · git repo `google-mcp-multi-account` · CLI `mag` (this project's wrapper — what you run; formerly `gwsa`/`gma`, still deprecated aliases) · MCP binary `google-mcp` · upstream dependency `gws` = the [Google Workspace CLI](https://github.com/googleworkspace/cli) that `mag` wraps (install it first).
 </details>
+
+## 🤝 Contributing
+
+- **Dev setup** — clone, then run the hermetic suite (no real account, no network — `gws` and the network are stubbed):
+
+```bash
+git clone https://github.com/elzinko/google-mcp-multi-account && cd google-mcp-multi-account
+./scripts/test.sh
+```
+
+  Running the tool against real accounts also needs the [`gws` CLI](https://github.com/googleworkspace/cli) (`brew install googleworkspace-cli`) — see [Quickstart](#-quickstart).
+
+- **Backlog-driven** — work is one Markdown card per feature/bug under [`features/`](features/) (priority-sorted index: [features/BACKLOG.md](features/BACKLOG.md)). Pick a `ready` card; **one feature = one branch = one PR**.
+- **Commit conventions** — [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `refactor:`…); `mag release` derives the semver tag from them.
+- **Before a PR** — `./scripts/test.sh` green, and walk the reviewer checklist in [docs/PR_VALIDATION.md](docs/PR_VALIDATION.md). Every PR gets an adversarial review before merge.
 
 ## 📚 Further reading
 
@@ -108,7 +137,8 @@ Product / MCP server `google-multi-account` (source of truth: `gateway/config.py
 |---|---|
 | Connect a client (Desktop, Code, Cursor); tools exposed | [docs/mcp-setup.md](docs/mcp-setup.md) |
 | OAuth / GCP setup, IAM roles | [docs/setup-oauth.md](docs/setup-oauth.md) |
-| CLI & web admin (`gwsa`, locks, Touch ID) | [docs/usage.md](docs/usage.md) |
+| CLI (`mag`, locks, Touch ID) | [docs/usage.md](docs/usage.md) |
+| Web admin (local webapp) | [docs/admin.md](docs/admin.md) |
 | Policy model (default-deny, Drive zones, grants) | [docs/policies.md](docs/policies.md) |
 
 ## License

@@ -20,7 +20,7 @@
     <circle cx="22" cy="22" r="5" fill="#c27b7b"/>
     <circle cx="40" cy="22" r="5" fill="#c2a46b"/>
     <circle cx="58" cy="22" r="5" fill="#6fa88e"/>
-    <text x="84" y="27" font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#3d555e">gwsa admin - 127.0.0.1:4877</text>
+    <text x="84" y="27" font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#3d555e">mag admin - 127.0.0.1:4877</text>
     <text x="28" y="78" font-family="ui-sans-serif, system-ui, sans-serif" font-size="18" fill="#14212b" font-weight="700">Accounts</text>
     <text x="28" y="98" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#5f737c">Policy default-deny / access on request</text>
     <g transform="translate(22,118)">
@@ -61,7 +61,7 @@
     <text x="22" y="116" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12.5" fill="#b7cdd4">The agent can't open</text>
     <text x="22" y="136" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12.5" fill="#b7cdd4">the door itself.</text>
     <rect x="22" y="160" width="256" height="48" rx="8" fill="#1d3d47" stroke="#2f5966"/>
-    <text x="34" y="180" font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#9fd6c2">gwsa unlock personal 30</text>
+    <text x="34" y="180" font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#9fd6c2">mag unlock personal 30</text>
     <text x="34" y="196" font-family="ui-sans-serif, system-ui, sans-serif" font-size="10" fill="#aecad2">proposed command / human runs it</text>
     <rect x="22" y="224" width="118" height="34" rx="8" fill="#1f8a72"/>
     <text x="81" y="245" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="700" fill="#fff">Run</text>

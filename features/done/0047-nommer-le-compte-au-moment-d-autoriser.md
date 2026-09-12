@@ -19,19 +19,19 @@ Gmail réelle :
 
 - le message d'`access_request` renvoyé par le MCP (« Le profil « perso » est
   verrouillé… ») — [gateway/api.py:647-809](gateway/api.py) ;
-- le dialogue **Touch ID** de l'élicitation signée (« gwsa : déverrouiller
+- le dialogue **Touch ID** de l'élicitation signée (« mag : déverrouiller
   « perso » ») — [gateway/elicitation.py:114-140](gateway/elicitation.py) et
   [scripts/elicitation-sign.swift:178-206](scripts/elicitation-sign.swift).
 
 Or c'est **le seul moment qui est une décision de sécurité** : « est-ce que
 j'autorise l'agent à toucher CE compte ? ». À cet instant, `« perso »` est
 abstrait ; l'email est la vérité terrain de *quelle boîte Gmail réelle j'expose*.
-Partout où l'enjeu est faible (`gwsa list`, `profiles_list`, `setup_status`,
+Partout où l'enjeu est faible (`mag list`, `profiles_list`, `setup_status`,
 admin web), l'email **est** affiché à côté de l'alias — l'asymétrie est donc
 inversée.
 
 Régression silencieuse, pas un angle jamais envisagé : la fiche 0032 voulait
-nommer le compte, et la fonction `strong_auth_reason()` ([bin/gwsa:124](bin/gwsa))
+nommer le compte, et la fonction `strong_auth_reason()` ([bin/mag:124](bin/mag))
 devait mettre l'**email** dans la raison Touch ID. Le passage à l'élicitation
 signée (fiche 0001 / ADR-0005) est passé par-dessus et `strong_auth_reason` est
 devenu **du code mort** (jamais appelé — seule référence vivante : un `grep`
@@ -48,7 +48,7 @@ journal — ADR-0002 : l'alias reste la clé, l'email est une métadonnée).
   [gateway/elicitation.py:143](gateway/elicitation.py)). L'email est alors
   **cryptographiquement lié** à la signature biométrique : le reçu enregistre le
   compte exact autorisé, pas seulement l'alias.
-- **`bin/gwsa`** : calcule l'email via `profile_email <dir>` (métadonnée `.email`,
+- **`bin/mag`** : calcule l'email via `profile_email <dir>` (métadonnée `.email`,
   lisible même verrouillé) et l'ajoute aux payloads `session_unlock`, `unlock`,
   `session_grant`, `grant`.
 - **Texte du prompt** (Python `prompt_from_payload` **et** Swift `promptText`,

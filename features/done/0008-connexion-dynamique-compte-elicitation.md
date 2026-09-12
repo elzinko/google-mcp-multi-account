@@ -18,13 +18,13 @@ connecter de **nouvelles adresses Gmail** (au-delà des comptes déjà présents
 dynamiquement et via élicitation à authentification forte ?
 
 État actuel — le mécanisme existe mais n'est PAS de première classe :
-- `gwsa add <alias> [email]` connecte un compte à tout moment (OAuth
+- `mag add <alias> [email]` connecte un compte à tout moment (OAuth
   navigateur, vérifie l'email attendu, écrit une policy prudente). ✅
 - MAIS : **pas gaté par strong auth** (Touch ID ne protège que unlock/grant ;
   ici la barrière humaine est le consentement OAuth dans le navigateur).
 - **Pas d'outil d'élicitation** côté gateway/MCP : `access_request` n'a que
   les kinds `unlock` et `grant`. Le LLM ne peut donc que *suggérer* la
-  commande shell `gwsa add`, sans flux dédié ni garde-fou.
+  commande shell `mag add`, sans flux dédié ni garde-fou.
 - **Prérequis par nouveau compte non portés par le flux** : test-user (si app
   en Testing) + binding IAM `serviceUsageConsumer` (cf. 0005). Aujourd'hui à
   la charge de l'humain, sans rappel automatique.
@@ -39,9 +39,9 @@ unlock/grant :
 
 1. **`access_request` kind=`add_account`** (gateway + tool MCP) : le LLM
    décrit le besoin (alias souhaité, email cible) ; la gateway renvoie un
-   message d'élicitation + la commande exacte `gwsa add <alias> <email>`
+   message d'élicitation + la commande exacte `mag add <alias> <email>`
    (et, si nécessaire, la commande IAM de 0005). N'exécute jamais.
-2. **Strong auth optionnelle sur `gwsa add`** : si `strongauth on`, exiger
+2. **Strong auth optionnelle sur `mag add`** : si `strongauth on`, exiger
    Touch ID avant de lancer le flux OAuth (cohérence avec unlock/grant).
 3. **Enchaînement des prérequis** : après connexion, rappeler/vérifier le
    binding IAM (réutilise la sonde de 0005).
@@ -54,11 +54,11 @@ unlock/grant :
       via un tool (`access_request` kind=`add_account`, email requis), obtenir
       la commande exacte, et l'humain seul l'exécute. Vérifié hermétiquement :
       aucune création de profil, refus sans email, enum exposé dans le MCP.
-- [x] `gwsa add` respecte `strongauth` (Touch ID) si activé — check placé
+- [x] `mag add` respecte `strongauth` (Touch ID) si activé — check placé
       après celui du client_secret (les envs de test n'atteignent jamais la
-      boîte biométrique). Boîte réelle à constater au prochain `gwsa add`.
+      boîte biométrique). Boîte réelle à constater au prochain `mag add`.
 - [x] Le flux rappelle le binding IAM : message d'élicitation (status /
-      sync-iam) + sonde post-connexion de `gwsa add` (0005) — pas de 403
+      sync-iam) + sonde post-connexion de `mag add` (0005) — pas de 403
       silencieux au 1er appel.
 - [x] Décision multi-projet : **hors périmètre v1**. Un seul
       `client_secret.json` partagé (`MASTER_SECRET`) = un seul projet GCP par

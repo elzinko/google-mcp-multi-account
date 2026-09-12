@@ -2,12 +2,13 @@
 
 Ce document est une **auto-évaluation honnête** du projet, pour un développeur qui
 l'évalue ou veut y contribuer. Il dit ce que le projet fait bien, ce qu'il fait
-mal, et ce qui pourrait le rendre inutile. Il complète [`SECURITY.md`](../SECURITY.md)
+mal, et ce qui pourrait le rendre inutile. Il complète [`SECURITY.md`](https://github.com/elzinko/google-mcp-multi-account/blob/main/SECURITY.md)
 et [`threat-model.md`](threat-model.md) (centrés sécurité) par une vue plus large :
 produit, ingénierie, stratégie.
 
-*Écrit le 2026-07-24. Le projet bouge vite : certaines limites ci-dessous sont déjà
-en cours de correction sur `main`.*
+*Écrit le 2026-07-24, revu le 2026-08-08. Le projet bouge vite : certaines limites
+ci-dessous sont déjà corrigées — le décompte des outils MCP et l'état de
+l'installation (releases, `curl` sans clone) ont été rafraîchis.*
 
 ## En une phrase
 
@@ -24,7 +25,7 @@ qui dispose d'un shell.
   contournements trouvés en audit.
 - **La gouvernance par compte est rare.** Verrous « accès sur demande », grants
   Drive temporaires, élicitation humaine : on ne retrouve cette combinaison chez
-  aucun autre serveur MCP connu (voir [Face à la concurrence](#face-à-la-concurrence)).
+  aucun autre serveur MCP connu (voir [Face à la concurrence](#face-a-la-concurrence)).
 - **Il est petit et sans dépendance lourde.** ~3 400 lignes, stdlib pure (Python,
   bash, Node), rien à installer via npm ou PyPI.
 
@@ -73,9 +74,10 @@ reste à faire.
 
 ### 4. La couverture MCP est étroite
 
-9 outils MCP, dont 3 utilitaires. On a Gmail (lire + brouillon) et Drive (lire +
-créer). Calendar, Docs, Sheets, Tasks : **aucun** outil MCP — accessibles seulement
-via le shell `gwsa`, donc **pas depuis Claude Desktop**. En face,
+17 outils MCP, dont 3 utilitaires. On a Gmail (lire, brouillon, pièces jointes) et
+Drive (lire, créer, modifier, copier, téléverser, partager). Mais Calendar, Docs,
+Sheets, Tasks : **aucun** outil MCP — accessibles seulement via le shell `mag`,
+donc **pas depuis Claude Desktop**. En face,
 [taylorwilsdon/google_workspace_mcp](https://github.com/taylorwilsdon/google_workspace_mcp)
 expose une centaine d'outils sur 12 services. C'est le point le plus faible face à
 la concurrence.
@@ -96,10 +98,12 @@ seul un développeur déjà à l'aise avec Google Cloud franchira ce setup.
 
 ### 6. Le projet est fait pour une personne
 
-Documentation en français, installation par `git clone` (pas de paquet installable
-en un clic), pas de release. Un format standard existe pourtant pour distribuer un
-serveur MCP en un clic : les [Desktop Extensions
-`.mcpb`](https://www.anthropic.com/engineering/desktop-extensions).
+Documentation en **français** (choix assumé) et un chemin de production **macOS
+seulement**. L'installation, en revanche, n'est plus un frein : `curl | bash` sans
+clone, versions taguées et **releases GitHub**, mise à jour par `mag update`. Reste
+qu'aucun format « un clic » type [Desktop Extensions
+`.mcpb`](https://www.anthropic.com/engineering/desktop-extensions) n'est encore
+produit, et que l'audience visée demeure étroite.
 
 ## Face à la concurrence
 
@@ -150,4 +154,4 @@ Deux nuances honnêtes :
 ## Voir aussi
 
 - [`threat-model.md`](threat-model.md) — le modèle de menace détaillé (sécurité).
-- [`../SECURITY.md`](../SECURITY.md) — garanties, ce qui n'est pas garanti, signalement.
+- [`../SECURITY.md`](https://github.com/elzinko/google-mcp-multi-account/blob/main/SECURITY.md) — garanties, ce qui n'est pas garanti, signalement.

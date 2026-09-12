@@ -1,9 +1,17 @@
 # Setup OAuth — console Google Cloud (one-shot, ~10 min)
 
-> **Raccourci** : `./scripts/provision-gcp.sh` automatise les étapes 1, 2 et 3
-> (avec vérification du compte connecté) et te guide pour les étapes 4 et 5,
-> seuls gestes que Google impose de faire dans la console. Ce guide manuel
-> reste la référence si tu préfères tout faire toi-même.
+!!! info "Préalable à l'utilisation"
+    Cette étape Google Cloud est un **prérequis** : sans le `client_secret.json`
+    produit ici, aucun compte ne peut être connecté. À faire une fois — avant, ou
+    juste après, l'[installation du connecteur](mcp-setup.md).
+
+> **Raccourci** (une fois le connecteur installé) : le script `provision-gcp.sh`
+> automatise les étapes 1, 2 et 3 (avec vérification du compte connecté) et te
+> guide pour les étapes 4 et 5, seuls gestes que Google impose dans la console.
+> Install `curl` → `~/.local/share/google-mcp/current/scripts/provision-gcp.sh` ;
+> depuis un clone → `./scripts/provision-gcp.sh`. Si tu fais l'OAuth **avant**
+> d'installer, suis le guide manuel ci-dessous — il reste la référence si tu
+> préfères tout faire toi-même.
 
 Objectif : obtenir un `client_secret.json` qui permettra à `gws` de connecter
 **tous** tes comptes @gmail.com. À faire **une seule fois**, avec **un seul**
@@ -80,9 +88,9 @@ compte comme « test user » **et** les tokens expirent tous les 7 jours.
 De retour dans le terminal :
 
 ```bash
-gwsa add perso     # navigateur → choisir le compte n°1 → accepter les accès
-gwsa add assoc     # navigateur → choisir le compte n°2 → accepter les accès
-gwsa list
+mag add perso perso.email@gmail.com     # compte n°1 : l'email épingle, le navigateur confirme
+mag add assoc assoc.email@gmail.com     # compte n°2
+mag list
 ```
 
 ## 7. Multi-comptes : rôle IAM pour chaque compte connecté
@@ -100,13 +108,13 @@ gcloud projects add-iam-policy-binding <PROJECT_ID> \
   --member=user:<adresse@gmail.com> --role=roles/serviceusage.serviceUsageConsumer
 ```
 
-À refaire pour chaque nouveau compte connecté via `gwsa add`. C'est la même
+À refaire pour chaque nouveau compte connecté via `mag add`. C'est la même
 liste d'adresses que les *test users* de l'étape 5 (si l'app est restée en
 Testing) : décide-la une fois, sers-t'en deux fois.
 
 **L'outillage te guide** — tu n'as pas à repérer le trou à la main :
 
-- `gwsa add <alias>` fait une sonde après connexion : si le compte n'a pas le
+- `mag add <alias>` fait une sonde après connexion : si le compte n'a pas le
   rôle, il **affiche directement la commande gcloud** à faire exécuter.
 - `./scripts/provision-gcp.sh status` liste **tous** les comptes connectés
   avec leur état d'accès au projet, et la commande de remédiation pour chacun

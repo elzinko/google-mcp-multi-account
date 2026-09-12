@@ -5,7 +5,7 @@ type: epic
 priority: P1
 version: v0.4.0
 epic:
-status: todo
+status: in-progress
 ready:
 pr:
 created: 2026-07-29

@@ -9,49 +9,49 @@ différents**, vérification humaine, puis nettoyage réversible.
 `ZZ-TESTS` créé par l'humain à la racine de chaque Drive, la policy refuse
 tout le reste (default-deny, zones), et le nettoyage passe par la
 **corbeille** (restaurable 30 jours) — la suppression définitive reste
-impossible via gwsa (`emptyTrash` toujours refusé).
+impossible via mag (`emptyTrash` toujours refusé).
 
 Prompt de lancement : voir [PROMPT.md](PROMPT.md).
 
 ## Prérequis (2 min, humain)
 
-1. Choisir 2 comptes dans `gwsa list` (ex. `perso` et `zebra`).
+1. Choisir 2 comptes dans `mag list` (ex. `perso` et `zebra`).
 2. Dans **chaque** Drive (interface web, connecté au bon compte), créer un
    dossier **`ZZ-TESTS`** à la racine. Nom exact, en un seul exemplaire —
-   `gwsa grant` résout le nom en ID et refuse les ambiguïtés.
+   `mag grant` résout le nom en ID et refuse les ambiguïtés.
    *Pourquoi l'humain ?* En mode zones le LLM ne peut écrire nulle part tant
    qu'aucune zone n'est accordée — créer le bac à sable est un geste humain,
    et c'est voulu.
 3. Jetons : si un compte n'a pas servi depuis > 7 jours (app OAuth en mode
-   *Testing*), prévoir une reconnexion `gwsa add <alias>` en cours de route
+   *Testing*), prévoir une reconnexion `mag add <alias>` en cours de route
    (le protocole le détecte, erreur `exit code 2`).
 
 ## Déroulé (ce que l'agent doit faire)
 
 Conventions : toutes les commandes agent passent par
-`GWSA_CLIENT=claude-code gwsa …` (jamais `gws` nu), ou par les tools MCP
+`GWSA_CLIENT=claude-code mag …` (jamais `gws` nu), ou par les tools MCP
 équivalents quand ils existent (`profiles_list`, `drive_list`, `drive_get`,
 `drive_create`, `drive_update`, `drive_permissions_*`, `access_request`).
 
 ### Phase 0 — état des lieux (lecture seule)
 
-- `gwsa list` : confirmer que les 2 alias existent et sont 🔒 verrouillés.
-- `gwsa strongauth status` : annoncer si Touch ID sera demandé.
+- `mag list` : confirmer que les 2 alias existent et sont 🔒 verrouillés.
+- `mag strongauth status` : annoncer si Touch ID sera demandé.
 - Annoncer le plan et les 2 dossiers `ZZ-TESTS` attendus.
 
 ### Phase 1 — élicitation « unlock » (l'humain déverrouille)
 
-- Tenter `gwsa ALIAS1 auth status` → refus « verrouillé 🔒 » **attendu** :
+- Tenter `mag ALIAS1 auth status` → refus « verrouillé 🔒 » **attendu** :
   c'est le test du verrou.
 - Demander à l'utilisateur d'exécuter, lui-même (Touch ID si strongauth) :
 
   ```bash
-  gwsa unlock ALIAS1 30
-  gwsa unlock ALIAS2 30
+  mag unlock ALIAS1 30
+  mag unlock ALIAS2 30
   ```
 
 - Re-vérifier `auth status` des 2 profils. `exit code 2` → token expiré :
-  proposer `gwsa add <alias>` puis reprendre.
+  proposer `mag add <alias>` puis reprendre.
 
 ### Phase 2 — élicitation « grant » (l'humain accorde les zones)
 
@@ -61,11 +61,11 @@ Conventions : toutes les commandes agent passent par
 - Demander à l'utilisateur :
 
   ```bash
-  gwsa grant ALIAS1 ZZ-TESTS 2
-  gwsa grant ALIAS2 ZZ-TESTS 2
+  mag grant ALIAS1 ZZ-TESTS 2
+  mag grant ALIAS2 ZZ-TESTS 2
   ```
 
-- `gwsa grants ALIAS1` / `ALIAS2` : noter l'ID de zone de chaque compte.
+- `mag grants ALIAS1` / `ALIAS2` : noter l'ID de zone de chaque compte.
   (Les grants expirent en 2 h — c'est normal, c'est le produit.)
 
 ### Phase 3 — écriture croisée (le cœur du test)
@@ -83,7 +83,7 @@ Pour **chaque** compte, dans la même session :
 2. Le créer **avec contenu** dans la zone :
 
    ```bash
-   gwsa ALIAS1 drive files create \
+   mag ALIAS1 drive files create \
      --json '{"name":"bonjour-<date>.md","parents":["<ID_ZONE_1>"]}' \
      --upload <fichier-local> --upload-content-type text/markdown
    ```
@@ -91,7 +91,7 @@ Pour **chaque** compte, dans la même session :
 3. Le **modifier** (contenu + renommage en un appel) :
 
    ```bash
-   gwsa ALIAS1 drive files update --params '{"fileId":"<ID_FICHIER>"}' \
+   mag ALIAS1 drive files update --params '{"fileId":"<ID_FICHIER>"}' \
      --json '{"name":"bonjour-<date>-v2.md"}' \
      --upload <fichier-local-v2> --upload-content-type text/markdown
    ```
@@ -151,7 +151,7 @@ les grants expirent tout seuls, verrous et grants se referment automatiquement
 - **Restes d'un run précédent** : signalés au pré-vol de la Phase 3,
   corbeille proposée (jamais imposée).
 - **Dossier `ZZ-TESTS` parti à la corbeille** lors d'un nettoyage précédent :
-  le restaurer ou le recréer avant de re-granter — `gwsa grant` ne résout que
+  le restaurer ou le recréer avant de re-granter — `mag grant` ne résout que
   les dossiers non corbeille (`trashed=false`).
 - **Verrous et grants expirés** entre deux runs : re-demander est normal,
   c'est le produit.
@@ -173,18 +173,18 @@ les grants expirent tout seuls, verrous et grants se referment automatiquement
 
 | Symptôme | Cause | Remède |
 |---|---|---|
-| `exit code 2` sur un profil | Token expiré (app en *Testing*, 7 j) | `gwsa add <alias>` puis reprendre |
+| `exit code 2` sur un profil | Token expiré (app en *Testing*, 7 j) | `mag add <alias>` puis reprendre |
 | `403 … required permission to use project <id>` | Le compte n'est pas membre du projet GCP de l'app OAuth (quota project) | Rôle `serviceUsageConsumer` à accorder — voir docs/setup-oauth.md §7 |
 | `dossier « ZZ-TESTS » introuvable ou ambigu` | Pas créé, mal orthographié, ou deux dossiers du même nom | Créer/renommer dans Drive web, ou donner l'ID (fin de l'URL du dossier) |
 | Refus « non vérifiable par zones » sur `+upload` | Comportement voulu | `files create/update` + `--upload` |
 | `validationError … outside the current directory` sur `--upload` | Garde-fou gws : chemin hors du répertoire courant | Fichier temporaire sous le repo (ex. `.e2e-tmp/`), supprimé après |
-| Refus de zone alors que le grant vient d'être posé | Grant expiré ou zone d'un autre compte | `gwsa grants <alias>`, re-granter |
+| Refus de zone alors que le grant vient d'être posé | Grant expiré ou zone d'un autre compte | `mag grants <alias>`, re-granter |
 | L'agent propose de déverrouiller lui-même | Interdit (CLAUDE.md) | C'est l'humain qui exécute unlock/grant, toujours |
 
 ## Limites connues (mises à jour 2026-07)
 
 - `drive_update` et `drive_permissions_*` sont exposés en MCP ; les phases 3
-  peuvent les utiliser à la place de `gwsa … files update --upload`.
+  peuvent les utiliser à la place de `mag … files update --upload`.
 - **Corbeille = suppression (fiche 0037)** : nettoyage des dossiers de zone =
   geste humain (Phase 6). Voir aussi [drive-cross-compte](../drive-cross-compte/)
   pour partage / transfert entre comptes.

@@ -21,15 +21,24 @@ from .config import (
     upload_roots,
     upload_spool,
 )
-from .context import get_git_root, get_session_id
+from .context import get_git_root
 from .errors import GatewayError
 from .executor import run_via_broker
 from .profiles import is_locked, list_profiles as _list_profiles
-from .profiles import profile_email, require_unlocked, validate_alias
+from .profiles import profile_email, validate_alias
 from .project import git_toplevel
-from .sessions import is_session_unlocked
+from .sessions import is_session_unlocked, require_session
 from .setup_status import setup_status  # noqa: F401 — re-export pour le dispatch MCP
 from .usage import log_usage
+
+# Borne défensive sur les pièces jointes Gmail : une PJ énorme (ou un
+# identifiant malveillant) ne doit pas pouvoir saturer le disque local.
+# 25 Mo = limite d'envoi Gmail ; surchargeable via GWSA_ATTACHMENT_MAX_MB.
+try:
+    _ATTACHMENT_MAX_MB = int(os.environ.get("GWSA_ATTACHMENT_MAX_MB", "25"))
+except ValueError:
+    _ATTACHMENT_MAX_MB = 25
+_ATTACHMENT_MAX_BYTES = max(1, _ATTACHMENT_MAX_MB) * 1024 * 1024
 
 # Champs Drive demandés partout : `owners`/`ownedByMe` répondent à « ce
 # livrable appartient-il bien au bon compte ? » — la question que le
@@ -77,40 +86,58 @@ def profiles_list() -> dict[str, Any]:
 
 
 def _run(
-    alias: str, gws_args: list[str], timeout: int = 60, raw_output: bool = False
+    alias: str,
+    gws_args: list[str],
+    timeout: int = 60,
+    raw_output: bool = False,
+    session: str = "",
 ) -> Any:
-    sid = get_session_id()
+    """Exécute un appel gws via le broker, autorisé par le jeton PORTÉ par cet appel.
+
+    Fail-closed (ADR-0007 §Repli) : jeton absent, inconnu ou expiré → refus,
+    quel que soit l'état de verrouillage du profil. Plus de repli sur un état
+    global de process — le jeton n'est jamais lu ailleurs que dans `session`,
+    le paramètre que l'appelant (gateway.mcp_server) a extrait de CET appel.
+    """
+    sid = (session or "").strip()
     gro = get_git_root() or git_toplevel()
     try:
-        if sid:
-            d = profile_dir(alias)
-            if not d.is_dir():
-                raise GatewayError(
-                    f"profil inconnu « {alias} » — le créer avec : gwsa add {alias}",
-                    code="not_found",
-                )
-            if is_locked(d) and not is_session_unlocked(sid, alias):
-                raise GatewayError(
-                    f"profil « {alias} » verrouillé pour cette session — "
-                    f"access_request kind=session_unlock",
-                    code="locked",
-                )
-        else:
-            require_unlocked(alias)
+        if not sid:
+            raise GatewayError(
+                "jeton de session requis — paramètre « session » manquant sur "
+                "cet appel (obtenu à l'initialize, ou via access_request)",
+                code="session",
+            )
+        require_session(sid)  # lève si jeton inconnu ou expiré (TTL)
+        d = profile_dir(alias)
+        if not d.is_dir():
+            raise GatewayError(
+                f"profil inconnu « {alias} » — le créer avec : mag add {alias}",
+                code="not_found",
+            )
+        if is_locked(d) and not is_session_unlocked(sid, alias):
+            raise GatewayError(
+                f"profil « {alias} » verrouillé pour cette session — "
+                f"access_request kind=session_unlock",
+                code="locked",
+            )
     except GatewayError as e:
-        if e.code == "locked":
+        if e.code in ("locked", "session"):
             log_usage(
-                alias, gws_args, client_id(), decision="refus", reason="locked",
+                alias, gws_args, client_id(), decision="refus", reason=e.code,
                 session_id=sid, git_root=gro,
             )
         raise
-    return run_via_broker(alias, gws_args, timeout=timeout, raw_output=raw_output)
+    return run_via_broker(
+        alias, gws_args, timeout=timeout, raw_output=raw_output, session_id=sid,
+    )
 
 
 def gmail_list(
     alias: str,
     query: str = "",
     max_results: int = 10,
+    session: str = "",
 ) -> dict[str, Any]:
     validate_alias(alias)
     max_results = max(1, min(int(max_results), 50))
@@ -120,11 +147,14 @@ def gmail_list(
     data = _run(
         alias,
         ["gmail", "users", "messages", "list", "--params", json.dumps(params)],
+        session=session,
     )
     return {"ok": True, "alias": alias, "result": data}
 
 
-def gmail_get(alias: str, message_id: str, format: str = "full") -> dict[str, Any]:
+def gmail_get(
+    alias: str, message_id: str, format: str = "full", session: str = "",
+) -> dict[str, Any]:
     validate_alias(alias)
     if not message_id or not isinstance(message_id, str):
         raise GatewayError("message_id requis", code="error")
@@ -133,6 +163,7 @@ def gmail_get(alias: str, message_id: str, format: str = "full") -> dict[str, An
     data = _run(
         alias,
         ["gmail", "users", "messages", "get", "--params", json.dumps(params)],
+        session=session,
     )
     return {"ok": True, "alias": alias, "result": data}
 
@@ -143,6 +174,7 @@ def gmail_create_draft(
     subject: str,
     body: str,
     cc: str = "",
+    session: str = "",
 ) -> dict[str, Any]:
     """Crée un brouillon — jamais d'envoi (pas de tool send en v1)."""
     validate_alias(alias)
@@ -166,6 +198,7 @@ def gmail_create_draft(
             "--params", json.dumps({"userId": "me"}),
             "--json", json.dumps(payload),
         ],
+        session=session,
     )
     return {"ok": True, "alias": alias, "result": data}
 
@@ -190,6 +223,7 @@ def drive_list(
     query: str = "trashed=false",
     page_size: int = 20,
     parent: Optional[str] = None,
+    session: str = "",
 ) -> dict[str, Any]:
     validate_alias(alias)
     page_size = max(1, min(int(page_size), 100))
@@ -204,6 +238,7 @@ def drive_list(
     data = _run(
         alias,
         ["drive", "files", "list", "--params", json.dumps(params)],
+        session=session,
     )
     files = data.get("files") if isinstance(data, dict) else None
     ownership = [
@@ -214,7 +249,7 @@ def drive_list(
     return {"ok": True, "alias": alias, "result": data, "ownership": ownership}
 
 
-def drive_get(alias: str, file_id: str) -> dict[str, Any]:
+def drive_get(alias: str, file_id: str, session: str = "") -> dict[str, Any]:
     validate_alias(alias)
     if not file_id:
         raise GatewayError("file_id requis", code="error")
@@ -225,6 +260,7 @@ def drive_get(alias: str, file_id: str) -> dict[str, Any]:
     data = _run(
         alias,
         ["drive", "files", "get", "--params", json.dumps(params)],
+        session=session,
     )
     return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
 
@@ -286,6 +322,7 @@ def drive_create(
     mime_type: str = "application/vnd.google-apps.document",
     content: str = "",
     content_type: str = "",
+    session: str = "",
 ) -> dict[str, Any]:
     """Crée un fichier sous parent_id — soumis aux zones Drive (policy + grants).
 
@@ -309,13 +346,14 @@ def drive_create(
         "--json", json.dumps(body),
     ]
     if not content:
-        data = _run(alias, args)
+        data = _run(alias, args, session=session)
         return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
     ctype = _content_type_for(content_type, mime_type)
     with _spooled_content(content, ctype) as path:
         data = _run(
             alias,
             [*args, "--upload", str(path), "--upload-content-type", ctype],
+            session=session,
         )
     return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
 
@@ -350,6 +388,7 @@ def drive_read(
     file_id: str,
     format: str = "",
     max_chars: int = 100_000,
+    session: str = "",
 ) -> dict[str, Any]:
     """Lit le CONTENU d'un fichier Drive en texte (lecture, sous verrou).
 
@@ -372,6 +411,7 @@ def drive_read(
         alias,
         ["drive", "files", "get", "--params",
          json.dumps({"fileId": file_id, "fields": "id,name,mimeType,size"})],
+        session=session,
     )
     mime = (meta.get("mimeType") or "") if isinstance(meta, dict) else ""
     name = (meta.get("name") or "") if isinstance(meta, dict) else ""
@@ -385,6 +425,7 @@ def drive_read(
             ["drive", "files", "export", "--params",
              json.dumps({"fileId": file_id, "mimeType": export_mime})],
             raw_output=True,
+            session=session,
         )
     elif mime.startswith("text/") or mime in _TEXTY_MIMES:
         _reject_oversize(meta, name or file_id)  # taille connue hors Google
@@ -394,6 +435,7 @@ def drive_read(
             ["drive", "files", "get", "--params",
              json.dumps({"fileId": file_id, "alt": "media"})],
             raw_output=True,
+            session=session,
         )
     else:
         raise GatewayError(
@@ -421,6 +463,7 @@ def drive_copy(
     file_id: str,
     parent_id: str,
     name: str = "",
+    session: str = "",
 ) -> dict[str, Any]:
     """Copie un fichier Drive vers parent_id — soumis aux zones côté destination.
 
@@ -443,6 +486,7 @@ def drive_copy(
             "--params", json.dumps({"fileId": file_id, "fields": _DRIVE_FILE_FIELDS}),
             "--json", json.dumps(body),
         ],
+        session=session,
     )
     return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
 
@@ -453,6 +497,7 @@ def drive_upload(
     parent_id: str,
     name: str = "",
     mime_type: str = "",
+    session: str = "",
 ) -> dict[str, Any]:
     """Téléverse un fichier local (binaire compris) — soumis aux zones Drive.
 
@@ -523,6 +568,7 @@ def drive_upload(
         data = _run(
             alias,
             [*args, "--upload", str(spool), "--upload-content-type", mime],
+            session=session,
         )
     finally:
         try:
@@ -558,6 +604,7 @@ def drive_update(
     content: Optional[str] = None,
     content_type: str = "",
     mime_type: str = "",
+    session: str = "",
 ) -> dict[str, Any]:
     """Met à jour un fichier Drive (nom et/ou contenu) — soumis aux zones.
 
@@ -587,7 +634,7 @@ def drive_update(
         "--json", json.dumps(body),
     ]
     if content is None:
-        data = _run(alias, args)
+        data = _run(alias, args, session=session)
         return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
     # content = remplacement INTÉGRAL (media upload). On lit d'abord le vrai
     # mimeType : un fichier Google natif ne s'édite pas ainsi (média ≠ contenu
@@ -597,6 +644,7 @@ def drive_update(
         alias,
         ["drive", "files", "get", "--params",
          json.dumps({"fileId": file_id, "fields": "mimeType"})],
+        session=session,
     )
     current_mime = current.get("mimeType", "") if isinstance(current, dict) else ""
     if current_mime.startswith("application/vnd.google-apps."):
@@ -612,6 +660,7 @@ def drive_update(
         data = _run(
             alias,
             [*args, "--upload", str(path), "--upload-content-type", ctype],
+            session=session,
         )
     return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
 
@@ -628,6 +677,7 @@ def drive_permissions_list(
     file_id: str,
     page_size: int = 100,
     page_token: str = "",
+    session: str = "",
 ) -> dict[str, Any]:
     """Liste les permissions d'un fichier (lecture).
 
@@ -649,6 +699,7 @@ def drive_permissions_list(
     data = _run(
         alias,
         ["drive", "permissions", "list", "--params", json.dumps(params)],
+        session=session,
     )
     return {"ok": True, "alias": alias, "result": data}
 
@@ -660,6 +711,7 @@ def drive_permissions_create(
     role: str = "reader",
     transfer_ownership: bool = False,
     send_notification: bool = False,
+    session: str = "",
 ) -> dict[str, Any]:
     """Partage un fichier ou invite à en devenir propriétaire (policy share requise).
 
@@ -726,6 +778,7 @@ def drive_permissions_create(
             "--params", json.dumps(params),
             "--json", json.dumps(body),
         ],
+        session=session,
     )
     return {
         "ok": True,
@@ -739,6 +792,7 @@ def drive_permissions_delete(
     alias: str,
     file_id: str,
     permission_id: str,
+    session: str = "",
 ) -> dict[str, Any]:
     """Révoque une permission (policy share requise)."""
     validate_alias(alias)
@@ -748,6 +802,7 @@ def drive_permissions_delete(
     _run(
         alias,
         ["drive", "permissions", "delete", "--params", json.dumps(params)],
+        session=session,
     )
     return {"ok": True, "alias": alias, "deleted": permission_id}
 
@@ -756,6 +811,7 @@ def gmail_attachment_get(
     message_id: str,
     attachment_id: str,
     filename: str = "",
+    session: str = "",
 ) -> dict[str, Any]:
     """Télécharge une pièce jointe (lecture, sous verrou) vers .downloads.
 
@@ -771,6 +827,7 @@ def gmail_attachment_get(
         alias,
         ["gmail", "users", "messages", "attachments", "get",
          "--params", json.dumps(params)],
+        session=session,
     )
     b64 = data.get("data") if isinstance(data, dict) else None
     if not isinstance(b64, str):
@@ -782,6 +839,12 @@ def gmail_attachment_get(
     # b64 == "" est une pièce jointe légitimement vide (0 octet) : on écrit un
     # fichier vide plutôt que d'accuser à tort les identifiants.
     raw = base64.urlsafe_b64decode(b64 + "=" * (-len(b64) % 4))
+    if len(raw) > _ATTACHMENT_MAX_BYTES:
+        raise GatewayError(
+            f"pièce jointe trop volumineuse : {len(raw)} octets > "
+            f"{_ATTACHMENT_MAX_BYTES} (borne GWSA_ATTACHMENT_MAX_MB)",
+            code="error",
+        )
     base = Path(_safe_filename(filename))
     dest_dir = download_dir()
     for i in range(1000):
@@ -806,6 +869,44 @@ def gmail_attachment_get(
     }
 
 
+def _bootstrap_no_session(kind: str) -> dict[str, Any]:
+    """Bootstrap SANS jeton (ADR-0007 §Repli) : le seul chemin qu'un appel sans
+
+    jeton peut emprunter est l'élicitation de CRÉATION de session — jamais un
+    accès données. `access_request` reste utilisable sans jeton (ce n'est pas
+    un tool de données), mais un kind qui exige une session en pointe ici vers
+    `mag session open`, plutôt que d'échouer sans piste.
+    """
+    return {
+        "ok": True,
+        "elicitation": True,
+        "kind": "session_open",
+        "requested_kind": kind,
+        "message": (
+            f"« {kind} » nécessite une session MCP active (jeton). Aucune session "
+            f"n'est ouverte pour cette conversation. L'utilisateur doit exécuter :\n"
+            f"  mag session open\n"
+            f"(geste signé — Touch ID/biométrie ; enrôlement requis) puis relancer "
+            f"la demande avec le jeton (session_id) obtenu."
+        ),
+        "suggested_command": "mag session open",
+    }
+
+
+def _reject_if_delegated(sid: str, kind: str) -> None:
+    """Une sous-session déléguée ne peut PAS demander d'élargissement (fiche 0045 /
+    ADR-0007 §Décision 1) : pas d'`access_request` élargissant depuis un enfant."""
+    from .sessions import get_session
+
+    state = get_session(sid)
+    if state is not None and state.delegated:
+        raise GatewayError(
+            f"sous-session déléguée « {sid} » : « {kind} » (élargissement) refusé — "
+            f"seule la session racine (ou l'humain) peut demander plus de droits",
+            code="delegated",
+        )
+
+
 def access_request(
     alias: str,
     kind: str,
@@ -813,13 +914,14 @@ def access_request(
     hours: int = 8,
     minutes: int = 60,
     email: str = "",
+    session: str = "",
 ) -> dict[str, Any]:
     """Produit un message d'élicitation — n'exécute jamais unlock/grant/add."""
     validate_alias(alias)
     kind = (kind or "").lower().strip()
     if kind == "add_account":
         # Connexion d'un NOUVEAU compte : l'alias n'existe pas encore (validé
-        # en format seulement). Le LLM propose ; l'humain exécute gwsa add
+        # en format seulement). Le LLM propose ; l'humain exécute mag add
         # (consentement OAuth navigateur + Touch ID si strongauth).
         if not email or "@" not in email:
             raise GatewayError(
@@ -835,7 +937,7 @@ def access_request(
             "message": (
                 f"Connexion d'un nouveau compte demandée : « {alias} » ({email}). "
                 f"L'utilisateur doit exécuter lui-même :\n"
-                f"  gwsa add {alias} {email}\n"
+                f"  mag add {alias} {email}\n"
                 f"(navigateur → choisir {email} → accepter ; Touch ID d'abord si "
                 f"strongauth est activé). Prérequis côté projet GCP : l'adresse doit "
                 f"être test user si l'app est en Testing, et recevoir le rôle IAM "
@@ -843,7 +945,7 @@ def access_request(
                 f"« ./scripts/provision-gcp.sh status » puis « sync-iam » "
                 f"(docs/setup-oauth.md §7). Le LLM ne doit RIEN exécuter de tout ça."
             ),
-            "suggested_command": f"gwsa add {alias} {email}",
+            "suggested_command": f"mag add {alias} {email}",
         }
     # Nommer le compte au moment d'autoriser (fiche 0047) : « alias » (email).
     # L'email (.email, ADR-0002) est lisible même verrouillé ; repli alias seul
@@ -852,10 +954,13 @@ def access_request(
     who = f"« {alias} » ({acct_email})" if acct_email else f"« {alias} »"
     if kind in ("session_unlock", "unlock"):
         mins = max(1, min(int(minutes), 1440))
-        sid = get_session_id()
+        sid = (session or "").strip()
         if sid or kind == "session_unlock":
             if not sid:
-                raise GatewayError("session_unlock nécessite une session MCP active", code="error")
+                # Bootstrap sans jeton (ADR-0007 §Repli) : pas d'accès données,
+                # juste la piste de création de session.
+                return _bootstrap_no_session(kind)
+            _reject_if_delegated(sid, kind)
             return {
                 "ok": True,
                 "elicitation": True,
@@ -865,10 +970,13 @@ def access_request(
                 "message": (
                     f"Le profil {who} est verrouillé pour cette session. "
                     f"L'utilisateur doit exécuter :\n"
-                    f"  gwsa session unlock {sid} {alias} {mins}\n"
-                    f"(déverrouillage limité à cette conversation — {mins} min)."
+                    f"  mag session unlock {sid} {alias} {mins}\n"
+                    f"(déverrouillage limité à cette conversation — {mins} min). "
+                    f"À distance (loin du Mac), la même commande + « --remote » "
+                    f"bascule l'approbation sur la passkey du téléphone (fiche 0078) "
+                    f"— nécessite un enrôlement préalable côté humain."
                 ),
-                "suggested_command": f"gwsa session unlock {sid} {alias} {mins}",
+                "suggested_command": f"mag session unlock {sid} {alias} {mins}",
             }
         return {
             "ok": True,
@@ -880,11 +988,11 @@ def access_request(
                 f"Le profil {who} est verrouillé (accès sur demande). "
                 f"Depuis une conversation MCP, préférer access_request kind=session_unlock "
                 f"(déverrouillage limité à cette session). Sans session MCP active, legacy poste entier :\n"
-                f"  gwsa unlock {alias} {mins}\n"
+                f"  mag unlock {alias} {mins}\n"
                 f"(déprécié — partagé entre toutes les sessions ; admin http://127.0.0.1:4877). "
                 f"Le LLM ne doit PAS exécuter cette commande ni contourner le verrou."
             ),
-            "suggested_command": f"gwsa unlock {alias} {mins}",
+            "suggested_command": f"mag unlock {alias} {mins}",
         }
     if kind in ("session_grant", "grant", "project_grant"):
         if not folder:
@@ -893,11 +1001,12 @@ def access_request(
                 code="error",
             )
         h = max(1, min(int(hours), 168))
-        sid = get_session_id()
+        sid = (session or "").strip()
 
         if kind == "project_grant":
             if not sid:
-                raise GatewayError("project_grant nécessite une session MCP active", code="error")
+                return _bootstrap_no_session(kind)
+            _reject_if_delegated(sid, kind)
             from .project import grant_allowed_by_manifest, resolve_project
             from pathlib import Path
 
@@ -915,12 +1024,12 @@ def access_request(
                     "message": (
                         f"Aucun manifeste projet (.gwsa/manifest.json). "
                         f"L'utilisateur doit d'abord :\n"
-                        f"  gwsa project init\n"
+                        f"  mag project init\n"
                         f"  # éditer capabilities.{alias}.drive.zones\n"
-                        f"  gwsa project sign\n"
+                        f"  mag project sign\n"
                         f"puis access_request kind=project_grant à nouveau."
                     ),
-                    "suggested_command": "gwsa project init",
+                    "suggested_command": "mag project init",
                 }
             if not proj.manifest_valid:
                 return {
@@ -933,9 +1042,9 @@ def access_request(
                     "message": (
                         f"Manifeste projet présent mais signature invalide "
                         f"({proj.verify_error or 'non signé'}). "
-                        f"Exécuter : gwsa project sign"
+                        f"Exécuter : mag project sign"
                     ),
-                    "suggested_command": "gwsa project sign",
+                    "suggested_command": "mag project sign",
                 }
             # folder peut être un nom — on ne résout pas Drive ici ; on teste si
             # ça ressemble à un id déjà dans le manifeste, sinon on guide quand même
@@ -953,11 +1062,11 @@ def access_request(
                     "message": (
                         f"« {folder} » n'est pas dans le plafond manifeste projet "
                         f"pour {who} (.gwsa/manifest.json). "
-                        f"L'humain doit éditer capabilities puis « gwsa project sign », "
+                        f"L'humain doit éditer capabilities puis « mag project sign », "
                         f"ou choisir une zone déjà déclarée. "
                         f"Session grant hors manifeste serait refusé."
                     ),
-                    "suggested_command": "gwsa project show",
+                    "suggested_command": "mag project show",
                 }
             return {
                 "ok": True,
@@ -969,15 +1078,16 @@ def access_request(
                 "message": (
                     f"Zone projet « {folder} » dans le plafond .gwsa/ pour {who}. "
                     f"Pour l'activer sur cette conversation :\n"
-                    f'  gwsa session grant {sid} {alias} "{folder}" {h}\n'
+                    f'  mag session grant {sid} {alias} "{folder}" {h}\n'
                     f"(intersection policy ∩ manifeste ∩ session — {h} h)."
                 ),
-                "suggested_command": f'gwsa session grant {sid} {alias} "{folder}" {h}',
+                "suggested_command": f'mag session grant {sid} {alias} "{folder}" {h}',
             }
 
         if sid or kind == "session_grant":
             if not sid:
-                raise GatewayError("session_grant nécessite une session MCP active", code="error")
+                return _bootstrap_no_session(kind)
+            _reject_if_delegated(sid, kind)
             return {
                 "ok": True,
                 "elicitation": True,
@@ -989,12 +1099,13 @@ def access_request(
                     f"Écriture Drive sous « {folder} » refusée pour cette session "
                     f"(compte {who}). "
                     f"L'utilisateur doit exécuter :\n"
-                    f'  gwsa session grant {sid} {alias} "{folder}" {h}\n'
+                    f'  mag session grant {sid} {alias} "{folder}" {h}\n'
                     f"(zone valable pour cette conversation seulement — {h} h). "
                     f"Si le dépôt a un .gwsa/ signé, préférer kind=project_grant "
-                    f"(vérifie le plafond manifeste)."
+                    f"(vérifie le plafond manifeste). À distance, ajouter « --remote » "
+                    f"pour approuver depuis la passkey du téléphone (fiche 0078)."
                 ),
-                "suggested_command": f'gwsa session grant {sid} {alias} "{folder}" {h}',
+                "suggested_command": f'mag session grant {sid} {alias} "{folder}" {h}',
             }
         return {
             "ok": True,
@@ -1009,11 +1120,11 @@ def access_request(
                 f"Depuis une conversation MCP, préférer access_request kind=session_grant "
                 f"ou kind=project_grant (zone limitée à cette session + plafond .gwsa/). "
                 f"Sans session MCP active, legacy poste entier :\n"
-                f"  gwsa grant {alias} \"{folder}\" {h}\n"
+                f"  mag grant {alias} \"{folder}\" {h}\n"
                 f"(déprécié — partagé entre toutes les sessions ; admin http://127.0.0.1:4877). "
                 f"Expiration automatique — redemander est normal."
             ),
-            "suggested_command": f'gwsa grant {alias} "{folder}" {h}',
+            "suggested_command": f'mag grant {alias} "{folder}" {h}',
         }
     raise GatewayError(
         "kind invalide — utiliser « unlock », « grant », « session_unlock », "

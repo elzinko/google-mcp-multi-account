@@ -30,7 +30,7 @@ phase. Chaque test a son répertoire, qui contient **tout** :
 |---|---|---|---|
 | [drive-2-comptes](drive-2-comptes/) | Lecture + écriture + modification Drive sur **2 comptes dans un même prompt**, élicitation comprise, nettoyage réversible | ~10 min | Dossier `ZZ-TESTS` à la racine des 2 Drive concernés |
 | [drive-cross-compte](drive-cross-compte/) | **Copie cross-compte** et partage entre **perso** et **mw** dans `ZZ-TESTS` (transfert de propriété hors périmètre) | ~15 min | `ZZ-TESTS` sur les 2 Drive ; activer `share` sur le compte source pour la phase partage |
-| [gwsa-grant-resolve-nom](gwsa-grant-resolve-nom/) | `gwsa grant` résout un dossier **par son nom** : par compte, refus francs (introuvable / ambigu / corbeille), sans Touch ID gaspillé. N'écrit aucun fichier | ~8 min | Dossier `ZZ-TESTS` à la racine des 2 Drive + **deux** dossiers homonymes `ZZ-AMBIGU` |
+| [mag-grant-resolve-nom](mag-grant-resolve-nom/) | `mag grant` résout un dossier **par son nom** : par compte, refus francs (introuvable / ambigu / corbeille), sans Touch ID gaspillé. N'écrit aucun fichier | ~8 min | Dossier `ZZ-TESTS` à la racine des 2 Drive + **deux** dossiers homonymes `ZZ-AMBIGU` |
 
 ## Conventions (tous les tests)
 
@@ -38,14 +38,14 @@ phase. Chaque test a son répertoire, qui contient **tout** :
   créé par l'humain à la racine du Drive concerné. Rien d'autre n'est touché —
   la policy (zones, default-deny) le garantit, et le test le vérifie.
 - **Élicitation humaine** : le LLM ne déverrouille jamais un profil et ne
-  s'accorde jamais de zone. Il demande ; l'humain exécute (`gwsa unlock`,
-  `gwsa grant`), Touch ID si strongauth est activé.
+  s'accorde jamais de zone. Il demande ; l'humain exécute (`mag unlock`,
+  `mag grant`), Touch ID si strongauth est activé.
 - **Refus attendus = assertions** : un test manuel vérifie aussi que les
   barrières tiennent. Une étape « refus attendu » qui passe est un échec.
 - **Nettoyage réversible** : corbeille uniquement (restaurable 30 jours),
   sur accord explicite. La suppression définitive reste un geste humain
   dans Drive.
-- **Identification** : commandes shell via `GWSA_CLIENT=claude-code gwsa …`
+- **Identification** : commandes shell via `GWSA_CLIENT=claude-code mag …`
   (jamais `gws` nu), tools MCP quand ils existent — tout est journalisé.
 
 ## Ajouter un test

@@ -27,14 +27,14 @@ jobs:
 
       - name: Syntaxe bash
         run: |
-          bash -n bin/gwsa
+          bash -n bin/mag
           bash -n install.sh
           for f in scripts/*.sh; do bash -n "$f"; done
 
       - name: shellcheck (erreurs bloquantes uniquement)
         run: |
           if command -v shellcheck >/dev/null 2>&1; then
-            shellcheck -S error bin/gwsa install.sh scripts/*.sh
+            shellcheck -S error bin/mag install.sh scripts/*.sh
           else
             echo "::warning::shellcheck absent de ce runner — étape sautée"
           fi
@@ -48,11 +48,11 @@ jobs:
         run: node --check admin/server.js
 
       # Hermétique (GWSA_ROOT / HOME / configs temporaires) : policy, gateway MCP,
-      # admin zones (wiring + API grant/drive-folder), gwsa dev (deploy isolé,
+      # admin zones (wiring + API grant/drive-folder), mag dev (deploy isolé,
       # use --apply, list/status/remove, dev test + marqueur afSearchHits).
       # Touch ID / swiftc : job macOS manuel (label « macos ») — jamais en CI Linux.
       # PR checkout = merge commit GitHub (HEAD = fusion PR→main), comme en prod.
-      - name: Tests (policy + garde-fous gwsa)
+      - name: Tests (policy + garde-fous mag)
         run: ./scripts/test.sh
 
   # Runner macOS = 10x le coût d'un runner Linux : jamais automatique.

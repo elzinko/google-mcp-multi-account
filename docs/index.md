@@ -9,14 +9,14 @@ Drive, chaque nouveau compte reste un **geste humain**.
 
 <div class="grid cards" markdown>
 
-- :material-rocket-launch: **[Démarrer en 3 minutes](#installer-en-3-minutes)**
+- :material-rocket-launch: **[Démarrer](#installer)**
   Installer sans cloner, connecter un compte, poser la question au LLM.
 
 - :material-shield-lock: **[Sécurité d'abord](threat-model.md)**
   Default-deny, verrous par profil, écritures Drive zonées, zéro envoi de mail.
 
-- :material-tools: **[CLI & admin](usage.md)**
-  `gwsa` : profils, verrous, zones Drive, Touch ID, interface web locale.
+- :material-tools: **[CLI (mag)](usage.md)**
+  `mag` : profils, verrous, zones Drive, Touch ID.
 
 - :material-sitemap: **[Sous le capot](architecture.md)**
   MCP, gateway, broker loopback, wrapper — qui parle à qui.
@@ -37,28 +37,38 @@ Drive, chaque nouveau compte reste un **geste humain**.
   macOS), journal d'audit par client. Seule étape cloud : un credential OAuth,
   une fois.
 
-## Installer en 3 minutes
+## Installer
 
-Pour **utiliser** le serveur, pas besoin de cloner le dépôt :
+**Prérequis** — la CLI amont [`gws`](https://github.com/googleworkspace/cli) (le
+Google Workspace CLI que ce projet enrobe) et Python 3 :
+
+```bash
+brew install googleworkspace-cli
+```
+
+Puis, pour **utiliser** le serveur (pas besoin de cloner le dépôt) :
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/elzinko/google-mcp-multi-account/main/install.sh | bash
 ```
 
-Ça télécharge la dernière version, la met sur ton poste, branche tes clients, et
-affiche à la fin le **setup Google** restant (voir [OAuth / Google Cloud](setup-oauth.md)).
+Ça télécharge la dernière version, la met sur ton poste, branche Claude
+Desktop et Claude Code (Cursor : à brancher à la main), et affiche à la fin
+le **setup Google** restant (un projet OAuth, ~10 min — voir
+[OAuth / Google Cloud](setup-oauth.md)). Aucun compte ne se connecte tant qu'il
+n'est pas fait — mais `setup_status` tourne déjà pour te guider.
 
-Connecter un compte, puis redémarrer Claude Desktop :
+Une fois le setup Google fait, connecter un compte puis redémarrer Claude Desktop :
 
 ```bash
-gwsa add perso        # navigateur → choisir le compte → accepter
-gwsa list             # profils + état
+mag add perso votre.email@gmail.com   # « perso » = nom court · l'email épingle le compte
+mag list             # profils + état
 ```
 
 Mettre à jour plus tard, **toujours sans clone** :
 
 ```bash
-gwsa update
+mag update
 ```
 
 !!! tip "Cloner, c'est pour contribuer"
@@ -71,7 +81,8 @@ gwsa update
 |---|---|
 | Brancher un client, connaître les tools exposés | [Installer & mettre à jour](mcp-setup.md) |
 | Faire le setup OAuth / Google Cloud, les rôles IAM | [OAuth / Google Cloud](setup-oauth.md) |
-| Piloter `gwsa` (profils, verrous, zones, admin) | [CLI & admin](usage.md) |
+| Piloter `mag` (profils, verrous, zones Drive) | [CLI (mag)](usage.md) |
+| Piloter l'admin web (comptes, verrous, policies) | [Admin web](admin.md) |
 | Comprendre le modèle de policy (default-deny, zones) | [Modèle de policy](policies.md) |
 | Voir les garanties de sécurité, phase par phase | [Modèle de menace](threat-model.md) |
 | Un regard honnête (forces, limites, concurrence) | [Critique](critique.md) |

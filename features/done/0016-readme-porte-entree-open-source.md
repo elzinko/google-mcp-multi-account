@@ -19,7 +19,7 @@ des repères qu'un projet open-source affiche pour être **lisible et crédible*
 1. **Quickstart non copiable tel quel** : l'étape « brancher le MCP » renvoyait
    au bloc JSON de `docs/mcp-setup.md` alors que le script `install-claude-desktop.sh`
    (0013) existait déjà — le lecteur croyait devoir éditer du JSON à la main. Et
-   il manquait un `git clone` + `cd` en tête : `ln -sf "$PWD/bin/gwsa" …` lancé
+   il manquait un `git clone` + `cd` en tête : `ln -sf "$PWD/bin/mag" …` lancé
    depuis le home crée un **symlink cassé silencieusement**, puis
    `provision-gcp.sh` échoue avec un message opaque.
 2. **Pas de licence** — statut juridique indéterminé, bloquant pour l'open-source.

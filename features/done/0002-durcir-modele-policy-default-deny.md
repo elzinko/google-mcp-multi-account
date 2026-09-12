@@ -28,7 +28,7 @@ résolus** — la fiche décrivait un état antérieur aux correctifs :
   vérification faite, un service non déclaré est bien refusé (lecture comprise).
   Ce build **verrouille le comportement par des tests** sur toute la classe
   (chat/meet/people/slides/forms).
-- **Point 2** : résolu (policy prudente écrite par défaut à `gwsa add`).
+- **Point 2** : résolu (policy prudente écrite par défaut à `mag add`).
 - **Point 3** : chemins absolus faits ; falsifiabilité de l'état des verrous →
   fiche 0001.
 
@@ -51,12 +51,12 @@ résolus** — la fiche décrivait un état antérieur aux correctifs :
    désormais une policy prudente par défaut à la création (`gateway/default_policy.py` →
    `write_default_policy` : Drive `zonesOnly`, Gmail sans envoi, docs/sheets/tasks lecture
    seule). Un profil frais est restreint d'emblée. *Reste, comme fail-open résiduel : si le
-   `policy.json` est absent (supprimé à la main), `bin/gwsa` retombe en « tout ouvert » —
+   `policy.json` est absent (supprimé à la main), `bin/mag` retombe en « tout ouvert » —
    c'est la même racine que le point 1 (défaut permissif) ; à traiter avec lui.*
 
-3. ~~**`gwsa strongauth` : le cérémonial Touch ID s'appuie sur des éléments éditables par
+3. ~~**`mag strongauth` : le cérémonial Touch ID s'appuie sur des éléments éditables par
    l'agent.**~~ **PARTIELLEMENT TRAITÉ le 2026-07-20.** `require_strong_auth` shellait vers
-   `swift` **résolu dans le PATH**, et — plus grave — `bin/gwsa` lançait le **contrôleur de
+   `swift` **résolu dans le PATH**, et — plus grave — `bin/mag` lançait le **contrôleur de
    policy** via `python3` du PATH : un faux `python3` renvoyant 0 **désactivait toute la
    policy** (démontré : la commande d'envoi atteignait `gws` malgré `send:false`). Corrigé :
    `SYS_PYTHON=/usr/bin/python3` et `SYS_SWIFT=/usr/bin/swift` en chemins absolus, non
@@ -73,7 +73,7 @@ résolus** — la fiche décrivait un état antérieur aux correctifs :
 ## Note transverse — la seule garantie dure est hors wrapper
 
 Les trois points, plus le contournement par `gws` nu (limite déjà documentée), pointent le
-même mur : **`gwsa` est un garde-fou côté client, dans le périmètre de l'agent.** Un agent
+même mur : **`mag` est un garde-fou côté client, dans le périmètre de l'agent.** Un agent
 avec shell peut toujours `GOOGLE_WORKSPACE_CLI_CONFIG_DIR=… gws …` et tout contourner
 (policy, verrou, journal). Le wrapper hausse le coût et trace l'usage coopératif — il ne
 contraint pas un agent adverse déterminé. La seule garantie dure serait de déplacer
@@ -90,7 +90,7 @@ le besoin réel émerge (cf. déclencheurs de la fiche 0001).
 - Bugs déjà corrigés (référence, ne pas rouvrir) : commit/segment du 2026-07-20,
   `scripts/policy-check.py` + `scripts/test.sh` (section « Bypass corrigés »).
 - Trous de couverture comblés le même jour : emptyTrash, move addParents/removeParents,
-  partage Calendar (acl), Gmail labels/update, bornes de `gwsa grant`, path-traversal alias.
+  partage Calendar (acl), Gmail labels/update, bornes de `mag grant`, path-traversal alias.
 - Idées de couverture encore ouvertes (audit §2) : test transitif « sous-dossiers compris »
   de `under_allowed` (récursion + anti-cycle + profondeur, via un stub `gws` en PATH) ;
   test que tout accès AUTORISÉ produit bien une ligne dans `usage.jsonl` (la journalisation
