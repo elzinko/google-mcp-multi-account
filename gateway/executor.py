@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .broker_server import broker_host, broker_port, ensure_token, token_path
-from .config import REPO_DIR, SYS_PYTHON, client_id
+from .config import REPO_DIR, SYS_PYTHON, client_id, gwsa_root
 from .context import get_git_root
 from .errors import GatewayError
 
@@ -58,7 +58,7 @@ def ensure_broker_running() -> None:
     python = SYS_PYTHON if os.path.isfile(SYS_PYTHON) else sys.executable
     env = dict(os.environ)
     env["PYTHONPATH"] = str(REPO_DIR) + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
-    log_path = Path(os.environ.get("GWSA_ROOT") or Path.home() / ".config" / "gws-accounts") / ".broker.log"
+    log_path = gwsa_root() / ".broker.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     logf = open(log_path, "a", encoding="utf-8")  # noqa: SIM115 — vit avec le daemon
     subprocess.Popen(

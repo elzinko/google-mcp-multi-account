@@ -49,7 +49,25 @@
 #   mag perso workflow +agenda
 set -euo pipefail
 
-GWSA_ROOT="${GWSA_ROOT:-$HOME/.config/gws-accounts}"
+# Renommage GWSA_ → MAG_ (fiche 20260912000249823, lot 3) : compat bi-nom en tête.
+# Chaque variable LUE depuis l'environnement de l'appelant est réamorcée avec MAG_
+# prioritaire, GWSA_ en repli. Le reste du script lit ensuite $GWSA_* (valeur déjà
+# résolue) sans changement — les défauts éventuels restent posés en aval (${VAR:-…}).
+# (Les variables ÉMISES vers les sous-process — GWSA_CLIENT, GWSA_SYS_SWIFT… — sont
+#  traitées au lot 4 ; leurs lecteurs Python acceptent déjà les deux noms, lot 2.)
+GWSA_ROOT="${MAG_ROOT:-${GWSA_ROOT:-$HOME/.config/gws-accounts}}"
+GWSA_ADMIN_PORT="${MAG_ADMIN_PORT:-${GWSA_ADMIN_PORT:-}}"
+GWSA_BROKER_PORT="${MAG_BROKER_PORT:-${GWSA_BROKER_PORT:-}}"
+GWSA_SESSION_ID="${MAG_SESSION_ID:-${GWSA_SESSION_ID:-}}"
+GWSA_DEPLOY_ROOT="${MAG_DEPLOY_ROOT:-${GWSA_DEPLOY_ROOT:-}}"
+GWSA_DESKTOP_CONFIG="${MAG_DESKTOP_CONFIG:-${GWSA_DESKTOP_CONFIG:-}}"
+GWSA_CURSOR_CONFIG="${MAG_CURSOR_CONFIG:-${GWSA_CURSOR_CONFIG:-}}"
+GWSA_REMOTE_SIGNER="${MAG_REMOTE_SIGNER:-${GWSA_REMOTE_SIGNER:-}}"
+GWSA_REMOTE_RESPONSE="${MAG_REMOTE_RESPONSE:-${GWSA_REMOTE_RESPONSE:-}}"
+GWSA_ELICITATION_MOCK="${MAG_ELICITATION_MOCK:-${GWSA_ELICITATION_MOCK:-}}"
+GWSA_ADMIN_NO_OPEN="${MAG_ADMIN_NO_OPEN:-${GWSA_ADMIN_NO_OPEN:-}}"
+GWSA_DEPRECATION_SESSION_KEY="${MAG_DEPRECATION_SESSION_KEY:-${GWSA_DEPRECATION_SESSION_KEY:-}}"
+
 MASTER_SECRET="$GWSA_ROOT/client_secret.json"
 
 # Sécurité (info-disclosure) : les métadonnées de comptes (.email, usage.jsonl,
@@ -884,7 +902,7 @@ close_session(sys.argv[1])
   esac
 }
 
-cmd_elicitation() { # mag elicitation enroll|status — clé biométrique (fiche 0001)
+cmd_elicitation() { # mag elicitation enroll|status|in-conversation — clé biométrique (fiche 0001)
   local sub="${1:-status}"; shift || true
   case "$sub" in
     enroll)
@@ -899,7 +917,32 @@ cmd_elicitation() { # mag elicitation enroll|status — clé biométrique (fiche
       REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" \
         "$SYS_PYTHON" "$REPO_DIR/scripts/elicitation-cli.py" status
       ;;
-    *) die "usage: $SELF elicitation enroll [--mock] | status" ;;
+    in-conversation)
+      [[ $# -le 1 ]] || die "usage: $SELF elicitation in-conversation on|off|status"
+      local flag="$GWSA_ROOT/.elicitation-in-conversation"
+      case "${1:-status}" in
+        on)
+          echo "⚠️  Opt-in mode: an MCP tool (session_unlock_in_conversation) will be able"
+          echo "   to trigger the Touch ID popup DIRECTLY from the conversation, without"
+          echo "   going through this terminal. Two-step protocol (confirmation in the chat"
+          echo "   before any popup) — but that confirmation is a SOFT lock: the LLM applies"
+          echo "   it itself, it is not a system guarantee. The real safety net stays the"
+          echo "   Touch ID signature."
+          # Créer la racine si elle n'existe pas encore (install neuve) avant
+          # d'écrire le marqueur : le durcissement de démarrage ne crée pas la
+          # racine, il la sécurise si elle existe (revue Codex #142).
+          mkdir -p "$GWSA_ROOT" && chmod 700 "$GWSA_ROOT" 2>/dev/null || true
+          touch "$flag"
+          echo "✓ In-conversation elicitation ENABLED (run 'mag elicitation enroll' if needed)."
+          echo "↻ Reconnect your conversation (or restart the MCP client) to see the tool:"
+          echo "   the tool list is only re-read on connect (no hot notification)."
+          ;;
+        off) rm -f "$flag"; echo "In-conversation elicitation disabled." ;;
+        status) [[ -f "$flag" ]] && echo "enabled" || echo "disabled" ;;
+        *) die "usage: $SELF elicitation in-conversation on|off|status" ;;
+      esac
+      ;;
+    *) die "usage: $SELF elicitation enroll [--mock] | status | in-conversation on|off|status" ;;
   esac
 }
 

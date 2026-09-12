@@ -13,11 +13,12 @@ import os
 import secrets
 import subprocess
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from ._filelock import file_lock
-from .config import PRODUCT_SLUG, REPO_DIR, SYS_PYTHON, gwsa_root
+from ._filelock import file_lock, try_file_lock
+from .config import PRODUCT_SLUG, REPO_DIR, SYS_PYTHON, env, gwsa_root
 
 ELICITATION_DIR_NAME = ".elicitation"
 PUBLIC_KEY_NAME = "public.der"
@@ -103,7 +104,7 @@ def _test_race_delay() -> None:
 
 
 def is_mock_mode() -> bool:
-    if os.environ.get("GWSA_ELICITATION_MOCK", "").strip() in ("1", "true", "yes"):
+    if (env("ELICITATION_MOCK") or "").strip() in ("1", "true", "yes"):
         return True
     return mock_key_path().is_file() and not public_key_path().is_file()
 
@@ -168,6 +169,8 @@ def prompt_from_payload(payload: dict[str, Any]) -> str:
         return f"mag : révoquer les sous-sessions de {sid or target}"
     if action == "strongauth_off":
         return "mag : désactiver l'authentification forte"
+    if action == "session_open":
+        return "mag : ouvrir une session pour cette conversation"
     return f"mag : {action} — {alias} {target}".strip()
 
 
@@ -271,14 +274,15 @@ def _sign_helper_cmd() -> list[str]:
 
     Préfère le binaire produit compilé (dialogue Touch ID nommé d'après
     PRODUCT_SLUG, cf. fiche 0032) s'il est présent et exécutable ; à défaut,
-    `swift <script>` (dialogue système « swift-frontend »). GWSA_SIGN_BIN suit le
-    même modèle de confiance que GWSA_SYS_SWIFT : fixé par le wrapper, chemin dur
-    (REPO_DIR) par défaut.
+    `swift <script>` (dialogue système « swift-frontend »). MAG_SIGN_BIN suit le
+    même modèle de confiance que MAG_SYS_SWIFT : fixé par le wrapper, chemin dur
+    (REPO_DIR) par défaut. Les anciens GWSA_SIGN_BIN / GWSA_SYS_SWIFT restent lus
+    en repli (helper env()).
     """
-    binp = os.environ.get("GWSA_SIGN_BIN") or str(SIGN_BUILD_DIR / PRODUCT_SLUG)
+    binp = env("SIGN_BIN") or str(SIGN_BUILD_DIR / PRODUCT_SLUG)
     if binp and os.access(binp, os.X_OK):
         return [binp]
-    swift = os.environ.get("GWSA_SYS_SWIFT", "/usr/bin/swift")
+    swift = env("SYS_SWIFT", "/usr/bin/swift")
     script = REPO_DIR / "scripts" / SIGN_HELPER_NAME
     if not Path(swift).is_file():
         raise ElicitationError(f"Swift introuvable ({swift}) — xcode-select --install")
@@ -410,6 +414,91 @@ def obtain_signature(payload: dict[str, Any]) -> str:
     return _swift_sign(payload)
 
 
+# ── Élicitation dans la conversation (opt-in, fiche « session_unlock_in_conversation ») ──
+#
+# Réglage calqué sur .strong-auth (gateway/project.py:260) : simple fichier
+# marqueur sous la racine gws. Off par défaut — le tool MCP correspondant
+# reste alors invisible dans tools/list (cf. gateway/mcp_server.py).
+IN_CONVERSATION_FLAG_NAME = ".elicitation-in-conversation"
+INCONV_THROTTLE_NAME = "inconv-throttle.json"
+INCONV_THROTTLE_SEC = 10  # une seule demande confirm=true à la fois par session
+
+
+def in_conversation_enabled() -> bool:
+    return (gwsa_root() / IN_CONVERSATION_FLAG_NAME).is_file()
+
+
+def _inconv_throttle_path() -> Path:
+    return elicitation_dir() / INCONV_THROTTLE_NAME
+
+
+def _inconv_throttle_lock_path() -> Path:
+    return _inconv_throttle_path().with_suffix(".lock")
+
+
+def check_inconv_throttle(session_id: str) -> None:
+    """Refuse un 2e déclenchement rapproché (confirm=true) pour la même session.
+
+    Verrou fichier inter-process, même schéma que consume_nonce (fiche 0084) :
+    c'est un garde-fou souple contre un LLM qui redéclenche trop vite, pas le
+    filet de sécurité réel (qui reste la signature Touch ID).
+    """
+    if not session_id:
+        return
+    now = time.time()
+    with file_lock(_inconv_throttle_lock_path()):
+        path = _inconv_throttle_path()
+        data: dict[str, float] = {}
+        if path.is_file():
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(raw, dict):
+                    data = {str(k): float(v) for k, v in raw.items()}
+            except (OSError, json.JSONDecodeError, TypeError, ValueError):
+                data = {}
+        last = data.get(session_id)
+        if last is not None and now - last < INCONV_THROTTLE_SEC:
+            raise ElicitationError(
+                "élicitation en conversation déjà en cours pour cette session — "
+                "réessayer dans quelques secondes"
+            )
+        data = {k: v for k, v in data.items() if now - v < 86400}
+        data[session_id] = now
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data), encoding="utf-8")
+        try:
+            os.chmod(tmp, 0o600)
+        except OSError:
+            pass
+        tmp.replace(path)
+
+
+INCONV_INFLIGHT_NAME = "inconv-inflight.lock"
+
+
+def _inconv_inflight_path() -> Path:
+    return elicitation_dir() / INCONV_INFLIGHT_NAME
+
+
+@contextmanager
+def inconv_inflight_guard():
+    """Garantit UNE seule élicitation en conversation en vol à la fois.
+
+    Verrou GLOBAL (toutes sessions confondues), tenu pour toute la durée du
+    popup Touch ID — pas un simple rate-limit par session (revue Codex #142).
+    Deux conversations concurrentes ne peuvent pas déclencher deux popups en
+    même temps : la seconde est refusée (fail-closed) au lieu de faire la queue.
+    """
+    try:
+        with try_file_lock(_inconv_inflight_path()):
+            yield
+    except BlockingIOError:
+        raise ElicitationError(
+            "une élicitation en conversation est déjà en cours — "
+            "attendre qu'elle se termine avant de réessayer"
+        )
+
+
 def run_elicitation_gate(fields: dict[str, Any]) -> None:
     """Point d'entrée : construit le payload, obtient signature, vérifie, journalise."""
     if not is_enrolled():
@@ -437,7 +526,7 @@ def run_elicitation_gate(fields: dict[str, Any]) -> None:
 
 def enroll_secure() -> dict[str, Any]:
     """Enrôlement macOS — SE / Keychain, sinon fichier private.p256 + Touch ID."""
-    if is_mock_mode() and os.environ.get("GWSA_ELICITATION_MOCK"):
+    if is_mock_mode() and env("ELICITATION_MOCK"):
         return enroll_mock()
     pub = public_key_path()
     proc = subprocess.run(
