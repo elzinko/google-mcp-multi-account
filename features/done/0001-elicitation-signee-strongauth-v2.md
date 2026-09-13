@@ -5,12 +5,22 @@ type: feature
 priority: P3
 version:
 epic:
-status: in-progress
+status: superseded
 ready:
 pr:
 created: 2026-07-20
-updated: 2026-07-28
+updated: 2026-09-12
 ---
+
+> **🗑️ Superseded (2026-09-12).** La proposition — consentement **scellé par une signature à présence
+> physique** (P-256 Secure Enclave, défi nonce + hachage, reçu vérifiable, fail-closed) — est **livrée** :
+> **ADR-0005** (« Élicitation signée v2 »), `scripts/elicitation-sign.swift`, `gateway/elicitation.py`
+> (challenge / `consume_nonce` / `log_receipt` / vérification). Durcie ensuite par [[0082]]/[[0083]]/[[0084]]
+> (anti-TOCTOU, anti-clonage) et exploitée par le POC in-conversation (#142).
+>
+> Le **2ᵉ trou** soulevé ici — « le contrôle vit dans le wrapper, un shell nu contourne » — est
+> **orthogonal** et reste porté par l'axe **holder/vault souverain** : épic [[0077]] (accès mobile
+> souverain, ADR-0008). Cette fiche est donc close ; son reliquat vit ailleurs.
 
 ## Contexte / Problème
 
@@ -58,7 +68,7 @@ Périmètre pressenti **ici** : les deux points d'élicitation existants, `unloc
 **État constaté le 2026-07-28** : fiche 0007 toujours `idea` (non shipped). Le user a
 autorisé l'implémentation du **chemin macOS / mag** dans ce repo sans attendre 0007
 (transport WhatsApp reste bloqué côté l'autre projet). Conception alignée sur les 4
-décisions de 0007 ; ADR local : [ADR-0005](../docs/adr/ADR-0005-elicitation-signee-v2.md).
+décisions de 0007 ; ADR local : [ADR-0005](../../docs/adr/ADR-0005-elicitation-signee-v2.md).
 
 ## Questions ouvertes (à trancher au grooming, une fois débloquée)
 

@@ -6,8 +6,8 @@ priority: P2
 product: google-mcp-multi-account
 version:
 epic:
-status: todo
-ready:
+status: ready
+ready: 2026-09-12
 pr:
 created: 2026-09-05
 ---
@@ -20,7 +20,8 @@ familles : (A) le **rollback à travers le renommage `gma→mag`** (#134/#135), 
 (B) la **dépréciation `gwsa` + le guide de refresh** (#136, fiche 0092). Aucun ne casse le cas courant.
 Les rollback sont rares et récupérables par réinstall ; côté 0092, deux vrais défauts (condition du
 message inversée, test de non-régression qui ne teste pas ce qu'il prétend) + deux durcissements.
-**Non groomé** (ready vide) : à cadrer avant de tirer.
+**Groomé (2026-09-12)** : la seule décision ouverte (test.sh, Groupe A) est tranchée — accepter la
+limite documentée. Les critères d'acceptation vérifiables sont en « Comment vérifier ». **Prête à tirer.**
 
 ## Groupe A — rollback (PR #134/#135)
 
@@ -51,8 +52,10 @@ message inversée, test de non-régression qui ne teste pas ce qu'il prétend) +
   Le test enchaîne le 2ᵉ revert via `$GW` (binaire du clone) et non `$LINK` (reciblé sur l'ancienne
   release). Comme la release précédente est antérieure au commit, son `mag` n'a pas le verbe `revert` :
   un vrai 2ᵉ `mag revert` échouerait. Le test devrait passer par `$LINK` — ce qui **révèle** une
-  limite réelle (revert indisponible après downgrade vers une release pré-revert). À décider : accepter
-  la limite (documentée) ou garder le lien `mag` courant même après downgrade.
+  limite réelle (revert indisponible après downgrade vers une release pré-revert). **Décidé** : accepter
+  la limite — garder le lien `mag` courant après un downgrade violerait l'invariant « `current` = ce qui
+  est lié ». Le test passe donc par `$LINK` et **documente** l'indisponibilité (message clair, pas un
+  échec silencieux) ; « revert après downgrade pré-revert » se répare par réinstallation.
 
 ## Groupe B — dépréciation gwsa + refresh (PR #136, fiche 0092)
 
