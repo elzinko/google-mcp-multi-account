@@ -34,6 +34,22 @@ PREVIOUS_LINK="$DEPLOY_ROOT/previous"
 LIB_GH="$(cd "$(dirname "$0")" && pwd)/lib-github-release.sh"
 # Re-ciblage des liens PATH mag/gma/gwsa — partagé avec update.sh (fiche 0081).
 LIB_CLI="$(cd "$(dirname "$0")" && pwd)/lib/cli-link.sh"
+# Chargé ICI, tout de suite — PAS au moment de l'utiliser dans --rollback plus
+# bas (fiche 20260905175129735 item 1). Quand ce script est invoqué à travers
+# le lien « current » ($0 = .../current/scripts/deploy-local.sh), le chemin
+# ci-dessus contient encore le composant « current » : si on ne source le
+# fichier qu'APRÈS point_current_at (qui rebascule current sur la version
+# CIBLE), la lecture traverse le symlink déjà rebasculé et cherche le helper
+# dans la release cible — absente pour une release qui prédate ce helper —
+# alors qu'il vivait bel et bien dans la release qui exécute CE process. En
+# sourçant tout de suite (avant toute bascule), la lecture du fichier
+# traverse « current » tant qu'il pointe encore sur la bonne release.
+LIB_CLI_LOADED=""
+if [[ -f "$LIB_CLI" ]]; then
+  # shellcheck source=scripts/lib/cli-link.sh
+  source "$LIB_CLI"
+  LIB_CLI_LOADED=1
+fi
 
 # ── affichage (même convention que provision-gcp.sh) ─────────────
 if [[ -t 1 ]]; then
@@ -124,7 +140,9 @@ if [[ "$MODE" == "list" ]]; then
   for d in "$DEPLOY_ROOT"/*/; do
     [[ -d "$d" ]] || continue
     v="$(basename "$d")"
-    if [[ "$v" == "current" ]]; then continue; fi
+    # « previous » est un lien réservé (dernière bascule, fiche 0091), pas une
+    # version déployée — item 3, fiche 20260905175129735.
+    if [[ "$v" == "current" || "$v" == "previous" ]]; then continue; fi
     found=1
     if [[ "$v" == "$cur" ]]; then echo "* $v"; else echo "  $v"; fi
   done
@@ -135,6 +153,12 @@ fi
 # ── --rollback ───────────────────────────────────────────────────
 if [[ "$MODE" == "rollback" ]]; then
   [[ -n "$ROLLBACK_TO" ]] || die "usage : --rollback <version> (voir --list)"
+  # « previous » est un lien RÉSERVÉ (dernière bascule, fiche 0091), pas une
+  # version : le test « -d » ci-dessous l'accepterait, mais point_current_at
+  # écrase « previous » AVANT d'y faire pointer current, ce qui perdrait sa
+  # vraie cible (item 3, fiche 20260905175129735).
+  [[ "$ROLLBACK_TO" != "previous" ]] \
+    || die "« previous » est un lien réservé (pointe la dernière bascule), pas une version déployée — vois « --list » pour les versions valables"
   target="$DEPLOY_ROOT/$ROLLBACK_TO"
   [[ -d "$target" ]] || die "version « $ROLLBACK_TO » non déployée (voir --list)"
   if [[ -n "$DRY" ]]; then
@@ -149,9 +173,7 @@ if [[ "$MODE" == "rollback" ]]; then
   # #114 round 5, fiche 0081). Même cible que le repli déjà appliqué par
   # stop_broker ci-dessus. Best-effort : une copie déployée avant ce partage
   # n'a pas ce fichier — on le signale plutôt que de faire échouer le rollback.
-  if [[ -f "$LIB_CLI" ]]; then
-    # shellcheck source=scripts/lib/cli-link.sh
-    source "$LIB_CLI"
+  if [[ -n "$LIB_CLI_LOADED" ]]; then
     retarget_cli_links "$REPO_ROOT" "$DEPLOY_ROOT"
   else
     warn "helper de re-ciblage introuvable ($LIB_CLI) — liens du PATH non gérés"
