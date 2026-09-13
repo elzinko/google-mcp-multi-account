@@ -26,7 +26,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-DEPLOY_ROOT="${GWSA_DEPLOY_ROOT:-$HOME/.local/share/google-mcp}"
+DEPLOY_ROOT="${MAG_DEPLOY_ROOT:-${GWSA_DEPLOY_ROOT:-$HOME/.local/share/google-mcp}}"  # compat bi-nom (fiche 20260912000249823)
 
 if [[ -t 1 ]]; then
   B=$'\033[1m'; G=$'\033[32m'; R=$'\033[31m'; Y=$'\033[33m'; N=$'\033[0m'
@@ -37,6 +37,25 @@ step() { echo; echo "${B}── $* ──${N}"; }
 ok()   { echo "${G}✓${N} $*"; }
 warn() { echo "${Y}⚠${N} $*"; }
 die()  { echo "${R}✗ $*${N}" >&2; exit 1; }
+
+# Re-ciblage des liens PATH mag/gma/gwsa — partagé avec deploy-local.sh
+# (fiche 0081). Chargé ICI, TOUT DE SUITE — pas plus bas, juste avant l'appel
+# à retarget_cli_links comme avant (fiche 20260905175129735 item 1). Quand ce
+# script est invoqué depuis la copie INSTALLÉE ($0 = .../current/scripts/
+# update.sh), $HERE contient encore le composant « current » : deploy-local.sh
+# rebascule current sur la release CIBLE avant qu'on ait besoin du helper ; si
+# on ne le source qu'après, la lecture traverse « current » déjà rebasculé et
+# cherche le helper dans la release cible — absente si elle prédate ce helper,
+# alors qu'il vivait bel et bien dans la release qui exécute CE process. En
+# sourçant maintenant, la lecture traverse « current » tant qu'il pointe
+# encore sur la bonne release.
+LIBCLI="$HERE/scripts/lib/cli-link.sh"
+CLI_LINK_LOADED=""
+if [[ -f "$LIBCLI" ]]; then
+  # shellcheck source=scripts/lib/cli-link.sh
+  source "$LIBCLI"
+  CLI_LINK_LOADED=1
+fi
 
 # ── arguments ────────────────────────────────────────────────────
 CHECK=""; FORCE=""; WANT=""
@@ -168,7 +187,7 @@ fi
 step "Branchement"
 INSTALLER="$DEPLOY_ROOT/current/scripts/install-claude-desktop.sh"
 CC_INSTALLER="$DEPLOY_ROOT/current/scripts/install-claude-code.sh"
-CONFIG="${GWSA_DESKTOP_CONFIG:-$HOME/Library/Application Support/Claude/claude_desktop_config.json}"
+CONFIG="${MAG_DESKTOP_CONFIG:-${GWSA_DESKTOP_CONFIG:-$HOME/Library/Application Support/Claude/claude_desktop_config.json}}"  # compat bi-nom (fiche 20260912000249823)
 EXPECTED="$DEPLOY_ROOT/current/bin/google-mcp"
 
 entry_command() {
@@ -220,15 +239,15 @@ fi  # fin du bloc sauté quand « déjà à jour »
 # étrangère est laissé intact.
 #
 # La logique de re-ciblage est partagée avec deploy-local.sh --rollback
-# (fiche 0081, socle du cluster updater 0091/0092) — voir scripts/lib/cli-link.sh.
-# Une copie déployée avant ce partage n'a pas ce fichier : on le signale
-# plutôt que de faire échouer tout « update » (best-effort, comme le reste
-# du branchement des liens du PATH).
-LIBCLI="$(cd "$(dirname "$0")" && pwd)/lib/cli-link.sh"
-if [[ -f "$LIBCLI" ]]; then
-  # shellcheck source=scripts/lib/cli-link.sh
-  source "$LIBCLI"
+# (fiche 0081, socle du cluster updater 0091/0092) — voir scripts/lib/cli-link.sh,
+# chargé tout en haut de ce script (item 1, fiche 20260905175129735) — AVANT
+# que deploy-local.sh ne bascule « current » sur la release cible. Une copie
+# déployée avant ce partage n'a pas ce fichier : on le signale plutôt que de
+# faire échouer tout « update » (best-effort, comme le reste du branchement
+# des liens du PATH).
+if [[ -n "$CLI_LINK_LOADED" ]]; then
   retarget_cli_links "$SRC" "$DEPLOY_ROOT"
+  MAG_RELINKED=1
 else
   warn "helper de re-ciblage introuvable ($LIBCLI) — lien du PATH non géré"
 fi
@@ -243,9 +262,15 @@ echo "Vérifier ensuite : le serveur doit annoncer « $TARGET_VERSION »."
 # commande est désormais « mag » (gwsa/gma restent invocables, dépréciés).
 # Le shell garde en cache l'ancien chemin résolu : après une bascule, « mag »
 # peut sembler introuvable tant qu'on n'a pas rafraîchi le shell courant.
-# On n'affiche l'encart QUE si c'est pertinent : « mag » pas encore résolu
-# dans CE shell (celui qui lance update.sh), ou pas encore présent au PATH.
-if ! command -v mag >/dev/null 2>&1; then
+#
+# item 5 (fiche 20260905175129735) : l'ancienne garde testait « command -v mag »
+# ICI, dans le PROCESS de update.sh — pas dans le shell interactif appelant.
+# Comme retarget_cli_links vient de (re)poser « mag » juste avant, ce test
+# réussit TOUJOURS dans ce process, masquant le guide précisément quand le
+# shell appelant, lui, a encore l'ancien chemin en cache (le cas visé). On
+# affiche donc le guide inconditionnellement dès qu'un (re)ciblage a eu lieu —
+# on ne peut pas déduire l'état du cache du shell appelant depuis ce process.
+if [[ -n "${MAG_RELINKED:-}" ]]; then
   echo
   echo "${Y}Le nom canonique en ligne de commande est « mag ».${N}"
   echo "Ce shell ne le voit pas encore (chemin mis en cache) : ouvre un nouveau"

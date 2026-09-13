@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 # Réutiliser la logique gateway (lock, policy, config)
-from .config import SYS_PYTHON, POLICY_CHECKER, gwsa_root, profile_dir, upload_spool
+from .config import SYS_PYTHON, POLICY_CHECKER, env, gwsa_root, profile_dir, upload_spool
 from .errors import GatewayError
 from .profiles import is_locked, require_unlocked
 from .sessions import active_capabilities, active_drive_zones, is_session_unlocked, purge_expired
@@ -41,11 +41,11 @@ PID_FILE_TPL = ".broker-{port}.pid"
 
 
 def broker_host() -> str:
-    return os.environ.get("GWSA_BROKER_HOST", DEFAULT_HOST)
+    return env("BROKER_HOST", DEFAULT_HOST)
 
 
 def broker_port() -> int:
-    return int(os.environ.get("GWSA_BROKER_PORT", str(DEFAULT_PORT)))
+    return int(env("BROKER_PORT", str(DEFAULT_PORT)))
 
 
 def token_path(port: int | None = None) -> Path:

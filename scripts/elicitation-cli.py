@@ -10,6 +10,7 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
 
+from gateway.config import env  # noqa: E402 — lecture bi-nom MAG_/GWSA_ (fiche 20260912000249823)
 from gateway.elicitation import (  # noqa: E402
     ElicitationError,
     enroll_mock,
@@ -36,7 +37,7 @@ def main() -> int:
             print(json.dumps(status(), indent=2, ensure_ascii=False))
             return 0
         if args.cmd == "enroll":
-            if args.mock or os.environ.get("GWSA_ELICITATION_MOCK"):
+            if args.mock or env("ELICITATION_MOCK"):
                 print(json.dumps(enroll_mock(), indent=2))
             else:
                 print(json.dumps(enroll_secure(), indent=2))
