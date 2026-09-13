@@ -117,6 +117,13 @@ accès réels. Vérifier qu'un déverrouillage du compte entier n'est **plus** l
 
 ## Notes
 
+- **Constaté le 2026-09-11** (test manuel du POC « élicitation dans la conversation »,
+  fiche `20260910194019668`) : sur **Claude Code**, le client MCP **ne fournit pas** le jeton de
+  session au LLM (l'option « id émis par le client » est rejetée par l'ADR-0007, car Desktop ne
+  l'émet pas). Le flux prévu reste **fonctionnel** — `mag session open` (geste humain) émet un
+  jeton que l'humain transmet au LLM — mais la **friction** (transmettre le `session_id` à la
+  main) est réelle et confirme l'intérêt de cette fiche / de `0101`. Ce n'est **pas** un
+  cul-de-sac ; c'est un problème d'**UX du jeton**.
 - **Séquencement** : P1, mais **après** l'épic 0060 (admin) et 0107. À porter dans `PLAN.md` au
   moment de le décider.
 - **Limite de menace inchangée** (ADR-0007) : sans vault (fiche 0003), le modèle reste

@@ -22,7 +22,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MCP_BIN="$REPO_ROOT/bin/google-mcp"
 SERVER_NAME="google-multi-account"
-GWSA_CLIENT="claude-code"
+CLIENT="claude-code"          # émis dans MAG_CLIENT (renommage GWSA_→MAG_, fiche 20260912000249823)
 BROKER_PORT="4878"
 SCOPE="user"
 CLAUDE="${CLAUDE_BIN:-claude}"
@@ -71,7 +71,7 @@ echo "  scope    : $SCOPE (visible depuis n'importe quel dossier)"
 
 # La commande d'enregistrement, construite une fois (réutilisée en dry-run et réel).
 add_cmd=("$CLAUDE" mcp add "$SERVER_NAME" --scope "$SCOPE"
-         --env "GWSA_CLIENT=$GWSA_CLIENT" --env "GWSA_BROKER_PORT=$BROKER_PORT"
+         --env "MAG_CLIENT=$CLIENT" --env "MAG_BROKER_PORT=$BROKER_PORT"
          -- "$MCP_BIN")
 
 # ── dry-run : montrer la commande, ne rien exécuter ──────────────
@@ -101,18 +101,21 @@ if [[ "$get_rc" -eq 0 ]]; then
   # Ne conclure « à jour » que si le binaire ET les deux --env (client, broker
   # port) correspondent à ce que « mcp add » poserait. La seule sous-chaîne du
   # binaire ne suffit pas : une entrée au même chemin mais sur un autre port de
-  # broker (mauvais couloir) ou sans GWSA_CLIENT (attribution du journal faussée)
+  # broker (mauvais couloir) ou sans MAG_CLIENT (attribution du journal faussée)
   # serait acceptée à tort, et l'installeur reporterait un faux succès (revue
   # Codex #43). Le re-branchement repose toujours l'entrée au scope voulu.
+  # Renommage GWSA_→MAG_ (fiche 20260912000249823) : on cherche les noms MAG_.
+  # Une entrée legacy en GWSA_ n'est donc pas reconnue « à jour » → re-branchée en
+  # MAG_ (migration). Le serveur lit les deux noms : rien ne casse entre-temps.
   entry_ok=1
-  for needle in "$MCP_BIN" "GWSA_CLIENT=$GWSA_CLIENT" "GWSA_BROKER_PORT=$BROKER_PORT"; do
+  for needle in "$MCP_BIN" "MAG_CLIENT=$CLIENT" "MAG_BROKER_PORT=$BROKER_PORT"; do
     grep -qF -- "$needle" <<<"$current" || entry_ok=0
   done
   if [[ "$entry_ok" -eq 1 ]]; then
     ok "Déjà branché (binaire, client et port de broker corrects) — rien à faire."
     exit 0
   fi
-  warn "Entrée « $SERVER_NAME » présente mais différente (binaire, client ou port de broker) — re-branchement."
+  warn "Entrée « $SERVER_NAME » présente mais différente ou legacy (binaire, client ou port) — re-branchement."
   "$CLAUDE" mcp remove "$SERVER_NAME" --scope "$SCOPE" >/dev/null 2>&1 \
     || "$CLAUDE" mcp remove "$SERVER_NAME" >/dev/null 2>&1 \
     || warn "retrait de l'ancienne entrée en échec — « $CLAUDE mcp add » va tenter d'écraser"
@@ -120,7 +123,7 @@ fi
 
 # ── enregistrement ───────────────────────────────────────────────
 if "${add_cmd[@]}" >/dev/null 2>&1; then
-  ok "Entrée « $SERVER_NAME » enregistrée (scope $SCOPE, GWSA_CLIENT=$GWSA_CLIENT)."
+  ok "Entrée « $SERVER_NAME » enregistrée (scope $SCOPE, MAG_CLIENT=$CLIENT)."
   echo
   echo "${B}→ Ouvre un nouveau « claude »${N} — « /mcp » doit lister « $SERVER_NAME »."
   echo "  Vérifier : claude mcp get $SERVER_NAME"

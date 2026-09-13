@@ -14,7 +14,7 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from .config import gwsa_root
+from .config import env, gwsa_root
 from .errors import GatewayError
 
 SESSIONS_DIR_NAME = ".sessions"
@@ -218,7 +218,7 @@ def new_session_id() -> str:
 def session_ttl_sec() -> int:
     """TTL effectif d'une session (secondes), surchargeable pour les tests."""
     try:
-        return int(os.environ.get("GWSA_SESSION_TTL_SEC", str(DEFAULT_SESSION_TTL_SEC)))
+        return int(env("SESSION_TTL_SEC", str(DEFAULT_SESSION_TTL_SEC)))
     except ValueError:
         return DEFAULT_SESSION_TTL_SEC
 
@@ -326,7 +326,7 @@ def session_grant_drive(
     fid = folder_id.strip()
     if not fid:
         raise GatewayError("folder_id requis", code="error")
-    git_root = os.environ.get("GWSA_GIT_ROOT", "").strip()
+    git_root = (env("GIT_ROOT") or "").strip()
     if git_root:
         from .project import grant_allowed_by_manifest, resolve_project
 

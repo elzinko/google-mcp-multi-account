@@ -16,6 +16,7 @@ from typing import Any, Optional
 from .config import (
     client_id,
     download_dir,
+    env,
     gwsa_root,
     profile_dir,
     upload_roots,
@@ -33,9 +34,10 @@ from .usage import log_usage
 
 # Borne défensive sur les pièces jointes Gmail : une PJ énorme (ou un
 # identifiant malveillant) ne doit pas pouvoir saturer le disque local.
-# 25 Mo = limite d'envoi Gmail ; surchargeable via GWSA_ATTACHMENT_MAX_MB.
+# 25 Mo = limite d'envoi Gmail ; surchargeable via MAG_ATTACHMENT_MAX_MB
+# (GWSA_ATTACHMENT_MAX_MB reste accepté en repli).
 try:
-    _ATTACHMENT_MAX_MB = int(os.environ.get("GWSA_ATTACHMENT_MAX_MB", "25"))
+    _ATTACHMENT_MAX_MB = int(env("ATTACHMENT_MAX_MB", "25"))
 except ValueError:
     _ATTACHMENT_MAX_MB = 25
 _ATTACHMENT_MAX_BYTES = max(1, _ATTACHMENT_MAX_MB) * 1024 * 1024
@@ -102,10 +104,23 @@ def _run(
     sid = (session or "").strip()
     gro = get_git_root() or git_toplevel()
     try:
+        # Guidage adaptatif : en mode « élicitation dans la conversation », pointer
+        # le LLM vers les tools MCP (zéro terminal) plutôt que vers « mag … » —
+        # sinon le LLM relaie une commande terminale que l'utilisateur refuse.
+        from .elicitation import in_conversation_enabled
+        inconv = in_conversation_enabled()
         if not sid:
             raise GatewayError(
-                "jeton de session requis — paramètre « session » manquant sur "
-                "cet appel (obtenu à l'initialize, ou via access_request)",
+                (
+                    "aucune session pour cette conversation — appeler d'abord le "
+                    "tool session_open_in_conversation (popup Touch ID) pour en "
+                    "ouvrir une, puis porter le session_id obtenu dans « session »"
+                )
+                if inconv else
+                (
+                    "jeton de session requis — paramètre « session » manquant sur "
+                    "cet appel (obtenu à l'initialize, ou via access_request)"
+                ),
                 code="session",
             )
         require_session(sid)  # lève si jeton inconnu ou expiré (TTL)
@@ -117,8 +132,15 @@ def _run(
             )
         if is_locked(d) and not is_session_unlocked(sid, alias):
             raise GatewayError(
-                f"profil « {alias} » verrouillé pour cette session — "
-                f"access_request kind=session_unlock",
+                (
+                    f"profil « {alias} » verrouillé — appeler le tool "
+                    f"session_unlock_in_conversation sur « {alias} » (popup Touch ID)"
+                )
+                if inconv else
+                (
+                    f"profil « {alias} » verrouillé pour cette session — "
+                    f"access_request kind=session_unlock"
+                ),
                 code="locked",
             )
     except GatewayError as e:
@@ -862,6 +884,21 @@ def _bootstrap_no_session(kind: str) -> dict[str, Any]:
     un tool de données), mais un kind qui exige une session en pointe ici vers
     `mag session open`, plutôt que d'échouer sans piste.
     """
+    from .elicitation import in_conversation_enabled
+    if in_conversation_enabled():
+        return {
+            "ok": True,
+            "elicitation": True,
+            "kind": "session_open",
+            "requested_kind": kind,
+            "message": (
+                f"« {kind} » nécessite une session active, et aucune n'est ouverte "
+                f"pour cette conversation. Appeler le tool "
+                f"session_open_in_conversation (popup Touch ID) pour en ouvrir une, "
+                f"puis porter le session_id obtenu — aucun terminal requis."
+            ),
+            "suggested_tool": "session_open_in_conversation",
+        }
     return {
         "ok": True,
         "elicitation": True,
@@ -995,7 +1032,7 @@ def access_request(
             from .project import grant_allowed_by_manifest, resolve_project
             from pathlib import Path
 
-            git_root = (get_git_root() or os.environ.get("GWSA_GIT_ROOT", "") or "").strip()
+            git_root = (get_git_root() or env("GIT_ROOT") or "").strip()
             start = Path(git_root) if git_root else None
             proj = resolve_project(start)
             if not proj.manifest_path:
@@ -1116,3 +1153,175 @@ def access_request(
         "« session_grant », « project_grant » ou « add_account »",
         code="error",
     )
+
+
+def session_unlock_in_conversation(
+    alias: str,
+    minutes: int | None = 60,
+    session: str = "",
+    confirm: bool = False,
+) -> dict[str, Any]:
+    """Mode opt-in — élicitation dans la conversation (mag elicitation in-conversation).
+
+    Protocole en DEUX temps (décision ferme, ne pas ré-arbitrer) :
+      - 1er appel (confirm=False) : AUCUN popup. Renvoie juste le texte de
+        l'action à annoncer dans le chat, à charge pour le LLM d'attendre le
+        « ok » humain avant de rappeler avec confirm=True.
+      - 2e appel (confirm=True) : déclenche l'élicitation signée (Touch ID ou
+        mock en test), puis déverrouille la session si la signature est valide.
+
+    La confirmation chat est un verrou SOUPLE (coopération du LLM) — le vrai
+    filet de sécurité reste la signature Touch ID (fail-closed en cas de refus).
+    """
+    from .elicitation import (
+        ElicitationError,
+        check_inconv_throttle,
+        in_conversation_enabled,
+        inconv_inflight_guard,
+        run_elicitation_gate,
+    )
+    from .sessions import session_unlock
+
+    if not in_conversation_enabled():
+        raise GatewayError(
+            "élicitation dans la conversation désactivée — "
+            "l'utilisateur doit exécuter : mag elicitation in-conversation on",
+            code="error",
+        )
+    validate_alias(alias)
+    sid = (session or "").strip()
+    if not sid:
+        raise GatewayError("session requise (jeton de conversation)", code="error")
+    require_session(sid)
+    _reject_if_delegated(sid, "session_unlock_in_conversation")
+    # Rejeter tout `confirm` non booléen (revue Codex #142) : un client peut
+    # envoyer une valeur schéma-invalide mais plausible (« "confirm": "false" »)
+    # que le dispatch transmet brute — sans ce garde, elle serait vue comme un
+    # accord et déclencherait le popup dès le 1er appel.
+    if not isinstance(confirm, bool):
+        raise GatewayError(
+            "paramètre « confirm » invalide — un booléen JSON est requis "
+            "(1er appel sans confirm = annonce ; confirm=true = déclenche Touch ID)",
+            code="error",
+        )
+    # Profil inconnu → refus AVANT toute confirmation ou signature (revue Codex
+    # #142) : sinon un alias fabriqué passe Touch ID, « déverrouille » dans le
+    # vide, et créer cet alias avant l'expiration rendrait le grant effectif.
+    if not profile_dir(alias).is_dir():
+        raise GatewayError(
+            f"profil inconnu « {alias} » — le créer avec : mag add {alias}",
+            code="not_found",
+        )
+    # None (absent) → 60 par défaut ; un 0 explicite est borné à 1 par max(1, …),
+    # pas transformé en 60 (ne pas confondre « absent » et « zéro », Codex #142).
+    mins = 60 if minutes is None else int(minutes)
+    mins = max(1, min(mins, 1440))
+    acct_email = profile_email(alias)
+    who = f"« {alias} » ({acct_email})" if acct_email else f"« {alias} »"
+
+    if not confirm:
+        return {
+            "ok": True,
+            "confirmation_required": True,
+            "alias": alias,
+            "session_id": sid,
+            "minutes": mins,
+            "message": (
+                f"Déverrouillage demandé pour {who}, session {sid}, {mins} min. "
+                f"AUCUN popup n'a été déclenché — annoncer cette action dans le "
+                f"chat et attendre l'accord explicite de l'utilisateur avant de "
+                f"rappeler ce tool avec confirm=true (cela déclenchera Touch ID)."
+            ),
+        }
+
+    try:
+        check_inconv_throttle(sid)
+        # Verrou GLOBAL « une élicitation en conversation à la fois », tenu
+        # pendant tout le popup (revue Codex #142) : le throttle par session ne
+        # suffit pas — deux conversations (deux session_id) pourraient déclencher
+        # deux Touch ID concurrents. Toute autre demande en vol est refusée ici.
+        with inconv_inflight_guard():
+            run_elicitation_gate({
+                "action": "session_unlock",
+                "alias": alias,
+                "email": acct_email,
+                "session_id": sid,
+                "minutes": mins,
+            })
+    except ElicitationError as e:
+        raise GatewayError(str(e), code="error") from e
+
+    session_unlock(sid, alias, mins)
+    return {
+        "ok": True,
+        "unlocked": True,
+        "alias": alias,
+        "session_id": sid,
+        "minutes": mins,
+        "message": f"{who} déverrouillé pour la session {sid} ({mins} min).",
+    }
+
+
+def session_open_in_conversation(confirm: bool = False) -> dict[str, Any]:
+    """Mode opt-in — OUVRIR une session depuis la conversation (zéro terminal).
+
+    Pendant MCP du geste terminal `mag session open`, mais déclenché par le LLM à
+    la demande de l'humain : le popup Touch ID est levé par le serveur MCP, une
+    session vide (zéro droit) est créée, et son `session_id` est RENDU au LLM pour
+    qu'il le porte ensuite (déverrouillage, lectures…). C'est le maillon qui rend
+    le mode utilisable sans terminal préalable (fiche 20260910194019668).
+
+    Réservé au mode opt-in (`mag elicitation in-conversation on`) : que le LLM
+    déclenche l'élicitation est un choix de sécurité assumé ; le filet reste le
+    popup Touch ID (fail-closed). Protocole en deux temps comme
+    session_unlock_in_conversation.
+    """
+    from .elicitation import (
+        ElicitationError,
+        in_conversation_enabled,
+        inconv_inflight_guard,
+        run_elicitation_gate,
+    )
+    from .sessions import create_session
+
+    if not in_conversation_enabled():
+        raise GatewayError(
+            "élicitation dans la conversation désactivée — "
+            "l'utilisateur doit exécuter : mag elicitation in-conversation on",
+            code="error",
+        )
+    if not isinstance(confirm, bool):
+        raise GatewayError(
+            "paramètre « confirm » invalide — un booléen JSON est requis "
+            "(1er appel sans confirm = annonce ; confirm=true = déclenche Touch ID)",
+            code="error",
+        )
+
+    if not confirm:
+        return {
+            "ok": True,
+            "confirmation_required": True,
+            "message": (
+                "Ouverture d'une session pour cette conversation demandée. AUCUN "
+                "popup n'a été déclenché — annoncer cette action dans le chat et "
+                "attendre l'accord explicite de l'utilisateur avant de rappeler ce "
+                "tool avec confirm=true (cela déclenchera Touch ID)."
+            ),
+        }
+
+    try:
+        with inconv_inflight_guard():
+            run_elicitation_gate({"action": "session_open"})
+    except ElicitationError as e:
+        raise GatewayError(str(e), code="error") from e
+
+    state = create_session(client="mcp-in-conversation")
+    return {
+        "ok": True,
+        "opened": True,
+        "session": state.session_id,
+        "message": (
+            f"Session ouverte : {state.session_id}. Porter ce session_id dans le "
+            f"paramètre « session » des prochains appels (déverrouillage, lecture…)."
+        ),
+    }

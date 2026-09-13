@@ -26,7 +26,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-DEPLOY_ROOT="${GWSA_DEPLOY_ROOT:-$HOME/.local/share/google-mcp}"
+DEPLOY_ROOT="${MAG_DEPLOY_ROOT:-${GWSA_DEPLOY_ROOT:-$HOME/.local/share/google-mcp}}"  # compat bi-nom (fiche 20260912000249823)
 
 if [[ -t 1 ]]; then
   B=$'\033[1m'; G=$'\033[32m'; R=$'\033[31m'; Y=$'\033[33m'; N=$'\033[0m'
@@ -168,7 +168,7 @@ fi
 step "Branchement"
 INSTALLER="$DEPLOY_ROOT/current/scripts/install-claude-desktop.sh"
 CC_INSTALLER="$DEPLOY_ROOT/current/scripts/install-claude-code.sh"
-CONFIG="${GWSA_DESKTOP_CONFIG:-$HOME/Library/Application Support/Claude/claude_desktop_config.json}"
+CONFIG="${MAG_DESKTOP_CONFIG:-${GWSA_DESKTOP_CONFIG:-$HOME/Library/Application Support/Claude/claude_desktop_config.json}}"  # compat bi-nom (fiche 20260912000249823)
 EXPECTED="$DEPLOY_ROOT/current/bin/google-mcp"
 
 entry_command() {

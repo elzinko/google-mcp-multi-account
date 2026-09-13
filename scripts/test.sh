@@ -1651,14 +1651,14 @@ print(d)' "$1" "$2" 2>/dev/null
   && pass "le script existe et est exécutable" \
   || fail "le script existe et est exécutable"
 
-# création : config absente → entrée ajoutée (command absolu + GWSA_CLIENT)
+# création : config absente → entrée ajoutée (command absolu + MAG_CLIENT)
 f="$CD/create.json"
 "$INSTALL" --config "$f" >/dev/null 2>&1
 cmd="$(jget "$f" mcpServers.google-multi-account.command)"
-env_client="$(jget "$f" mcpServers.google-multi-account.env.GWSA_CLIENT)"
+env_client="$(jget "$f" mcpServers.google-multi-account.env.MAG_CLIENT)"
 [[ "$cmd" == */bin/google-mcp && "$env_client" == "claude-desktop" ]] \
-  && pass "création : fichier absent → entrée (command absolu + GWSA_CLIENT=claude-desktop)" \
-  || fail "création : fichier absent → entrée (command absolu + GWSA_CLIENT)"
+  && pass "création : fichier absent → entrée (command absolu + MAG_CLIENT=claude-desktop)" \
+  || fail "création : fichier absent → entrée (command absolu + MAG_CLIENT)"
 
 # préservation : autres serveurs MCP + clés annexes intacts
 f="$CD/preserve.json"
@@ -1693,6 +1693,20 @@ ls "$f".bak-* >/dev/null 2>&1 \
   && pass "backup horodaté créé avant modification" \
   || fail "backup horodaté créé avant modification"
 
+# migration legacy → MAG_ : une entrée CORRECTE mais nommée en GWSA_ (ancien nom)
+# est ré-écrite en MAG_ (renommage fiche 20260912000249823). Backup fait ; le
+# serveur lit les deux noms, donc rien ne casse pendant la bascule.
+f="$CD/migrate.json"
+MCP_ABS_DT="$(cd "$(dirname "$INSTALL")/.." && pwd)/bin/google-mcp"
+cat > "$f" <<JSON
+{ "mcpServers": { "google-multi-account": { "command": "$MCP_ABS_DT", "env": { "GWSA_CLIENT": "claude-desktop", "GWSA_BROKER_PORT": "4878" } } } }
+JSON
+"$INSTALL" --config "$f" >/dev/null 2>&1
+[[ "$(jget "$f" mcpServers.google-multi-account.env.MAG_CLIENT)" == "claude-desktop" \
+   && -z "$(jget "$f" mcpServers.google-multi-account.env.GWSA_CLIENT)" ]] \
+  && pass "migration : entrée legacy GWSA_ correcte → ré-écrite en MAG_ (backup)" \
+  || fail "migration : legacy GWSA_ → MAG_"
+
 # JSON invalide → refus (exit ≠ 0), fichier intact
 f="$CD/bad.json"
 printf '{ pas du json ' > "$f"; orig="$(cat "$f")"
@@ -1725,14 +1739,14 @@ printf '{ "mcpServers": [1, 2, 3] }' > "$f"; orig="$(cat "$f")"
 # le port part dans l'entrée, même quand c'est celui par défaut
 f="$CD/port-default.json"
 "$INSTALL" --config "$f" >/dev/null 2>&1
-[[ "$(jget "$f" mcpServers.google-multi-account.env.GWSA_BROKER_PORT)" == "4878" ]] \
+[[ "$(jget "$f" mcpServers.google-multi-account.env.MAG_BROKER_PORT)" == "4878" ]] \
   && pass "couloir : le port du broker est écrit dans l'entrée (4878 par défaut)" \
   || fail "couloir : port par défaut absent de l'entrée"
 
 # --port choisit le couloir
 f="$CD/port-custom.json"
 "$INSTALL" --config "$f" --name google-multi-account-v0 --port 4881 >/dev/null 2>&1
-[[ "$(jget "$f" mcpServers.google-multi-account-v0.env.GWSA_BROKER_PORT)" == "4881" ]] \
+[[ "$(jget "$f" mcpServers.google-multi-account-v0.env.MAG_BROKER_PORT)" == "4881" ]] \
   && pass "couloir : --port 4881 écrit dans l'entrée nommée" \
   || fail "couloir : --port ignoré"
 
@@ -1751,7 +1765,7 @@ out_c="$("$INSTALL" --config "$f" --name google-multi-account-dev 2>&1)"; rc_c=$
 
 # … mais un port libre passe, et l'entrée existante n'est pas touchée
 "$INSTALL" --config "$f" --name google-multi-account-dev --port 4880 >/dev/null 2>&1
-[[ "$(jget "$f" mcpServers.google-multi-account-dev.env.GWSA_BROKER_PORT)" == "4880" \
+[[ "$(jget "$f" mcpServers.google-multi-account-dev.env.MAG_BROKER_PORT)" == "4880" \
    && "$(jget "$f" mcpServers.google-multi-account.command)" == "/ailleurs/google-mcp" ]] \
   && pass "couloir : port libre accepté, entrée voisine intacte" \
   || fail "couloir : port libre refusé ou voisin modifié"
@@ -1823,9 +1837,9 @@ ccrun >/dev/null 2>&1
   && pass "claude-code : première fois → mcp add scope user sur le bon binaire" \
   || fail "claude-code : enregistrement initial"
 
-# les --env attendus sont transmis
-grep -q "GWSA_CLIENT=claude-code" "$CCLOG" && grep -q "GWSA_BROKER_PORT=4878" "$CCLOG" \
-  && pass "claude-code : --env GWSA_CLIENT=claude-code + port 4878 transmis" \
+# les --env attendus sont transmis (renommage : émis en MAG_)
+grep -q "MAG_CLIENT=claude-code" "$CCLOG" && grep -q "MAG_BROKER_PORT=4878" "$CCLOG" \
+  && pass "claude-code : --env MAG_CLIENT=claude-code + port 4878 transmis" \
   || fail "claude-code : env manquants"
 
 # 2. relance → idempotent, aucun nouvel add
@@ -1848,17 +1862,27 @@ printf '%s\n' "$MCP_ABS" > "$CCREG"
 printf '    GWSA_CLIENT=claude-code\n    GWSA_BROKER_PORT=9999\n' > "$CCENV"; : > "$CCLOG"
 ccrun >/dev/null 2>&1
 [[ "$(grep -c "mcp remove" "$CCLOG")" -ge 1 && "$(grep -c "mcp add" "$CCLOG")" -ge 1 ]] \
-  && grep -q "GWSA_BROKER_PORT=4878" "$CCLOG" \
+  && grep -q "MAG_BROKER_PORT=4878" "$CCLOG" \
   && pass "claude-code : bon binaire mais mauvais port → re-branché sur le bon couloir" \
   || fail "claude-code : devrait re-brancher quand le port de broker diffère"
 
-# 3c. bon binaire + bon port, mais SANS GWSA_CLIENT → re-branchement (attribution).
+# 3c. bon binaire + bon port, mais SANS client → re-branchement (attribution).
 printf '%s\n' "$MCP_ABS" > "$CCREG"
 printf '    GWSA_BROKER_PORT=4878\n' > "$CCENV"; : > "$CCLOG"
 ccrun >/dev/null 2>&1
 [[ "$(grep -c "mcp add" "$CCLOG")" -ge 1 ]] \
-  && pass "claude-code : entrée sans GWSA_CLIENT → re-branchée (attribution du journal)" \
-  || fail "claude-code : devrait re-brancher quand GWSA_CLIENT manque"
+  && pass "claude-code : entrée sans client → re-branchée (attribution du journal)" \
+  || fail "claude-code : devrait re-brancher quand le client manque"
+
+# 3d. entrée legacy COMPLÈTE et correcte, mais nommée en GWSA_ → migrée vers MAG_
+#     (renommage fiche 20260912000249823 ; le serveur lit les deux, rien ne casse).
+printf '%s\n' "$MCP_ABS" > "$CCREG"
+printf '    GWSA_CLIENT=claude-code\n    GWSA_BROKER_PORT=4878\n' > "$CCENV"; : > "$CCLOG"
+ccrun >/dev/null 2>&1
+[[ "$(grep -c "mcp add" "$CCLOG")" -ge 1 ]] \
+  && grep -q "MAG_CLIENT=claude-code" "$CCLOG" && grep -q "MAG_BROKER_PORT=4878" "$CCLOG" \
+  && pass "claude-code : entrée legacy GWSA_ correcte → migrée en MAG_" \
+  || fail "claude-code : legacy GWSA_ correcte devrait migrer en MAG_"
 
 # 4. --print : montre la commande, n'invoque JAMAIS le CLI
 : > "$CCLOG"
@@ -3423,6 +3447,404 @@ GWSA_ROOT="$ELIC_ROOT" GWSA_SESSION_ID="$sid_e" GWSA_ELICITATION_MOCK=1 \
   && pass "elicitation : mag session unlock avec strongauth+mock" \
   || fail "elicitation : mag session unlock strongauth"
 
+section "élicitation dans la conversation — opt-in (session_unlock_in_conversation)"
+INCONV_ROOT="$TMP/mag-inconv"
+mkdir -p "$INCONV_ROOT/alpha"
+export GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 PYTHONPATH="$(pwd)"
+"$PY" "$(pwd)/scripts/elicitation-cli.py" enroll --mock >/dev/null 2>&1
+
+# off par défaut : tools/list ne contient PAS le tool ; access_request inchangé
+off_ok="$(GWSA_ROOT="$INCONV_ROOT" "$PY" -c '
+import json, subprocess, sys
+out = subprocess.run([sys.executable, "-m", "gateway"],
+                      input=json.dumps({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}) + "\n",
+                      capture_output=True, text=True).stdout.splitlines()[0]
+r = json.loads(out)
+names = [t["name"] for t in r["result"]["tools"]]
+assert "session_unlock_in_conversation" not in names, names
+assert "access_request" in names
+print("ok")
+')"
+[[ "$off_ok" == "ok" ]] \
+  && pass "in-conversation : off par défaut → tool absent de tools/list, access_request inchangé" \
+  || fail "in-conversation : off par défaut ($off_ok)"
+
+# on : le tool apparaît dans tools/list
+touch "$INCONV_ROOT/.elicitation-in-conversation"
+on_ok="$(GWSA_ROOT="$INCONV_ROOT" "$PY" -c '
+import json, subprocess, sys
+out = subprocess.run([sys.executable, "-m", "gateway"],
+                      input=json.dumps({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}) + "\n",
+                      capture_output=True, text=True).stdout.splitlines()[0]
+r = json.loads(out)
+names = [t["name"] for t in r["result"]["tools"]]
+assert "session_unlock_in_conversation" in names, names
+print("ok")
+')"
+[[ "$on_ok" == "ok" ]] \
+  && pass "in-conversation : on → le tool apparaît dans tools/list" \
+  || fail "in-conversation : on ($on_ok)"
+
+# 1er appel (sans confirm) : confirmation requise, AUCUN popup, AUCUN déverrouillage
+first_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.sessions import create_session, is_session_unlocked
+s = create_session(client="t")
+r = api.session_unlock_in_conversation(alias="alpha", minutes=30, session=s.session_id, confirm=False)
+assert r.get("ok") and r.get("confirmation_required"), r
+assert "alpha" in r["message"] and "30" in r["message"] and s.session_id in r["message"], r
+assert is_session_unlocked(s.session_id, "alpha") is False
+print("ok")
+')"
+[[ "$first_ok" == "ok" ]] \
+  && pass "in-conversation : 1er appel (sans confirm) → confirmation requise, aucun déverrouillage" \
+  || fail "in-conversation : 1er appel ($first_ok)"
+
+# 2e appel confirm=true (mode mock) : élicitation signée puis déverrouillage
+second_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.sessions import create_session, is_session_unlocked
+s = create_session(client="t")
+r = api.session_unlock_in_conversation(alias="alpha", minutes=30, session=s.session_id, confirm=True)
+assert r.get("ok") and r.get("unlocked"), r
+assert is_session_unlocked(s.session_id, "alpha") is True
+print("ok")
+')"
+[[ "$second_ok" == "ok" ]] \
+  && pass "in-conversation : 2e appel (confirm=true) → élicitation mock puis déverrouillage" \
+  || fail "in-conversation : 2e appel ($second_ok)"
+
+# throttle : un 2e confirm=true rapproché sur la même session est refusé
+throttle_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.errors import GatewayError
+from gateway.sessions import create_session
+s = create_session(client="t")
+api.session_unlock_in_conversation(alias="alpha", minutes=30, session=s.session_id, confirm=True)
+try:
+    api.session_unlock_in_conversation(alias="alpha", minutes=30, session=s.session_id, confirm=True)
+    print("no-throttle")
+except GatewayError:
+    print("ok")
+')"
+[[ "$throttle_ok" == "ok" ]] \
+  && pass "in-conversation : throttle → 2e confirm=true rapproché refusé" \
+  || fail "in-conversation : throttle ($throttle_ok)"
+
+# F1 (revue Codex #142) : confirm non booléen (ex "false" string) refusé, aucun déverrouillage
+confirmtype_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.errors import GatewayError
+from gateway.sessions import create_session, is_session_unlocked
+s = create_session(client="t")
+try:
+    api.session_unlock_in_conversation(alias="alpha", minutes=30, session=s.session_id, confirm="false")
+    print("accepted-string")
+except GatewayError:
+    print("ok" if is_session_unlocked(s.session_id, "alpha") is False else "unlocked")
+')"
+[[ "$confirmtype_ok" == "ok" ]] \
+  && pass "in-conversation : confirm non booléen (« false » string) refusé, aucun déverrouillage" \
+  || fail "in-conversation : confirm type ($confirmtype_ok)"
+
+# F2 (revue Codex #142) : profil inexistant refusé AVANT confirmation/Touch ID
+ghost_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.errors import GatewayError
+from gateway.sessions import create_session, is_session_unlocked
+s = create_session(client="t")
+try:
+    api.session_unlock_in_conversation(alias="ghost", minutes=30, session=s.session_id, confirm=False)
+    print("accepted-ghost")
+except GatewayError:
+    print("ok" if is_session_unlocked(s.session_id, "ghost") is False else "unlocked")
+')"
+[[ "$ghost_ok" == "ok" ]] \
+  && pass "in-conversation : profil inconnu refusé avant confirmation (pas de Touch ID dans le vide)" \
+  || fail "in-conversation : profil inconnu ($ghost_ok)"
+
+# F3 (revue Codex #142) : verrou global « une élicitation en vol » → 2e demande concurrente refusée
+inflight_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.errors import GatewayError
+from gateway.elicitation import _inconv_inflight_path
+from gateway._filelock import try_file_lock
+from gateway.sessions import create_session, is_session_unlocked
+s = create_session(client="t")
+with try_file_lock(_inconv_inflight_path()):   # simule une élicitation déjà en vol (autre conversation)
+    try:
+        api.session_unlock_in_conversation(alias="alpha", minutes=30, session=s.session_id, confirm=True)
+        print("no-guard")
+    except GatewayError:
+        print("ok" if is_session_unlocked(s.session_id, "alpha") is False else "unlocked")
+')"
+[[ "$inflight_ok" == "ok" ]] \
+  && pass "in-conversation : verrou global « une élicitation en vol » → 2e demande concurrente refusée" \
+  || fail "in-conversation : verrou in-flight ($inflight_ok)"
+
+# Codex #142 : minutes=0 explicite borné à 1 (pas transformé en 60 par « or »)
+zeromin_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.sessions import create_session
+s = create_session(client="t")
+r = api.session_unlock_in_conversation(alias="alpha", minutes=0, session=s.session_id, confirm=False)
+print("ok" if r.get("minutes") == 1 else "got=%r" % r.get("minutes"))
+')"
+[[ "$zeromin_ok" == "ok" ]] \
+  && pass "in-conversation : minutes=0 explicite borné à 1 min (pas 60)" \
+  || fail "in-conversation : minutes=0 ($zeromin_ok)"
+
+# fail-closed : élicitation indisponible (non enrôlée) → pas de déverrouillage
+rm -f "$INCONV_ROOT/.elicitation/mock.key"
+failclosed_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.errors import GatewayError
+from gateway.sessions import create_session, is_session_unlocked
+s = create_session(client="t")
+try:
+    api.session_unlock_in_conversation(alias="alpha", minutes=30, session=s.session_id, confirm=True)
+    print("unlocked-anyway")
+except GatewayError:
+    print("ok" if is_session_unlocked(s.session_id, "alpha") is False else "unlocked-anyway")
+')"
+[[ "$failclosed_ok" == "ok" ]] \
+  && pass "in-conversation : échec d'élicitation → fail-closed (pas de déverrouillage)" \
+  || fail "in-conversation : fail-closed ($failclosed_ok)"
+"$PY" "$(pwd)/scripts/elicitation-cli.py" enroll --mock >/dev/null 2>&1  # ré-enrôler pour la suite
+
+# réglage off : refus même en appelant directement la fonction (défense en profondeur)
+rm -f "$INCONV_ROOT/.elicitation-in-conversation"
+disabled_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.errors import GatewayError
+from gateway.sessions import create_session
+s = create_session(client="t")
+try:
+    api.session_unlock_in_conversation(alias="alpha", minutes=30, session=s.session_id, confirm=False)
+    print("bypass")
+except GatewayError:
+    print("ok")
+')"
+[[ "$disabled_ok" == "ok" ]] \
+  && pass "in-conversation : réglage off → refus même en appel direct (défense en profondeur)" \
+  || fail "in-conversation : off refuse ($disabled_ok)"
+
+# CLI : mag elicitation in-conversation on|off|status (calque strongauth)
+cli_status_before="$(GWSA_ROOT="$INCONV_ROOT" "$GWSA" elicitation in-conversation status 2>&1)"
+cli_on_out="$(GWSA_ROOT="$INCONV_ROOT" "$GWSA" elicitation in-conversation on 2>&1)"
+cli_flag_after_on=$([ -f "$INCONV_ROOT/.elicitation-in-conversation" ] && echo yes || echo no)
+cli_status_on="$(GWSA_ROOT="$INCONV_ROOT" "$GWSA" elicitation in-conversation status 2>&1)"
+GWSA_ROOT="$INCONV_ROOT" "$GWSA" elicitation in-conversation off >/dev/null 2>&1
+cli_flag_after_off=$([ -f "$INCONV_ROOT/.elicitation-in-conversation" ] && echo yes || echo no)
+if [[ "$cli_status_before" == "disabled" && "$cli_flag_after_on" == "yes" \
+      && "$cli_status_on" == "enabled" && "$cli_flag_after_off" == "no" \
+      && "$cli_on_out" == *"⚠️"* && "$cli_on_out" == *"Reconnect"* ]]; then
+  pass "CLI : mag elicitation in-conversation on|off|status (avertissement de risque + reconnexion + marqueur)"
+else
+  fail "CLI : elicitation in-conversation (before=$cli_status_before after_on=$cli_flag_after_on status_on=$cli_status_on after_off=$cli_flag_after_off)"
+fi
+
+# Codex #142 : « on » sur une racine inexistante (install neuve) crée la racine puis le marqueur
+FRESH_ROOT="$TMP/mag-inconv-fresh"
+rm -rf "$FRESH_ROOT"
+fresh_out="$(GWSA_ROOT="$FRESH_ROOT" "$GWSA" elicitation in-conversation on 2>&1)"
+fresh_flag=$([ -f "$FRESH_ROOT/.elicitation-in-conversation" ] && echo yes || echo no)
+[[ "$fresh_flag" == "yes" ]] \
+  && pass "in-conversation : 'on' sur racine inexistante → racine créée puis marqueur (install neuve)" \
+  || fail "in-conversation : fresh root ($fresh_flag / $fresh_out)"
+
+section "session_open_in_conversation — ouvrir une session depuis la conversation (zéro terminal)"
+touch "$INCONV_ROOT/.elicitation-in-conversation"   # mode on
+"$PY" "$(pwd)/scripts/elicitation-cli.py" enroll --mock >/dev/null 2>&1
+
+# le tool apparaît dans tools/list quand le mode est on
+open_listed="$(GWSA_ROOT="$INCONV_ROOT" "$PY" -c '
+import json, subprocess, sys
+out = subprocess.run([sys.executable, "-m", "gateway"],
+                     input=json.dumps({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}) + "\n",
+                     capture_output=True, text=True).stdout.splitlines()[0]
+names = [t["name"] for t in json.loads(out)["result"]["tools"]]
+assert "session_open_in_conversation" in names, names
+print("ok")
+')"
+[[ "$open_listed" == "ok" ]] \
+  && pass "session_open : exposé dans tools/list quand le mode est on" \
+  || fail "session_open : listé ($open_listed)"
+
+# 1er appel (sans confirm) : confirmation requise, AUCUNE session créée
+open_first="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+r = api.session_open_in_conversation(confirm=False)
+assert r.get("ok") and r.get("confirmation_required") and "session" not in r, r
+print("ok")
+')"
+[[ "$open_first" == "ok" ]] \
+  && pass "session_open : 1er appel (sans confirm) → confirmation requise, aucune session" \
+  || fail "session_open : 1er appel ($open_first)"
+
+# 2e appel (confirm=true, mock) : session créée + session_id rendu, réellement utilisable
+open_second="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.sessions import get_session
+r = api.session_open_in_conversation(confirm=True)
+assert r.get("ok") and r.get("opened"), r
+sid = r.get("session")
+assert sid and get_session(sid) is not None, (sid, r)
+print("ok")
+')"
+[[ "$open_second" == "ok" ]] \
+  && pass "session_open : 2e appel (confirm=true) → session créée + session_id rendu au LLM" \
+  || fail "session_open : 2e appel ($open_second)"
+
+# fail-closed : élicitation indisponible → aucune session ouverte
+rm -f "$INCONV_ROOT/.elicitation/mock.key"
+open_failclosed="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.errors import GatewayError
+try:
+    api.session_open_in_conversation(confirm=True)
+    print("opened-anyway")
+except GatewayError:
+    print("ok")
+')"
+[[ "$open_failclosed" == "ok" ]] \
+  && pass "session_open : échec d'élicitation → fail-closed (aucune session)" \
+  || fail "session_open : fail-closed ($open_failclosed)"
+"$PY" "$(pwd)/scripts/elicitation-cli.py" enroll --mock >/dev/null 2>&1   # ré-enrôler pour la suite
+
+# réglage off : refus même en appel direct (défense en profondeur)
+rm -f "$INCONV_ROOT/.elicitation-in-conversation"
+open_disabled="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.errors import GatewayError
+try:
+    api.session_open_in_conversation(confirm=False)
+    print("bypass")
+except GatewayError:
+    print("ok")
+')"
+[[ "$open_disabled" == "ok" ]] \
+  && pass "session_open : réglage off → refus même en appel direct (défense en profondeur)" \
+  || fail "session_open : off refuse ($open_disabled)"
+
+# guidage : en mode in-conversation, les refus pointent vers les TOOLS MCP (pas le terminal)
+touch "$INCONV_ROOT/.elicitation-in-conversation"
+mkdir -p "$INCONV_ROOT/alpha" && touch "$INCONV_ROOT/alpha/.locked"
+guid_ok="$(GWSA_ROOT="$INCONV_ROOT" GWSA_ELICITATION_MOCK=1 "$PY" -c '
+import gateway.api as api
+from gateway.errors import GatewayError
+from gateway.sessions import create_session
+m1 = m2 = False
+try:
+    api._run("alpha", ["gmail", "list"], session="")
+except GatewayError as e:
+    m1 = "session_open_in_conversation" in str(e)
+s = create_session(client="t")
+try:
+    api._run("alpha", ["gmail", "list"], session=s.session_id)
+except GatewayError as e:
+    m2 = "session_unlock_in_conversation" in str(e)
+print("ok" if (m1 and m2) else "m1=%s m2=%s" % (m1, m2))
+')"
+[[ "$guid_ok" == "ok" ]] \
+  && pass "guidage : mode on → refus pointent vers les tools MCP (session_open/unlock_in_conversation)" \
+  || fail "guidage in-conversation ($guid_ok)"
+
+# guidage OFF : message terminal inchangé (non-régression)
+rm -f "$INCONV_ROOT/.elicitation-in-conversation"
+guidoff_ok="$(GWSA_ROOT="$INCONV_ROOT" "$PY" -c '
+import gateway.api as api
+from gateway.errors import GatewayError
+from gateway.sessions import create_session
+s = create_session(client="t")
+try:
+    api._run("alpha", ["gmail", "list"], session=s.session_id)
+    print("no-error")
+except GatewayError as e:
+    print("ok" if "access_request kind=session_unlock" in str(e) else "got:%s" % e)
+')"
+[[ "$guidoff_ok" == "ok" ]] \
+  && pass "guidage : mode off → message terminal inchangé (non-régression)" \
+  || fail "guidage off ($guidoff_ok)"
+
+section "renommage GWSA_ → MAG_ : compat bi-nom (fiche 20260912000249823, lot 1)"
+compat_ok="$("$PY" -c '
+import os
+for k in ["MAG_ROOT","GWSA_ROOT","MAG_CLIENT","GWSA_CLIENT","MAG_BROKER_PORT","GWSA_BROKER_PORT","MAG_BROKER_HOST","GWSA_BROKER_HOST"]:
+    os.environ.pop(k, None)
+from gateway.config import client_id, gwsa_root
+from gateway import broker_server
+# CLIENT : MAG_ prioritaire, GWSA_ repli, defaut sinon
+os.environ["MAG_CLIENT"]="from-mag"; os.environ["GWSA_CLIENT"]="from-gwsa"
+assert client_id()=="from-mag", client_id()
+del os.environ["MAG_CLIENT"]
+assert client_id()=="from-gwsa", client_id()
+del os.environ["GWSA_CLIENT"]
+assert client_id()=="mcp", client_id()
+# ROOT : MAG_ puis GWSA_
+os.environ["MAG_ROOT"]="/tmp/mag-root-test"
+assert str(gwsa_root())=="/tmp/mag-root-test", gwsa_root()
+del os.environ["MAG_ROOT"]; os.environ["GWSA_ROOT"]="/tmp/gwsa-root-test"
+assert str(gwsa_root())=="/tmp/gwsa-root-test", gwsa_root()
+# BROKER_PORT : MAG_ prioritaire
+os.environ["MAG_BROKER_PORT"]="4999"; os.environ["GWSA_BROKER_PORT"]="4878"
+assert broker_server.broker_port()==4999, broker_server.broker_port()
+del os.environ["MAG_BROKER_PORT"]
+assert broker_server.broker_port()==4878, broker_server.broker_port()
+print("ok")
+')"
+[[ "$compat_ok" == "ok" ]] \
+  && pass "renommage : MAG_ prioritaire, GWSA_ en repli, défaut sinon (CLIENT/ROOT/BROKER_PORT)" \
+  || fail "renommage compat bi-nom ($compat_ok)"
+
+# Lot 2 — lectures gateway (sessions, elicitation) via le helper env()
+lot2_ok="$("$PY" -c '
+import os
+for k in ["MAG_SESSION_TTL_SEC","GWSA_SESSION_TTL_SEC","MAG_ELICITATION_MOCK","GWSA_ELICITATION_MOCK"]:
+    os.environ.pop(k, None)
+from gateway.sessions import session_ttl_sec, DEFAULT_SESSION_TTL_SEC
+from gateway.elicitation import is_mock_mode
+# SESSION_TTL_SEC : MAG_ prioritaire, GWSA_ repli, defaut sinon
+os.environ["MAG_SESSION_TTL_SEC"]="123"; os.environ["GWSA_SESSION_TTL_SEC"]="456"
+assert session_ttl_sec()==123, session_ttl_sec()
+del os.environ["MAG_SESSION_TTL_SEC"]
+assert session_ttl_sec()==456, session_ttl_sec()
+del os.environ["GWSA_SESSION_TTL_SEC"]
+assert session_ttl_sec()==DEFAULT_SESSION_TTL_SEC, session_ttl_sec()
+# ELICITATION_MOCK : MAG_ ou GWSA_ active le mode mock (court-circuit avant lecture fichier)
+os.environ["MAG_ELICITATION_MOCK"]="1"
+assert is_mock_mode() is True
+del os.environ["MAG_ELICITATION_MOCK"]; os.environ["GWSA_ELICITATION_MOCK"]="1"
+assert is_mock_mode() is True
+del os.environ["GWSA_ELICITATION_MOCK"]
+print("ok")
+')"
+[[ "$lot2_ok" == "ok" ]] \
+  && pass "renommage lot 2 : lectures gateway bi-nom (SESSION_TTL_SEC, ELICITATION_MOCK)" \
+  || fail "renommage lot 2 gateway ($lot2_ok)"
+
+# Lot 2 — script feuille log-usage.py (helper _env inline, sans dépendance gateway)
+l2dir="$(mktemp -d)"
+MAG_CLIENT="cli-mag" "$PY" scripts/log-usage.py "$l2dir" "aliasX" gmail list >/dev/null 2>&1
+GWSA_CLIENT="cli-gwsa" "$PY" scripts/log-usage.py "$l2dir" "aliasX" gmail list >/dev/null 2>&1
+l2log="$(cat "$l2dir/usage.jsonl" 2>/dev/null)"
+if [[ "$l2log" == *'"client": "cli-mag"'* && "$l2log" == *'"client": "cli-gwsa"'* ]]; then
+  pass "renommage lot 2 : log-usage.py lit MAG_CLIENT et GWSA_CLIENT (helper _env)"
+else
+  fail "renommage lot 2 log-usage ($l2log)"
+fi
+rm -rf "$l2dir"
+
+# Lot 3 — bin/mag (bash) réamorce MAG_ROOT en tête (compat bi-nom, MAG_ prioritaire)
+l3root="$(mktemp -d)"
+l3out="$(MAG_ROOT="$l3root" MAG_BROKER_PORT=4899 "$GWSA" broker status 2>&1 || true)"
+if [[ "$l3out" == *"$l3root"* ]]; then
+  pass "renommage lot 3 : bin/mag honore MAG_ROOT (broker status → root)"
+else
+  fail "renommage lot 3 bin/mag MAG_ROOT ($l3out)"
+fi
+rm -rf "$l3root"
+
 section "consume_nonce : verrou inter-process anti-TOCTOU (fiche 0084)"
 # consume_nonce fait reload → check → save sans atomicité inter-process avant
 # le correctif de la fiche 0084 : deux process concurrents peuvent tous deux
@@ -4577,8 +4999,10 @@ assert stable["command"] == "/opt/stable/bin/google-mcp"
 assert name in servers
 e = servers[name]
 assert e["command"] == bin_path
-assert e["env"]["GWSA_BROKER_PORT"] == "4921"
-assert e["env"]["GWSA_CLIENT"] == "claude-desktop"
+# install-claude-desktop.sh émet MAG_ (renommage fiche 20260912000249823) ;
+# l'entrée stable, d'un autre nom, n'est pas touchée → reste en GWSA_ (assert plus haut).
+assert e["env"]["MAG_BROKER_PORT"] == "4921"
+assert e["env"]["MAG_CLIENT"] == "claude-desktop"
 assert name != "google-multi-account"
 PY
 [[ $? -eq 0 ]] \

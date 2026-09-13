@@ -10,34 +10,42 @@ import json
 import os
 import sys
 
+
+def _env(name, default=None):
+    """Lecture bi-nom MAG_/GWSA_ (fiche 20260912000249823) — copie locale minimale
+    de gateway.config.env(). Ce script feuille reste sans dépendance pour ne jamais
+    planter à l'import ; garder aligné avec gateway/config.py:env()."""
+    return os.environ.get("MAG_" + name) or os.environ.get("GWSA_" + name) or default
+
+
 try:
     root, alias, args = sys.argv[1], sys.argv[2], sys.argv[3:]
     entry = {
         "ts": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
-        "client": os.environ.get("GWSA_CLIENT", "cli"),
+        "client": _env("CLIENT", "cli"),
         "alias": alias,
         "cmd": " ".join(args),
-        "decision": os.environ.get("GWSA_LOG_DECISION", "ok"),
+        "decision": _env("LOG_DECISION", "ok"),
     }
-    sid = os.environ.get("GWSA_SESSION_ID", "")
+    sid = _env("SESSION_ID", "")
     if sid:
         entry["session_id"] = sid
-    gro = os.environ.get("GWSA_GIT_ROOT", "")
+    gro = _env("GIT_ROOT", "")
     if gro:
         entry["git_root"] = gro
-    reason = os.environ.get("GWSA_LOG_REASON", "")
+    reason = _env("LOG_REASON", "")
     if reason:
         entry["reason"] = reason
     # Audit du grain service × opération × ressource (fiche 0076 lot 3, M-08) :
     # posé par gateway.usage.log_usage pour les appels réussis seulement —
     # champs optionnels, un lecteur existant du journal les ignore sans casser.
-    service = os.environ.get("GWSA_LOG_SERVICE", "")
+    service = _env("LOG_SERVICE", "")
     if service:
         entry["service"] = service
-    operation = os.environ.get("GWSA_LOG_OPERATION", "")
+    operation = _env("LOG_OPERATION", "")
     if operation:
         entry["operation"] = operation
-    resource = os.environ.get("GWSA_LOG_RESOURCE", "")
+    resource = _env("LOG_RESOURCE", "")
     if resource:
         entry["resource"] = resource
     with open(os.path.join(root, "usage.jsonl"), "a") as f:

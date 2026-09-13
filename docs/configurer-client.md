@@ -15,7 +15,7 @@ mag wire all          # les deux — « --print » pour un dry-run
 !!! info "L'installeur ne branche rien par défaut"
     `install.sh` **ne touche aucune config client** : il pose le serveur puis **affiche**
     ces commandes — à toi de les lancer (doctrine « tu tiens chaque porte »). Pour tout
-    brancher pendant l'install : `curl … | bash -s -- --wire` (ou `GWSA_WIRE=1`).
+    brancher pendant l'install : `curl … | bash -s -- --wire` (ou `MAG_WIRE=1`).
 
 !!! note "Pourquoi deux noms ?"
     Le **dépôt** s'appelle `google-mcp-multi-account`, mais le **connecteur** déclaré
@@ -41,7 +41,7 @@ mag wire all          # les deux — « --print » pour un dry-run
       "mcpServers": {
         "google-multi-account": {
           "command": "~/.local/share/google-mcp/current/bin/google-mcp",
-          "env": { "GWSA_CLIENT": "claude-desktop" }
+          "env": { "MAG_CLIENT": "claude-desktop" }
         }
       }
     }
@@ -66,7 +66,7 @@ mag wire all          # les deux — « --print » pour un dry-run
 
     ```bash
     claude mcp add google-multi-account --scope user \
-      --env GWSA_CLIENT=claude-code --env GWSA_BROKER_PORT=4878 \
+      --env MAG_CLIENT=claude-code --env MAG_BROKER_PORT=4878 \
       -- ~/.local/share/google-mcp/current/bin/google-mcp
     ```
 
@@ -83,7 +83,7 @@ mag wire all          # les deux — « --print » pour un dry-run
       "mcpServers": {
         "google-multi-account": {
           "command": "~/.local/share/google-mcp/current/bin/google-mcp",
-          "env": { "GWSA_CLIENT": "cursor" }
+          "env": { "MAG_CLIENT": "cursor" }
         }
       }
     }
@@ -92,6 +92,26 @@ mag wire all          # les deux — « --print » pour un dry-run
     Cursor n'expande pas toujours `~` : si le serveur ne démarre pas, mets le chemin
     **absolu** (`/Users/<toi>/.local/share/google-mcp/current/bin/google-mcp`).
     Depuis un **clone** (contributeurs), vise plutôt `…/google-mcp-multi-account/bin/google-mcp`.
+
+## Noms des variables (`MAG_`, ex-`GWSA_`)
+
+**En clair :** les variables d'environnement commencent par **`MAG_`** aujourd'hui.
+Les anciens noms en **`GWSA_`** marchent toujours — le serveur les lit en repli.
+Tu n'as **rien à changer** dans une config qui tourne. Si les deux sont posés,
+`MAG_` gagne.
+
+Une config client n'a besoin que de deux variables :
+
+| Variable (actuelle) | Ancien nom (repli) | Rôle |
+|---|---|---|
+| `MAG_CLIENT` | `GWSA_CLIENT` | Étiquette du client dans le journal (`claude-desktop`, `claude-code`, `cursor`) |
+| `MAG_BROKER_PORT` | `GWSA_BROKER_PORT` | Port du broker (le « couloir ») — `4878` par défaut |
+| `MAG_ROOT` | `GWSA_ROOT` | Dossier de config et de comptes — usage avancé, rarement posé à la main |
+
+`mag wire` et les installeurs écrivent désormais `MAG_`. Une entrée existante encore
+en `GWSA_` est **migrée** vers `MAG_` au prochain `mag wire` (un backup est fait
+avant). Le dossier des comptes (`~/.config/gws-accounts`) ne change **pas** de nom :
+seules les variables sont renommées.
 
 ## Retirer une entrée
 

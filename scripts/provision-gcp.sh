@@ -23,7 +23,7 @@
 # État persisté dans ~/.config/gws-accounts/provision.env
 set -euo pipefail
 
-GWSA_ROOT="${GWSA_ROOT:-$HOME/.config/gws-accounts}"
+GWSA_ROOT="${MAG_ROOT:-${GWSA_ROOT:-$HOME/.config/gws-accounts}}"  # compat bi-nom (fiche 20260912000249823)
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SYS_SWIFT="/usr/bin/swift"
 STATE_FILE="$GWSA_ROOT/provision.env"

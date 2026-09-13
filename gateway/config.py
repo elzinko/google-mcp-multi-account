@@ -29,8 +29,16 @@ SYS_PYTHON = "/usr/bin/python3"
 PRODUCT_SLUG = "google-multi-account"
 
 
+def env(name: str, default: str | None = None) -> str | None:
+    """Lit une variable d'env pendant le renommage GWSA_ → MAG_ (fiche 20260912000249823) :
+    `MAG_<name>` d'abord, puis `GWSA_<name>` en repli, sinon `default`. Une valeur vide
+    est traitée comme absente (repli). Point de compat UNIQUE pour tout le code Python.
+    """
+    return os.environ.get("MAG_" + name) or os.environ.get("GWSA_" + name) or default
+
+
 def gwsa_root() -> Path:
-    return Path(os.environ.get("GWSA_ROOT") or Path.home() / ".config" / "gws-accounts")
+    return Path(env("ROOT") or Path.home() / ".config" / "gws-accounts")
 
 
 def profile_dir(alias: str) -> Path:
@@ -90,7 +98,7 @@ def upload_roots() -> list[Path]:
     hors des énumérations de profils. Défaut vide → seul `.downloads` est
     lisible (ADR-0006).
     """
-    parts: list[str] = os.environ.get("GWSA_UPLOAD_ROOTS", "").split(os.pathsep)
+    parts: list[str] = (env("UPLOAD_ROOTS") or "").split(os.pathsep)
     conf = gwsa_root() / ".upload-roots"
     try:
         if conf.is_file():
@@ -116,4 +124,4 @@ def upload_roots() -> list[Path]:
 
 
 def client_id() -> str:
-    return os.environ.get("GWSA_CLIENT") or "mcp"
+    return env("CLIENT") or "mcp"
