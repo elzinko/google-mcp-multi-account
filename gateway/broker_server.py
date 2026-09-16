@@ -198,7 +198,7 @@ def check_policy(
         raise GatewayError(msg, code="policy")
 
 
-def _require_access(alias: str, session_id: str) -> Path:
+def _require_access(alias: str, session_id: str, *, transactional: bool | None = None) -> Path:
     d = profile_dir(alias)
     if not d.is_dir():
         raise GatewayError(
@@ -206,6 +206,8 @@ def _require_access(alias: str, session_id: str) -> Path:
             code="not_found",
         )
     if session_id:
+        # Mode porté par l'appelant (Codex #149) ; None → repli sur l'env broker.
+        transac = transactional_enabled() if transactional is None else transactional
         # Mode transactionnel (ADR-0011/0012) : le consentement est appliqué EN
         # AMONT, au point de contrôle `_run` (Touch ID par acte / bail de
         # lecture), pas par le verrou « minutes ». Le broker n'exige donc plus
@@ -214,7 +216,7 @@ def _require_access(alias: str, session_id: str) -> Path:
         # l'unlock minutes (Codex PR #147, P1). Le broker n'est joignable que via
         # la gateway (loopback + token) qui a déjà porté le geste.
         if (
-            not transactional_enabled()
+            not transac
             and is_locked(d)
             and not is_session_unlocked(session_id, alias)
         ):
@@ -236,17 +238,22 @@ def handle_exec(
     git_root: str = "",
     raw_output: bool = False,
     consented_cap: dict[str, Any] | None = None,
+    transactional: bool | None = None,
 ) -> Any:
     if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
         raise GatewayError("args doit être une liste de chaînes", code="error")
     if not args:
         raise GatewayError("args vide", code="error")
+    # Mode transactionnel porté par la requête (ADR-0012, Zone 1 — Codex #149) :
+    # la gateway en est l'autorité ; None (appelant legacy) → repli sur l'env du
+    # broker. Évite la désync d'un daemon démarré avec un autre env.
+    transac = transactional_enabled() if transactional is None else transactional
     # GC câblé au balayage/accès (ADR-0007 §Décision 5) : le cycle de vie d'une
     # session ne dépend jamais de la déconnexion MCP, donc on purge ici plutôt
     # que d'attendre un signal qui n'existe pas.
     purge_expired()
     try:
-        d = _require_access(alias, session_id)
+        d = _require_access(alias, session_id, transactional=transac)
     except GatewayError as e:
         if e.code == "locked":
             log_usage(
@@ -259,7 +266,6 @@ def handle_exec(
     session_caps: Any = None
     session_full_access = False
     use_session = bool(session_id)
-    transac = transactional_enabled()
     if use_session:
         if transac:
             # ADR-0012, Zone 1 : en transactionnel, la SEULE source de droits est
@@ -331,12 +337,16 @@ class BrokerHandler(socketserver.StreamRequestHandler):
                 git_root = str(req.get("git_root") or "")
                 cap_raw = req.get("consented_cap")
                 consented_cap = cap_raw if isinstance(cap_raw, dict) else None
+                # Mode porté par la requête (Codex #149) : présent → on le suit ;
+                # absent (appelant legacy) → None, repli sur l'env du broker.
+                transactional = bool(req["transactional"]) if "transactional" in req else None
                 result = handle_exec(
                     alias, args, client,
                     session_id=session_id,
                     git_root=git_root,
                     raw_output=bool(req.get("raw_output")),
                     consented_cap=consented_cap,
+                    transactional=transactional,
                 )
                 self._reply({"ok": True, "result": result})
                 return

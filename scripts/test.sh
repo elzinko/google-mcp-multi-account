@@ -3167,7 +3167,7 @@ out_call_iso="$("$PY" -c "
 import gateway.api as api
 from gateway.sessions import create_session, session_unlock
 
-def fake_broker(alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None):
+def fake_broker(alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None):
     return {'files': [], '_sid': session_id}
 api.run_via_broker = fake_broker
 
@@ -6782,7 +6782,7 @@ out="$(GWSA_ROOT="$TX2" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACT
 import gateway.api as api
 from gateway.sessions import create_session
 caps = []
-api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None: (caps.append(consented_cap) or {'ok': True})
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None:(caps.append(consented_cap) or {'ok': True})
 calls = {'n': 0}; _og = api.run_elicitation_gate
 def _cg(f):
     calls['n'] += 1
@@ -6805,7 +6805,7 @@ out="$(GWSA_ROOT="$TX2" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACT
 import gateway.api as api
 import gateway.elicitation as elic
 from gateway.sessions import create_session
-api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None: {'ok': True}
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None:{'ok': True}
 s = create_session(client='g2')
 api.gmail_list(alias='alpha', session=s.session_id)  # ouvre le bail, budget 1→0
 elic.obtain_signature = lambda payload: (_ for _ in ()).throw(elic.ElicitationError('refuse (test)'))
@@ -6825,7 +6825,7 @@ out="$(GWSA_ROOT="$TX2" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACT
 import gateway.api as api
 import gateway.elicitation as elic
 from gateway.sessions import create_session
-api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None: {'ok': True}
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None:{'ok': True}
 s = create_session(client='g3')
 r1 = api.gmail_create_draft(alias='alpha', to='a@b.com', subject='s1', body='b', session=s.session_id)
 r2 = api.gmail_create_draft(alias='alpha', to='a@b.com', subject='s2', body='b', session=s.session_id)
@@ -6849,7 +6849,7 @@ out="$(GWSA_ROOT="$TX2" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACT
   MAG_TRANSACTIONAL_LEASE_MODE=manuel "$PY" -c "
 import gateway.api as api
 from gateway.sessions import create_session
-api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None: {'ok': True}
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None:{'ok': True}
 calls = {'n': 0}; _og = api.run_elicitation_gate
 def _cg(f):
     calls['n'] += 1
@@ -7000,7 +7000,7 @@ seen = {}
 def cap_gate(fields):
     seen.update(fields)
 api.run_elicitation_gate = cap_gate
-api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None: {'ok': True}
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None:{'ok': True}
 s = create_session(client='l3')
 api.gmail_create_draft(alias='alpha', to='dest@x.com', subject='Sujet', body='b', session=s.session_id)
 ba = seen.get('bound_args') or {}
@@ -7050,6 +7050,77 @@ PYEOF
 else
   printf '  \033[33m•\033[0m %s\n' "transactionnel Zone 3/4 : parité prompt — swiftc absent (skip ; testé sur hôte macOS)"
 fi
+
+section "Consentement transactionnel — durcissements revue Codex #149 (P2)"
+
+TX4="$(mktemp -d)"; mkdir -p "$TX4/alpha"
+PY="/usr/bin/python3"; [[ -x "$PY" ]] || PY="$(command -v python3)"
+
+# F2) Sécu : un session_id piégé (chemin absolu / traversée) est rejeté AVANT de
+#     former un chemin de verrou → aucun fichier créé hors de .sessions.
+out="$(GWSA_ROOT="$TX4" PYTHONPATH="$(pwd)" "$PY" -c "
+import os, pathlib
+from gateway.sessions import get_session, session_unlock
+uniq = '/tmp/mag-evil-' + str(os.getpid())
+g = get_session(uniq)                 # lecture : None, jamais d'exception ni de fichier
+raised = False
+try:
+    session_unlock(uniq, 'alpha', 10)  # écriture : refus explicite
+except Exception:
+    raised = True
+leaked = pathlib.Path(uniq + '.lock').exists() or pathlib.Path(uniq + '.json').exists()
+for p in (uniq + '.lock', uniq + '.json'):
+    try: pathlib.Path(p).unlink()
+    except OSError: pass
+print('get_none', g is None, 'raised', raised, 'noleak', not leaked)
+")"
+[[ "$out" == *"get_none True"* && "$out" == *"raised True"* && "$out" == *"noleak True"* ]] \
+  && pass "transactionnel sécu : session_id piégé rejeté, aucun fichier hors .sessions (Codex #149 P2)" \
+  || fail "transactionnel sécu : traversée de chemin via session_id ($out)"
+
+# F3) Bascule de mode : un bail ouvert en session (sans borne de temps) devient
+#     inutilisable dès qu'on repasse en fenetre (le TTL court reprend).
+out="$(GWSA_ROOT="$TX4" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 \
+  MAG_TRANSACTIONAL_LEASE_MODE=session "$PY" -c "
+import os
+from gateway.sessions import create_session, open_read_lease, is_read_lease_active
+s = create_session(client='sw'); open_read_lease(s.session_id, 'alpha')
+before = is_read_lease_active(s.session_id, 'alpha')
+os.environ['MAG_TRANSACTIONAL_LEASE_MODE'] = 'fenetre'   # bascule session → fenetre
+after = is_read_lease_active(s.session_id, 'alpha')
+print('before', before, 'after', after)
+")"
+[[ "$out" == *"before True"* && "$out" == *"after False"* ]] \
+  && pass "transactionnel : bail session devient inutilisable après bascule en fenetre (Codex #149 P2)" \
+  || fail "transactionnel : bail timeless survit à la bascule de mode ($out)"
+
+# F1) Broker/gateway sync : le mode est porté par la REQUÊTE (la gateway est
+#     l'autorité) — un broker dont l'env dit OFF laisse quand même passer un
+#     appel dont la requête dit transactional=True ; requête False + verrou → refus.
+out="$(GWSA_ROOT="$TX4" PYTHONPATH="$(pwd)" "$PY" -c "
+import os, pathlib
+import gateway.broker_server as bs
+from gateway.sessions import create_session
+d = pathlib.Path(os.environ['GWSA_ROOT']) / 'beta'; d.mkdir(exist_ok=True); (d / '.locked').write_text('1')
+s = create_session(client='sync')
+os.environ.pop('MAG_TRANSACTIONAL_CONSENT', None); os.environ.pop('GWSA_TRANSACTIONAL_CONSENT', None)
+allowed = True
+try:
+    bs._require_access('beta', s.session_id, transactional=True)   # requête autorité
+except bs.GatewayError:
+    allowed = False
+refused = False
+try:
+    bs._require_access('beta', s.session_id, transactional=False)
+except bs.GatewayError as e:
+    refused = (e.code == 'locked')
+print('req_true_allowed', allowed, 'req_false_refused', refused)
+")"
+[[ "$out" == *"req_true_allowed True"* && "$out" == *"req_false_refused True"* ]] \
+  && pass "transactionnel : mode porté par la requête — broker suit la gateway, pas son env (Codex #149 P2)" \
+  || fail "transactionnel : broker/gateway désynchronisés ($out)"
+
+rm -rf "$TX4"
 
 # --- Bilan ------------------------------------------------------------------
 

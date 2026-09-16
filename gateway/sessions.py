@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import time
 from dataclasses import asdict, dataclass, field, replace
@@ -106,6 +107,18 @@ def sessions_dir() -> Path:
 
 def _path(session_id: str) -> Path:
     return sessions_dir() / f"{session_id}.json"
+
+
+# Un session_id est un jeton GÉNÉRÉ (`new_session_id` = secrets.token_hex(12) →
+# 24 hex) mais PORTÉ par l'appelant. Le valider avant d'en dériver un chemin de
+# fichier interdit toute traversée (« ../ », chemin absolu) qui écrirait un
+# .json/.lock hors de `.sessions` (Codex #149, P2 sécu). Fail-closed : un jeton
+# non conforme est traité comme une session inconnue.
+_SID_RE = re.compile(r"[0-9a-f]{16,64}\Z")
+
+
+def _is_safe_sid(session_id: str) -> bool:
+    return bool(session_id) and _SID_RE.match(session_id) is not None
 
 
 def _lock_path(session_id: str) -> Path:
@@ -397,7 +410,7 @@ def get_session(session_id: str) -> SessionState | None:
     Zone 2) : sinon ce save (last_seen_at) pouvait ré-écrire un budget de bail
     déjà décrémenté sous verrou par un appel concurrent (Codex PR #147, P1).
     """
-    if not session_id:
+    if not _is_safe_sid(session_id):
         return None
     with file_lock(_lock_path(session_id)):
         state = _load_active(session_id)
@@ -437,6 +450,8 @@ def session_unlock(session_id: str, alias: str, minutes: int) -> SessionState:
     lecture (quelques minutes max), jamais 1440. Flag OFF (défaut) :
     comportement strictement inchangé (non-régression). RMW sous le verrou
     unique (ADR-0012, Zone 2)."""
+    if not _is_safe_sid(session_id):
+        raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
     with file_lock(_lock_path(session_id)):
         state = _load_active(session_id)
         if state is None:
@@ -455,6 +470,19 @@ def session_unlock(session_id: str, alias: str, minutes: int) -> SessionState:
         return state
 
 
+def _lease_usable(lease: ReadLease | None) -> bool:
+    """Un bail est-il exploitable MAINTENANT ? Actif (TTL/budget) ET cohérent avec
+    le mode courant. Bascule fail-closed (Codex #149, P2) : un bail « session »
+    (sans borne de temps, `expires_at<=0`) devient inutilisable dès que le mode
+    effectif n'est plus `session` (retour à `fenetre`, ou valeur invalide qui s'y
+    replie) — le TTL court reprend ses droits, on ne garde pas un bail éternel."""
+    if lease is None or not lease.active():
+        return False
+    if lease.expires_at <= 0.0 and transactional_lease_mode() != "session":
+        return False
+    return True
+
+
 def open_read_lease(session_id: str, alias: str) -> SessionState:
     """Ouvre un bail de lecture pour (session, alias) selon le mode de durée de
     vie (ADR-0012, Zone 4). Un nouveau consentement REMPLACE tout bail existant
@@ -466,6 +494,8 @@ def open_read_lease(session_id: str, alias: str) -> SessionState:
     - ``manuel``  : aucun bail ouvert (chaque lecture est signée en amont) ; on
       efface un éventuel bail résiduel.
     """
+    if not _is_safe_sid(session_id):
+        raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
     mode = transactional_lease_mode()
     with file_lock(_lock_path(session_id)):
         state = _load_active(session_id)
@@ -486,12 +516,13 @@ def open_read_lease(session_id: str, alias: str) -> SessionState:
 def is_read_lease_active(session_id: str, alias: str) -> bool:
     """Bail de lecture actif pour (session, alias) ? Lecture seule sous le verrou
     unique (pas de save)."""
+    if not _is_safe_sid(session_id):
+        return False
     with file_lock(_lock_path(session_id)):
         state = _load_active(session_id)
         if state is None:
             return False
-        lease = state.read_leases.get(alias)
-        return bool(lease and lease.active())
+        return _lease_usable(state.read_leases.get(alias))
 
 
 def try_consume_read_lease(session_id: str, alias: str) -> bool:
@@ -501,12 +532,14 @@ def try_consume_read_lease(session_id: str, alias: str) -> bool:
     (Codex PR #147, P1). Retourne True si un slot a été consommé (bail actif),
     False sinon — l'appelant doit alors obtenir un nouveau consentement. Le
     retrait ne dépend que du TTL/budget, jamais d'un geste du LLM."""
+    if not _is_safe_sid(session_id):
+        return False
     with file_lock(_lock_path(session_id)):
         state = _load_active(session_id)
         if state is None:
             return False
         lease = state.read_leases.get(alias)
-        if lease is None or not lease.active():
+        if not _lease_usable(lease):
             return False
         lease.budget -= 1
         state.touch()
@@ -530,6 +563,8 @@ def session_grant_drive(
     # RMW sous le verrou unique (ADR-0012, Zone 2). Le verrou couvre aussi la
     # résolution du manifeste projet pour préserver l'ordre des contrôles
     # (délégation d'abord) — I/O local rapide, chemin d'octroi rare.
+    if not _is_safe_sid(session_id):
+        raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
     with file_lock(_lock_path(session_id)):
         state = _load_active(session_id)
         if state is None:
@@ -703,6 +738,8 @@ def session_grant_capability(
     if not account or not service or not operation:
         raise GatewayError("account/service/operation requis", code="error")
     # RMW sous le verrou unique (ADR-0012, Zone 2).
+    if not _is_safe_sid(session_id):
+        raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
     with file_lock(_lock_path(session_id)):
         state = _load_active(session_id)
         if state is None:

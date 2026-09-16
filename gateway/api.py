@@ -298,6 +298,9 @@ def _run(
     return run_via_broker(
         alias, gws_args, timeout=timeout, raw_output=raw_output, session_id=sid,
         consented_cap=consented_cap,
+        # Mode porté par la requête (le cap n'est posé QUE par le gate
+        # transactionnel) → le broker ne dépend plus de son env de démarrage.
+        transactional=consented_cap is not None,
     )
 
 

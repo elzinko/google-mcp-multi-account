@@ -97,6 +97,7 @@ def run_via_broker(
     raw_output: bool = False,
     session_id: str = "",
     consented_cap: dict[str, Any] | None = None,
+    transactional: bool = False,
 ) -> Any:
     ensure_broker_running()
     tok = ensure_token()
@@ -119,6 +120,13 @@ def run_via_broker(
     # le temps de cet appel, jamais persistée).
     if consented_cap:
         payload["consented_cap"] = consented_cap
+    # Le mode transactionnel est porté PAR LA REQUÊTE (ADR-0012, Zone 1 —
+    # correctif Codex #149) : le broker est un daemon persistant qui garde son
+    # env de démarrage ; la gateway est l'autorité du mode (elle a porté le
+    # geste). Sans ça, activer le flag après le démarrage du broker le
+    # désynchronise (il refuserait un appel pourtant consenti).
+    if transactional:
+        payload["transactional"] = True
     gro = get_git_root()
     if gro:
         payload["git_root"] = gro
