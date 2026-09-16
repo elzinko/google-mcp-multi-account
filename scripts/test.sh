@@ -6937,6 +6937,80 @@ print('legacy_refused', legacy_refused, 'tx_allowed', tx_allowed)
 
 rm -rf "$TX2"
 
+section "Consentement transactionnel — Zone 3 : arguments liés au reçu signé (ADR-0012 lot 3)"
+
+PY="/usr/bin/python3"; [[ -x "$PY" ]] || PY="$(command -v python3)"
+
+# L3-1) LE fix Codex : deux « permissions create » sur le MÊME fichier mais
+#       destinataire/rôle différents produisent des bound_args DISTINCTS → reçus
+#       signés distincts (avant : signaient pareil, l'humain ne voyait pas la
+#       différence).
+out="$(PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from gateway.categorize import consequential_args
+from gateway.elicitation import build_payload, canonical_json
+a1 = ['drive','permissions','create','--params',json.dumps({'fileId':'F1'}),'--json',json.dumps({'type':'user','role':'writer','emailAddress':'alice@x.com'})]
+a2 = ['drive','permissions','create','--params',json.dumps({'fileId':'F1'}),'--json',json.dumps({'type':'user','role':'reader','emailAddress':'eve@x.com'})]
+b1 = consequential_args('drive',['permissions'],'create',a1)
+b2 = consequential_args('drive',['permissions'],'create',a2)
+p1 = canonical_json(build_payload('transactional_mutation:drive:permissions:create', target='F1', bound_args=b1))
+p2 = canonical_json(build_payload('transactional_mutation:drive:permissions:create', target='F1', bound_args=b2))
+print('distinct' if (b1 != b2 and 'alice@x.com' in p1 and 'eve@x.com' in p2 and p1 != p2) else 'same')
+")"
+[[ "$out" == "distinct" ]] \
+  && pass "transactionnel Zone 3 : deux partages Drive (destinataire/rôle ≠) signent différemment (Codex #147 P1)" \
+  || fail "transactionnel Zone 3 : partages Drive confondus ($out)"
+
+# L3-2) permissions delete lie permissionId ; brouillon Gmail lie to/cc/subject
+#       (décodés du message base64), listes triées, corps NON lié.
+out="$(PYTHONPATH="$(pwd)" "$PY" -c "
+import json, base64
+from gateway.categorize import consequential_args
+d = consequential_args('drive',['permissions'],'delete',['drive','permissions','delete','--params',json.dumps({'fileId':'F1','permissionId':'P9'})])
+raw = base64.urlsafe_b64encode(('To: b@x.com, a@x.com\r\nSubject: Hi\r\nCc: c@x.com\r\n\r\nSECRETBODY').encode()).decode().rstrip('=')
+g = consequential_args('gmail',['users','drafts'],'create',['gmail','users','drafts','create','--json',json.dumps({'message':{'raw':raw}})])
+ok = (d == {'fileId':'F1','permissionId':'P9'}
+      and g.get('to') == ['a@x.com','b@x.com'] and g.get('cc') == ['c@x.com'] and g.get('subject') == 'Hi'
+      and 'SECRETBODY' not in json.dumps(g))
+print('OK' if ok else f'wrong d={d} g={g}')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "transactionnel Zone 3 : delete lie permissionId ; draft lie to/cc/subject (corps exclu, listes triées)" \
+  || fail "transactionnel Zone 3 : liaison des arguments incorrecte ($out)"
+
+# L3-3) Le prompt Touch ID AFFICHE les arguments liés (l'humain voit qui reçoit quoi).
+out="$(PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.elicitation import build_payload, prompt_from_payload
+p = build_payload('transactional_mutation:drive:permissions:create', alias='perso', email='perso@gmail.com', target='F1', bound_args={'fileId':'F1','role':'writer','grantee':'alice@x.com'})
+s = prompt_from_payload(p)
+print('OK' if ('grantee=alice@x.com' in s and 'role=writer' in s and 'perso@gmail.com' in s) else f'wrong:{s}')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "transactionnel Zone 3 : le prompt Touch ID nomme les arguments conséquents (qui reçoit quoi)" \
+  || fail "transactionnel Zone 3 : prompt sans arguments liés ($out)"
+
+# L3-4) Bout en bout : le gate d'une mutation gmail transporte bound_args (to/subject)
+#       jusqu'à l'élicitation — pas juste service:méthode.
+TX3="$(mktemp -d)"; mkdir -p "$TX3/alpha"
+GWSA_ROOT="$TX3" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
+out="$(GWSA_ROOT="$TX3" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 "$PY" -c "
+import gateway.api as api
+from gateway.sessions import create_session
+seen = {}
+def cap_gate(fields):
+    seen.update(fields)
+api.run_elicitation_gate = cap_gate
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None: {'ok': True}
+s = create_session(client='l3')
+api.gmail_create_draft(alias='alpha', to='dest@x.com', subject='Sujet', body='b', session=s.session_id)
+ba = seen.get('bound_args') or {}
+print('OK' if (ba.get('to') == ['dest@x.com'] and ba.get('subject') == 'Sujet') else f'wrong:{ba}')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "transactionnel Zone 3 : le gate transporte bound_args jusqu'à l'élicitation (bout en bout)" \
+  || fail "transactionnel Zone 3 : bound_args absent du gate ($out)"
+rm -rf "$TX3"
+
 # --- Bilan ------------------------------------------------------------------
 
 printf '\n\033[1mBilan : %d réussis, %d échoués\033[0m\n' "$PASS" "$FAIL"

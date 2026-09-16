@@ -16,6 +16,7 @@ policy, best-effort côté audit).
 """
 from __future__ import annotations
 
+import base64
 import json
 
 READ_METHODS = {
@@ -251,3 +252,126 @@ def drive_files_trash_override(
     if body.get("trashed") is True or params.get("trashed") is True:
         return "delete"
     return operation
+
+
+# ---------------------------------------------------------------------------
+# Arguments CONSÉQUENTS liés au reçu signé (ADR-0012, Zone 3)
+#
+# Le payload signé (ADR-0005) portait service:ressources:méthode + une ressource
+# unique. Deux « drive permissions create » sur le même fichier (destinataire ou
+# rôle différent) signaient pareil ; une suppression de permission omettait
+# `permissionId` ; un brouillon Gmail omettait destinataire/sujet (Codex #147,
+# P1). `consequential_args` extrait, des MÊMES flags parsés, les arguments qui
+# changent la CONSÉQUENCE de l'acte — normalisés et canoniques (listes triées,
+# clés triées à la sérialisation) — pour les mettre dans le reçu SIGNÉ et le
+# prompt Touch ID. L'humain approuve alors QUI reçoit QUOI, pas juste la méthode.
+#
+# Best-effort : dict vide si l'acte n'a pas d'arguments conséquents mappés — il
+# reste lié par op_label + target dans le payload (jamais un blanc). Les actes
+# SENSIBLES (partage Drive, destinataires Gmail) sont mappés explicitement : y
+# confondre deux actes serait grave.
+
+
+def _gmail_message_headers(args: list[str]) -> dict:
+    """to/cc/subject d'un brouillon Gmail — décodés du message RFC-2822 encodé
+    base64url dans `--json {"message":{"raw":…}}` (c'est ainsi que gmail_create_draft
+    transporte le message). Corps NON lié (décision produit : to/cc/subject, pas
+    le corps — volumineux, volatil, aucun tool n'envoie)."""
+    body = parse_json_flag(args, "--json")
+    msg = body.get("message") if isinstance(body, dict) else None
+    raw = msg.get("raw") if isinstance(msg, dict) else None
+    if not isinstance(raw, str) or not raw:
+        return {}
+    try:
+        decoded = base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4)).decode("utf-8", "replace")
+    except (ValueError, TypeError):
+        return {}
+    to: list[str] = []
+    cc: list[str] = []
+    subject = ""
+    for line in decoded.replace("\r\n", "\n").split("\n"):
+        if line == "":
+            break  # fin des en-têtes
+        low = line.lower()
+        if low.startswith("to:"):
+            to = [a.strip() for a in line[3:].split(",") if a.strip()]
+        elif low.startswith("cc:"):
+            cc = [a.strip() for a in line[3:].split(",") if a.strip()]
+        elif low.startswith("subject:"):
+            subject = line[8:].strip()
+    out: dict = {}
+    if to:
+        out["to"] = sorted(to)
+    if cc:
+        out["cc"] = sorted(cc)
+    if subject:
+        out["subject"] = subject
+    return out
+
+
+def consequential_args(
+    service: str, resources: list[str], raw_method: str, args: list[str],
+) -> dict:
+    """Arguments conséquents (canoniques) d'un acte mutant, à lier au reçu signé
+    et au prompt Touch ID (ADR-0012, Zone 3). Voir le commentaire ci-dessus.
+
+    Rend TOUJOURS un dict (vide = pas d'arguments fins mappés) : la
+    non-régression fonctionnelle prime — un acte non mappé reste signé via
+    op_label + target, jamais un blanc."""
+    service = norm_service(service)
+    method = norm(raw_method)
+    res = [r.lower() for r in resources]
+
+    if service == "gmail" and "drafts" in res and method in ("create", "update"):
+        return _gmail_message_headers(args)
+
+    if service == "drive" and "permissions" in res:
+        params = parse_json_flag(args, "--params")
+        req = parse_json_flag(args, "--json")
+        if method == "create":
+            out: dict = {}
+            if params.get("fileId"):
+                out["fileId"] = str(params.get("fileId"))
+            if req.get("type"):
+                out["type"] = str(req.get("type"))
+            if req.get("role"):
+                out["role"] = str(req.get("role"))
+            grantee = req.get("emailAddress") or req.get("domain") or ""
+            if grantee:
+                out["grantee"] = str(grantee)
+            return out
+        if method == "delete":
+            out = {}
+            if params.get("fileId"):
+                out["fileId"] = str(params.get("fileId"))
+            if params.get("permissionId"):
+                out["permissionId"] = str(params.get("permissionId"))
+            return out
+
+    if service == "drive" and "files" in res:
+        params = parse_json_flag(args, "--params")
+        req = parse_json_flag(args, "--json")
+        fid = str(params.get("fileId") or "")
+        if method in ("delete", "trash", "batchdelete"):
+            return {"fileId": fid} if fid else {}
+        if method in ("update", "patch", "modify", "untrash"):
+            out = {}
+            if fid:
+                out["fileId"] = fid
+            changed = sorted(k for k in req) if isinstance(req, dict) else []
+            if changed:
+                out["fields"] = changed
+            return out
+        if method in ("create", "copy"):
+            out = {}
+            if fid:
+                out["fileId"] = fid  # source d'une copie
+            if isinstance(req, dict):
+                if req.get("name"):
+                    out["name"] = str(req.get("name"))
+                parents = req.get("parents")
+                if isinstance(parents, list) and parents:
+                    out["parents"] = sorted(str(p) for p in parents if p)
+            return out
+
+    return {}

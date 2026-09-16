@@ -22,7 +22,7 @@ from .config import (
     upload_roots,
     upload_spool,
 )
-from .categorize import categorize, norm_service, operand_resource
+from .categorize import categorize, consequential_args, norm_service, operand_resource
 from .context import get_git_root
 from .elicitation import ElicitationError, run_elicitation_gate
 from .errors import GatewayError
@@ -136,6 +136,21 @@ def _classify_operation(gws_args: list[str]) -> tuple[str, str, str, str, str | 
     return op_class, resource, op_label, service, category
 
 
+def _bound_args(gws_args: list[str]) -> dict[str, Any]:
+    """Arguments conséquents de l'acte (ADR-0012, Zone 3), pour le reçu signé et
+    le prompt Touch ID — via la table `consequential_args` (même source de vérité
+    que policy-check). Dict vide si rien de mappé (l'acte reste lié par op_label
+    + target)."""
+    if not gws_args:
+        return {}
+    service = norm_service(gws_args[0])
+    pos = _positionals(gws_args[1:])
+    if not pos:
+        return {}
+    resources, raw_method = pos[:-1], pos[-1]
+    return consequential_args(service, resources, raw_method, gws_args)
+
+
 def _consented_cap(service: str, category: str | None) -> dict[str, str]:
     """Capacité consentie qui voyage dans l'appel (ADR-0012, Zone 1).
 
@@ -180,6 +195,9 @@ def _transactional_gate(alias: str, gws_args: list[str], sid: str) -> dict[str, 
                     "email": email,
                     "target": resource,
                     "session_id": sid,
+                    # Zone 3 : lier les arguments conséquents (qui reçoit quoi) au
+                    # reçu signé + au prompt. Vide pour une lecture (mode manuel).
+                    "bound_args": _bound_args(gws_args) if op_class == "mutation" else {},
                 }
             )
         except ElicitationError as e:
