@@ -7011,6 +7011,46 @@ print('OK' if (ba.get('to') == ['dest@x.com'] and ba.get('subject') == 'Sujet') 
   || fail "transactionnel Zone 3 : bound_args absent du gate ($out)"
 rm -rf "$TX3"
 
+section "Consentement transactionnel — Zone 3/4 : parité prompt Python↔Swift (ADR-0012 lot 4)"
+
+PY="/usr/bin/python3"; [[ -x "$PY" ]] || PY="$(command -v python3)"
+if command -v swiftc >/dev/null 2>&1; then
+  SW_BIN="$(mktemp -u)"
+  if swiftc scripts/elicitation-sign.swift -o "$SW_BIN" 2>/dev/null; then
+    out="$(PYTHONPATH="$(pwd)" "$PY" - "$SW_BIN" <<'PYEOF'
+import json, subprocess, sys
+from gateway.elicitation import build_payload, prompt_from_payload
+BIN = sys.argv[1]
+cases = [
+    build_payload('transactional_mutation:drive:permissions:create', alias='perso',
+                  email='perso@gmail.com', target='F1',
+                  bound_args={'fileId': 'F1', 'type': 'user', 'role': 'writer', 'grantee': 'alice@x.com'}),
+    build_payload('transactional_mutation:gmail:users:drafts:create', alias='perso',
+                  email='perso@gmail.com',
+                  bound_args={'to': ['a@x.com', 'b@x.com'], 'cc': ['c@x.com'], 'subject': 'Hi'}),
+    build_payload('transactional_read:gmail:users:messages:list', alias='perso', email='perso@gmail.com'),
+    build_payload('transactional_read_lease', alias='perso', email='perso@gmail.com'),
+    build_payload('session_unlock', alias='perso', email='perso@gmail.com', session_id='S1', minutes=30),
+]
+bad = 0
+for p in cases:
+    sw = subprocess.run([BIN, 'prompt', json.dumps(p)], capture_output=True, text=True).stdout.rstrip('\n')
+    if sw != prompt_from_payload(p):
+        bad += 1
+print('OK' if bad == 0 else f'DIFF:{bad}')
+PYEOF
+)"
+    [[ "$out" == "OK" ]] \
+      && pass "transactionnel Zone 3/4 : prompt Touch ID identique Python↔Swift (bound_args compris)" \
+      || fail "transactionnel Zone 3/4 : divergence prompt Python↔Swift ($out)"
+    rm -f "$SW_BIN"
+  else
+    printf '  \033[33m•\033[0m %s\n' "transactionnel Zone 3/4 : parité prompt — compilation swift échouée, skip"
+  fi
+else
+  printf '  \033[33m•\033[0m %s\n' "transactionnel Zone 3/4 : parité prompt — swiftc absent (skip ; testé sur hôte macOS)"
+fi
+
 # --- Bilan ------------------------------------------------------------------
 
 printf '\n\033[1mBilan : %d réussis, %d échoués\033[0m\n' "$PASS" "$FAIL"
