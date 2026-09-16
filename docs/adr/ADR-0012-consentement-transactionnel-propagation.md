@@ -1,11 +1,11 @@
 # ADR-0012 — Consentement transactionnel : propager le geste jusqu'à la policy (raffinement d'ADR-0011)
 
 **Date** : 2026-09-12
-**Statut** : proposé (raffine ADR-0011 sur 3 points d'implémentation ; feature opt-in, OFF par défaut)
+**Statut** : proposé (raffine ADR-0011 sur 3 points d'implémentation + 1 réglage produit — durée de vie du bail ; feature opt-in, OFF par défaut)
 **Décideurs** : Thomas (mainteneur)
 **Raffine** : [ADR-0011](ADR-0011-consentement-transactionnel.md) · s'appuie sur [ADR-0007](ADR-0007-droits-par-session.md), [ADR-0005](ADR-0005-elicitation-signee-v2.md)
 
-> **TL;DR** — ADR-0011 a posé le *quoi* du consentement transactionnel (bail de lecture, acte de mutation signé usage-unique, retrait jamais LLM-dépendant). Trois rondes de revue Codex ont montré que le *comment* fuyait par trois trous : le geste réussissait dans la **gateway** mais le **broker** refusait quand même (il recalculait des capacités vides), des écritures de session concurrentes s'écrasaient, et la signature ne liait pas les vrais arguments de l'acte. Cet ADR tranche les trois **en amont** pour qu'une seule implémentation propre remplace les rustines : (1) la capacité consentie **voyage dans l'appel** et devient la source unique côté broker ; (2) **tous** les read-modify-write de session passent par **un seul verrou** ; (3) les arguments conséquents entrent dans le **payload signé** via une **table explicite**, acte non mappé = refus. *L'outil vérifie, l'humain autorise, le LLM propose.*
+> **TL;DR** — ADR-0011 a posé le *quoi* du consentement transactionnel (bail de lecture, acte de mutation signé usage-unique, retrait jamais LLM-dépendant). Trois rondes de revue Codex ont montré que le *comment* fuyait par trois trous : le geste réussissait dans la **gateway** mais le **broker** refusait quand même (il recalculait des capacités vides), des écritures de session concurrentes s'écrasaient, et la signature ne liait pas les vrais arguments de l'acte. Cet ADR tranche les trois **en amont** pour qu'une seule implémentation propre remplace les rustines : (1) la capacité consentie **voyage dans l'appel** et devient la source unique côté broker ; (2) **tous** les read-modify-write de session passent par **un seul verrou** ; (3) les arguments conséquents entrent dans le **payload signé** via une **table explicite**, acte non mappé = refus. S'y ajoute un **réglage produit** (Zone 4) : la **durée de vie du bail** devient un mode configurable — fenêtre courte (défaut), liée à la session, ou manuel — choisi en config/admin, sans jamais desserrer la signature des mutations. *L'outil vérifie, l'humain autorise, le LLM propose.*
 
 ---
 
@@ -133,6 +133,41 @@ Table initiale (surface de mutation réellement exposée par les tools MCP) :
 
 ---
 
+## Décision — Zone 4 : durée de vie du bail (mode configurable)
+
+**Décision.** La borne de fin du bail de lecture devient un **mode explicite**, choisi en configuration (fichier + interface admin), lu via `env("TRANSACTIONAL_LEASE_MODE", "fenetre")`. Trois valeurs :
+
+- `fenetre` (**défaut**) — le bail vit une **fenêtre courte** (TTL) **et** un **budget** de lectures. Il se referme au premier des deux atteint. C'est le comportement d'ADR-0011, le plus proprement *transactionnel*.
+- `session` — le bail vit **aussi longtemps que la session** — son TTL d'inactivité, aujourd'hui 8 h (ADR-0007) — ou jusqu'à `mag session close`. Il est stocké dans le fichier de session, donc il **disparaît avec elle**. Le **budget** reste actif comme filet : fin de session **ou** N lectures, au premier des deux.
+- `manuel` — pas de bail : **chaque lecture** passe par un acte signé (le mode manuel déjà prévu par ADR-0011).
+
+Le mode ne change **que la borne de fin du bail**. Il ne touche ni l'intersection ADR-0007 (Zone 1), ni le verrou (Zone 2), ni la signature des mutations (Zone 3). **Les mutations restent signées usage-unique dans tous les modes** — le mode ne desserre jamais l'écriture, seulement le confort de lecture.
+
+```mermaid
+flowchart LR
+    S["Geste de lecture<br/>→ ouvre le bail"] --> F{"mode<br/>(config)"}
+    F -->|fenetre| A["fin = TTL court<br/>OU budget épuisé"]
+    F -->|session| B["fin = fin de session<br/>(TTL 8 h / close)<br/>OU budget épuisé"]
+    F -->|manuel| C["pas de bail<br/>chaque lecture signée"]
+    style A fill:#e8f5e9,stroke:#2e7d32
+    style B fill:#fff3e0,stroke:#c77700
+    style C fill:#cfe8ff,stroke:#1b6fb3
+```
+
+*Figure 4 — Même geste de lecture, trois bornes de fin selon le mode. `fenetre` (vert) est le plus strict ; `session` (orange) le plus confortable, borné par le budget ; `manuel` (bleu) supprime le bail et re-signe chaque lecture.*
+
+**Pourquoi ce n'est pas « referme à l'archivage ».** La gateway ne reçoit **aucun signal** de fermeture de conversation. ADR-0007 §Décision 5 l'a acté : les jetons sont *au porteur*, Desktop partage **une seule** connexion MCP pour toutes les conversations, et le protocole MCP ne fournit **aucun identifiant de conversation**. Le serveur ne peut donc pas savoir qu'un chat précis a été archivé. La seule fin de vie observable est le **TTL** ou la **fermeture explicite**. Le mode `session` s'aligne sur ce que la gateway sait réellement voir.
+
+**Alternatives rejetées.**
+- *Lier le bail à l'archivage de la conversation* (le rêve ergonomique : « ferme quand je quitte le chat »). Rejeté : **non observable** côté serveur (cf. ci-dessus). Le brancher supposerait que **le client** appelle `close_session` en fin de conversation — un hook côté app qui n'existe pas aujourd'hui. À garder comme évolution **client**, hors de la gateway.
+- *Figer un seul mode en dur.* Rejeté : la friction acceptable dépend de l'usage — un run de lecture massif ne veut pas re-signer toutes les 90 s, un accès ponctuel veut la fenêtre la plus courte. Le curseur doit être **de la config**, pas du code.
+
+**Conséquences.** Un cran de config de plus, lu par `env()` et exposé dans l'admin (panneau policy / transactionnel). Le mode `session` est **plus confortable** mais **moins strict** : un bail qui vit 8 h ressemble à l'ancien « déverrouillé pour la journée » qu'ADR-0011 remplaçait. Le **budget de lectures** est ce qui le garde borné. Trade-off à assumer côté produit (cf. décision humaine #1).
+
+**Repli fail-closed.** Valeur de mode absente ou inconnue → `fenetre` (le plus strict). Flag illisible → `fenetre`. Jamais un défaut permissif.
+
+---
+
 ## Plan d'implémentation (par lots)
 
 Ordre choisi : assainir la base (verrou) **avant** d'y brancher la propagation, la signature en dernier car elle seule touche Swift.
@@ -140,6 +175,7 @@ Ordre choisi : assainir la base (verrou) **avant** d'y brancher la propagation, 
 | Lot | Contenu | Testable comment |
 |---|---|---|
 | **1 — Zone 2** | `_with_locked_session` + routage de **tous** les RMW ; supprime les save hors verrou. Refactor interne pur. | **Hermétique.** Tests de concurrence (course consume ↔ save), non-régression flag OFF. |
+| **1 bis — Zone 4** | Mode `TRANSACTIONAL_LEASE_MODE` (`fenetre`/`session`/`manuel`) lu via `env()` ; borne de fin du bail selon le mode ; budget conservé en filet. Écrit via le verrou du lot 1. | **Hermétique.** Un test par mode : `fenetre` expire au TTL/budget, `session` survit au TTL court mais meurt à `close_session`, `manuel` n'ouvre aucun bail. Repli `fenetre` sur valeur inconnue ; non-régression flag OFF. |
 | **2 — Zone 1** | Champ `consented_cap` gateway→broker ; broker : en transac ON, `caps = [consented_cap]` **seulement** ; `policy-check.py` inchangé. | **Hermétique.** Transac ON + `policy.json` restrictive + `GWSA_ELICITATION_MOCK=1` : acte consenti passe, acte non consenti = deny. Sans Touch ID réel. |
 | **3 — Zone 3 (Python)** | Table `consequential_args` + `bound_args` dans le payload + rendu prompt Python. | **Hermétique.** Test *octets canoniques* via chemin mock HMAC ; acte non mappé → refus. |
 | **4 — Zone 3 (Swift) + live** | Rendu prompt Swift + **parité des octets canoniques** Python/Swift ; dialogue Touch ID affichant op + compte + args ; test 2 conversations. | **Non hermétique** — exige le vrai broker + Swift + Touch ID (test manuel `tests/manuels/`). |
@@ -151,7 +187,7 @@ Ordre choisi : assainir la base (verrou) **avant** d'y brancher la propagation, 
 
 ## Ce qui reste une décision **humaine** (valeur, pas technique)
 
-1. **Réglages par défaut du bail** (aujourd'hui TTL 90 s / budget 20 opérations) — curseur produit friction ⇄ sûreté. À valider par Thomas.
+1. **Réglages par défaut du bail** — le **mode** de durée de vie par défaut (Zone 4 : `fenetre` proposé, le plus strict) **et** ses valeurs (aujourd'hui TTL 90 s / budget 20 opérations). Curseur produit friction ⇄ sûreté. À valider par Thomas.
 2. **Périmètre `bound_args` pour Gmail** : signer le **corps** du brouillon (ou son hash) ou seulement `to`/`cc`/`subject` ? Proposition : `to`/`cc`/`subject` (aucun tool n'*envoie* ; le corps est volumineux et volatil). Arbitrage fidélité ⇄ ergonomie.
 3. **Faire le lot 5 dans ce POC ?** Lier la cap au reçu signé côté broker, ou assumer le modèle coopératif (loopback + token) comme le reste d'ADR-0007. **Décision de posture de sécurité**, pas d'implémentation.
 
@@ -161,5 +197,5 @@ Ordre choisi : assainir la base (verrou) **avant** d'y brancher la propagation, 
 
 - ADR : [ADR-0011](ADR-0011-consentement-transactionnel.md) (modèle transactionnel — raffiné ici), [ADR-0007](ADR-0007-droits-par-session.md) (intersection fail-closed policy ∩ manifeste ∩ caps), [ADR-0005](ADR-0005-elicitation-signee-v2.md) (payload signé, `consume_nonce`).
 - Fiche : `features/20260911135931576_consentement-transactionnel.md` (à créer/mettre à jour si absente).
-- Code : `gateway/api.py` (`_run`, `_transactional_gate`, `_classify_operation`), `gateway/broker_server.py` (`handle_exec`, `_require_access`, `check_policy`), `gateway/sessions.py` (verrou, bail), `gateway/categorize.py` (`operand_resource`, `_OPERAND_PARAM` — modèle de la table zone 3), `scripts/policy-check.py` (`check_session_caps`, `_session_cap_allows`), `scripts/elicitation-sign.swift` (`promptText`), `gateway/elicitation.py` (`prompt_from_payload`, `run_elicitation_gate`).
+- Code : `gateway/api.py` (`_run`, `_transactional_gate`, `_classify_operation`), `gateway/broker_server.py` (`handle_exec`, `_require_access`, `check_policy`), `gateway/sessions.py` (verrou, bail, mode de durée de vie), `gateway/config.py` (`env` — lecture de `TRANSACTIONAL_LEASE_MODE`), `gateway/categorize.py` (`operand_resource`, `_OPERAND_PARAM` — modèle de la table zone 3), `scripts/policy-check.py` (`check_session_caps`, `_session_cap_allows`), `scripts/elicitation-sign.swift` (`promptText`), `gateway/elicitation.py` (`prompt_from_payload`, `run_elicitation_gate`).
 - Menace : `docs/threat-model.md`, `SECURITY.md`.
