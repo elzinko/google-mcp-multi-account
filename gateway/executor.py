@@ -96,6 +96,7 @@ def run_via_broker(
     timeout: int = 60,
     raw_output: bool = False,
     session_id: str = "",
+    consented_cap: dict[str, Any] | None = None,
 ) -> Any:
     ensure_broker_running()
     tok = ensure_token()
@@ -112,6 +113,12 @@ def run_via_broker(
     # Jeton porté par l'appelant (paramètre, pas un global — ADR-0007 §Décision 2).
     if session_id:
         payload["session_id"] = session_id
+    # Capacité consentie transactionnelle (ADR-0012, Zone 1) : le geste réussi
+    # côté gateway produit la capacité EXACTE de l'acte, qui voyage dans l'appel
+    # et devient la SEULE source de droits côté broker (usage unique — elle vit
+    # le temps de cet appel, jamais persistée).
+    if consented_cap:
+        payload["consented_cap"] = consented_cap
     gro = get_git_root()
     if gro:
         payload["git_root"] = gro
