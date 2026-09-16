@@ -107,6 +107,7 @@
 | [0035](0035-admin-acces-rapide-et-visu-zones.md) | Accès rapide à l'admin + visualisation des zones (icône barre de menus ?) | feature | P2 |  |  |  | 💡 idea |  |
 | [0039](0039-harmoniser-vocabulaire-jeton.md) | Bannir « jeton/token » des surfaces utilisateur — un seul vocabulaire (accès / connexion) | chore | P2 |  |  |  | 💡 idea |  |
 | [20260910170000000](20260910170000000_traduire-scripts-helper-mag-parite-mcp.md) | Traduire en anglais les scripts helper opérationnels de mag + parité CLI/MCP | feature | P2 |  | 0017 | google-mcp-multi-account | 💡 idea |  |
+| [20260916201419331](20260916201419331_gmail-list-pagination-curseur.md) | Exposer la pagination (pageToken) dans gmail_list pour parcourir tout l'historique | feature | P2 |  |  | google-multi-account | 💡 idea |  |
 | [0003](0003-vault-credentials-hors-perimetre-agent.md) | Vault credentials hors périmètre agent (Phase 2.1) | feature | P3 |  |  |  | 💡 idea |  |
 | [0006](0006-harnais-test-manuel-hybride.md) | Harnais hybride pour les tests manuels — script pour la mécanique, LLM pour la glu | feature | P3 |  |  |  | 💡 idea |  |
 | [0018](0018-cross-platform-hors-macos.md) | Cross-platform — faire tourner le projet hors macOS (Linux, Intel) | feature | P3 |  | 0017 |  | 💡 idea |  |
