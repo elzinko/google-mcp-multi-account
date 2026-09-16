@@ -8,7 +8,7 @@ version:
 epic: 0082
 status: in-progress
 ready: 2026-09-12
-pr:
+pr: "#149"
 created: 2026-09-11
 ---
 
