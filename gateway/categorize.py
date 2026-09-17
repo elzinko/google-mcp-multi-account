@@ -403,9 +403,17 @@ def consequential_args(
             if isinstance(req, dict):
                 if req.get("name"):
                     out["name"] = str(req.get("name"))
+                if req.get("mimeType"):
+                    out["mimeType"] = str(req.get("mimeType"))
                 parents = req.get("parents")
                 if isinstance(parents, list) and parents:
                     out["parents"] = sorted(str(p) for p in parents if p)
+            # Contenu téléversé (Codex #149) : même empreinte qu'en update, sinon
+            # deux fichiers de même nom/destination mais contenus différents
+            # signeraient pareil.
+            up = flag_value(args, "--upload")
+            if up:
+                out["content"] = _upload_digest(up)
             return out
 
     return {}

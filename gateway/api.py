@@ -351,6 +351,16 @@ def gmail_create_draft(
     validate_alias(alias)
     if not to or not subject:
         raise GatewayError("to et subject sont requis", code="error")
+    # Anti-injection d'en-têtes (Codex #149) : un CR/LF dans to/cc/subject
+    # injecterait des en-têtes arbitraires dans le message RFC (ex. un « Bcc: »
+    # caché → destinataire réel mais ABSENT du reçu signé/prompt). Refus net au
+    # bord de l'API : le message signé décrit alors exactement ce qui est créé.
+    for _label, _val in (("to", to), ("cc", cc), ("subject", subject)):
+        if "\r" in _val or "\n" in _val:
+            raise GatewayError(
+                f"« {_label} » contient un saut de ligne interdit (injection d'en-tête)",
+                code="error",
+            )
     # Message RFC 2822 minimal, encodé raw base64url — gws drafts.create attend --json.
     headers = [f"To: {to}", f"Subject: {subject}"]
     if cc:

@@ -7206,6 +7206,46 @@ print('OK' if ok else f'wrong {d1} {d2} {dc}')
 
 rm -rf "$TX5"
 
+section "Consentement transactionnel — durcissements revue Codex #149 round 3 (P2)"
+
+TX6="$(mktemp -d)"; mkdir -p "$TX6/alpha"
+PY="/usr/bin/python3"; [[ -x "$PY" ]] || PY="$(command -v python3)"
+
+# R3-3) Sécu : un CR/LF dans to/cc/subject d'un brouillon Gmail est refusé au bord
+#       de l'API (pas d'injection d'un Bcc caché absent du reçu signé).
+out="$(GWSA_ROOT="$TX6" PYTHONPATH="$(pwd)" "$PY" -c "
+import gateway.api as api
+raised = False
+try:
+    api.gmail_create_draft(alias='alpha', to='visible@x.com\r\nBcc: hidden@x.com',
+                           subject='s', body='b', session='a' * 24)
+except api.GatewayError as e:
+    raised = (e.code == 'error')
+print('OK' if raised else 'wrong')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "transactionnel sécu : injection d'en-tête (CRLF) dans un brouillon Gmail refusée (Codex #149 R3)" \
+  || fail "transactionnel sécu : CRLF dans to/cc/subject non rejeté ($out)"
+
+# R3-2) drive_create/upload : contenus différents (même nom/destination) signent
+#       différemment (empreinte du média, comme en update).
+out="$(GWSA_ROOT="$TX6" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, tempfile, os
+from gateway.categorize import consequential_args
+t1 = tempfile.NamedTemporaryFile(delete=False); t1.write(b'AAA'); t1.close()
+t2 = tempfile.NamedTemporaryFile(delete=False); t2.write(b'BBB'); t2.close()
+mk = lambda p: ['drive','files','create','--json',json.dumps({'name':'F','parents':['P']}),'--upload',p]
+b1 = consequential_args('drive',['files'],'create',mk(t1.name))
+b2 = consequential_args('drive',['files'],'create',mk(t2.name))
+os.unlink(t1.name); os.unlink(t2.name)
+print('OK' if (b1.get('content','').startswith('media:sha256:') and b1 != b2) else f'wrong {b1} {b2}')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "transactionnel Zone 3 : drive_create lie une empreinte du contenu (Codex #149 R3)" \
+  || fail "transactionnel Zone 3 : create ne distingue pas les contenus ($out)"
+
+rm -rf "$TX6"
+
 # --- Bilan ------------------------------------------------------------------
 
 printf '\n\033[1mBilan : %d réussis, %d échoués\033[0m\n' "$PASS" "$FAIL"
