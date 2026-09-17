@@ -6647,7 +6647,7 @@ print('OK' if 1439*60 <= delta <= 1440*60 + 2 else f'wrong:{delta}')
 
 # 2) Flag ON, mode fenetre (défaut) : le bail referme seul au TTL. (config via MAG_)
 out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_READ_LEASE_TTL_SEC=1 MAG_READ_LEASE_BUDGET=5 "$PY" -c "
+  MAG_TRANSACTIONAL_LEASE_MODE=fenetre MAG_READ_LEASE_TTL_SEC=1 MAG_READ_LEASE_BUDGET=5 "$PY" -c "
 import time
 from gateway.sessions import create_session, open_read_lease, is_read_lease_active
 s = create_session(client='txB')
@@ -6663,7 +6663,7 @@ print('before', before, 'after', after)
 
 # 3) Flag ON, mode fenetre : le bail referme au budget épuisé (avant le TTL).
 out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_READ_LEASE_TTL_SEC=90 MAG_READ_LEASE_BUDGET=2 "$PY" -c "
+  MAG_TRANSACTIONAL_LEASE_MODE=fenetre MAG_READ_LEASE_TTL_SEC=90 MAG_READ_LEASE_BUDGET=2 "$PY" -c "
 from gateway.sessions import create_session, open_read_lease, is_read_lease_active, consume_read_lease
 s = create_session(client='txC')
 open_read_lease(s.session_id, 'alpha')
@@ -6719,13 +6719,23 @@ print('active' if is_read_lease_active(s.session_id, 'alpha') else 'no-lease')
   && pass "transactionnel manuel : aucun bail ouvert (chaque lecture signée)" \
   || fail "transactionnel manuel : un bail a été ouvert ($out)"
 
-# 6) Zone 4 : valeur de mode inconnue → repli fail-closed sur fenetre ; compat GWSA_.
+# 5bis) Zone 4 : le mode PAR DÉFAUT (aucune config) est manuel — un droit, une
+#       action (décision Thomas 2026-09-17).
+out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import transactional_lease_mode
+print(transactional_lease_mode())
+")"
+[[ "$out" == "manuel" ]] \
+  && pass "transactionnel : mode par défaut = manuel (un droit, une action)" \
+  || fail "transactionnel : défaut inattendu ($out)"
+
+# 6) Zone 4 : valeur de mode inconnue → repli fail-closed sur manuel ; compat GWSA_.
 out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_LEASE_MODE=bogus "$PY" -c "
 from gateway.sessions import transactional_lease_mode
 print(transactional_lease_mode())
 ")"
-[[ "$out" == "fenetre" ]] \
-  && pass "transactionnel : mode inconnu → repli fail-closed sur fenetre" \
+[[ "$out" == "manuel" ]] \
+  && pass "transactionnel : mode inconnu → repli fail-closed sur manuel (le plus strict)" \
   || fail "transactionnel : mode inconnu mal replié ($out)"
 out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" GWSA_TRANSACTIONAL_LEASE_MODE=session "$PY" -c "
 from gateway.sessions import transactional_lease_mode
@@ -6737,7 +6747,7 @@ print(transactional_lease_mode())
 
 # 7) Zone 2 : consommation ATOMIQUE — 24 process concurrents, budget 3 → exactement 3.
 out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_READ_LEASE_TTL_SEC=90 MAG_READ_LEASE_BUDGET=3 "$PY" -c "
+  MAG_TRANSACTIONAL_LEASE_MODE=fenetre MAG_READ_LEASE_TTL_SEC=90 MAG_READ_LEASE_BUDGET=3 "$PY" -c "
 import multiprocessing as mp
 from gateway.sessions import create_session, open_read_lease, try_consume_read_lease
 s = create_session(client='txRace'); sid = s.session_id
@@ -6778,7 +6788,7 @@ GWSA_ROOT="$TX2" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev
 # G1) Gate lecture : bail actif ne redemande rien ; budget épuisé rouvre (geste) ;
 #     la capacité consentie {service, catégorie} voyage bien jusqu'au broker.
 out="$(GWSA_ROOT="$TX2" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_READ_LEASE_BUDGET=2 "$PY" -c "
+  MAG_TRANSACTIONAL_LEASE_MODE=fenetre MAG_READ_LEASE_BUDGET=2 "$PY" -c "
 import gateway.api as api
 from gateway.sessions import create_session
 caps = []
@@ -6801,7 +6811,7 @@ print('n1', n1, 'n2', n2, 'n3', n3, 'cap', caps[0])
 
 # G2) Gate lecture : bail fermé + geste REFUSÉ → refus fail-closed (jamais d'accès).
 out="$(GWSA_ROOT="$TX2" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_READ_LEASE_BUDGET=1 "$PY" -c "
+  MAG_TRANSACTIONAL_LEASE_MODE=fenetre MAG_READ_LEASE_BUDGET=1 "$PY" -c "
 import gateway.api as api
 import gateway.elicitation as elic
 from gateway.sessions import create_session

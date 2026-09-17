@@ -51,13 +51,17 @@ def transactional_enabled() -> bool:
 def transactional_lease_mode() -> str:
     """Durée de vie du bail de lecture (ADR-0012, Zone 4) — mode configurable :
 
-    - ``fenetre`` (défaut) : bail = fenêtre courte (TTL) ET budget, au premier atteint.
-    - ``session``          : bail vit aussi longtemps que la session, budget en filet.
-    - ``manuel``           : pas de bail — chaque lecture est signée.
+    - ``manuel`` (**défaut**) : pas de bail — CHAQUE lecture est signée. Un droit,
+      une action : le LLM ne peut jamais faire plus que l'acte approuvé (décision
+      Thomas 2026-09-17). Le plus strict.
+    - ``fenetre`` : bail = fenêtre courte (TTL) ET budget, au premier atteint —
+      groupage confort, opt-in explicite.
+    - ``session`` : bail vit aussi longtemps que la session, budget en filet.
 
     Lu via MAG_/GWSA_TRANSACTIONAL_LEASE_MODE, puis le marqueur fichier
     ``.transactional-lease-mode`` (posé par l'admin). Repli fail-closed sur
-    ``fenetre`` (défaut sûr) si la valeur est absente, illisible ou inconnue."""
+    ``manuel`` (le plus strict) si la valeur est absente, illisible ou inconnue :
+    seul un opt-in explicite ``fenetre``/``session`` desserre la lecture."""
     val = (env("TRANSACTIONAL_LEASE_MODE") or "").strip().lower()
     if not val:
         try:
@@ -65,7 +69,7 @@ def transactional_lease_mode() -> str:
             val = p.read_text(encoding="utf-8").strip().lower() if p.is_file() else ""
         except OSError:
             val = ""
-    return val if val in LEASE_MODES else "fenetre"
+    return val if val in LEASE_MODES else "manuel"
 
 
 def read_lease_ttl_sec() -> int:

@@ -126,8 +126,8 @@ cette réimplémentation propre en une fois — elle **couvre l'incrément 1 ci-
   transactionnel (policy ∩ manifeste ∩ {cap}) ; absente → deny-all. Corrige le trou « caps vides » de #147.
 - **Zone 3** — les arguments conséquents (destinataire/rôle Drive, to/cc/subject Gmail) entrent dans le
   reçu signé + le prompt Touch ID ; deux partages distincts ne signent plus pareil.
-- **Zone 4 (modes)** — durée de vie du bail configurable : `fenetre` (défaut) | `session` | `manuel`,
-  réglable en config/admin ; repli fail-closed sur `fenetre`.
+- **Zone 4 (modes)** — durée de vie du bail configurable : `manuel` (**défaut** : un droit, une action) |
+  `fenetre` | `session`, réglable en config/admin ; repli fail-closed sur `manuel`.
 
 Opt-in `MAG_/GWSA_TRANSACTIONAL_CONSENT` (OFF par défaut). 574 tests hermétiques verts, dont parité
 prompt Python↔Swift. Reste hors PR : test manuel Touch ID réel (2 conversations) ; calibration fine.

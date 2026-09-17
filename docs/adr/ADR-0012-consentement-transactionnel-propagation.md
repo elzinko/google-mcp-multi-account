@@ -5,7 +5,7 @@
 **Décideurs** : Thomas (mainteneur)
 **Raffine** : [ADR-0011](ADR-0011-consentement-transactionnel.md) · s'appuie sur [ADR-0007](ADR-0007-droits-par-session.md), [ADR-0005](ADR-0005-elicitation-signee-v2.md)
 
-> **TL;DR** — ADR-0011 a posé le *quoi* du consentement transactionnel (bail de lecture, acte de mutation signé usage-unique, retrait jamais LLM-dépendant). Trois rondes de revue Codex ont montré que le *comment* fuyait par trois trous : le geste réussissait dans la **gateway** mais le **broker** refusait quand même (il recalculait des capacités vides), des écritures de session concurrentes s'écrasaient, et la signature ne liait pas les vrais arguments de l'acte. Cet ADR tranche les trois **en amont** pour qu'une seule implémentation propre remplace les rustines : (1) la capacité consentie **voyage dans l'appel** et devient la source unique côté broker ; (2) **tous** les read-modify-write de session passent par **un seul verrou** ; (3) les arguments conséquents entrent dans le **payload signé** via une **table explicite**, acte non mappé = refus. S'y ajoute un **réglage produit** (Zone 4) : la **durée de vie du bail** devient un mode configurable — fenêtre courte (défaut), liée à la session, ou manuel — choisi en config/admin, sans jamais desserrer la signature des mutations. *L'outil vérifie, l'humain autorise, le LLM propose.*
+> **TL;DR** — ADR-0011 a posé le *quoi* du consentement transactionnel (bail de lecture, acte de mutation signé usage-unique, retrait jamais LLM-dépendant). Trois rondes de revue Codex ont montré que le *comment* fuyait par trois trous : le geste réussissait dans la **gateway** mais le **broker** refusait quand même (il recalculait des capacités vides), des écritures de session concurrentes s'écrasaient, et la signature ne liait pas les vrais arguments de l'acte. Cet ADR tranche les trois **en amont** pour qu'une seule implémentation propre remplace les rustines : (1) la capacité consentie **voyage dans l'appel** et devient la source unique côté broker ; (2) **tous** les read-modify-write de session passent par **un seul verrou** ; (3) les arguments conséquents entrent dans le **payload signé** via une **table explicite**, acte non mappé = refus. S'y ajoute un **réglage produit** (Zone 4) : la **durée de vie du bail** devient un mode configurable — **manuel (défaut : un droit, une action)**, fenêtre courte, ou liée à la session — choisi en config/admin, sans jamais desserrer la signature des mutations. *L'outil vérifie, l'humain autorise, le LLM propose.*
 
 ---
 
@@ -135,11 +135,13 @@ Table initiale (surface de mutation réellement exposée par les tools MCP) :
 
 ## Décision — Zone 4 : durée de vie du bail (mode configurable)
 
-**Décision.** La borne de fin du bail de lecture devient un **mode explicite**, choisi en configuration (fichier + interface admin), lu via `env("TRANSACTIONAL_LEASE_MODE", "fenetre")`. Trois valeurs :
+**Décision.** La borne de fin du bail de lecture devient un **mode explicite**, choisi en configuration (fichier + interface admin), lu via `env("TRANSACTIONAL_LEASE_MODE")`. Trois valeurs :
 
-- `fenetre` (**défaut**) — le bail vit une **fenêtre courte** (TTL) **et** un **budget** de lectures. Il se referme au premier des deux atteint. C'est le comportement d'ADR-0011, le plus proprement *transactionnel*.
+- `manuel` (**défaut**, décision Thomas 2026-09-17) — pas de bail : **chaque lecture** passe par un acte signé. **Un droit, une action** : le LLM ne peut jamais faire plus que l'acte que l'humain vient d'approuver, indépendamment du temps. Le plus strict, la meilleure posture anti-injection.
+- `fenetre` — le bail vit une **fenêtre courte** (TTL) **et** un **budget** de lectures. Il se referme au premier des deux atteint. Groupage confort (plusieurs lectures sous un geste), opt-in explicite.
 - `session` — le bail vit **aussi longtemps que la session** — son TTL d'inactivité, aujourd'hui 8 h (ADR-0007) — ou jusqu'à `mag session close`. Il est stocké dans le fichier de session, donc il **disparaît avec elle**. Le **budget** reste actif comme filet : fin de session **ou** N lectures, au premier des deux.
-- `manuel` — pas de bail : **chaque lecture** passe par un acte signé (le mode manuel déjà prévu par ADR-0011).
+
+*Choix du défaut manuel (2026-09-17) : Thomas privilégie « un droit = une action » — la borne est l'**acte**, pas le temps. `fenetre`/`session` restent disponibles pour qui préfère le confort de lecture, au prix d'un cran de sûreté ; à surveiller côté fatigue de validation (un geste par lecture peut banaliser le Touch ID).*
 
 Le mode ne change **que la borne de fin du bail**. Il ne touche ni l'intersection ADR-0007 (Zone 1), ni le verrou (Zone 2), ni la signature des mutations (Zone 3). **Les mutations restent signées usage-unique dans tous les modes** — le mode ne desserre jamais l'écriture, seulement le confort de lecture.
 
@@ -164,7 +166,7 @@ flowchart LR
 
 **Conséquences.** Un cran de config de plus, lu par `env()` et exposé dans l'admin (panneau policy / transactionnel). Le mode `session` est **plus confortable** mais **moins strict** : un bail qui vit 8 h ressemble à l'ancien « déverrouillé pour la journée » qu'ADR-0011 remplaçait. Le **budget de lectures** est ce qui le garde borné. Trade-off à assumer côté produit (cf. décision humaine #1).
 
-**Repli fail-closed.** Valeur de mode absente ou inconnue → `fenetre` (le plus strict). Flag illisible → `fenetre`. Jamais un défaut permissif.
+**Repli fail-closed.** Valeur de mode absente, illisible ou inconnue → `manuel` (le plus strict — un geste par acte). Seul un opt-in **explicite** `fenetre`/`session` desserre la lecture ; jamais un défaut permissif.
 
 ---
 
@@ -187,7 +189,7 @@ Ordre choisi : assainir la base (verrou) **avant** d'y brancher la propagation, 
 
 ## Ce qui reste une décision **humaine** (valeur, pas technique)
 
-1. **Réglages par défaut du bail** — le **mode** de durée de vie par défaut (Zone 4 : `fenetre` proposé, le plus strict) **et** ses valeurs (aujourd'hui TTL 90 s / budget 20 opérations). Curseur produit friction ⇄ sûreté. À valider par Thomas.
+1. **Réglages par défaut du bail** — mode par défaut **tranché : `manuel`** (2026-09-17, « un droit une action »). Les valeurs TTL/budget (aujourd'hui 90 s / 20) ne servent que si l'on active `fenetre`/`session` ; à calibrer le jour où l'on veut le confort de lecture.
 2. **Périmètre `bound_args` pour Gmail** : signer le **corps** du brouillon (ou son hash) ou seulement `to`/`cc`/`subject` ? Proposition : `to`/`cc`/`subject` (aucun tool n'*envoie* ; le corps est volumineux et volatil). Arbitrage fidélité ⇄ ergonomie.
 3. **Faire le lot 5 dans ce POC ?** Lier la cap au reçu signé côté broker, ou assumer le modèle coopératif (loopback + token) comme le reste d'ADR-0007. **Décision de posture de sécurité**, pas d'implémentation.
 
