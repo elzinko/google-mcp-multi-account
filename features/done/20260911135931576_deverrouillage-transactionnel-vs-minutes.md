@@ -6,7 +6,7 @@ priority: P1
 product: google-multi-account
 version:
 epic: 0082
-status: in-progress
+status: shipped
 ready: 2026-09-12
 pr: "#149"
 created: 2026-09-11
