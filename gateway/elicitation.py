@@ -142,8 +142,8 @@ def _render_bound_args(bound: dict[str, Any]) -> str:
     aplaties. Doit rester aligné avec elicitation-sign.swift (lot 4)."""
     if not bound:
         return ""
-    order = ["to", "cc", "subject", "grantee", "role", "type", "fileId",
-             "permissionId", "name", "parents", "fields"]
+    order = ["to", "cc", "subject", "grantee", "role", "type", "sendNotificationEmail",
+             "fileId", "permissionId", "name", "mimeType", "parents", "fields", "content"]
     keys = [k for k in order if k in bound] + [k for k in sorted(bound) if k not in order]
     parts = []
     for k in keys:

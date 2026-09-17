@@ -125,6 +125,14 @@ def _is_safe_sid(session_id: str) -> bool:
     return bool(session_id) and _SID_RE.match(session_id) is not None
 
 
+def _session_exists(session_id: str) -> bool:
+    """Jeton valide ET fichier de session présent. Vérifié AVANT de prendre le
+    verrou : sinon un jeton hex quelconque (valide mais inexistant) ferait créer
+    un `.lock` jamais nettoyé → accumulation sans borne (Codex #149 P2). Le code
+    sous verrou re-teste via `_load_active` (sécurité vis-à-vis des courses)."""
+    return _is_safe_sid(session_id) and _path(session_id).is_file()
+
+
 def _lock_path(session_id: str) -> Path:
     """Verrou UNIQUE par session (ADR-0012, Zone 2) : sérialise tous les
     read-modify-write du même fichier de session (touch, unlock, grant,
@@ -414,7 +422,7 @@ def get_session(session_id: str) -> SessionState | None:
     Zone 2) : sinon ce save (last_seen_at) pouvait ré-écrire un budget de bail
     déjà décrémenté sous verrou par un appel concurrent (Codex PR #147, P1).
     """
-    if not _is_safe_sid(session_id):
+    if not _session_exists(session_id):
         return None
     with file_lock(_lock_path(session_id)):
         state = _load_active(session_id)
@@ -454,7 +462,7 @@ def session_unlock(session_id: str, alias: str, minutes: int) -> SessionState:
     lecture (quelques minutes max), jamais 1440. Flag OFF (défaut) :
     comportement strictement inchangé (non-régression). RMW sous le verrou
     unique (ADR-0012, Zone 2)."""
-    if not _is_safe_sid(session_id):
+    if not _session_exists(session_id):
         raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
     with file_lock(_lock_path(session_id)):
         state = _load_active(session_id)
@@ -498,7 +506,7 @@ def open_read_lease(session_id: str, alias: str) -> SessionState:
     - ``manuel``  : aucun bail ouvert (chaque lecture est signée en amont) ; on
       efface un éventuel bail résiduel.
     """
-    if not _is_safe_sid(session_id):
+    if not _session_exists(session_id):
         raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
     mode = transactional_lease_mode()
     with file_lock(_lock_path(session_id)):
@@ -520,7 +528,7 @@ def open_read_lease(session_id: str, alias: str) -> SessionState:
 def is_read_lease_active(session_id: str, alias: str) -> bool:
     """Bail de lecture actif pour (session, alias) ? Lecture seule sous le verrou
     unique (pas de save)."""
-    if not _is_safe_sid(session_id):
+    if not _session_exists(session_id):
         return False
     with file_lock(_lock_path(session_id)):
         state = _load_active(session_id)
@@ -536,7 +544,7 @@ def try_consume_read_lease(session_id: str, alias: str) -> bool:
     (Codex PR #147, P1). Retourne True si un slot a été consommé (bail actif),
     False sinon — l'appelant doit alors obtenir un nouveau consentement. Le
     retrait ne dépend que du TTL/budget, jamais d'un geste du LLM."""
-    if not _is_safe_sid(session_id):
+    if not _session_exists(session_id):
         return False
     with file_lock(_lock_path(session_id)):
         state = _load_active(session_id)
@@ -567,7 +575,7 @@ def session_grant_drive(
     # RMW sous le verrou unique (ADR-0012, Zone 2). Le verrou couvre aussi la
     # résolution du manifeste projet pour préserver l'ordre des contrôles
     # (délégation d'abord) — I/O local rapide, chemin d'octroi rare.
-    if not _is_safe_sid(session_id):
+    if not _session_exists(session_id):
         raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
     with file_lock(_lock_path(session_id)):
         state = _load_active(session_id)
@@ -742,7 +750,7 @@ def session_grant_capability(
     if not account or not service or not operation:
         raise GatewayError("account/service/operation requis", code="error")
     # RMW sous le verrou unique (ADR-0012, Zone 2).
-    if not _is_safe_sid(session_id):
+    if not _session_exists(session_id):
         raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
     with file_lock(_lock_path(session_id)):
         state = _load_active(session_id)
@@ -920,6 +928,7 @@ def close_session(session_id: str) -> None:
     découplé de la connexion MCP — ADR-0007 §Décision 5)."""
     revoke_descendants(session_id)
     _path(session_id).unlink(missing_ok=True)
+    _lock_path(session_id).unlink(missing_ok=True)  # pas d'orphelin .lock (Codex #149)
 
 
 def list_sessions(*, include_expired_zones: bool = False) -> list[dict[str, Any]]:

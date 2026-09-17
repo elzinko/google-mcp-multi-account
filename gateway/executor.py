@@ -123,10 +123,10 @@ def run_via_broker(
     # Le mode transactionnel est porté PAR LA REQUÊTE (ADR-0012, Zone 1 —
     # correctif Codex #149) : le broker est un daemon persistant qui garde son
     # env de démarrage ; la gateway est l'autorité du mode (elle a porté le
-    # geste). Sans ça, activer le flag après le démarrage du broker le
-    # désynchronise (il refuserait un appel pourtant consenti).
-    if transactional:
-        payload["transactional"] = True
+    # geste). On envoie TOUJOURS la valeur explicite (True ET False) — sinon un
+    # broker démarré en transactionnel puis le flag désactivé retomberait sur son
+    # env périmé et refuserait un appel legacy pourtant valide (Codex #149 P2).
+    payload["transactional"] = bool(transactional)
     gro = get_git_root()
     if gro:
         payload["git_root"] = gro

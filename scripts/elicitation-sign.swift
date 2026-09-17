@@ -187,8 +187,8 @@ func boundValueString(_ v: Any) -> String {
 // « clé=valeur ; … », listes jointes par « , »).
 func renderBoundArgs(_ obj: [String: Any]) -> String {
     guard let bound = obj["bound_args"] as? [String: Any], !bound.isEmpty else { return "" }
-    let order = ["to", "cc", "subject", "grantee", "role", "type", "fileId",
-                 "permissionId", "name", "parents", "fields"]
+    let order = ["to", "cc", "subject", "grantee", "role", "type", "sendNotificationEmail",
+                 "fileId", "permissionId", "name", "mimeType", "parents", "fields", "content"]
     var keys = order.filter { bound[$0] != nil }
     keys += bound.keys.filter { !order.contains($0) }.sorted()
     var parts: [String] = []

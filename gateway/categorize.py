@@ -17,6 +17,7 @@ policy, best-effort côté audit).
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 
 READ_METHODS = {
@@ -309,6 +310,20 @@ def _gmail_message_headers(args: list[str]) -> dict:
     return out
 
 
+def _upload_digest(path: str) -> str:
+    """Empreinte courte du contenu média remplacé (ADR-0012 Zone 3, Codex #149) :
+    deux remplacements différents ne doivent pas signer pareil. Rend
+    ``media:sha256:<16 hex>`` ou ``media:?`` si illisible."""
+    try:
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+        return "media:sha256:" + h.hexdigest()[:16]
+    except OSError:
+        return "media:?"
+
+
 def consequential_args(
     service: str, resources: list[str], raw_method: str, args: list[str],
 ) -> dict:
@@ -339,6 +354,13 @@ def consequential_args(
             grantee = req.get("emailAddress") or req.get("domain") or ""
             if grantee:
                 out["grantee"] = str(grantee)
+            # Notification par email = acte VISIBLE de l'extérieur : le lier pour
+            # que l'humain le voie (un partage notifié ≠ un partage silencieux,
+            # Codex #149 P2). Le flag est dans --params. Stocké en CHAÎNE
+            # "true"/"false" : rendu identique Python↔Swift (un bool JSON se
+            # rendrait « True » d'un côté, « 1 » de l'autre).
+            if "sendNotificationEmail" in params:
+                out["sendNotificationEmail"] = "true" if params.get("sendNotificationEmail") else "false"
             return out
         if method == "delete":
             out = {}
@@ -358,9 +380,21 @@ def consequential_args(
             out = {}
             if fid:
                 out["fileId"] = fid
-            changed = sorted(k for k in req) if isinstance(req, dict) else []
-            if changed:
-                out["fields"] = changed
+            # Lier les VALEURS, pas seulement les noms de champs (Codex #149 P2) :
+            # deux renommages différents doivent signer différemment.
+            if isinstance(req, dict):
+                if req.get("name") is not None:
+                    out["name"] = str(req.get("name"))
+                if req.get("mimeType"):
+                    out["mimeType"] = str(req.get("mimeType"))
+                extra = sorted(k for k in req if k not in ("name", "mimeType"))
+                if extra:
+                    out["fields"] = extra
+            # Remplacement de contenu (media upload) : lier une empreinte, sinon
+            # deux contenus différents signeraient pareil (Codex #149 P2).
+            up = flag_value(args, "--upload")
+            if up:
+                out["content"] = _upload_digest(up)
             return out
         if method in ("create", "copy"):
             out = {}

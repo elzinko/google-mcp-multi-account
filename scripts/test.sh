@@ -7132,6 +7132,80 @@ print('req_true_allowed', allowed, 'req_false_refused', refused)
 
 rm -rf "$TX4"
 
+section "Consentement transactionnel — durcissements revue Codex #149 round 2 (P2)"
+
+TX5="$(mktemp -d)"; mkdir -p "$TX5/alpha"
+PY="/usr/bin/python3"; [[ -x "$PY" ]] || PY="$(command -v python3)"
+
+# R2-10) L'exécuteur envoie TOUJOURS le mode (True ET False), jamais omis — sinon
+#        le broker retombe sur son env périmé.
+out="$(GWSA_ROOT="$TX5" PYTHONPATH="$(pwd)" "$PY" -c "
+import gateway.executor as ex
+cap = {}
+ex.ensure_broker_running = lambda: None
+ex.ensure_token = lambda: 'tok'
+ex._request = lambda payload, timeout=0: (cap.update(payload) or {'ok': True, 'result': {}})
+ex.run_via_broker('alpha', ['gmail', 'x'], session_id='a' * 24, transactional=False)
+print('present', 'transactional' in cap, 'value', cap.get('transactional'))
+")"
+[[ "$out" == *"present True"* && "$out" == *"value False"* ]] \
+  && pass "transactionnel : l'exécuteur envoie transactional=False explicitement (Codex #149 R2)" \
+  || fail "transactionnel : mode False omis → broker sur env périmé ($out)"
+
+# R2-9) Aucun lockfile créé pour un jeton hex INEXISTANT (pas d'accumulation).
+out="$(GWSA_ROOT="$TX5" PYTHONPATH="$(pwd)" "$PY" -c "
+import glob
+from gateway.sessions import get_session, session_unlock, sessions_dir
+sid = 'a' * 24  # format valide, session inexistante
+before = set(glob.glob(str(sessions_dir() / '*.lock')))
+g = get_session(sid)
+try:
+    session_unlock(sid, 'alpha', 5)
+except Exception:
+    pass
+after = set(glob.glob(str(sessions_dir() / '*.lock')))
+print('get_none', g is None, 'no_new_lock', before == after)
+")"
+[[ "$out" == *"get_none True"* && "$out" == *"no_new_lock True"* ]] \
+  && pass "transactionnel : jeton inexistant ne crée aucun .lock (pas d'accumulation, Codex #149 R2)" \
+  || fail "transactionnel : lockfile créé pour jeton inexistant ($out)"
+
+# R2-8) Un partage Drive NOTIFIÉ (email) ne signe pas comme un partage silencieux.
+out="$(GWSA_ROOT="$TX5" PYTHONPATH="$(pwd)" "$PY" -c "
+import json
+from gateway.categorize import consequential_args
+b = ['drive','permissions','create','--json',json.dumps({'type':'user','role':'writer','emailAddress':'a@x.com'})]
+notif = b[:3] + ['--params', json.dumps({'fileId':'F1','sendNotificationEmail':True})] + b[3:]
+silent = b[:3] + ['--params', json.dumps({'fileId':'F1','sendNotificationEmail':False})] + b[3:]
+bn = consequential_args('drive',['permissions'],'create',notif)
+bs = consequential_args('drive',['permissions'],'create',silent)
+print('OK' if (bn.get('sendNotificationEmail')=='true' and bs.get('sendNotificationEmail')=='false' and bn!=bs) else f'wrong {bn} {bs}')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "transactionnel Zone 3 : notification email liée — partage notifié ≠ silencieux (Codex #149 R2)" \
+  || fail "transactionnel Zone 3 : sendNotificationEmail non lié ($out)"
+
+# R2-11) drive_update lie les VALEURS (deux renommages ≠) et une empreinte du contenu.
+out="$(GWSA_ROOT="$TX5" PYTHONPATH="$(pwd)" "$PY" -c "
+import json, tempfile, os
+from gateway.categorize import consequential_args
+u1 = ['drive','files','update','--params',json.dumps({'fileId':'F1'}),'--json',json.dumps({'name':'A'})]
+u2 = ['drive','files','update','--params',json.dumps({'fileId':'F1'}),'--json',json.dumps({'name':'B'})]
+d1 = consequential_args('drive',['files'],'update',u1)
+d2 = consequential_args('drive',['files'],'update',u2)
+tf = tempfile.NamedTemporaryFile(delete=False); tf.write(b'hello'); tf.close()
+uc = ['drive','files','update','--params',json.dumps({'fileId':'F1'}),'--json',json.dumps({}),'--upload',tf.name]
+dc = consequential_args('drive',['files'],'update',uc)
+os.unlink(tf.name)
+ok = (d1.get('name')=='A' and d2.get('name')=='B' and d1!=d2 and dc.get('content','').startswith('media:sha256:'))
+print('OK' if ok else f'wrong {d1} {d2} {dc}')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "transactionnel Zone 3 : drive_update lie les valeurs + empreinte du contenu (Codex #149 R2)" \
+  || fail "transactionnel Zone 3 : update ne lie que les noms de champs ($out)"
+
+rm -rf "$TX5"
+
 # --- Bilan ------------------------------------------------------------------
 
 printf '\n\033[1mBilan : %d réussis, %d échoués\033[0m\n' "$PASS" "$FAIL"
