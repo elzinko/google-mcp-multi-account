@@ -175,6 +175,36 @@ func enroll(to path: String) {
     enrollFileBased(to: path)
 }
 
+// Stringifie une valeur JSON pour le prompt — parallèle à Python str().
+func boundValueString(_ v: Any) -> String {
+    if let s = v as? String { return s }
+    if let n = v as? NSNumber { return n.stringValue }
+    return String(describing: v)
+}
+
+// Résumé lisible des arguments conséquents (ADR-0012, Zone 3) — DOIT rester
+// aligné sur gateway/elicitation.py:_render_bound_args (même ordre, même format
+// « clé=valeur ; … », listes jointes par « , »).
+func renderBoundArgs(_ obj: [String: Any]) -> String {
+    guard let bound = obj["bound_args"] as? [String: Any], !bound.isEmpty else { return "" }
+    let order = ["to", "cc", "subject", "grantee", "role", "type", "sendNotificationEmail",
+                 "fileId", "permissionId", "name", "mimeType", "parents", "fields", "content"]
+    var keys = order.filter { bound[$0] != nil }
+    keys += bound.keys.filter { !order.contains($0) }.sorted()
+    var parts: [String] = []
+    for k in keys {
+        guard let v = bound[k] else { continue }
+        let s: String
+        if let arr = v as? [Any] {
+            s = arr.map { boundValueString($0) }.joined(separator: ", ")
+        } else {
+            s = boundValueString(v)
+        }
+        parts.append("\(k)=\(s)")
+    }
+    return parts.joined(separator: " ; ")
+}
+
 func promptText(from obj: [String: Any]) -> String {
     let action = obj["action"] as? String ?? ""
     let alias = obj["alias"] as? String ?? ""
@@ -187,6 +217,21 @@ func promptText(from obj: [String: Any]) -> String {
     // gateway/elicitation.py:prompt_from_payload. Repli alias seul si inconnu.
     let who = email.isEmpty ? "« \(alias) »" : "« \(alias) » (\(email))"
     let acct = email.isEmpty ? alias : "\(alias) · \(email)"
+    // Consentement transactionnel (ADR-0011/0012) — parallèle à
+    // gateway/elicitation.py:prompt_from_payload : nommer l'acte concret, le
+    // compte (email) ET les arguments conséquents (bound_args, Zone 3).
+    if action.hasPrefix("transactional_mutation") || action.hasPrefix("transactional_read:") {
+        let parts = action.split(separator: ":", maxSplits: 1)
+        let op = parts.count > 1 ? String(parts[1]) : "acte sensible"
+        var base = "mag : autoriser « \(op) » sur \(who)"
+        if !target.isEmpty { base += " — \(target)" }
+        let detail = renderBoundArgs(obj)
+        if !detail.isEmpty { base += " [\(detail)]" }
+        return base
+    }
+    if action == "transactional_read_lease" {
+        return "mag : ouvrir un bail de lecture court sur \(who)"
+    }
     switch action {
     case "session_unlock":
         return "mag : déverrouiller \(who) pour la session \(sid) (\(minutes) min)"
@@ -297,8 +342,19 @@ func signPayload(_ json: String) {
     FileHandle.standardOutput.write("\n".data(using: .utf8)!)
 }
 
+// Débogage/parité : imprime UNIQUEMENT le texte du prompt (aucun Touch ID,
+// aucune signature) — permet de tester la parité avec Python
+// (gateway/elicitation.py:prompt_from_payload) de façon hermétique.
+func printPrompt(_ json: String) {
+    guard let data = json.data(using: .utf8),
+          let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        die("payload JSON invalide")
+    }
+    print(promptText(from: obj))
+}
+
 guard CommandLine.arguments.count >= 2 else {
-    die("usage : enroll <pub.der> | sign <json>")
+    die("usage : enroll <pub.der> | sign <json> | prompt <json>")
 }
 let cmd = CommandLine.arguments[1]
 switch cmd {
@@ -308,6 +364,9 @@ case "enroll":
 case "sign":
     guard CommandLine.arguments.count >= 3 else { die("usage : sign <json>") }
     signPayload(CommandLine.arguments[2])
+case "prompt":
+    guard CommandLine.arguments.count >= 3 else { die("usage : prompt <json>") }
+    printPrompt(CommandLine.arguments[2])
 default:
     die("commande inconnue : \(cmd)")
 }

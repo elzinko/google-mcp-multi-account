@@ -20,13 +20,20 @@ import socketserver
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 # Réutiliser la logique gateway (lock, policy, config)
 from .config import SYS_PYTHON, POLICY_CHECKER, env, gwsa_root, profile_dir, upload_spool
 from .errors import GatewayError
 from .profiles import is_locked, require_unlocked
-from .sessions import active_capabilities, active_drive_zones, is_session_unlocked, purge_expired
+from .sessions import (
+    active_capabilities,
+    active_drive_zones,
+    is_session_unlocked,
+    purge_expired,
+    transactional_enabled,
+)
 from .usage import log_usage
 from .vault import gws_config_dir, migrate_all
 
@@ -191,7 +198,7 @@ def check_policy(
         raise GatewayError(msg, code="policy")
 
 
-def _require_access(alias: str, session_id: str) -> Path:
+def _require_access(alias: str, session_id: str, *, transactional: bool | None = None) -> Path:
     d = profile_dir(alias)
     if not d.is_dir():
         raise GatewayError(
@@ -199,7 +206,20 @@ def _require_access(alias: str, session_id: str) -> Path:
             code="not_found",
         )
     if session_id:
-        if is_locked(d) and not is_session_unlocked(session_id, alias):
+        # Mode porté par l'appelant (Codex #149) ; None → repli sur l'env broker.
+        transac = transactional_enabled() if transactional is None else transactional
+        # Mode transactionnel (ADR-0011/0012) : le consentement est appliqué EN
+        # AMONT, au point de contrôle `_run` (Touch ID par acte / bail de
+        # lecture), pas par le verrou « minutes ». Le broker n'exige donc plus
+        # is_session_unlocked dans ce mode — sinon un appel pourtant consenti
+        # échouerait ici et le gate transactionnel ne pourrait pas remplacer
+        # l'unlock minutes (Codex PR #147, P1). Le broker n'est joignable que via
+        # la gateway (loopback + token) qui a déjà porté le geste.
+        if (
+            not transac
+            and is_locked(d)
+            and not is_session_unlocked(session_id, alias)
+        ):
             raise GatewayError(
                 f"profil « {alias} » verrouillé pour cette session — "
                 f"demander : mag session unlock {session_id} {alias} [minutes]",
@@ -217,17 +237,23 @@ def handle_exec(
     session_id: str = "",
     git_root: str = "",
     raw_output: bool = False,
+    consented_cap: dict[str, Any] | None = None,
+    transactional: bool | None = None,
 ) -> Any:
     if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
         raise GatewayError("args doit être une liste de chaînes", code="error")
     if not args:
         raise GatewayError("args vide", code="error")
+    # Mode transactionnel porté par la requête (ADR-0012, Zone 1 — Codex #149) :
+    # la gateway en est l'autorité ; None (appelant legacy) → repli sur l'env du
+    # broker. Évite la désync d'un daemon démarré avec un autre env.
+    transac = transactional_enabled() if transactional is None else transactional
     # GC câblé au balayage/accès (ADR-0007 §Décision 5) : le cycle de vie d'une
     # session ne dépend jamais de la déconnexion MCP, donc on purge ici plutôt
     # que d'attendre un signal qui n'existe pas.
     purge_expired()
     try:
-        d = _require_access(alias, session_id)
+        d = _require_access(alias, session_id, transactional=transac)
     except GatewayError as e:
         if e.code == "locked":
             log_usage(
@@ -237,13 +263,34 @@ def handle_exec(
         raise
 
     session_zones: set[str] | None = None
-    session_caps = None
+    session_caps: Any = None
     session_full_access = False
     use_session = bool(session_id)
     if use_session:
-        session_zones = active_drive_zones(session_id, alias)
-        session_caps = active_capabilities(session_id, alias)
-        session_full_access = is_session_unlocked(session_id, alias)
+        if transac:
+            # ADR-0012, Zone 1 : en transactionnel, la SEULE source de droits est
+            # la capacité consentie PORTÉE par l'appel (le geste a réussi côté
+            # gateway). On ignore active_capabilities / is_session_unlocked
+            # (minutes court-circuité) et on ne passe AUCUNE zone Drive : un cap
+            # sans ressource couvre l'acte, borné par policy ∩ manifeste
+            # (intersection ADR-0007 inchangée). Cap absente/illisible → caps
+            # vides → deny-all (fail-closed, ADR-0007 §3).
+            session_full_access = False
+            session_zones = None
+            if consented_cap:
+                session_caps = [
+                    SimpleNamespace(
+                        service=str(consented_cap.get("service") or ""),
+                        operation=str(consented_cap.get("operation") or ""),
+                        resource=str(consented_cap.get("resource") or ""),
+                    )
+                ]
+            else:
+                session_caps = []
+        else:
+            session_zones = active_drive_zones(session_id, alias)
+            session_caps = active_capabilities(session_id, alias)
+            session_full_access = is_session_unlocked(session_id, alias)
         # Plafond manifeste appliqué dans policy-check via GWSA_GIT_ROOT (intersection)
 
     check_policy(
@@ -251,7 +298,7 @@ def handle_exec(
         session_id=session_id,
         git_root=git_root,
         session_drive_zones=session_zones,
-        use_session_grants=use_session,
+        use_session_grants=use_session and not transac,
         session_caps=session_caps,
         session_full_access=session_full_access,
     )
@@ -288,11 +335,18 @@ class BrokerHandler(socketserver.StreamRequestHandler):
                 client = req.get("client") or "broker"
                 session_id = str(req.get("session_id") or "")
                 git_root = str(req.get("git_root") or "")
+                cap_raw = req.get("consented_cap")
+                consented_cap = cap_raw if isinstance(cap_raw, dict) else None
+                # Mode porté par la requête (Codex #149) : présent → on le suit ;
+                # absent (appelant legacy) → None, repli sur l'env du broker.
+                transactional = bool(req["transactional"]) if "transactional" in req else None
                 result = handle_exec(
                     alias, args, client,
                     session_id=session_id,
                     git_root=git_root,
                     raw_output=bool(req.get("raw_output")),
+                    consented_cap=consented_cap,
+                    transactional=transactional,
                 )
                 self._reply({"ok": True, "result": result})
                 return

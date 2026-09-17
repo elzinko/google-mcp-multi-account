@@ -22,13 +22,22 @@ from .config import (
     upload_roots,
     upload_spool,
 )
+from .categorize import categorize, consequential_args, norm_service, operand_resource
 from .context import get_git_root
+from .elicitation import ElicitationError, run_elicitation_gate
 from .errors import GatewayError
 from .executor import run_via_broker
 from .profiles import is_locked, list_profiles as _list_profiles
 from .profiles import profile_email, validate_alias
 from .project import git_toplevel
-from .sessions import is_session_unlocked, require_session
+from .sessions import (
+    is_session_unlocked,
+    open_read_lease,
+    require_session,
+    transactional_enabled,
+    transactional_lease_mode,
+    try_consume_read_lease,
+)
 from .setup_status import setup_status  # noqa: F401 — re-export pour le dispatch MCP
 from .usage import log_usage
 
@@ -87,6 +96,136 @@ def profiles_list() -> dict[str, Any]:
     return {"ok": True, "profiles": _list_profiles()}
 
 
+def _positionals(args: list[str]) -> list[str]:
+    """Positionnels de gauche d'un appel gws (`<service> <resource…> <method>`),
+    avant tout flag — même règle que `scripts/policy-check.py::positionals_of`
+    (ne PAS reprendre après un flag, sinon la valeur d'un flag inconnu se ferait
+    passer pour la méthode)."""
+    out: list[str] = []
+    for a in args:
+        if a.startswith("-"):
+            break
+        out.append(a)
+    return out
+
+
+def _classify_operation(gws_args: list[str]) -> tuple[str, str, str, str, str | None]:
+    """Classe un appel gws pour le point de contrôle transactionnel.
+
+    Rend (op_class, resource, op_label, service, category) :
+    - op_class ∈ {« lecture », « mutation »} — pilote le gate (bail vs acte signé) ;
+    - resource : ressource opérante (prompt/reçu), via `operand_resource` — même
+      source de vérité que policy-check ;
+    - op_label : `service:ressources:méthode` (ex. « drive:permissions:create »)
+      pour l'action SIGNÉE — distingue create de delete (Codex #147, P1) ;
+    - service, category : nourrissent la capacité consentie (Zone 1).
+
+    Réutilise `gateway.categorize` (source de vérité partagée avec policy-check et
+    l'audit). Fail-closed : appel non classable → mutation (régime le plus strict)."""
+    if not gws_args:
+        return "mutation", "", "?", "", None
+    service = norm_service(gws_args[0])
+    pos = _positionals(gws_args[1:])
+    if not pos:
+        return "mutation", "", service, service, None
+    resources, raw_method = pos[:-1], pos[-1]
+    category = categorize(service, resources, raw_method)
+    resource = operand_resource(service, resources, raw_method, gws_args)
+    op_class = "lecture" if category == "read" else "mutation"
+    op_label = ":".join([service, *resources, raw_method])
+    return op_class, resource, op_label, service, category
+
+
+def _bound_args(gws_args: list[str]) -> dict[str, Any]:
+    """Arguments conséquents de l'acte (ADR-0012, Zone 3), pour le reçu signé et
+    le prompt Touch ID — via la table `consequential_args` (même source de vérité
+    que policy-check). Dict vide si rien de mappé (l'acte reste lié par op_label
+    + target)."""
+    if not gws_args:
+        return {}
+    service = norm_service(gws_args[0])
+    pos = _positionals(gws_args[1:])
+    if not pos:
+        return {}
+    resources, raw_method = pos[:-1], pos[-1]
+    return consequential_args(service, resources, raw_method, gws_args)
+
+
+def _consented_cap(service: str, category: str | None) -> dict[str, str]:
+    """Capacité consentie qui voyage dans l'appel (ADR-0012, Zone 1).
+
+    SANS ressource à dessein : un cap sans ressource matche tous les chemins de
+    `policy-check` (Drive compris, vérifié avec `resource=""`), ce qui évite le
+    re-deny du broker (Codex #147, P1). La fidélité fine (destinataire, sujet…)
+    vit dans le PAYLOAD SIGNÉ (Zone 3), pas dans le périmètre d'autorisation. Le
+    cap autorise `service:catégorie`, borné par policy ∩ manifeste, pour ce seul
+    appel (jamais persisté). Catégorie inconnue → opération `*` sur le service
+    (l'acte a été approuvé par Touch ID), jamais au-delà de la policy."""
+    if not service:
+        return {"service": "*", "operation": "*"}
+    return {"service": service, "operation": category or "*"}
+
+
+def _transactional_gate(alias: str, gws_args: list[str], sid: str) -> dict[str, str]:
+    """Point de contrôle unique du consentement transactionnel (ADR-0011/0012),
+    appelé par `_run` quand `transactional_enabled()`. Rend la capacité consentie
+    à porter jusqu'au broker (Zone 1).
+
+    - mutation (ou mode ``manuel``, ou lecture non classée) : acte SIGNÉ lié à
+      CET acte (compte × opération × ressource), usage unique (`consume_nonce`) —
+      aucune fenêtre ; un 2ᵉ acte identique redemande un geste.
+    - lecture (modes ``fenetre``/``session``) : bail actif (TTL non écoulé ET
+      budget restant) → budget −1 ; sinon un geste « lire maintenant » ouvre un
+      bail frais dont on consomme aussitôt le premier slot.
+
+    Fail-closed : geste refusé/absent (`ElicitationError`) → refus
+    (`GatewayError` code="locked"), jamais un accès."""
+    op_class, resource, op_label, service, category = _classify_operation(gws_args)
+    # L'email est la vérité « quelle boîte » : le passer pour que le prompt/reçu
+    # nomme le compte réel, pas juste l'alias, en multi-comptes (Codex #147, P2).
+    email = profile_email(alias)
+    mode = transactional_lease_mode()
+    if op_class == "mutation" or mode == "manuel":
+        prefix = "transactional_mutation" if op_class == "mutation" else "transactional_read"
+        try:
+            run_elicitation_gate(
+                {
+                    "action": f"{prefix}:{op_label}",
+                    "alias": alias,
+                    "email": email,
+                    "target": resource,
+                    "session_id": sid,
+                    # Zone 3 : lier les arguments conséquents (qui reçoit quoi) au
+                    # reçu signé + au prompt. Vide pour une lecture (mode manuel).
+                    "bound_args": _bound_args(gws_args) if op_class == "mutation" else {},
+                }
+            )
+        except ElicitationError as e:
+            raise GatewayError(f"acte refusé — {e}", code="locked") from e
+        return _consented_cap(service, category)
+    # Lecture (fenetre/session) : consommer un slot de bail ATOMIQUEMENT (check +
+    # décrément sous verrou) pour ne pas dépasser le budget signé sous concurrence
+    # (Codex #147, P1). Slot indisponible → un geste ouvre un bail frais.
+    if not try_consume_read_lease(sid, alias):
+        try:
+            run_elicitation_gate(
+                {
+                    "action": "transactional_read_lease",
+                    "alias": alias,
+                    "email": email,
+                    "session_id": sid,
+                }
+            )
+        except ElicitationError as e:
+            raise GatewayError(f"bail de lecture refusé — {e}", code="locked") from e
+        open_read_lease(sid, alias)
+        if not try_consume_read_lease(sid, alias):
+            raise GatewayError(
+                "bail de lecture indisponible après consentement", code="locked"
+            )
+    return _consented_cap(service, category)
+
+
 def _run(
     alias: str,
     gws_args: list[str],
@@ -103,6 +242,7 @@ def _run(
     """
     sid = (session or "").strip()
     gro = get_git_root() or git_toplevel()
+    consented_cap: dict[str, str] | None = None
     try:
         # Guidage adaptatif : en mode « élicitation dans la conversation », pointer
         # le LLM vers les tools MCP (zéro terminal) plutôt que vers « mag … » —
@@ -130,7 +270,12 @@ def _run(
                 f"profil inconnu « {alias} » — le créer avec : mag add {alias}",
                 code="not_found",
             )
-        if is_locked(d) and not is_session_unlocked(sid, alias):
+        if transactional_enabled():
+            # ADR-0011/0012 : le modèle transactionnel REMPLACE la fenêtre minutes.
+            # Le gate route lecture/mutation (bail ou acte signé) indépendamment
+            # de .locked, et produit la capacité consentie portée au broker (Zone 1).
+            consented_cap = _transactional_gate(alias, gws_args, sid)
+        elif is_locked(d) and not is_session_unlocked(sid, alias):
             raise GatewayError(
                 (
                     f"profil « {alias} » verrouillé — appeler le tool "
@@ -152,6 +297,10 @@ def _run(
         raise
     return run_via_broker(
         alias, gws_args, timeout=timeout, raw_output=raw_output, session_id=sid,
+        consented_cap=consented_cap,
+        # Mode porté par la requête (le cap n'est posé QUE par le gate
+        # transactionnel) → le broker ne dépend plus de son env de démarrage.
+        transactional=consented_cap is not None,
     )
 
 
@@ -202,6 +351,16 @@ def gmail_create_draft(
     validate_alias(alias)
     if not to or not subject:
         raise GatewayError("to et subject sont requis", code="error")
+    # Anti-injection d'en-têtes (Codex #149) : un CR/LF dans to/cc/subject
+    # injecterait des en-têtes arbitraires dans le message RFC (ex. un « Bcc: »
+    # caché → destinataire réel mais ABSENT du reçu signé/prompt). Refus net au
+    # bord de l'API : le message signé décrit alors exactement ce qui est créé.
+    for _label, _val in (("to", to), ("cc", cc), ("subject", subject)):
+        if "\r" in _val or "\n" in _val:
+            raise GatewayError(
+                f"« {_label} » contient un saut de ligne interdit (injection d'en-tête)",
+                code="error",
+            )
     # Message RFC 2822 minimal, encodé raw base64url — gws drafts.create attend --json.
     headers = [f"To: {to}", f"Subject: {subject}"]
     if cc:

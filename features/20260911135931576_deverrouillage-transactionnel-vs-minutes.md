@@ -6,9 +6,9 @@ priority: P1
 product: google-multi-account
 version:
 epic: 0082
-status: ready
+status: in-progress
 ready: 2026-09-12
-pr:
+pr: "#149"
 created: 2026-09-11
 ---
 
@@ -114,7 +114,25 @@ l'existant qui marche**.
   (sous-ensemble de droits). Ici c'est le *combien de temps / à quelle granularité temporelle*.
 - Épic parent [`0082`](0082-droits-par-session.md) ; socle [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md).
 
-## Incrément 1 (ce sprint) — le cœur ADR-0011, sur `main`
+## Livré — réimplémentation propre ADR-0012 (2026-09-16)
+
+Après trois rondes de revue Codex sur les PR #147/#148 (fermées), une passe de conception a produit
+l'[ADR-0012](../docs/adr/ADR-0012-consentement-transactionnel-propagation.md) (4 zones). Cette PR livre
+cette réimplémentation propre en une fois — elle **couvre l'incrément 1 ci-dessous ET la couche modes** :
+
+- **Zone 2** — un seul verrou par session ; tous les read-modify-write sérialisés ; consommation de bail
+  atomique (budget jamais dépassé sous concurrence).
+- **Zone 1** — la capacité consentie voyage dans l'appel jusqu'au broker, seule source de droits en
+  transactionnel (policy ∩ manifeste ∩ {cap}) ; absente → deny-all. Corrige le trou « caps vides » de #147.
+- **Zone 3** — les arguments conséquents (destinataire/rôle Drive, to/cc/subject Gmail) entrent dans le
+  reçu signé + le prompt Touch ID ; deux partages distincts ne signent plus pareil.
+- **Zone 4 (modes)** — durée de vie du bail configurable : `manuel` (**défaut** : un droit, une action) |
+  `fenetre` | `session`, réglable en config/admin ; repli fail-closed sur `manuel`.
+
+Opt-in `MAG_/GWSA_TRANSACTIONAL_CONSENT` (OFF par défaut). 574 tests hermétiques verts, dont parité
+prompt Python↔Swift. Reste hors PR : test manuel Touch ID réel (2 conversations) ; calibration fine.
+
+## Incrément 1 (cadrage initial) — le cœur ADR-0011, sur `main`
 
 Objectif : poser la **mécanique** d'ADR-0011 dans la couche session/gate, sans la couche « modes ».
 
@@ -137,15 +155,15 @@ socle) ; la **calibration** des défauts et l'**allowlist** de comptes sensibles
 
 ## Critères d'acceptation (incrément 1)
 
-- [ ] Le registre de session porte un **bail de lecture** (TTL **et** budget) au lieu d'une fenêtre
+- [x] Le registre de session porte un **bail de lecture** (TTL **et** budget) au lieu d'une fenêtre
   `minutes` ; il se referme seul (TTL écoulé **ou** budget épuisé) — testé (hermétique).
-- [ ] `_run` : une **lecture** sous bail actif passe (budget −1) ; bail fermé → refus sauf nouveau
+- [x] `_run` : une **lecture** sous bail actif passe (budget −1) ; bail fermé → refus sauf nouveau
   consentement — testé.
-- [ ] Une **mutation** (écriture / envoi / partage / suppression) exige un **acte signé dédié** (usage
+- [x] Une **mutation** (écriture / envoi / partage / suppression) exige un **acte signé dédié** (usage
   unique) ; un 2ᵉ acte identique redemande un geste — testé.
-- [ ] Tool **non classé** → traité en **mutation** (fail-closed) — testé.
-- [ ] `session_unlock` accepte encore `minutes` mais l'**écrête** au plafond du bail — testé (non-régression API).
-- [ ] `./scripts/test.sh` au vert (aucune régression).
+- [x] Tool **non classé** → traité en **mutation** (fail-closed) — testé.
+- [x] `session_unlock` accepte encore `minutes` mais l'**écrête** au plafond du bail — testé (non-régression API).
+- [x] `./scripts/test.sh` au vert (aucune régression) — 574/574.
 
 ## Comment vérifier
 

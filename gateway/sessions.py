@@ -8,17 +8,95 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import time
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from ._filelock import file_lock
 from .config import env, gwsa_root
 from .errors import GatewayError
 
 SESSIONS_DIR_NAME = ".sessions"
 DEFAULT_SESSION_TTL_SEC = 8 * 3600
+
+# --- Consentement transactionnel (ADR-0011, raffiné ADR-0012) ---------------
+#
+# Opt-in, OFF par défaut : tant que le flag n'est pas posé, `_run` (api.py) et
+# `session_unlock` se comportent exactement comme avant — la fenêtre `minutes`
+# reste le seul mécanisme (garde-fou de déploiement). Toute la config passe par
+# le helper `env()` (MAG_<NAME> puis GWSA_<NAME>), jamais `os.environ` nu.
+TRANSACTIONAL_FLAG_NAME = ".transactional-consent"
+LEASE_MODE_FLAG_NAME = ".transactional-lease-mode"
+DEFAULT_READ_LEASE_TTL_SEC = 90
+DEFAULT_READ_LEASE_BUDGET = 20
+LEASE_MODES = ("fenetre", "session", "manuel")
+
+
+def transactional_flag_path() -> Path:
+    return gwsa_root() / TRANSACTIONAL_FLAG_NAME
+
+
+def transactional_enabled() -> bool:
+    """Modèle de consentement transactionnel actif ? Opt-in : fichier marqueur
+    sous la racine de config (déploiement réel) OU MAG_/GWSA_TRANSACTIONAL_CONSENT
+    (tests hermétiques). Jamais activé par défaut."""
+    if (env("TRANSACTIONAL_CONSENT") or "").strip().lower() in ("1", "true", "yes"):
+        return True
+    return transactional_flag_path().is_file()
+
+
+def transactional_lease_mode() -> str:
+    """Durée de vie du bail de lecture (ADR-0012, Zone 4) — mode configurable :
+
+    - ``manuel`` (**défaut**) : pas de bail — CHAQUE lecture est signée. Un droit,
+      une action : le LLM ne peut jamais faire plus que l'acte approuvé (décision
+      Thomas 2026-09-17). Le plus strict.
+    - ``fenetre`` : bail = fenêtre courte (TTL) ET budget, au premier atteint —
+      groupage confort, opt-in explicite.
+    - ``session`` : bail vit aussi longtemps que la session, budget en filet.
+
+    Lu via MAG_/GWSA_TRANSACTIONAL_LEASE_MODE, puis le marqueur fichier
+    ``.transactional-lease-mode`` (posé par l'admin). Repli fail-closed sur
+    ``manuel`` (le plus strict) si la valeur est absente, illisible ou inconnue :
+    seul un opt-in explicite ``fenetre``/``session`` desserre la lecture."""
+    val = (env("TRANSACTIONAL_LEASE_MODE") or "").strip().lower()
+    if not val:
+        try:
+            p = gwsa_root() / LEASE_MODE_FLAG_NAME
+            val = p.read_text(encoding="utf-8").strip().lower() if p.is_file() else ""
+        except OSError:
+            val = ""
+    return val if val in LEASE_MODES else "manuel"
+
+
+def read_lease_ttl_sec() -> int:
+    """TTL du bail de lecture (secondes) — surchargeable via
+    MAG_/GWSA_READ_LEASE_TTL_SEC. Une des deux limites du bail en mode
+    ``fenetre`` ; la première atteinte referme."""
+    try:
+        return max(1, int(env("READ_LEASE_TTL_SEC", str(DEFAULT_READ_LEASE_TTL_SEC))))
+    except (TypeError, ValueError):
+        return DEFAULT_READ_LEASE_TTL_SEC
+
+
+def read_lease_budget() -> int:
+    """Budget d'opérations du bail de lecture — surchargeable via
+    MAG_/GWSA_READ_LEASE_BUDGET. Seconde limite du bail (filet en mode
+    ``session``)."""
+    try:
+        return max(1, int(env("READ_LEASE_BUDGET", str(DEFAULT_READ_LEASE_BUDGET))))
+    except (TypeError, ValueError):
+        return DEFAULT_READ_LEASE_BUDGET
+
+
+def read_lease_plafond_minutes() -> int:
+    """Plafond (minutes, arrondi au supérieur) auquel `session_unlock` écrête
+    `minutes` quand le transactionnel est actif (ADR-0011 §Décision 4) — quelques
+    minutes max, jamais 1440."""
+    return max(1, -(-read_lease_ttl_sec() // 60))
 
 
 def sessions_dir() -> Path:
@@ -35,6 +113,50 @@ def _path(session_id: str) -> Path:
     return sessions_dir() / f"{session_id}.json"
 
 
+# Un session_id est un jeton GÉNÉRÉ (`new_session_id` = secrets.token_hex(12) →
+# 24 hex) mais PORTÉ par l'appelant. Le valider avant d'en dériver un chemin de
+# fichier interdit toute traversée (« ../ », chemin absolu) qui écrirait un
+# .json/.lock hors de `.sessions` (Codex #149, P2 sécu). Fail-closed : un jeton
+# non conforme est traité comme une session inconnue.
+_SID_RE = re.compile(r"[0-9a-f]{16,64}\Z")
+
+
+def _is_safe_sid(session_id: str) -> bool:
+    return bool(session_id) and _SID_RE.match(session_id) is not None
+
+
+def _session_exists(session_id: str) -> bool:
+    """Jeton valide ET fichier de session présent. Vérifié AVANT de prendre le
+    verrou : sinon un jeton hex quelconque (valide mais inexistant) ferait créer
+    un `.lock` jamais nettoyé → accumulation sans borne (Codex #149 P2). Le code
+    sous verrou re-teste via `_load_active` (sécurité vis-à-vis des courses)."""
+    return _is_safe_sid(session_id) and _path(session_id).is_file()
+
+
+def _lock_path(session_id: str) -> Path:
+    """Verrou UNIQUE par session (ADR-0012, Zone 2) : sérialise tous les
+    read-modify-write du même fichier de session (touch, unlock, grant,
+    consommation de bail). `file_lock` est un `flock` NON réentrant — une 2ᵉ
+    prise dans le même process bloque —, donc le code sous verrou charge en brut
+    (`_load` / `_load_active`), JAMAIS via `require_session`/`get_session`."""
+    return sessions_dir() / f"{session_id}.lock"
+
+
+def _load_active(session_id: str) -> SessionState | None:
+    """Charge une session en BRUT et applique l'expiration TTL (fail-closed :
+    unlink + None si dépassée). N'exécute NI touch/save NI verrou — l'appelant
+    DOIT déjà tenir `_lock_path(session_id)`. Brique interne de tous les RMW
+    verrouillés ; ne l'appelle jamais hors d'un `with file_lock(...)`."""
+    state = _load(session_id)
+    if state is None:
+        return None
+    last_activity = state.last_seen_at or state.created_at
+    if last_activity and time.time() - last_activity > session_ttl_sec():
+        _path(session_id).unlink(missing_ok=True)
+        return None
+    return state
+
+
 @dataclass
 class DriveZone:
     id: str
@@ -44,6 +166,30 @@ class DriveZone:
     def active(self, now: float | None = None) -> bool:
         t = now if now is not None else time.time()
         return bool(self.id) and self.expires_at > t
+
+
+@dataclass
+class ReadLease:
+    """Bail de lecture transactionnel (ADR-0011, durée de vie ADR-0012 Zone 4).
+
+    Deux bornes : le temps (`expires_at`) et le `budget` d'opérations. La
+    convention de `expires_at` encode le mode de durée de vie :
+
+    - ``expires_at > 0`` : borne de temps active (mode ``fenetre``) — le bail
+      referme dès `expires_at` OU budget épuisé, au premier des deux.
+    - ``expires_at <= 0`` : PAS de borne de temps propre (mode ``session``) — le
+      bail ne meurt qu'avec son budget ou avec la session (son fichier est
+      supprimé à la fermeture/expiration de session, emportant le bail).
+
+    Le retrait ne dépend JAMAIS d'un geste du LLM : il se calcule ici, à chaque
+    appel, depuis le temps et le budget (ADR-0011 §Décision 3)."""
+
+    expires_at: float = 0.0
+    budget: int = 0
+
+    def active(self, now: float | None = None) -> bool:
+        t = now if now is not None else time.time()
+        return self.budget > 0 and (self.expires_at <= 0.0 or self.expires_at > t)
 
 
 @dataclass
@@ -84,6 +230,9 @@ class SessionState:
     drive_zones: dict[str, list[DriveZone]] = field(default_factory=dict)
     # capacités fines (compte, service, opération, ressource?) — cf. Capability
     capabilities: list[Capability] = field(default_factory=list)
+    # alias → bail de lecture transactionnel (ADR-0011). Propre à CETTE session
+    # (pas d'héritage parent/enfant : hors périmètre de l'incrément).
+    read_leases: dict[str, ReadLease] = field(default_factory=dict)
     delegated: bool = False  # True = sous-session (pas d'access_request direct)
     # True dès qu'une session est créée/enregistrée par la révision 0080 (ou
     # plus récente) : `capabilities` porte déjà l'état résolu (racine : le
@@ -124,6 +273,7 @@ class SessionState:
                 for alias, zones in self.drive_zones.items()
             },
             "capabilities": [asdict(c) for c in self.capabilities],
+            "read_leases": {alias: asdict(lease) for alias, lease in self.read_leases.items()},
             "delegated": self.delegated,
             "capabilities_snapshot": self.capabilities_snapshot,
             "grants_snapshot": self.grants_snapshot,
@@ -164,6 +314,16 @@ class SessionState:
                         expires_at=float(c.get("expires_at") or 0),
                     )
                 )
+        leases_raw = data.get("read_leases") or {}
+        read_leases: dict[str, ReadLease] = {}
+        if isinstance(leases_raw, dict):
+            for alias, lease in leases_raw.items():
+                if not isinstance(lease, dict):
+                    continue
+                read_leases[str(alias)] = ReadLease(
+                    expires_at=float(lease.get("expires_at") or 0),
+                    budget=int(lease.get("budget") or 0),
+                )
         return cls(
             session_id=str(data.get("session_id") or ""),
             parent_id=str(data.get("parent_id") or ""),
@@ -173,6 +333,7 @@ class SessionState:
             unlocks={str(k): float(v) for k, v in unlocks.items()},
             drive_zones=dz,
             capabilities=capabilities,
+            read_leases=read_leases,
             delegated=bool(data.get("delegated")),
             # Absent (fichier écrit avant la fiche 0080) → False : repli
             # legacy `_ancestor_chain` dans `active_capabilities` tant que la
@@ -256,20 +417,20 @@ def get_session(session_id: str) -> SessionState | None:
     même si `purge_expired` n'est pas encore passée dessus. Ne délègue pas à
     `close_session` (récursion : close_session → revoke_descendants →
     require_session → get_session).
+
+    Le touch + save se fait sous LE verrou unique de la session (ADR-0012,
+    Zone 2) : sinon ce save (last_seen_at) pouvait ré-écrire un budget de bail
+    déjà décrémenté sous verrou par un appel concurrent (Codex PR #147, P1).
     """
-    if not session_id:
+    if not _session_exists(session_id):
         return None
-    state = _load(session_id)
-    if state is None:
-        return None
-    now = time.time()
-    last_activity = state.last_seen_at or state.created_at
-    if last_activity and now - last_activity > session_ttl_sec():
-        _path(session_id).unlink(missing_ok=True)
-        return None
-    state.touch()
-    _save(state)
-    return state
+    with file_lock(_lock_path(session_id)):
+        state = _load_active(session_id)
+        if state is None:
+            return None
+        state.touch()
+        _save(state)
+        return state
 
 
 def require_session(session_id: str) -> SessionState:
@@ -294,17 +455,114 @@ def _root_session(state: SessionState) -> SessionState:
 
 
 def session_unlock(session_id: str, alias: str, minutes: int) -> SessionState:
-    state = require_session(session_id)
-    root = _root_session(state)
-    if state.delegated and state.session_id != root.session_id:
-        raise GatewayError(
-            "seule la session racine (ou l'humain) peut déverrouiller un profil",
-            code="error",
-        )
-    mins = max(1, min(int(minutes), 1440))
-    state.unlocks[alias] = time.time() + mins * 60
-    _save(state)
-    return state
+    """Déverrouille `alias` pour la session pendant `minutes` — API inchangée.
+
+    `minutes` est DÉPRÉCIÉ quand le transactionnel est actif (ADR-0011
+    §Décision 4) : conservé pour compat, mais écrêté au plafond du bail de
+    lecture (quelques minutes max), jamais 1440. Flag OFF (défaut) :
+    comportement strictement inchangé (non-régression). RMW sous le verrou
+    unique (ADR-0012, Zone 2)."""
+    if not _session_exists(session_id):
+        raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
+    with file_lock(_lock_path(session_id)):
+        state = _load_active(session_id)
+        if state is None:
+            raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
+        root = _root_session(state)
+        if state.delegated and state.session_id != root.session_id:
+            raise GatewayError(
+                "seule la session racine (ou l'humain) peut déverrouiller un profil",
+                code="error",
+            )
+        plafond = read_lease_plafond_minutes() if transactional_enabled() else 1440
+        mins = max(1, min(int(minutes), plafond))
+        state.unlocks[alias] = time.time() + mins * 60
+        state.touch()
+        _save(state)
+        return state
+
+
+def _lease_usable(lease: ReadLease | None) -> bool:
+    """Un bail est-il exploitable MAINTENANT ? Actif (TTL/budget) ET cohérent avec
+    le mode courant. Bascule fail-closed (Codex #149, P2) : un bail « session »
+    (sans borne de temps, `expires_at<=0`) devient inutilisable dès que le mode
+    effectif n'est plus `session` (retour à `fenetre`, ou valeur invalide qui s'y
+    replie) — le TTL court reprend ses droits, on ne garde pas un bail éternel."""
+    if lease is None or not lease.active():
+        return False
+    if lease.expires_at <= 0.0 and transactional_lease_mode() != "session":
+        return False
+    return True
+
+
+def open_read_lease(session_id: str, alias: str) -> SessionState:
+    """Ouvre un bail de lecture pour (session, alias) selon le mode de durée de
+    vie (ADR-0012, Zone 4). Un nouveau consentement REMPLACE tout bail existant
+    sur cet alias — il ne le prolonge jamais. RMW sous le verrou unique.
+
+    - ``fenetre`` : borne de temps (TTL) + budget.
+    - ``session`` : pas de borne de temps propre (`expires_at = 0`) — le bail vit
+      avec la session ; le budget reste comme filet.
+    - ``manuel``  : aucun bail ouvert (chaque lecture est signée en amont) ; on
+      efface un éventuel bail résiduel.
+    """
+    if not _session_exists(session_id):
+        raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
+    mode = transactional_lease_mode()
+    with file_lock(_lock_path(session_id)):
+        state = _load_active(session_id)
+        if state is None:
+            raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
+        if mode == "manuel":
+            state.read_leases.pop(alias, None)
+        else:
+            expires_at = (time.time() + read_lease_ttl_sec()) if mode == "fenetre" else 0.0
+            state.read_leases[alias] = ReadLease(
+                expires_at=expires_at, budget=read_lease_budget()
+            )
+        state.touch()
+        _save(state)
+        return state
+
+
+def is_read_lease_active(session_id: str, alias: str) -> bool:
+    """Bail de lecture actif pour (session, alias) ? Lecture seule sous le verrou
+    unique (pas de save)."""
+    if not _session_exists(session_id):
+        return False
+    with file_lock(_lock_path(session_id)):
+        state = _load_active(session_id)
+        if state is None:
+            return False
+        return _lease_usable(state.read_leases.get(alias))
+
+
+def try_consume_read_lease(session_id: str, alias: str) -> bool:
+    """Vérifie ET consomme un slot de bail de façon ATOMIQUE (verrou unique) :
+    check et décrément dans le même cycle load/mutate/save. Sinon deux appels
+    concurrents observaient le même dernier slot et dépassaient le budget signé
+    (Codex PR #147, P1). Retourne True si un slot a été consommé (bail actif),
+    False sinon — l'appelant doit alors obtenir un nouveau consentement. Le
+    retrait ne dépend que du TTL/budget, jamais d'un geste du LLM."""
+    if not _session_exists(session_id):
+        return False
+    with file_lock(_lock_path(session_id)):
+        state = _load_active(session_id)
+        if state is None:
+            return False
+        lease = state.read_leases.get(alias)
+        if not _lease_usable(lease):
+            return False
+        lease.budget -= 1
+        state.touch()
+        _save(state)
+        return True
+
+
+def consume_read_lease(session_id: str, alias: str) -> None:
+    """Compat : consomme un slot si le bail est actif, sans valeur de retour.
+    Préférer `try_consume_read_lease` (atomique) au point de contrôle."""
+    try_consume_read_lease(session_id, alias)
 
 
 def session_grant_drive(
@@ -314,40 +572,49 @@ def session_grant_drive(
     folder_name: str = "",
     hours: int = 8,
 ) -> SessionState:
-    state = require_session(session_id)
-    root = _root_session(state)
-    if state.delegated and state.session_id != root.session_id:
-        raise GatewayError(
-            "seule la session racine (ou l'humain) peut accorder une zone Drive",
-            code="error",
-        )
-    h = max(1, min(int(hours), 168))
-    expires = time.time() + h * 3600
-    fid = folder_id.strip()
-    if not fid:
-        raise GatewayError("folder_id requis", code="error")
-    git_root = (env("GIT_ROOT") or "").strip()
-    if git_root:
-        from .project import grant_allowed_by_manifest, resolve_project
-
-        proj = resolve_project(Path(git_root))
-        if proj.fail_closed:
+    # RMW sous le verrou unique (ADR-0012, Zone 2). Le verrou couvre aussi la
+    # résolution du manifeste projet pour préserver l'ordre des contrôles
+    # (délégation d'abord) — I/O local rapide, chemin d'octroi rare.
+    if not _session_exists(session_id):
+        raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
+    with file_lock(_lock_path(session_id)):
+        state = _load_active(session_id)
+        if state is None:
+            raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
+        root = _root_session(state)
+        if state.delegated and state.session_id != root.session_id:
             raise GatewayError(
-                "manifeste projet invalide/altéré/supprimé après confiance — "
-                "refus (anti-downgrade, ADR-0007 §Décision 3)",
-                code="policy",
+                "seule la session racine (ou l'humain) peut accorder une zone Drive",
+                code="error",
             )
-        if proj.manifest_valid and proj.manifest:
-            if not grant_allowed_by_manifest(proj.manifest, alias, fid):
+        h = max(1, min(int(hours), 168))
+        expires = time.time() + h * 3600
+        fid = folder_id.strip()
+        if not fid:
+            raise GatewayError("folder_id requis", code="error")
+        git_root = (env("GIT_ROOT") or "").strip()
+        if git_root:
+            from .project import grant_allowed_by_manifest, resolve_project
+
+            proj = resolve_project(Path(git_root))
+            if proj.fail_closed:
                 raise GatewayError(
-                    f"zone « {fid} » hors périmètre manifeste projet (.gwsa/manifest.json)",
+                    "manifeste projet invalide/altéré/supprimé après confiance — "
+                    "refus (anti-downgrade, ADR-0007 §Décision 3)",
                     code="policy",
                 )
-    zones = [z for z in state.drive_zones.get(alias, []) if z.id != fid]
-    zones.append(DriveZone(id=fid, name=folder_name or fid, expires_at=expires))
-    state.drive_zones[alias] = zones
-    _save(state)
-    return state
+            if proj.manifest_valid and proj.manifest:
+                if not grant_allowed_by_manifest(proj.manifest, alias, fid):
+                    raise GatewayError(
+                        f"zone « {fid} » hors périmètre manifeste projet (.gwsa/manifest.json)",
+                        code="policy",
+                    )
+        zones = [z for z in state.drive_zones.get(alias, []) if z.id != fid]
+        zones.append(DriveZone(id=fid, name=folder_name or fid, expires_at=expires))
+        state.drive_zones[alias] = zones
+        state.touch()
+        _save(state)
+        return state
 
 
 def _ancestor_chain(state: SessionState) -> list[SessionState]:
@@ -476,40 +743,47 @@ def session_grant_capability(
     Réservé à la session racine — une sous-session déléguée ne peut pas
     s'élargir elle-même (même règle que `session_unlock` / `session_grant_drive`).
     """
-    state = require_session(session_id)
-    root = _root_session(state)
-    if state.delegated and state.session_id != root.session_id:
-        raise GatewayError(
-            "seule la session racine (ou l'humain) peut accorder une capacité",
-            code="error",
-        )
     account = account.strip()
     service = service.strip().lower()
     operation = operation.strip().lower()
     resource = resource.strip()
     if not account or not service or not operation:
         raise GatewayError("account/service/operation requis", code="error")
-    h = max(1, min(int(hours), 168))
-    expires = time.time() + h * 3600
-    caps = [
-        c
-        for c in state.capabilities
-        if not (
-            c.account == account
-            and c.service == service
-            and c.operation == operation
-            and c.resource == resource
+    # RMW sous le verrou unique (ADR-0012, Zone 2).
+    if not _session_exists(session_id):
+        raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
+    with file_lock(_lock_path(session_id)):
+        state = _load_active(session_id)
+        if state is None:
+            raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
+        root = _root_session(state)
+        if state.delegated and state.session_id != root.session_id:
+            raise GatewayError(
+                "seule la session racine (ou l'humain) peut accorder une capacité",
+                code="error",
+            )
+        h = max(1, min(int(hours), 168))
+        expires = time.time() + h * 3600
+        caps = [
+            c
+            for c in state.capabilities
+            if not (
+                c.account == account
+                and c.service == service
+                and c.operation == operation
+                and c.resource == resource
+            )
+        ]
+        caps.append(
+            Capability(
+                account=account, service=service, operation=operation,
+                resource=resource, expires_at=expires,
+            )
         )
-    ]
-    caps.append(
-        Capability(
-            account=account, service=service, operation=operation,
-            resource=resource, expires_at=expires,
-        )
-    )
-    state.capabilities = caps
-    _save(state)
-    return state
+        state.capabilities = caps
+        state.touch()
+        _save(state)
+        return state
 
 
 def active_capabilities(session_id: str, account: str, service: str = "") -> list[Capability]:
@@ -654,6 +928,7 @@ def close_session(session_id: str) -> None:
     découplé de la connexion MCP — ADR-0007 §Décision 5)."""
     revoke_descendants(session_id)
     _path(session_id).unlink(missing_ok=True)
+    _lock_path(session_id).unlink(missing_ok=True)  # pas d'orphelin .lock (Codex #149)
 
 
 def list_sessions(*, include_expired_zones: bool = False) -> list[dict[str, Any]]:

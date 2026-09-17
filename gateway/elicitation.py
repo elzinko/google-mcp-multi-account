@@ -136,6 +136,23 @@ def payload_hash(payload: dict[str, Any]) -> str:
     return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
 
 
+def _render_bound_args(bound: dict[str, Any]) -> str:
+    """Résumé lisible des arguments conséquents pour le prompt Touch ID (ADR-0012,
+    Zone 3) — pour que l'humain voie QUI reçoit QUOI. Ordre stable, listes
+    aplaties. Doit rester aligné avec elicitation-sign.swift (lot 4)."""
+    if not bound:
+        return ""
+    order = ["to", "cc", "subject", "grantee", "role", "type", "sendNotificationEmail",
+             "fileId", "permissionId", "name", "mimeType", "parents", "fields", "content"]
+    keys = [k for k in order if k in bound] + [k for k in sorted(bound) if k not in order]
+    parts = []
+    for k in keys:
+        v = bound[k]
+        v = ", ".join(str(x) for x in v) if isinstance(v, list) else str(v)
+        parts.append(f"{k}={v}")
+    return " ; ".join(parts)
+
+
 def prompt_from_payload(payload: dict[str, Any]) -> str:
     """Texte Touch ID — doit rester aligné avec elicitation-sign.swift."""
     action = str(payload.get("action") or "")
@@ -145,6 +162,7 @@ def prompt_from_payload(payload: dict[str, Any]) -> str:
     sid = str(payload.get("session_id") or "")
     minutes = int(payload.get("minutes") or 0)
     hours = int(payload.get("hours") or 0)
+    bound = payload.get("bound_args") if isinstance(payload.get("bound_args"), dict) else {}
     # Nommer le compte à l'instant d'autoriser (fiche 0047) : l'email est la
     # vérité terrain « quelle boîte Gmail ». Repli sur l'alias seul si inconnu.
     who = f"« {alias} » ({email})" if email else f"« {alias} »"
@@ -171,6 +189,20 @@ def prompt_from_payload(payload: dict[str, Any]) -> str:
         return "mag : désactiver l'authentification forte"
     if action == "session_open":
         return "mag : ouvrir une session pour cette conversation"
+    # Consentement transactionnel (ADR-0011/0012) : nommer le compte (email =
+    # vérité terrain, Codex #147 P2), l'acte EXACT (op concrète, P1) et ses
+    # arguments conséquents (bound_args, Zone 3) — qui reçoit quoi.
+    if action.startswith("transactional_mutation") or action.startswith("transactional_read:"):
+        op = action.split(":", 1)[1] if ":" in action else "acte sensible"
+        base = f"mag : autoriser « {op} » sur {who}"
+        if target:
+            base += f" — {target}"
+        detail = _render_bound_args(bound)
+        if detail:
+            base += f" [{detail}]"
+        return base
+    if action == "transactional_read_lease":
+        return f"mag : ouvrir un bail de lecture court sur {who}"
     return f"mag : {action} — {alias} {target}".strip()
 
 
@@ -183,9 +215,10 @@ def build_payload(
     minutes: int = 0,
     hours: int = 0,
     email: str = "",
+    bound_args: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     now = int(time.time())
-    return {
+    payload: dict[str, Any] = {
         "v": 1,
         "action": action,
         "alias": alias,
@@ -198,6 +231,13 @@ def build_payload(
         "issued_at": now,
         "expires_at": now + CHALLENGE_TTL_SEC,
     }
+    # Arguments conséquents liés à l'acte (ADR-0012, Zone 3) : entrent dans le
+    # payload SIGNÉ (canonical_json couvre tout le dict, clés triées) et dans le
+    # prompt Touch ID. Omis quand vide → aucun changement pour les actions
+    # historiques (non-régression de la signature).
+    if bound_args:
+        payload["bound_args"] = bound_args
+    return payload
 
 
 def _load_nonces() -> dict[str, float]:
@@ -508,6 +548,7 @@ def run_elicitation_gate(fields: dict[str, Any]) -> None:
     action = str(fields.get("action") or "")
     if not action:
         raise ElicitationError("action manquante")
+    ba = fields.get("bound_args")
     payload = build_payload(
         action,
         alias=str(fields.get("alias") or ""),
@@ -516,6 +557,7 @@ def run_elicitation_gate(fields: dict[str, Any]) -> None:
         session_id=str(fields.get("session_id") or ""),
         minutes=int(fields.get("minutes") or 0),
         hours=int(fields.get("hours") or 0),
+        bound_args=ba if isinstance(ba, dict) and ba else None,
     )
     signature = obtain_signature(payload)
     if not verify_signature(payload, signature):
