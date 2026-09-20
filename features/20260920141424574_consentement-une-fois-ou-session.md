@@ -69,20 +69,24 @@ en leur **retirant la durée** (portée = vie de la session) et en ajoutant le c
 
 ## Critères d'acceptation
 
-- [ ] **Manuel = par action, zéro TTL** : une action acceptée « une fois » n'ouvre aucun
+- [x] **Manuel = par action, zéro TTL** : une action acceptée « une fois » n'ouvre aucun
   droit au-delà d'elle-même ; la même action ensuite redemande — testé.
-- [ ] **« pour la session »** : après acceptation « session » d'un périmètre, une action
+- [x] **« pour la session »** : après acceptation « session » d'un périmètre, une action
   **du même périmètre** repasse **sans nouveau geste** ; un périmètre **différent**
-  redemande — testé.
-- [ ] La grâce « session » **meurt avec la session** (fermeture ou expiration), **sans
+  redemande — testé **de bout en bout** via les tools MCP de mutation (`drive_create`,
+  `drive_update`, `drive_copy`, `drive_upload`, `gmail_draft_create` exposent
+  `grant_scope` ; lot 6).
+- [x] La grâce « session » **meurt avec la session** (fermeture ou expiration), **sans
   limite de temps** propre — testé.
-- [ ] **Partage** (`drive permissions create/delete`) : **toujours par acte**, jamais
-  couvert par « pour la session » — testé.
-- [ ] **Mode réglable depuis l'admin** (manuel / auto), persisté ; repli fail-closed sur
+- [x] **Partage** (`drive permissions create/delete`) : **toujours par acte**, jamais
+  couvert par « pour la session » — testé (et **jamais exposé** au bord MCP : pas de
+  `grant_scope` sur `drive_permissions_create`/`drive_permissions_delete`).
+- [x] **Mode réglable depuis l'admin** (manuel / auto), persisté ; repli fail-closed sur
   manuel — testé.
-- [ ] Durées **configurables** (fenêtre auto, TTL d'inactivité de session) ; **retrait** du
-  déverrouillage par minutes en transactionnel — testé (non-régression flag OFF).
-- [ ] `./scripts/test.sh` au vert.
+- [x] Durées **configurables** (fenêtre auto, TTL d'inactivité de session) ; **retrait** du
+  déverrouillage par minutes en transactionnel — testé (non-régression flag OFF) ; les
+  trois durées admin **refusent 0** (lot 6).
+- [x] `./scripts/test.sh` au vert.
 
 ## Comment vérifier
 

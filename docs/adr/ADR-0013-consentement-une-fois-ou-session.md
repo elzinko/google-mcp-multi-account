@@ -70,9 +70,11 @@ flowchart TD
 
 Le choix « une fois / pour la session » est un **champ de portée signé** (`grant_scope ∈ {once, session}`, défaut `once`), threadé au niveau de l'appel à travers `_run`, placé dans le **payload signé** et dans le **texte du prompt Touch ID**. Le LLM relaie le choix exprimé dans le chat ; **l'humain le confirme en lisant le prompt et en posant le doigt**. Posture coopérative d'ADR-0007 inchangée : le LLM propose, l'humain autorise.
 
+**Le bord est câblé (lot 6).** `grant_scope` est exposé au schéma des tools MCP de mutation **NON-partage** (`drive_create`, `drive_update`, `drive_copy`, `drive_upload`, `gmail_draft_create` — enum `once`/`session`, défaut `once`), extrait au dispatch et relayé jusqu'à la fonction api correspondante puis `_run`. **Jamais** sur `drive_permissions_create`/`drive_permissions_delete` (garde-fou Décision 4 : le partage n'a pas de paramètre de portée au bord, pas seulement au gate). C'est ce paramètre que le LLM remplit quand l'utilisateur dit « pour la session » dans le chat ; le popup natif à deux boutons (« Une fois » / « Pour la session »), qui offrirait le même choix directement dans le geste Touch ID, reste l'arrivée ergonomique future — la parité de *texte* du prompt Python↔Swift existe déjà (lot 5), pas encore le bouton dédié.
+
 **Alternative rejetée.** Faire recalculer la grâce par le broker depuis le fichier session. Rejetée : réintroduit le point de décision divergent qu'ADR-0012 Zone 1 a supprimé (« la gateway décide, le broker applique la même décision »).
 
-**Conséquences.** Deux acquisitions de verrou séparées (lecture de grâce, puis écriture) — acceptable car l'écriture est idempotente (dé-doublonnée par quadruplet), sans compteur à décrémenter : pas de TOCTOU comme le budget de bail. Le popup natif à deux boutons (« Une fois » / « Pour la session ») est l'arrivée ergonomique, laissée au lot Swift.
+**Conséquences.** Deux acquisitions de verrou séparées (lecture de grâce, puis écriture) — acceptable car l'écriture est idempotente (dé-doublonnée par quadruplet), sans compteur à décrémenter : pas de TOCTOU comme le budget de bail. Une sous-session déléguée n'a pas le droit d'écrire une grâce (seule la racine accorde des capacités, ADR-0007) : elle est donc exclue de la grâce (lookup et écriture), et l'écriture de grâce est de toute façon enveloppée dans un filet — un échec ne fait jamais échouer l'acte déjà approuvé (fix P1, lot 6).
 
 **Repli fail-closed.** Portée absente/inconnue → `once`. Geste refusé → `GatewayError(code="locked")`, jamais d'accès. Champ de portée non signé ignoré : la portée n'a d'effet que via le payload signé.
 
@@ -144,6 +146,7 @@ flowchart LR
 | **3** | Portée signée `grant_scope` dans `build_payload` + `prompt_from_payload` (Python) ; threadée par `_run` → `_transactional_gate`. | **Hermétique.** Octets canoniques du payload avec/sans `grant_scope` (mock HMAC) ; prompt affiche la portée. |
 | **4** | Cœur `_transactional_gate` : garde-fou partage (liste blanche) → lookup grâce → geste → écriture grâce si `session` + éligible + ressource. | **Hermétique.** 2ᵉ acte même dossier passe sans geste ; dossier différent redemande ; partage redemande même après « session » ; write sans ressource → « once ». |
 | **5** | Admin : sélecteur mode (`auto`/`manuel`) + réglages TTL session / fenêtre auto ; retrait `session_unlock` en transactionnel ; parité prompt Swift + test manuel `tests/manuels/`. | **Hermétique** (endpoints admin, refus `session_unlock` en transac, non-régression flag OFF) **+ non hermétique** (Swift + Touch ID réel, deux conversations). |
+| **6** | Le dernier fil : `grant_scope` exposé au schéma + dispatch des 5 tools MCP de mutation non-partage (jamais sur le partage) ; fix P1 sous-session déléguée (grâce jamais écrite par un enfant, échec d'écriture jamais fatal à l'acte) ; fix P2 durées admin refusent `0` ; catégorie inconnue déjà exclue par la liste blanche (Décision 4), testée explicitement. | **Hermétique.** Schéma/dispatch MCP, bout en bout via `drive_create` (même dossier sans geste, autre dossier redemande), sous-session déléguée + scope=session (acte passe, aucune grâce, pas d'exception), catégorie inconnue jamais éligible, CLI refuse `0`. |
 
 **Fichiers exacts par lot.**
 
@@ -152,6 +155,7 @@ flowchart LR
 - **Lot 3** : `gateway/elicitation.py` (`build_payload`, `prompt_from_payload`) ; `gateway/api.py` (`_run` signature/threading). Test : `scripts/test.sh` (octets canoniques).
 - **Lot 4** : `gateway/api.py` (`_transactional_gate`) — c'est le lot central. Test : `scripts/test.sh` (les 4 critères d'acceptation).
 - **Lot 5** : `admin/server.js`, `admin/index.html` (sélecteur + réglages) ; `gateway/sessions.py` (`session_unlock` : refus en transac) ; `scripts/elicitation-sign.swift` (`promptText` : parité portée) ; `tests/manuels/`.
+- **Lot 6** : `gateway/mcp_server.py` (`_GRANT_SCOPE_PROPERTY`, schéma + `DISPATCH` des 5 tools de mutation non-partage) ; `gateway/api.py` (`drive_create`/`drive_update`/`drive_copy`/`drive_upload`/`gmail_create_draft` acceptent `grant_scope` et le relaient à `_run` ; `_transactional_gate` : `_is_delegated_session`, garde (a) éligibilité, garde (b) écriture de grâce protégée) ; `bin/mag` (`_tx_set_int` : refuse `0`). Test : `scripts/test.sh` (section « ADR-0013 lot 6 »).
 
 ---
 
