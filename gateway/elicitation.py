@@ -200,6 +200,13 @@ def prompt_from_payload(payload: dict[str, Any]) -> str:
         detail = _render_bound_args(bound)
         if detail:
             base += f" [{detail}]"
+        # Portée choisie (ADR-0013 §Décision 3) : « une fois » (défaut) ou
+        # « pour la session ». Absente (actions historiques, ou lot pas encore
+        # threadé) → rien à afficher, format canonique inchangé.
+        grant_scope = str(payload.get("grant_scope") or "")
+        if grant_scope:
+            scope_label = "pour la session" if grant_scope == "session" else "une fois"
+            base += f" (portée : {scope_label})"
         return base
     if action == "transactional_read_lease":
         return f"mag : ouvrir un bail de lecture court sur {who}"
@@ -216,6 +223,7 @@ def build_payload(
     hours: int = 0,
     email: str = "",
     bound_args: dict[str, Any] | None = None,
+    grant_scope: str = "",
 ) -> dict[str, Any]:
     now = int(time.time())
     payload: dict[str, Any] = {
@@ -237,6 +245,12 @@ def build_payload(
     # historiques (non-régression de la signature).
     if bound_args:
         payload["bound_args"] = bound_args
+    # Portée du consentement — « une fois » / « pour la session » (ADR-0013
+    # §Décision 3) : champ SIGNÉ (canonical_json, clés triées), même
+    # traitement que bound_args — omis quand absent, donc aucun changement
+    # d'octets pour les actions qui ne le threadent pas (non-régression).
+    if grant_scope:
+        payload["grant_scope"] = grant_scope
     return payload
 
 
@@ -558,6 +572,7 @@ def run_elicitation_gate(fields: dict[str, Any]) -> None:
         minutes=int(fields.get("minutes") or 0),
         hours=int(fields.get("hours") or 0),
         bound_args=ba if isinstance(ba, dict) and ba else None,
+        grant_scope=str(fields.get("grant_scope") or ""),
     )
     signature = obtain_signature(payload)
     if not verify_signature(payload, signature):

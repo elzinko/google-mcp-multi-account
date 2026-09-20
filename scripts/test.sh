@@ -7317,6 +7317,62 @@ print('OK' if (b1.get('content','').startswith('media:sha256:') and b1 != b2) el
 
 rm -rf "$TX6"
 
+section "ADR-0013 lot 3 — portée signée grant_scope (une fois / pour la session)"
+
+TX7="$(mktemp -d)"; mkdir -p "$TX7/alpha"
+PY="/usr/bin/python3"; [[ -x "$PY" ]] || PY="$(command -v python3)"
+GWSA_ROOT="$TX7" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
+
+# L4-1) build_payload : grant_scope entre dans le payload SIGNÉ (clés triées,
+#       canonical_json) — absent quand non fourni (non-régression des actions
+#       historiques), distinct pour « once » vs « session ».
+out="$(PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.elicitation import build_payload, canonical_json
+p_absent = build_payload('transactional_mutation:drive:files:create', target='F1')
+p_once = build_payload('transactional_mutation:drive:files:create', target='F1', grant_scope='once')
+p_session = build_payload('transactional_mutation:drive:files:create', target='F1', grant_scope='session')
+b_absent, b_once, b_session = canonical_json(p_absent), canonical_json(p_once), canonical_json(p_session)
+ok = (
+    'grant_scope' not in p_absent
+    and p_once.get('grant_scope') == 'once'
+    and p_session.get('grant_scope') == 'session'
+    and b_once != b_session
+)
+print('OK' if ok else f'wrong absent={b_absent} once={b_once} session={b_session}')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "ADR-0013 lot 3 : grant_scope dans le payload signé, absent si non fourni, distinct once/session" \
+  || fail "ADR-0013 lot 3 : grant_scope mal intégré au payload ($out)"
+
+# L4-2) Octets canoniques via le chemin mock HMAC : deux portées différentes
+#       signent différemment ; une signature ne vérifie que son propre payload.
+out="$(GWSA_ROOT="$TX7" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 "$PY" -c "
+from gateway.elicitation import build_payload, sign_mock, verify_mock
+p1 = build_payload('transactional_mutation:drive:files:create', target='F1', grant_scope='once')
+p2 = build_payload('transactional_mutation:drive:files:create', target='F1', grant_scope='session')
+s1, s2 = sign_mock(p1), sign_mock(p2)
+ok = s1 != s2 and verify_mock(p1, s1) and verify_mock(p2, s2) and not verify_mock(p1, s2)
+print('OK' if ok else 'wrong')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "ADR-0013 lot 3 : octets canoniques distincts once/session (mock HMAC)" \
+  || fail "ADR-0013 lot 3 : signature mock insensible à grant_scope ($out)"
+
+# L4-3) Le prompt Touch ID affiche la portée choisie.
+out="$(PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.elicitation import build_payload, prompt_from_payload
+p_once = build_payload('transactional_mutation:drive:files:create', alias='perso', email='perso@gmail.com', target='F1', grant_scope='once')
+p_sess = build_payload('transactional_mutation:drive:files:create', alias='perso', email='perso@gmail.com', target='F1', grant_scope='session')
+s_once, s_sess = prompt_from_payload(p_once), prompt_from_payload(p_sess)
+ok = 'une fois' in s_once and 'pour la session' in s_sess and s_once != s_sess
+print('OK' if ok else f'wrong once={s_once!r} sess={s_sess!r}')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "ADR-0013 lot 3 : le prompt Touch ID affiche la portée choisie" \
+  || fail "ADR-0013 lot 3 : prompt sans mention de la portée ($out)"
+
+rm -rf "$TX7"
+
 # --- Bilan ------------------------------------------------------------------
 
 printf '\n\033[1mBilan : %d réussis, %d échoués\033[0m\n' "$PASS" "$FAIL"
