@@ -548,6 +548,36 @@ function listSessions() {
   return out;
 }
 
+// Consentement transactionnel (ADR-0013 lot 5) — état lu directement depuis les
+// marqueurs fichiers sous GWSA_ROOT (même défauts que `mag transactional status`,
+// sans passer par un sous-process pour un simple GET). Les écritures, elles,
+// passent TOUJOURS par `mag transactional …` (source de vérité de la persistance).
+const TX_MODES = ["manuel", "auto"];
+const TX_DEFAULTS = {
+  session_ttl_sec: 28800,
+  read_lease_ttl_sec: 90,
+  read_lease_budget: 20,
+};
+
+function readTransactionalState() {
+  const consent = fs.existsSync(path.join(ROOT, ".transactional-consent"));
+  const modeRaw = readText(path.join(ROOT, ".transactional-lease-mode"));
+  const mode = TX_MODES.includes(modeRaw) ? modeRaw : "manuel";
+  const readInt = (file, fallback) => {
+    const txt = readText(path.join(ROOT, file));
+    const n = parseInt(txt, 10);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+  };
+  return {
+    ok: true,
+    consent,
+    mode,
+    session_ttl_sec: readInt(".session-ttl-sec", TX_DEFAULTS.session_ttl_sec),
+    read_lease_ttl_sec: readInt(".read-lease-ttl-sec", TX_DEFAULTS.read_lease_ttl_sec),
+    read_lease_budget: readInt(".read-lease-budget", TX_DEFAULTS.read_lease_budget),
+  };
+}
+
 function validPolicy(p) {
   if (p === null) return true;
   if (typeof p !== "object" || Array.isArray(p)) return false;
@@ -715,6 +745,47 @@ const server = http.createServer(async (req, res) => {
         const r = await mag(["session", "close", sid]);
         return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).trim() });
       }
+    }
+    if (req.method === "GET" && p === "/api/transactional") {
+      return send(res, 200, readTransactionalState());
+    }
+    if (req.method === "POST" && p === "/api/transactional/consent") {
+      const b = await readBody(req);
+      const r = await mag(["transactional", b.enabled ? "on" : "off"]);
+      return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).trim() });
+    }
+    if (req.method === "POST" && p === "/api/transactional/mode") {
+      const b = await readBody(req);
+      const mode = String(b.mode || "");
+      if (!TX_MODES.includes(mode)) return send(res, 400, { error: "mode invalide (manuel|auto)" });
+      const r = await mag(["transactional", "mode", mode]);
+      return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).trim() });
+    }
+    if (req.method === "POST" && p === "/api/transactional/settings") {
+      const b = await readBody(req);
+      const fields = [
+        ["session_ttl_sec", "session-ttl"],
+        ["read_lease_ttl_sec", "read-lease-ttl"],
+        ["read_lease_budget", "read-lease-budget"],
+      ];
+      const toApply = [];
+      for (const [key, cliSub] of fields) {
+        if (b[key] === undefined) continue;
+        const raw = b[key];
+        const n = typeof raw === "number" ? raw : Number.parseInt(String(raw), 10);
+        if (!Number.isInteger(n) || n <= 0 || String(n) !== String(raw).trim()) {
+          return send(res, 400, { error: `${key} doit être un entier positif` });
+        }
+        toApply.push([cliSub, n]);
+      }
+      if (!toApply.length) return send(res, 400, { error: "aucun réglage fourni" });
+      const outs = [];
+      for (const [cliSub, n] of toApply) {
+        const r = await mag(["transactional", cliSub, String(n)]);
+        if (r.code) return send(res, 500, { ok: false, out: (r.stdout + r.stderr).trim() });
+        outs.push((r.stdout + r.stderr).trim());
+      }
+      return send(res, 200, { ok: true, out: outs.join("\n") });
     }
     if (req.method === "GET" && p === "/api/log") {
       const lines = tailFile(path.join(ROOT, "usage.jsonl"), 300)
