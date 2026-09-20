@@ -8,7 +8,7 @@ version:
 epic:
 status: in-progress
 ready: 2026-09-12
-pr: "#142"
+pr:
 created: 2026-09-12
 ---
 
@@ -94,6 +94,11 @@ Lancer le serveur avec `MAG_BROKER_PORT=…` (sans `GWSA_BROKER_PORT`) → il l'
 
 ## Notes
 
+- **Réconciliation 2026-09-20** : le champ `pr` portait `#142`, mais ce numéro appartient à
+  l'élicitation in-conversation (collision entre sessions parallèles). Aucune PR ne livre ce
+  renommage : les lots 1-4 (commits `519d403`, `ec5b154`, `e76b996`) vivent sur une branche
+  `feat/…` **non mergée sur `main`**. Champ `pr` remis à vide ; fiche gardée `in-progress`
+  jusqu'au merge.
 - Exécute l'**option 4** de la fiche nommage [`20260911211558435`](20260911211558435_coherence-nommage-mag-serveur-repo.md).
 - Décision préservée : **ne pas renommer le serveur MCP** `google-multi-account` (breaking) ni le
   dossier `gws-accounts`. Ici, uniquement les **variables d'env**.

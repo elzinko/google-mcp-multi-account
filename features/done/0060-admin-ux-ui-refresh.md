@@ -5,7 +5,7 @@ type: epic
 priority: P1
 version: v0.4.0
 epic:
-status: in-progress
+status: shipped
 ready:
 pr:
 created: 2026-07-29
@@ -25,9 +25,9 @@ strongauth). Jamais tirable — on tire les enfants.
 
 ## Critères d'acceptation
 
-- [ ] Enfants MVP livrés : 0061–0067
-- [ ] Enfants docs / a11y / metadata livrés : 0068–0071
-- [ ] Milestone GitHub [v0.4.0](https://github.com/elzinko/google-mcp-multi-account/milestone/1) fermable
+- [x] Enfants MVP livrés : 0061–0067
+- [x] Enfants docs / a11y / metadata livrés : 0068–0071
+- [ ] Milestone GitHub [v0.4.0](https://github.com/elzinko/google-mcp-multi-account/milestone/1) fermable — *geste GitHub humain, hors dépôt*
 
 ## Notes
 
@@ -35,3 +35,11 @@ strongauth). Jamais tirable — on tire les enfants.
 - **Project** : [google-mcp-multi-account — v0.4.0](https://github.com/users/elzinko/projects/2)
 - **Milestone** : [v0.4.0](https://github.com/elzinko/google-mcp-multi-account/milestone/1)
 - Détail et captures : vivre dans l'issue GitHub — cette fiche est un index.
+
+## Clôture (réconciliation 2026-09-20)
+
+Épic clos : ses 11 enfants (0061 → 0071) sont tous dans `features/done/`, chacun livré
+par sa propre PR (référence dans chaque fiche enfant). La fiche épic était restée
+`in-progress` alors que le travail était terminé. Pas de PR propre à l'épic — il est
+livré par ses enfants — d'où `pr:` vide. Reste seulement le geste GitHub humain
+« fermer le milestone v0.4.0 ».
