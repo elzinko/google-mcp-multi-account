@@ -3348,6 +3348,66 @@ if [[ "$admin_ready" -eq 1 ]]; then
   [[ "$code_origin" == "403" ]] \
     && pass "admin : refuse une Origin étrangère" \
     || fail "admin Origin guard (code=$code_origin)"
+
+  # ── Panneau admin transactionnel (ADR-0013 lot 5) ──
+  tx_get1="$(curl -sf -H 'X-GWSA-Admin: 1' "http://127.0.0.1:$ADMIN_PORT/api/transactional")"
+  [[ "$tx_get1" == *'"consent":false'* && "$tx_get1" == *'"mode":"manuel"'* \
+     && "$tx_get1" == *'"session_ttl_sec":28800'* && "$tx_get1" == *'"read_lease_ttl_sec":90'* \
+     && "$tx_get1" == *'"read_lease_budget":20'* ]] \
+    && pass "admin GET /api/transactional : défauts (consent off, mode manuel, TTL par défaut)" \
+    || fail "admin GET /api/transactional défauts ($tx_get1)"
+
+  tx_on="$(curl -sf -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
+    -X POST -d '{"enabled":true}' "http://127.0.0.1:$ADMIN_PORT/api/transactional/consent")"
+  [[ "$tx_on" == *'"ok":true'* && -f "$SESS_ROOT/.transactional-consent" ]] \
+    && pass "admin POST /api/transactional/consent {enabled:true} : active via mag" \
+    || fail "admin POST consent on ($tx_on)"
+
+  tx_mode="$(curl -sf -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
+    -X POST -d '{"mode":"auto"}' "http://127.0.0.1:$ADMIN_PORT/api/transactional/mode")"
+  mode_file="$(cat "$SESS_ROOT/.transactional-lease-mode" 2>/dev/null || true)"
+  [[ "$tx_mode" == *'"ok":true'* && "$mode_file" == "auto" ]] \
+    && pass "admin POST /api/transactional/mode {mode:auto} : bascule via mag" \
+    || fail "admin POST mode auto ($tx_mode mode_file=$mode_file)"
+
+  code_mode_bad="$(curl -s -o /dev/null -w '%{http_code}' \
+    -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
+    -X POST -d '{"mode":"n_importe_quoi"}' "http://127.0.0.1:$ADMIN_PORT/api/transactional/mode")"
+  [[ "$code_mode_bad" == "400" ]] \
+    && pass "admin POST /api/transactional/mode : rejette un mode invalide (fail-closed)" \
+    || fail "admin POST mode invalide (code=$code_mode_bad)"
+
+  tx_settings="$(curl -sf -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
+    -X POST -d '{"session_ttl_sec":3600,"read_lease_ttl_sec":120,"read_lease_budget":5}' \
+    "http://127.0.0.1:$ADMIN_PORT/api/transactional/settings")"
+  sttl_file="$(cat "$SESS_ROOT/.session-ttl-sec" 2>/dev/null || true)"
+  rttl_file="$(cat "$SESS_ROOT/.read-lease-ttl-sec" 2>/dev/null || true)"
+  rbud_file="$(cat "$SESS_ROOT/.read-lease-budget" 2>/dev/null || true)"
+  [[ "$tx_settings" == *'"ok":true'* && "$sttl_file" == "3600" && "$rttl_file" == "120" && "$rbud_file" == "5" ]] \
+    && pass "admin POST /api/transactional/settings : écrit les 3 durées via mag" \
+    || fail "admin POST settings ($tx_settings sttl=$sttl_file rttl=$rttl_file rbud=$rbud_file)"
+
+  code_settings_bad="$(curl -s -o /dev/null -w '%{http_code}' \
+    -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
+    -X POST -d '{"session_ttl_sec":"abc"}' "http://127.0.0.1:$ADMIN_PORT/api/transactional/settings")"
+  [[ "$code_settings_bad" == "400" ]] \
+    && pass "admin POST /api/transactional/settings : rejette une durée non entière (fail-closed)" \
+    || fail "admin POST settings invalide (code=$code_settings_bad)"
+
+  tx_get2="$(curl -sf -H 'X-GWSA-Admin: 1' "http://127.0.0.1:$ADMIN_PORT/api/transactional")"
+  [[ "$tx_get2" == *'"consent":true'* && "$tx_get2" == *'"mode":"auto"'* \
+     && "$tx_get2" == *'"session_ttl_sec":3600'* ]] \
+    && pass "admin GET /api/transactional : reflète l'état après écriture" \
+    || fail "admin GET /api/transactional après écriture ($tx_get2)"
+
+  code_tx_csrf="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$ADMIN_PORT/api/transactional")"
+  [[ "$code_tx_csrf" == "403" ]] \
+    && pass "admin /api/transactional : refuse sans X-GWSA-Admin" \
+    || fail "admin CSRF transactional (code=$code_tx_csrf)"
+
+  # remet le flag OFF pour ne pas polluer les tests suivants qui réutilisent SESS_ROOT
+  curl -sf -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
+    -X POST -d '{"enabled":false}' "http://127.0.0.1:$ADMIN_PORT/api/transactional/consent" >/dev/null
 else
   fail "admin server sessions : démarrage timeout port $ADMIN_PORT"
 fi
