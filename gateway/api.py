@@ -34,6 +34,8 @@ from .sessions import (
     is_session_unlocked,
     open_read_lease,
     require_session,
+    session_grant_capability_session_lived,
+    session_has_capability,
     transactional_enabled,
     transactional_lease_mode,
     try_consume_read_lease,
@@ -166,17 +168,46 @@ def _consented_cap(service: str, category: str | None) -> dict[str, str]:
     return {"service": service, "operation": category or "*"}
 
 
-def _transactional_gate(alias: str, gws_args: list[str], sid: str) -> dict[str, str]:
-    """Point de contrôle unique du consentement transactionnel (ADR-0011/0012),
-    appelé par `_run` quand `transactional_enabled()`. Rend la capacité consentie
-    à porter jusqu'au broker (Zone 1).
+# Liste blanche d'éligibilité à la grâce « pour la session » (ADR-0013
+# §Décision 4) : SEULEMENT read/create/update/delete. `share` et toute
+# catégorie inconnue (None) en sont exclus par construction — ni lookup ni
+# écriture de grâce, Touch ID par acte toujours (fail-closed par liste
+# blanche, jamais par liste noire : une catégorie future non classée reste
+# exclue tant qu'elle n'est pas explicitement ajoutée ici).
+_GRACE_ELIGIBLE_CATEGORIES = {"read", "create", "update", "delete"}
 
-    - mutation (ou mode ``manuel``, ou lecture non classée) : acte SIGNÉ lié à
-      CET acte (compte × opération × ressource), usage unique (`consume_nonce`) —
-      aucune fenêtre ; un 2ᵉ acte identique redemande un geste.
-    - lecture (modes ``fenetre``/``session``) : bail actif (TTL non écoulé ET
-      budget restant) → budget −1 ; sinon un geste « lire maintenant » ouvre un
-      bail frais dont on consomme aussitôt le premier slot.
+
+def _normalize_grant_scope(raw: str) -> str:
+    """Normalise la portée demandée par l'appel (ADR-0013 §Décision 3).
+
+    ``once``/``session`` reconnus tels quels ; tout le reste (absent, vide,
+    inconnu) replie sur ``once`` — seul un choix EXPLICITE « session » peut
+    desserrer, jamais une valeur par défaut ou mal formée."""
+    val = (raw or "").strip().lower()
+    return val if val in ("once", "session") else "once"
+
+
+def _transactional_gate(
+    alias: str, gws_args: list[str], sid: str, grant_scope: str = "once",
+) -> dict[str, str]:
+    """Point de contrôle unique du consentement transactionnel (ADR-0011/0012,
+    raffiné ADR-0013), appelé par `_run` quand `transactional_enabled()`. Rend
+    la capacité consentie à porter jusqu'au broker (Zone 1).
+
+    En mode ``manuel``, AVANT tout geste : (1) classer l'acte ; (2) garde-fou
+    partage — seule une catégorie de la liste blanche est éligible à la
+    grâce ; (3) si éligible ET une grâce couvre déjà ce périmètre exact
+    (compte × service × catégorie × ressource, `session_has_capability`) :
+    AUCUN geste, retour direct de la capacité consentie ; (4) sinon geste
+    signé (usage unique, `consume_nonce`) puis, au succès, si la portée
+    choisie est ``session`` ET la ressource est dérivable, écriture de la
+    grâce (`session_grant_capability_session_lived`) — sans ressource
+    dérivable, « session » retombe sur « une fois » (pas de grâce à l'échelle
+    du service). Le broker reçoit toujours un `consented_cap` SANS ressource
+    (`_consented_cap`) — `handle_exec` est inchangé (ADR-0012 Zone 1).
+
+    En mode ``auto`` : mutation par acte (jamais de grâce, Décision 5) ;
+    lecture groupée sous bail (TTL + budget) — inchangé.
 
     Fail-closed : geste refusé/absent (`ElicitationError`) → refus
     (`GatewayError` code="locked"), jamais un accès."""
@@ -185,6 +216,16 @@ def _transactional_gate(alias: str, gws_args: list[str], sid: str) -> dict[str, 
     # nomme le compte réel, pas juste l'alias, en multi-comptes (Codex #147, P2).
     email = profile_email(alias)
     mode = transactional_lease_mode()
+    scope = _normalize_grant_scope(grant_scope)
+
+    # (2) Garde-fou partage EN PREMIER : seul le mode manuel connaît la grâce
+    # « pour la session », et seule une catégorie whitelistée y est éligible.
+    grace_eligible = mode == "manuel" and category in _GRACE_ELIGIBLE_CATEGORIES
+
+    # (3) Grâce déjà accordée pour ce périmètre exact → aucun geste.
+    if grace_eligible and session_has_capability(sid, alias, service, category, resource):
+        return _consented_cap(service, category)
+
     if op_class == "mutation" or mode == "manuel":
         prefix = "transactional_mutation" if op_class == "mutation" else "transactional_read"
         try:
@@ -198,12 +239,18 @@ def _transactional_gate(alias: str, gws_args: list[str], sid: str) -> dict[str, 
                     # Zone 3 : lier les arguments conséquents (qui reçoit quoi) au
                     # reçu signé + au prompt. Vide pour une lecture (mode manuel).
                     "bound_args": _bound_args(gws_args) if op_class == "mutation" else {},
+                    # ADR-0013 §Décision 3 : portée signée, threadée depuis l'appel.
+                    "grant_scope": scope,
                 }
             )
         except ElicitationError as e:
             raise GatewayError(f"acte refusé — {e}", code="locked") from e
+        # (4) Au succès : « pour la session » écrit la grâce — seulement si
+        # éligible ET ressource dérivable (repli fail-closed sur « une fois »).
+        if grace_eligible and scope == "session" and resource:
+            session_grant_capability_session_lived(sid, alias, service, category, resource)
         return _consented_cap(service, category)
-    # Lecture (fenetre/session) : consommer un slot de bail ATOMIQUEMENT (check +
+    # Lecture (mode auto) : consommer un slot de bail ATOMIQUEMENT (check +
     # décrément sous verrou) pour ne pas dépasser le budget signé sous concurrence
     # (Codex #147, P1). Slot indisponible → un geste ouvre un bail frais.
     if not try_consume_read_lease(sid, alias):
@@ -232,6 +279,7 @@ def _run(
     timeout: int = 60,
     raw_output: bool = False,
     session: str = "",
+    grant_scope: str = "once",
 ) -> Any:
     """Exécute un appel gws via le broker, autorisé par le jeton PORTÉ par cet appel.
 
@@ -239,6 +287,12 @@ def _run(
     quel que soit l'état de verrouillage du profil. Plus de repli sur un état
     global de process — le jeton n'est jamais lu ailleurs que dans `session`,
     le paramètre que l'appelant (gateway.mcp_server) a extrait de CET appel.
+
+    `grant_scope` (ADR-0013 §Décision 3) : indice de portée « une fois »
+    (défaut) / « pour la session » threadé au niveau de CET appel jusqu'au
+    gate transactionnel — jamais un argument métier par outil (lot 5 câble sa
+    source réelle, l'admin/Swift ; ici le défaut `once` préserve bit pour bit
+    le comportement des appelants qui ne le passent pas encore).
     """
     sid = (session or "").strip()
     gro = get_git_root() or git_toplevel()
@@ -274,7 +328,7 @@ def _run(
             # ADR-0011/0012 : le modèle transactionnel REMPLACE la fenêtre minutes.
             # Le gate route lecture/mutation (bail ou acte signé) indépendamment
             # de .locked, et produit la capacité consentie portée au broker (Zone 1).
-            consented_cap = _transactional_gate(alias, gws_args, sid)
+            consented_cap = _transactional_gate(alias, gws_args, sid, grant_scope=grant_scope)
         elif is_locked(d) and not is_session_unlocked(sid, alias):
             raise GatewayError(
                 (

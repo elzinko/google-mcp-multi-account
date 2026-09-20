@@ -7373,6 +7373,101 @@ print('OK' if ok else f'wrong once={s_once!r} sess={s_sess!r}')
 
 rm -rf "$TX7"
 
+section "ADR-0013 lot 4 — cœur du gate : grâce « pour la session » (les 4 critères d'acceptation)"
+
+TX8="$(mktemp -d)"; mkdir -p "$TX8/alpha"
+PY="/usr/bin/python3"; [[ -x "$PY" ]] || PY="$(command -v python3)"
+GWSA_ROOT="$TX8" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
+
+# (a)+(b) Un 2ᵉ acte de création dans le MÊME dossier après « session » passe
+#         SANS geste ; un dossier DIFFÉRENT redemande.
+out="$(GWSA_ROOT="$TX8" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
+  MAG_TRANSACTIONAL_LEASE_MODE=manuel "$PY" -c "
+import json
+import gateway.api as api
+from gateway.sessions import create_session
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None: {'ok': True}
+calls = {'n': 0}; _og = api.run_elicitation_gate
+def _cg(f):
+    calls['n'] += 1
+    return _og(f)
+api.run_elicitation_gate = _cg
+s = create_session(client='l4ab')
+
+def create_args(folder):
+    return ['drive', 'files', 'create', '--params', json.dumps({'fields': 'id'}),
+            '--json', json.dumps({'name': 'f', 'parents': [folder]})]
+
+api._run('alpha', create_args('FOLDERX'), session=s.session_id, grant_scope='session')
+n1 = calls['n']
+api._run('alpha', create_args('FOLDERX'), session=s.session_id)  # même dossier, portée par défaut
+n2 = calls['n']
+api._run('alpha', create_args('FOLDERY'), session=s.session_id)  # dossier différent
+n3 = calls['n']
+print('n1', n1, 'n2', n2, 'n3', n3)
+")"
+[[ "$out" == *"n1 1"* && "$out" == *"n2 1"* && "$out" == *"n3 2"* ]] \
+  && pass "ADR-0013 lot 4 (a)(b) : même dossier après « session » → sans geste ; autre dossier → redemande" \
+  || fail "ADR-0013 lot 4 (a)(b) : grâce mal scopée à la ressource ($out)"
+
+# (c) Le partage (permissions create/delete) redemande TOUJOURS, même avec
+#     grant_scope=session répété sur le MÊME fichier — jamais de grâce partage.
+out="$(GWSA_ROOT="$TX8" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
+  MAG_TRANSACTIONAL_LEASE_MODE=manuel "$PY" -c "
+import json
+import gateway.api as api
+from gateway.sessions import create_session
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None: {'ok': True}
+calls = {'n': 0}; _og = api.run_elicitation_gate
+def _cg(f):
+    calls['n'] += 1
+    return _og(f)
+api.run_elicitation_gate = _cg
+s = create_session(client='l4c')
+
+perm_args = ['drive', 'permissions', 'create', '--params', json.dumps({'fileId': 'FILEZ'}),
+             '--json', json.dumps({'type': 'user', 'role': 'reader', 'emailAddress': 'a@b.com'})]
+api._run('alpha', perm_args, session=s.session_id, grant_scope='session')
+n1 = calls['n']
+api._run('alpha', perm_args, session=s.session_id, grant_scope='session')
+n2 = calls['n']
+print('n1', n1, 'n2', n2)
+")"
+[[ "$out" == *"n1 1"* && "$out" == *"n2 2"* ]] \
+  && pass "ADR-0013 lot 4 (c) : partage redemande toujours, jamais couvert par « pour la session »" \
+  || fail "ADR-0013 lot 4 (c) : une grâce a couvert un partage ($out)"
+
+# (d) Écriture « session » SANS ressource dérivable (ex. drive files copy sans
+#     parents identifiable) → aucune grâce écrite, retombe sur « une fois ».
+out="$(GWSA_ROOT="$TX8" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
+  MAG_TRANSACTIONAL_LEASE_MODE=manuel "$PY" -c "
+import json
+import gateway.api as api
+from gateway.sessions import create_session, session_has_capability
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None: {'ok': True}
+calls = {'n': 0}; _og = api.run_elicitation_gate
+def _cg(f):
+    calls['n'] += 1
+    return _og(f)
+api.run_elicitation_gate = _cg
+s = create_session(client='l4d')
+
+copy_args = ['drive', 'files', 'copy', '--params', json.dumps({'fileId': 'SRC', 'fields': 'id'}),
+             '--json', json.dumps({'name': 'copy'})]  # pas de 'parents' → resource non dérivable
+api._run('alpha', copy_args, session=s.session_id, grant_scope='session')
+n1 = calls['n']
+api._run('alpha', copy_args, session=s.session_id)  # portée par défaut : doit redemander (aucune grâce écrite)
+n2 = calls['n']
+no_cap = not session_has_capability(s.session_id, 'alpha', 'drive', 'create', '')
+print('n1', n1, 'n2', n2, 'no_cap', no_cap)
+")"
+[[ "$out" == *"n1 1"* && "$out" == *"n2 2"* && "$out" == *"no_cap True"* ]] \
+  && pass "ADR-0013 lot 4 (d) : sans ressource dérivable, « session » retombe sur « une fois » (aucune grâce)" \
+  || fail "ADR-0013 lot 4 (d) : une grâce a été écrite sans ressource dérivable ($out)"
+
+rm -rf "$TX8"
+
+
 # --- Bilan ------------------------------------------------------------------
 
 printf '\n\033[1mBilan : %d réussis, %d échoués\033[0m\n' "$PASS" "$FAIL"
