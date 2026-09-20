@@ -7171,6 +7171,11 @@ cases = [
     build_payload('transactional_mutation:gmail:users:drafts:create', alias='perso',
                   email='perso@gmail.com',
                   bound_args={'to': ['a@x.com', 'b@x.com'], 'cc': ['c@x.com'], 'subject': 'Hi'}),
+    # ADR-0013 : la portée choisie doit s'afficher à l'identique Python↔Swift.
+    build_payload('transactional_mutation:drive:files:create', alias='perso',
+                  email='perso@gmail.com', target='DOSSIER-A', grant_scope='session'),
+    build_payload('transactional_mutation:drive:files:create', alias='perso',
+                  email='perso@gmail.com', target='DOSSIER-A', grant_scope='once'),
     build_payload('transactional_read:gmail:users:messages:list', alias='perso', email='perso@gmail.com'),
     build_payload('transactional_read_lease', alias='perso', email='perso@gmail.com'),
     build_payload('session_unlock', alias='perso', email='perso@gmail.com', session_id='S1', minutes=30),

@@ -227,6 +227,14 @@ func promptText(from obj: [String: Any]) -> String {
         if !target.isEmpty { base += " — \(target)" }
         let detail = renderBoundArgs(obj)
         if !detail.isEmpty { base += " [\(detail)]" }
+        // Portée choisie (ADR-0013 §Décision 3) — aligné sur
+        // gateway/elicitation.py:prompt_from_payload : « une fois » (défaut) ou
+        // « pour la session ». Absente → rien, format canonique inchangé.
+        let grantScope = obj["grant_scope"] as? String ?? ""
+        if !grantScope.isEmpty {
+            let scopeLabel = grantScope == "session" ? "pour la session" : "une fois"
+            base += " (portée : \(scopeLabel))"
+        }
         return base
     }
     if action == "transactional_read_lease" {
