@@ -31,6 +31,7 @@ phase. Chaque test a son répertoire, qui contient **tout** :
 | [drive-2-comptes](drive-2-comptes/) | Lecture + écriture + modification Drive sur **2 comptes dans un même prompt**, élicitation comprise, nettoyage réversible | ~10 min | Dossier `ZZ-TESTS` à la racine des 2 Drive concernés |
 | [drive-cross-compte](drive-cross-compte/) | **Copie cross-compte** et partage entre **perso** et **mw** dans `ZZ-TESTS` (transfert de propriété hors périmètre) | ~15 min | `ZZ-TESTS` sur les 2 Drive ; activer `share` sur le compte source pour la phase partage |
 | [mag-grant-resolve-nom](mag-grant-resolve-nom/) | `mag grant` résout un dossier **par son nom** : par compte, refus francs (introuvable / ambigu / corbeille), sans Touch ID gaspillé. N'écrit aucun fichier | ~8 min | Dossier `ZZ-TESTS` à la racine des 2 Drive + **deux** dossiers homonymes `ZZ-AMBIGU` |
+| [transactionnel-une-fois-session](transactionnel-une-fois-session/) | Geste « une fois / pour la session » : la grâce couvre le même dossier, un autre redemande, le partage reste toujours signé ; mode réglable depuis l'admin (ADR-0013) | ~15 min | `ZZ-TESTS` + sous-dossiers `DOSSIER-A`/`DOSSIER-B` ; transactionnel ON, mode manuel |
 
 ## Conventions (tous les tests)
 
