@@ -99,6 +99,11 @@ nav:
           - ADR-0006 · Fichiers reçus, répertoire dédié: adr/ADR-0006-fichiers-recus-repertoire-dedie.md
           - ADR-0007 · Droits par session: adr/ADR-0007-droits-par-session.md
           - ADR-0008 · Accès mobile — passkey + holder natif: adr/ADR-0008-acces-mobile-passkey-holder-natif.md
+          - ADR-0009 · Approbation passkey distante: adr/ADR-0009-approbation-passkey-distante.md
+          - ADR-0010 · Design system admin sans build: adr/ADR-0010-design-system-admin-sans-build.md
+          - ADR-0011 · Consentement transactionnel par session: adr/ADR-0011-consentement-transactionnel-par-session.md
+          - ADR-0012 · Consentement transactionnel — propagation: adr/ADR-0012-consentement-transactionnel-propagation.md
+          - ADR-0013 · Consentement « une fois / pour la session »: adr/ADR-0013-consentement-une-fois-ou-session.md
   - Contribuer:
       - Comment contribuer: contribuer.md
       - Validation des PR: PR_VALIDATION.md
