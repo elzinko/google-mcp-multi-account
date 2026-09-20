@@ -6778,19 +6778,68 @@ print('consumed', sum(res))
   && pass "transactionnel Zone 2 : consommation atomique — budget jamais dépassé sous concurrence" \
   || fail "transactionnel Zone 2 : budget dépassé (course non sérialisée) ($out)"
 
-# 8) Flag ON : session_unlock(minutes) écrêté au plafond du bail (~2 min), pas 1440.
-out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_READ_LEASE_TTL_SEC=90 "$PY" -c "
-import time
-from gateway.sessions import create_session, session_unlock
-s = create_session(client='txPlaf')
-s = session_unlock(s.session_id, 'alpha', 2000)
-delta = s.unlocks['alpha'] - time.time()
-print('OK' if delta <= 2*60 + 2 else f'wrong:{delta}')
+# 8) ADR-0013 Décision 6 : session_unlock(minutes) REFUSE en transactionnel
+#    (la fenêtre de minutes est retirée, on renvoie vers « pour la session »),
+#    et n'arme aucun unlock.
+out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 "$PY" -c "
+from gateway.sessions import create_session, session_unlock, get_session
+from gateway.errors import GatewayError
+s = create_session(client='txNoUnlock')
+try:
+    session_unlock(s.session_id, 'alpha', 2000)
+    print('wrong:accepte')
+except GatewayError as e:
+    s2 = get_session(s.session_id)
+    code = getattr(e, 'code', '')
+    print('OK' if (code == 'locked' and not s2.unlocks) else 'bad:' + str(code) + ':' + str(s2.unlocks))
 ")"
 [[ "$out" == "OK" ]] \
-  && pass "transactionnel ON : minutes écrêté au plafond du bail (déprécié), pas 1440" \
-  || fail "transactionnel ON : minutes non écrêté au plafond ($out)"
+  && pass "transactionnel ON : session_unlock(minutes) refuse, aucun unlock armé (ADR-0013)" \
+  || fail "transactionnel ON : session_unlock aurait dû refuser ($out)"
+
+# 8bis) Non-régression : flag transactionnel OFF → session_unlock arme toujours la fenêtre.
+out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import time
+from gateway.sessions import create_session, session_unlock
+s = create_session(client='txOffUnlock')
+s = session_unlock(s.session_id, 'alpha', 30)
+print('OK' if s.unlocks.get('alpha', 0) > time.time() else 'wrong')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "flag OFF : session_unlock(minutes) inchangé (non-régression ADR-0013)" \
+  || fail "flag OFF : session_unlock cassé ($out)"
+
+# 8ter) ADR-0013 Décision 6 : durées réglables par marqueur fichier (admin),
+#       env prioritaire, repli fail-safe sur le défaut. Root jetable (pas de
+#       contamination des autres tests).
+DUR_ROOT="$(mktemp -d)"
+out="$(GWSA_ROOT="$DUR_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import pathlib, os
+from gateway import sessions as S
+root = pathlib.Path(os.environ['GWSA_ROOT'])
+(root / S.SESSION_TTL_FLAG_NAME).write_text('3600')
+(root / S.READ_LEASE_TTL_FLAG_NAME).write_text('45')
+(root / S.READ_LEASE_BUDGET_FLAG_NAME).write_text('7')
+a = (S.session_ttl_sec(), S.read_lease_ttl_sec(), S.read_lease_budget())
+(root / S.READ_LEASE_BUDGET_FLAG_NAME).write_text('pasunentier')
+b = S.read_lease_budget()
+print('OK' if a == (3600, 45, 7) and b == S.DEFAULT_READ_LEASE_BUDGET else 'wrong:' + str(a) + ':' + str(b))
+")"
+[[ "$out" == "OK" ]] \
+  && pass "transactionnel : durées réglables par marqueur admin + repli fail-safe (ADR-0013)" \
+  || fail "transactionnel : durées non réglables ($out)"
+
+out="$(GWSA_ROOT="$DUR_ROOT" PYTHONPATH="$(pwd)" MAG_SESSION_TTL_SEC=120 "$PY" -c "
+import pathlib, os
+from gateway import sessions as S
+root = pathlib.Path(os.environ['GWSA_ROOT'])
+(root / S.SESSION_TTL_FLAG_NAME).write_text('3600')
+print('OK' if S.session_ttl_sec() == 120 else 'wrong:' + str(S.session_ttl_sec()))
+")"
+[[ "$out" == "OK" ]] \
+  && pass "transactionnel : env prioritaire sur le marqueur de durée (ADR-0013)" \
+  || fail "transactionnel : priorité env cassée ($out)"
+rm -rf "$DUR_ROOT"
 
 # 9) ADR-0013 lot 1 : Capability.active() accepte la sentinelle expires_at<=0 —
 #    une grâce « pour la session » est active tant que la session vit, et

@@ -30,6 +30,12 @@ DEFAULT_SESSION_TTL_SEC = 8 * 3600
 # le helper `env()` (MAG_<NAME> puis GWSA_<NAME>), jamais `os.environ` nu.
 TRANSACTIONAL_FLAG_NAME = ".transactional-consent"
 LEASE_MODE_FLAG_NAME = ".transactional-lease-mode"
+# ADR-0013 Décision 6 : les durées deviennent des réglages. Chacune est lue via
+# son env (tests) PUIS un marqueur fichier posé par l'admin (déploiement réel),
+# sinon son défaut. Même patron que ``transactional_lease_mode``.
+SESSION_TTL_FLAG_NAME = ".session-ttl-sec"
+READ_LEASE_TTL_FLAG_NAME = ".read-lease-ttl-sec"
+READ_LEASE_BUDGET_FLAG_NAME = ".read-lease-budget"
 DEFAULT_READ_LEASE_TTL_SEC = 90
 DEFAULT_READ_LEASE_BUDGET = 20
 # ADR-0013 (raffine ADR-0012 Zone 4) : deux modes seulement. Le mode global
@@ -85,31 +91,39 @@ def transactional_lease_mode() -> str:
     return val if val in LEASE_MODES else "manuel"
 
 
-def read_lease_ttl_sec() -> int:
-    """TTL du bail de lecture (secondes) — surchargeable via
-    MAG_/GWSA_READ_LEASE_TTL_SEC. Une des deux limites du bail en mode
-    ``fenetre`` ; la première atteinte referme."""
+def _int_setting(env_name: str, flag_name: str, default: int, minimum: int = 1) -> int:
+    """Lit un réglage entier : MAG_/GWSA_<env_name> d'abord (tests), puis le
+    marqueur fichier <flag_name> posé par l'admin (déploiement réel), sinon
+    ``default``. Repli fail-safe sur ``default`` si absent, illisible ou
+    invalide ; borné à ``>= minimum``. Même patron que
+    ``transactional_lease_mode`` (ADR-0013 Décision 6)."""
+    raw = (env(env_name) or "").strip()
+    if not raw:
+        try:
+            p = gwsa_root() / flag_name
+            raw = p.read_text(encoding="utf-8").strip() if p.is_file() else ""
+        except OSError:
+            raw = ""
+    if not raw:
+        return default
     try:
-        return max(1, int(env("READ_LEASE_TTL_SEC", str(DEFAULT_READ_LEASE_TTL_SEC))))
+        return max(minimum, int(raw))
     except (TypeError, ValueError):
-        return DEFAULT_READ_LEASE_TTL_SEC
+        return default
+
+
+def read_lease_ttl_sec() -> int:
+    """TTL du bail de lecture (secondes) — réglage (env MAG_/GWSA_READ_LEASE_TTL_SEC
+    ou marqueur admin). Une des deux limites du bail en mode ``auto`` ; la
+    première atteinte referme."""
+    return _int_setting("READ_LEASE_TTL_SEC", READ_LEASE_TTL_FLAG_NAME, DEFAULT_READ_LEASE_TTL_SEC)
 
 
 def read_lease_budget() -> int:
-    """Budget d'opérations du bail de lecture — surchargeable via
-    MAG_/GWSA_READ_LEASE_BUDGET. Seconde limite du bail (filet en mode
-    ``session``)."""
-    try:
-        return max(1, int(env("READ_LEASE_BUDGET", str(DEFAULT_READ_LEASE_BUDGET))))
-    except (TypeError, ValueError):
-        return DEFAULT_READ_LEASE_BUDGET
-
-
-def read_lease_plafond_minutes() -> int:
-    """Plafond (minutes, arrondi au supérieur) auquel `session_unlock` écrête
-    `minutes` quand le transactionnel est actif (ADR-0011 §Décision 4) — quelques
-    minutes max, jamais 1440."""
-    return max(1, -(-read_lease_ttl_sec() // 60))
+    """Budget d'opérations du bail de lecture — réglage (env
+    MAG_/GWSA_READ_LEASE_BUDGET ou marqueur admin). Seconde limite du bail en
+    mode ``auto``."""
+    return _int_setting("READ_LEASE_BUDGET", READ_LEASE_BUDGET_FLAG_NAME, DEFAULT_READ_LEASE_BUDGET)
 
 
 def sessions_dir() -> Path:
@@ -400,11 +414,11 @@ def new_session_id() -> str:
 
 
 def session_ttl_sec() -> int:
-    """TTL effectif d'une session (secondes), surchargeable pour les tests."""
-    try:
-        return int(env("SESSION_TTL_SEC", str(DEFAULT_SESSION_TTL_SEC)))
-    except ValueError:
-        return DEFAULT_SESSION_TTL_SEC
+    """TTL d'inactivité d'une session (secondes) — réglage (env
+    MAG_/GWSA_SESSION_TTL_SEC ou marqueur admin, ADR-0013 Décision 6). Défaut
+    8 h ; borné à >= 1 s (comportement historique préservé) ; repli fail-safe
+    sur le défaut si illisible."""
+    return _int_setting("SESSION_TTL_SEC", SESSION_TTL_FLAG_NAME, DEFAULT_SESSION_TTL_SEC, minimum=1)
 
 
 def create_session(
@@ -480,11 +494,13 @@ def _root_session(state: SessionState) -> SessionState:
 def session_unlock(session_id: str, alias: str, minutes: int) -> SessionState:
     """Déverrouille `alias` pour la session pendant `minutes` — API inchangée.
 
-    `minutes` est DÉPRÉCIÉ quand le transactionnel est actif (ADR-0011
-    §Décision 4) : conservé pour compat, mais écrêté au plafond du bail de
-    lecture (quelques minutes max), jamais 1440. Flag OFF (défaut) :
-    comportement strictement inchangé (non-régression). RMW sous le verrou
-    unique (ADR-0012, Zone 2)."""
+    Le déverrouillage par minutes est **retiré quand le transactionnel est
+    actif** (ADR-0013 Décision 6, aboutissement d'ADR-0011 §Décision 4) : il
+    **refuse** et renvoie vers « pour la session » (le choix par acte). La
+    fenêtre de minutes était la dernière durée non voulue du modèle
+    transactionnel ; on la ferme pour de bon plutôt que de l'écrêter. Flag OFF
+    (défaut) : comportement strictement inchangé, `minutes` borné 1–1440
+    (non-régression). RMW sous le verrou unique (ADR-0012, Zone 2)."""
     if not _session_exists(session_id):
         raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
     with file_lock(_lock_path(session_id)):
@@ -497,8 +513,13 @@ def session_unlock(session_id: str, alias: str, minutes: int) -> SessionState:
                 "seule la session racine (ou l'humain) peut déverrouiller un profil",
                 code="error",
             )
-        plafond = read_lease_plafond_minutes() if transactional_enabled() else 1440
-        mins = max(1, min(int(minutes), plafond))
+        if transactional_enabled():
+            raise GatewayError(
+                "déverrouillage par minutes retiré en mode transactionnel : "
+                "autorise « pour la session » au moment d'agir (ADR-0013)",
+                code="locked",
+            )
+        mins = max(1, min(int(minutes), 1440))
         state.unlocks[alias] = time.time() + mins * 60
         state.touch()
         _save(state)
