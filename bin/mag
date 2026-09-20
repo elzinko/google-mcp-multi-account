@@ -975,7 +975,9 @@ cmd_elicitation() { # mag elicitation enroll|status|in-conversation — clé bio
 }
 
 _tx_set_int() { # $1=nom-fichier-marqueur  $2=valeur  $3=label — écrit un réglage entier (ADR-0013)
-  [[ "${2:-}" =~ ^[0-9]+$ ]] || die "usage: $SELF transactional $3 <entier positif>"
+  # >= 1 seulement : une durée de 0 n'a pas de sens (session-ttl, fenêtre auto,
+  # budget auto) — ^[0-9]+$ acceptait 0 à tort (ADR-0013 lot 6, fix P2).
+  [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || die "usage: $SELF transactional $3 <entier ≥ 1>"
   mkdir -p "$GWSA_ROOT" && chmod 700 "$GWSA_ROOT" 2>/dev/null || true
   printf '%s' "$2" > "$GWSA_ROOT/$1"
   echo "✓ $3 = $2"

@@ -6918,6 +6918,24 @@ if GWSA_ROOT="$TXCLI_ROOT" "$GWSA" transactional session-ttl pasunentier >/dev/n
 else
   pass "CLI : mag transactional refuse une durée non entière (ADR-0013)"
 fi
+# ADR-0013 lot 6, fix P2 : 0 n'est pas un entier ≥ 1 — une durée nulle n'a pas
+# de sens (session-ttl, fenêtre auto, budget auto). Les trois réglages sont
+# testés, `^[0-9]+$` matchait 0 à tort avant le correctif.
+if GWSA_ROOT="$TXCLI_ROOT" "$GWSA" transactional session-ttl 0 >/dev/null 2>&1; then
+  fail "CLI : mag transactional session-ttl a accepté 0"
+else
+  pass "CLI : mag transactional session-ttl refuse 0 (ADR-0013 lot 6)"
+fi
+if GWSA_ROOT="$TXCLI_ROOT" "$GWSA" transactional read-lease-ttl 0 >/dev/null 2>&1; then
+  fail "CLI : mag transactional read-lease-ttl a accepté 0"
+else
+  pass "CLI : mag transactional read-lease-ttl refuse 0 (ADR-0013 lot 6)"
+fi
+if GWSA_ROOT="$TXCLI_ROOT" "$GWSA" transactional read-lease-budget 0 >/dev/null 2>&1; then
+  fail "CLI : mag transactional read-lease-budget a accepté 0"
+else
+  pass "CLI : mag transactional read-lease-budget refuse 0 (ADR-0013 lot 6)"
+fi
 rm -rf "$TXCLI_ROOT"
 
 # 9) ADR-0013 lot 1 : Capability.active() accepte la sentinelle expires_at<=0 —
@@ -7599,6 +7617,148 @@ print('n1', n1, 'n2', n2, 'no_cap', no_cap)
   || fail "ADR-0013 lot 4 (d) : une grâce a été écrite sans ressource dérivable ($out)"
 
 rm -rf "$TX8"
+
+section "ADR-0013 lot 6 — brancher le bord (grant_scope) + fix P1 sous-session + P2 catégorie inconnue"
+
+TX9="$(mktemp -d)"; mkdir -p "$TX9/alpha"
+PY="/usr/bin/python3"; [[ -x "$PY" ]] || PY="$(command -v python3)"
+GWSA_ROOT="$TX9" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
+
+# L6-1) Schéma MCP : grant_scope exposé (enum once/session, défaut once) sur
+#       les 5 mutations NON-partage — JAMAIS sur les tools de partage
+#       (garde-fou ADR-0013 Décision 4).
+out="$(PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.mcp_server import TOOLS
+by_name = {t['name']: t for t in TOOLS}
+mutating = ['drive_create', 'drive_update', 'drive_copy', 'drive_upload', 'gmail_draft_create']
+sharing = ['drive_permissions_create', 'drive_permissions_delete']
+ok = True
+for n in mutating:
+    gs = by_name[n]['inputSchema']['properties'].get('grant_scope')
+    if not gs or gs.get('enum') != ['once', 'session'] or gs.get('default') != 'once':
+        ok = False
+for n in sharing:
+    if 'grant_scope' in by_name[n]['inputSchema']['properties']:
+        ok = False
+print('OK' if ok else 'wrong')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "ADR-0013 lot 6 : grant_scope au schéma des 5 mutations, absent du partage" \
+  || fail "ADR-0013 lot 6 : schéma MCP grant_scope incorrect ($out)"
+
+# L6-2) Dispatch MCP : grant_scope de l'appel est bien EXTRAIT et relayé à la
+#       fonction api correspondante, pour les 5 tools câblés.
+out="$(PYTHONPATH="$(pwd)" "$PY" -c "
+import gateway.mcp_server as ms
+import gateway.api as api
+captured = {}
+def mk(name):
+    def fn(**kw):
+        captured[name] = kw.get('grant_scope')
+        return {'ok': True}
+    return fn
+for name in ('drive_create', 'drive_update', 'drive_copy', 'drive_upload', 'gmail_create_draft'):
+    setattr(api, name, mk(name))
+ms.DISPATCH['drive_create'](alias='alpha', name='n', parent_id='p', session='s', grant_scope='session')
+ms.DISPATCH['drive_update'](alias='alpha', file_id='f', session='s', grant_scope='session')
+ms.DISPATCH['drive_copy'](alias='alpha', file_id='f', parent_id='p', session='s', grant_scope='session')
+ms.DISPATCH['drive_upload'](alias='alpha', path='/x', parent_id='p', session='s', grant_scope='session')
+ms.DISPATCH['gmail_draft_create'](alias='alpha', to='a@b.com', subject='s', body='b', session='s', grant_scope='session')
+ok = all(v == 'session' for v in captured.values()) and len(captured) == 5
+print('OK' if ok else f'wrong {captured}')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "ADR-0013 lot 6 : dispatch MCP relaie grant_scope aux 5 fonctions api" \
+  || fail "ADR-0013 lot 6 : dispatch MCP ne relaie pas grant_scope ($out)"
+
+# L6-3) Bout en bout via le VRAI tool api.drive_create (pas _run directement) :
+#       1er acte sur DOSSIER-A demande le geste, 2e acte même dossier passe
+#       SANS geste, un dossier différent redemande.
+out="$(GWSA_ROOT="$TX9" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
+  MAG_TRANSACTIONAL_LEASE_MODE=manuel "$PY" -c "
+import gateway.api as api
+from gateway.sessions import create_session
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None: {'ok': True}
+calls = {'n': 0}; _og = api.run_elicitation_gate
+def _cg(f):
+    calls['n'] += 1
+    return _og(f)
+api.run_elicitation_gate = _cg
+s = create_session(client='l6e2e')
+api.drive_create(alias='alpha', name='f1', parent_id='DOSSIER-A', session=s.session_id, grant_scope='session')
+n1 = calls['n']
+api.drive_create(alias='alpha', name='f2', parent_id='DOSSIER-A', session=s.session_id)  # même dossier, portée par défaut
+n2 = calls['n']
+api.drive_create(alias='alpha', name='f3', parent_id='DOSSIER-B', session=s.session_id)  # dossier différent
+n3 = calls['n']
+print('n1', n1, 'n2', n2, 'n3', n3)
+")"
+[[ "$out" == *"n1 1"* && "$out" == *"n2 1"* && "$out" == *"n3 2"* ]] \
+  && pass "ADR-0013 lot 6 : drive_create câblé de bout en bout — même dossier sans geste, autre dossier redemande" \
+  || fail "ADR-0013 lot 6 : câblage bout en bout de drive_create incorrect ($out)"
+
+# L6-4) Fix P1 : sous-session déléguée + scope=session → l'acte PASSE (Touch ID
+#       déjà consommé), AUCUNE grâce écrite (ni côté racine ni côté enfant),
+#       et surtout aucune exception ne remonte (la mémorisation de la grâce ne
+#       doit jamais faire échouer un acte déjà autorisé).
+out="$(GWSA_ROOT="$TX9" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
+  MAG_TRANSACTIONAL_LEASE_MODE=manuel "$PY" -c "
+import json
+import gateway.api as api
+from gateway.sessions import create_session, create_child_session, session_has_capability
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None: {'ok': True}
+root = create_session(client='l6p1root')
+child = create_child_session(root.session_id, client='l6p1child')
+
+def create_args(folder):
+    return ['drive', 'files', 'create', '--params', json.dumps({'fields': 'id'}),
+            '--json', json.dumps({'name': 'f', 'parents': [folder]})]
+
+exc = None
+try:
+    r = api._run('alpha', create_args('FOLDERDELEG'), session=child.session_id, grant_scope='session')
+    act_ok = r.get('ok') is True
+except Exception as e:
+    exc = repr(e); act_ok = False
+no_cap_root = not session_has_capability(root.session_id, 'alpha', 'drive', 'create', 'FOLDERDELEG')
+no_cap_child = not session_has_capability(child.session_id, 'alpha', 'drive', 'create', 'FOLDERDELEG')
+print('act_ok', act_ok, 'exc', exc, 'no_cap_root', no_cap_root, 'no_cap_child', no_cap_child)
+")"
+[[ "$out" == *"act_ok True"* && "$out" == *"exc None"* \
+   && "$out" == *"no_cap_root True"* && "$out" == *"no_cap_child True"* ]] \
+  && pass "ADR-0013 lot 6, fix P1 : sous-session déléguée + scope=session → acte passe, aucune grâce, pas d'exception" \
+  || fail "ADR-0013 lot 6, fix P1 : sous-session déléguée casse l'acte ou écrit une grâce ($out)"
+
+# L6-5) Fix P2 : une catégorie hors liste blanche (méthode non classée →
+#       categorize() rend None) n'est JAMAIS éligible à la grâce, même avec
+#       scope=session — ni lookup ni écriture (fail-closed par liste blanche).
+out="$(GWSA_ROOT="$TX9" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
+  MAG_TRANSACTIONAL_LEASE_MODE=manuel "$PY" -c "
+import json
+import gateway.api as api
+from gateway.sessions import create_session, active_capabilities
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None: {'ok': True}
+calls = {'n': 0}; _og = api.run_elicitation_gate
+def _cg(f):
+    calls['n'] += 1
+    return _og(f)
+api.run_elicitation_gate = _cg
+s = create_session(client='l6p2')
+
+# méthode non reconnue (ni read/create/update/delete/share) → categorize() = None
+weird_args = ['drive', 'files', 'frobnicate', '--params', json.dumps({'fileId': 'FILEW'})]
+api._run('alpha', weird_args, session=s.session_id, grant_scope='session')
+n1 = calls['n']
+api._run('alpha', weird_args, session=s.session_id, grant_scope='session')
+n2 = calls['n']
+caps_after = active_capabilities(s.session_id, 'alpha', 'drive')
+print('n1', n1, 'n2', n2, 'caps_after', caps_after)
+")"
+[[ "$out" == *"n1 1"* && "$out" == *"n2 2"* && "$out" == *"caps_after []"* ]] \
+  && pass "ADR-0013 lot 6, fix P2 : catégorie inconnue jamais éligible à la grâce (fail-closed)" \
+  || fail "ADR-0013 lot 6, fix P2 : une grâce a été consultée/écrite pour une catégorie inconnue ($out)"
+
+rm -rf "$TX9"
 
 
 # --- Bilan ------------------------------------------------------------------

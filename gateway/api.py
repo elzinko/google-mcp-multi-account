@@ -177,6 +177,21 @@ def _consented_cap(service: str, category: str | None) -> dict[str, str]:
 _GRACE_ELIGIBLE_CATEGORIES = {"read", "create", "update", "delete"}
 
 
+def _is_delegated_session(sid: str) -> bool:
+    """True si `sid` est une sous-session déléguée (pas la racine).
+
+    Seule la session racine peut écrire une grâce
+    (`session_grant_capability_session_lived` refuse sinon avec
+    `GatewayError(code="error")`, cf. `_write_session_capability`). Une
+    sous-session déléguée ne doit donc jamais être déclarée éligible à la
+    grâce « pour la session » (ADR-0013 lot 6, fix P1 latent) — repli
+    fail-closed si la session est illisible ici : `require_session` l'a déjà
+    validée plus haut dans `_run`."""
+    from .sessions import get_session
+    state = get_session(sid)
+    return bool(state and state.delegated)
+
+
 def _normalize_grant_scope(raw: str) -> str:
     """Normalise la portée demandée par l'appel (ADR-0013 §Décision 3).
 
@@ -220,7 +235,14 @@ def _transactional_gate(
 
     # (2) Garde-fou partage EN PREMIER : seul le mode manuel connaît la grâce
     # « pour la session », et seule une catégorie whitelistée y est éligible.
-    grace_eligible = mode == "manuel" and category in _GRACE_ELIGIBLE_CATEGORIES
+    # Garde (a) ADR-0013 lot 6, fix P1 : une sous-session déléguée n'est
+    # jamais éligible — ni au lookup ni à l'écriture — pour ne jamais tenter
+    # une écriture de grâce qu'elle n'a pas le droit de faire.
+    grace_eligible = (
+        mode == "manuel"
+        and category in _GRACE_ELIGIBLE_CATEGORIES
+        and not _is_delegated_session(sid)
+    )
 
     # (3) Grâce déjà accordée pour ce périmètre exact → aucun geste.
     if grace_eligible and session_has_capability(sid, alias, service, category, resource):
@@ -247,8 +269,15 @@ def _transactional_gate(
             raise GatewayError(f"acte refusé — {e}", code="locked") from e
         # (4) Au succès : « pour la session » écrit la grâce — seulement si
         # éligible ET ressource dérivable (repli fail-closed sur « une fois »).
+        # Garde (b) ADR-0013 lot 6, fix P1 : mémoriser la grâce ne doit JAMAIS
+        # faire échouer un acte déjà approuvé (Touch ID déjà consommé) — un
+        # échec d'écriture (ex. concurrence, cas non prévu par la garde (a))
+        # retombe silencieusement sur « une fois » plutôt que de remonter.
         if grace_eligible and scope == "session" and resource:
-            session_grant_capability_session_lived(sid, alias, service, category, resource)
+            try:
+                session_grant_capability_session_lived(sid, alias, service, category, resource)
+            except GatewayError:
+                pass
         return _consented_cap(service, category)
     # Lecture (mode auto) : consommer un slot de bail ATOMIQUEMENT (check +
     # décrément sous verrou) pour ne pas dépasser le budget signé sous concurrence
@@ -400,6 +429,7 @@ def gmail_create_draft(
     body: str,
     cc: str = "",
     session: str = "",
+    grant_scope: str = "once",
 ) -> dict[str, Any]:
     """Crée un brouillon — jamais d'envoi (pas de tool send en v1)."""
     validate_alias(alias)
@@ -434,6 +464,7 @@ def gmail_create_draft(
             "--json", json.dumps(payload),
         ],
         session=session,
+        grant_scope=grant_scope,
     )
     return {"ok": True, "alias": alias, "result": data}
 
@@ -558,6 +589,7 @@ def drive_create(
     content: str = "",
     content_type: str = "",
     session: str = "",
+    grant_scope: str = "once",
 ) -> dict[str, Any]:
     """Crée un fichier sous parent_id — soumis aux zones Drive (policy + grants).
 
@@ -581,7 +613,7 @@ def drive_create(
         "--json", json.dumps(body),
     ]
     if not content:
-        data = _run(alias, args, session=session)
+        data = _run(alias, args, session=session, grant_scope=grant_scope)
         return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
     ctype = _content_type_for(content_type, mime_type)
     with _spooled_content(content, ctype) as path:
@@ -589,6 +621,7 @@ def drive_create(
             alias,
             [*args, "--upload", str(path), "--upload-content-type", ctype],
             session=session,
+            grant_scope=grant_scope,
         )
     return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
 
@@ -699,6 +732,7 @@ def drive_copy(
     parent_id: str,
     name: str = "",
     session: str = "",
+    grant_scope: str = "once",
 ) -> dict[str, Any]:
     """Copie un fichier Drive vers parent_id — soumis aux zones côté destination.
 
@@ -722,6 +756,7 @@ def drive_copy(
             "--json", json.dumps(body),
         ],
         session=session,
+        grant_scope=grant_scope,
     )
     return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
 
@@ -733,6 +768,7 @@ def drive_upload(
     name: str = "",
     mime_type: str = "",
     session: str = "",
+    grant_scope: str = "once",
 ) -> dict[str, Any]:
     """Téléverse un fichier local (binaire compris) — soumis aux zones Drive.
 
@@ -804,6 +840,7 @@ def drive_upload(
             alias,
             [*args, "--upload", str(spool), "--upload-content-type", mime],
             session=session,
+            grant_scope=grant_scope,
         )
     finally:
         try:
@@ -840,6 +877,7 @@ def drive_update(
     content_type: str = "",
     mime_type: str = "",
     session: str = "",
+    grant_scope: str = "once",
 ) -> dict[str, Any]:
     """Met à jour un fichier Drive (nom et/ou contenu) — soumis aux zones.
 
@@ -869,12 +907,14 @@ def drive_update(
         "--json", json.dumps(body),
     ]
     if content is None:
-        data = _run(alias, args, session=session)
+        data = _run(alias, args, session=session, grant_scope=grant_scope)
         return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
     # content = remplacement INTÉGRAL (media upload). On lit d'abord le vrai
     # mimeType : un fichier Google natif ne s'édite pas ainsi (média ≠ contenu
     # structuré) → refus plutôt qu'échec silencieux / corruption d'un binaire
     # (revue F5 / Codex P1). « content » réservé aux fichiers non-natifs.
+    # (lecture incidente, PAS la mutation choisie par l'appelant : la portée
+    # demandée ne s'applique qu'à l'acte d'écriture ci-dessous)
     current = _run(
         alias,
         ["drive", "files", "get", "--params",
@@ -896,6 +936,7 @@ def drive_update(
             alias,
             [*args, "--upload", str(path), "--upload-content-type", ctype],
             session=session,
+            grant_scope=grant_scope,
         )
     return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
 

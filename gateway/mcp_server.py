@@ -61,6 +61,24 @@ _SESSION_PROPERTY: dict[str, Any] = {
     ),
 }
 
+# Portée du consentement transactionnel (ADR-0013 §Décision 3), exposée
+# UNIQUEMENT sur les mutations non-partage : le partage (drive_permissions_*)
+# reste toujours signé par acte (Décision 4, garde-fou — ne jamais l'ajouter
+# à ces tools). Le LLM y relaie le « pour la session » exprimé dans le chat ;
+# c'est l'humain qui confirme en lisant la portée dans le prompt Touch ID.
+_GRANT_SCOPE_PROPERTY: dict[str, Any] = {
+    "type": "string",
+    "enum": ["once", "session"],
+    "default": "once",
+    "description": (
+        "Portée du consentement pour cet acte : « once » = ce seul acte "
+        "(défaut) ; « session » = accepter ce périmètre exact (ce dossier / "
+        "ce fichier précis) jusqu'à la fin de la session — un acte identique "
+        "ne redemandera plus de geste. Sans effet si le consentement "
+        "transactionnel n'est pas actif, ou hors mode manuel."
+    ),
+}
+
 TOOLS: list[dict[str, Any]] = [
     {
         "name": "profiles_list",
@@ -119,6 +137,7 @@ TOOLS: list[dict[str, Any]] = [
                 "body": {"type": "string"},
                 "cc": {"type": "string", "default": ""},
                 "session": _SESSION_PROPERTY,
+                "grant_scope": _GRANT_SCOPE_PROPERTY,
             },
             "required": ["alias", "to", "subject", "body", "session"],
             "additionalProperties": False,
@@ -199,6 +218,7 @@ TOOLS: list[dict[str, Any]] = [
                     ),
                 },
                 "session": _SESSION_PROPERTY,
+                "grant_scope": _GRANT_SCOPE_PROPERTY,
             },
             "required": ["alias", "name", "parent_id", "session"],
             "additionalProperties": False,
@@ -252,6 +272,7 @@ TOOLS: list[dict[str, Any]] = [
                 "parent_id": {"type": "string", "description": "ID du dossier destination autorisé"},
                 "name": {"type": "string", "description": "Nom de la copie (défaut : celui de Drive)"},
                 "session": _SESSION_PROPERTY,
+                "grant_scope": _GRANT_SCOPE_PROPERTY,
             },
             "required": ["alias", "file_id", "parent_id", "session"],
             "additionalProperties": False,
@@ -277,6 +298,7 @@ TOOLS: list[dict[str, Any]] = [
                 "name": {"type": "string", "description": "Nom sur Drive (défaut : nom du fichier)"},
                 "mime_type": {"type": "string", "description": "Type MIME (défaut : deviné de l'extension)"},
                 "session": _SESSION_PROPERTY,
+                "grant_scope": _GRANT_SCOPE_PROPERTY,
             },
             "required": ["alias", "path", "parent_id", "session"],
             "additionalProperties": False,
@@ -342,6 +364,7 @@ TOOLS: list[dict[str, Any]] = [
                     "description": "Type MIME cible si content fourni",
                 },
                 "session": _SESSION_PROPERTY,
+                "grant_scope": _GRANT_SCOPE_PROPERTY,
             },
             "required": ["alias", "file_id", "session"],
             "additionalProperties": False,
@@ -562,6 +585,7 @@ DISPATCH: dict[str, Callable] = {
         body=kw.get("body") or "",
         cc=kw.get("cc") or "",
         session=kw.get("session") or "",
+        grant_scope=kw.get("grant_scope") or "once",
     ),
     "drive_list": lambda **kw: api.drive_list(
         alias=kw["alias"],
@@ -586,6 +610,7 @@ DISPATCH: dict[str, Callable] = {
         parent_id=kw["parent_id"],
         name=kw.get("name") or "",
         session=kw.get("session") or "",
+        grant_scope=kw.get("grant_scope") or "once",
     ),
     "drive_upload": lambda **kw: api.drive_upload(
         alias=kw["alias"],
@@ -594,6 +619,7 @@ DISPATCH: dict[str, Callable] = {
         name=kw.get("name") or "",
         mime_type=kw.get("mime_type") or "",
         session=kw.get("session") or "",
+        grant_scope=kw.get("grant_scope") or "once",
     ),
     "gmail_attachment_get": lambda **kw: api.gmail_attachment_get(
         alias=kw["alias"],
@@ -610,6 +636,7 @@ DISPATCH: dict[str, Callable] = {
         content=kw.get("content") or "",
         content_type=kw.get("content_type") or "",
         session=kw.get("session") or "",
+        grant_scope=kw.get("grant_scope") or "once",
     ),
     "drive_update": lambda **kw: api.drive_update(
         alias=kw["alias"],
@@ -620,6 +647,7 @@ DISPATCH: dict[str, Callable] = {
         content_type=kw.get("content_type") or "",
         mime_type=kw.get("mime_type") or "",
         session=kw.get("session") or "",
+        grant_scope=kw.get("grant_scope") or "once",
     ),
     "drive_permissions_list": lambda **kw: api.drive_permissions_list(
         alias=kw["alias"],
