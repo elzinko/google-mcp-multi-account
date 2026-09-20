@@ -6841,6 +6841,25 @@ print('OK' if S.session_ttl_sec() == 120 else 'wrong:' + str(S.session_ttl_sec()
   || fail "transactionnel : priorité env cassée ($out)"
 rm -rf "$DUR_ROOT"
 
+# 8quater bis) CLI `mag transactional` (ADR-0013 lot 5) : écrit mode + durée, relus
+#              par le code ; root jetable (pas de contamination) ; non-entier refusé.
+TXCLI_ROOT="$(mktemp -d)"
+GWSA_ROOT="$TXCLI_ROOT" "$GWSA" transactional mode auto >/dev/null 2>&1
+GWSA_ROOT="$TXCLI_ROOT" "$GWSA" transactional session-ttl 3600 >/dev/null 2>&1
+out="$(GWSA_ROOT="$TXCLI_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import transactional_lease_mode, session_ttl_sec
+print('OK' if transactional_lease_mode() == 'auto' and session_ttl_sec() == 3600 else 'wrong')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "CLI : mag transactional écrit mode+durée, relus par le code (ADR-0013)" \
+  || fail "CLI : mag transactional non relu ($out)"
+if GWSA_ROOT="$TXCLI_ROOT" "$GWSA" transactional session-ttl pasunentier >/dev/null 2>&1; then
+  fail "CLI : mag transactional session-ttl a accepté un non-entier"
+else
+  pass "CLI : mag transactional refuse une durée non entière (ADR-0013)"
+fi
+rm -rf "$TXCLI_ROOT"
+
 # 9) ADR-0013 lot 1 : Capability.active() accepte la sentinelle expires_at<=0 —
 #    une grâce « pour la session » est active tant que la session vit, et
 #    disparaît avec elle (close_session).

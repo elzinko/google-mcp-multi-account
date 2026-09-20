@@ -24,6 +24,7 @@
 #   mag grants <alias> [clear]                       List/clear temporary authorizations
 #   mag strongauth on|off|status                     Require signed elicitation for unlock & grant
 #   mag elicitation enroll|status                    Enroll biometric key / status
+#   mag transactional status|on|off|mode manuel|auto Transactional consent + lease mode (ADR-0013)
 #   mag admin [stop]                                 Start/stop the web interface (127.0.0.1:4877)
 #   mag broker [status|stop]                         Status/stop the broker for this GWSA_ROOT
 #   mag dev deploy [--isolated]                      Deploy the current clone as a temporary dev version
@@ -178,7 +179,7 @@ check_alias() {
   [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] \
     || die "invalid alias \"$1\" (letters, digits, - and _ only)"
   case "$1" in
-    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth|elicitation|admin|broker|dev|update|release|revert|session|vault|project|sandbox|couloir|wire) die "\"$1\" is a reserved word" ;;
+    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth|elicitation|transactional|admin|broker|dev|update|release|revert|session|vault|project|sandbox|couloir|wire) die "\"$1\" is a reserved word" ;;
   esac
 }
 
@@ -970,6 +971,51 @@ cmd_elicitation() { # mag elicitation enroll|status|in-conversation — clé bio
       esac
       ;;
     *) die "usage: $SELF elicitation enroll [--mock] | status | in-conversation on|off|status" ;;
+  esac
+}
+
+_tx_set_int() { # $1=nom-fichier-marqueur  $2=valeur  $3=label — écrit un réglage entier (ADR-0013)
+  [[ "${2:-}" =~ ^[0-9]+$ ]] || die "usage: $SELF transactional $3 <entier positif>"
+  mkdir -p "$GWSA_ROOT" && chmod 700 "$GWSA_ROOT" 2>/dev/null || true
+  printf '%s' "$2" > "$GWSA_ROOT/$1"
+  echo "✓ $3 = $2"
+}
+
+cmd_transactional() { # mag transactional status|on|off|mode|durées — consentement transactionnel (ADR-0013)
+  local sub="${1:-status}"; shift || true
+  case "$sub" in
+    on)
+      mkdir -p "$GWSA_ROOT" && chmod 700 "$GWSA_ROOT" 2>/dev/null || true
+      touch "$GWSA_ROOT/.transactional-consent"
+      echo "✓ Transactional consent ENABLED (opt-in). Reconnect the MCP client to apply."
+      ;;
+    off) rm -f "$GWSA_ROOT/.transactional-consent"; echo "Transactional consent disabled." ;;
+    mode)
+      case "${1:-}" in
+        manuel|auto)
+          mkdir -p "$GWSA_ROOT" && chmod 700 "$GWSA_ROOT" 2>/dev/null || true
+          printf '%s' "$1" > "$GWSA_ROOT/.transactional-lease-mode"
+          echo "✓ Lease mode: $1"
+          ;;
+        "") [[ -f "$GWSA_ROOT/.transactional-lease-mode" ]] && { cat "$GWSA_ROOT/.transactional-lease-mode"; echo; } || echo "manuel (default)" ;;
+        *) die "usage: $SELF transactional mode manuel|auto" ;;
+      esac
+      ;;
+    session-ttl)       _tx_set_int ".session-ttl-sec"     "${1:-}" "session-ttl" ;;
+    read-lease-ttl)    _tx_set_int ".read-lease-ttl-sec"  "${1:-}" "read-lease-ttl" ;;
+    read-lease-budget) _tx_set_int ".read-lease-budget"   "${1:-}" "read-lease-budget" ;;
+    status)
+      local consent="disabled"; [[ -f "$GWSA_ROOT/.transactional-consent" ]] && consent="enabled"
+      local mode="manuel (default)"; [[ -f "$GWSA_ROOT/.transactional-lease-mode" ]] && mode="$(cat "$GWSA_ROOT/.transactional-lease-mode")"
+      local sttl="28800 (default 8h)"; [[ -f "$GWSA_ROOT/.session-ttl-sec" ]] && sttl="$(cat "$GWSA_ROOT/.session-ttl-sec")"
+      local rttl="90 (default)"; [[ -f "$GWSA_ROOT/.read-lease-ttl-sec" ]] && rttl="$(cat "$GWSA_ROOT/.read-lease-ttl-sec")"
+      local rbud="20 (default)"; [[ -f "$GWSA_ROOT/.read-lease-budget" ]] && rbud="$(cat "$GWSA_ROOT/.read-lease-budget")"
+      echo "transactional consent: $consent"
+      echo "lease mode: $mode"
+      echo "session TTL (s): $sttl"
+      echo "auto lease window (s): $rttl / budget: $rbud"
+      ;;
+    *) die "usage: $SELF transactional status|on|off|mode manuel|auto|session-ttl <s>|read-lease-ttl <s>|read-lease-budget <n>" ;;
   esac
 }
 
@@ -1993,6 +2039,7 @@ main() {
     grants) shift; [[ $# -ge 1 && $# -le 2 ]] || die "usage: $SELF grants <alias> [clear]"; cmd_grants "$@" ;;
     session) shift; cmd_session "$@" ;;
     elicitation) shift; cmd_elicitation "$@" ;;
+    transactional) shift; cmd_transactional "$@" ;;
     project) shift; cmd_project "$@" ;;
     vault) shift; cmd_vault "$@" ;;
     strongauth)
