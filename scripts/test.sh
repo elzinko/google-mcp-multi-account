@@ -6645,9 +6645,9 @@ print('OK' if 1439*60 <= delta <= 1440*60 + 2 else f'wrong:{delta}')
   && pass "transactionnel OFF : minutes écrêté à 1440 (non-régression)" \
   || fail "transactionnel OFF : comportement minutes changé ($out)"
 
-# 2) Flag ON, mode fenetre (défaut) : le bail referme seul au TTL. (config via MAG_)
+# 2) Flag ON, mode auto (ex-fenetre) : le bail referme seul au TTL. (config via MAG_)
 out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_TRANSACTIONAL_LEASE_MODE=fenetre MAG_READ_LEASE_TTL_SEC=1 MAG_READ_LEASE_BUDGET=5 "$PY" -c "
+  MAG_TRANSACTIONAL_LEASE_MODE=auto MAG_READ_LEASE_TTL_SEC=1 MAG_READ_LEASE_BUDGET=5 "$PY" -c "
 import time
 from gateway.sessions import create_session, open_read_lease, is_read_lease_active
 s = create_session(client='txB')
@@ -6658,12 +6658,12 @@ after = is_read_lease_active(s.session_id, 'alpha')
 print('before', before, 'after', after)
 ")"
 [[ "$out" == *"before True"* && "$out" == *"after False"* ]] \
-  && pass "transactionnel fenetre : TTL écoulé referme seul" \
-  || fail "transactionnel fenetre : TTL n'a pas refermé ($out)"
+  && pass "transactionnel auto : TTL écoulé referme seul" \
+  || fail "transactionnel auto : TTL n'a pas refermé ($out)"
 
-# 3) Flag ON, mode fenetre : le bail referme au budget épuisé (avant le TTL).
+# 3) Flag ON, mode auto : le bail referme au budget épuisé (avant le TTL).
 out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_TRANSACTIONAL_LEASE_MODE=fenetre MAG_READ_LEASE_TTL_SEC=90 MAG_READ_LEASE_BUDGET=2 "$PY" -c "
+  MAG_TRANSACTIONAL_LEASE_MODE=auto MAG_READ_LEASE_TTL_SEC=90 MAG_READ_LEASE_BUDGET=2 "$PY" -c "
 from gateway.sessions import create_session, open_read_lease, is_read_lease_active, consume_read_lease
 s = create_session(client='txC')
 open_read_lease(s.session_id, 'alpha')
@@ -6672,40 +6672,55 @@ consume_read_lease(s.session_id, 'alpha'); after = is_read_lease_active(s.sessio
 print('mid', mid, 'after', after)
 ")"
 [[ "$out" == *"mid True"* && "$out" == *"after False"* ]] \
-  && pass "transactionnel fenetre : budget épuisé referme seul (avant TTL)" \
-  || fail "transactionnel fenetre : budget non appliqué ($out)"
+  && pass "transactionnel auto : budget épuisé referme seul (avant TTL)" \
+  || fail "transactionnel auto : budget non appliqué ($out)"
 
-# 4) Zone 4 mode=session : survit au TTL court, meurt au budget.
-out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_TRANSACTIONAL_LEASE_MODE=session MAG_READ_LEASE_TTL_SEC=1 MAG_READ_LEASE_BUDGET=2 "$PY" -c "
-import time
-from gateway.sessions import create_session, open_read_lease, is_read_lease_active, consume_read_lease
-s = create_session(client='txSess')
-open_read_lease(s.session_id, 'alpha')
-time.sleep(1.2)  # au-delà du TTL fenetre — en mode session, ne referme PAS
-survived = is_read_lease_active(s.session_id, 'alpha')
-consume_read_lease(s.session_id, 'alpha'); consume_read_lease(s.session_id, 'alpha')
-after_budget = is_read_lease_active(s.session_id, 'alpha')
-print('survived', survived, 'after_budget', after_budget)
+# 4) ADR-0013 lot 2 : les 3 mappings de compat (fenetre→auto, session→manuel,
+#    absent/inconnu→manuel) — le mode ``session`` global disparaît.
+out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import transactional_lease_mode
+import os
+os.environ['MAG_TRANSACTIONAL_LEASE_MODE'] = 'fenetre'
+a = transactional_lease_mode()
+os.environ['MAG_TRANSACTIONAL_LEASE_MODE'] = 'session'
+b = transactional_lease_mode()
+os.environ['MAG_TRANSACTIONAL_LEASE_MODE'] = 'nimportequoi'
+c = transactional_lease_mode()
+os.environ.pop('MAG_TRANSACTIONAL_LEASE_MODE', None)
+d = transactional_lease_mode()
+os.environ['MAG_TRANSACTIONAL_LEASE_MODE'] = 'auto'
+e = transactional_lease_mode()
+os.environ['MAG_TRANSACTIONAL_LEASE_MODE'] = 'manuel'
+f = transactional_lease_mode()
+print('fenetre->', a, 'session->', b, 'inconnu->', c, 'absent->', d, 'auto=', e, 'manuel=', f)
 ")"
-[[ "$out" == *"survived True"* && "$out" == *"after_budget False"* ]] \
-  && pass "transactionnel session : survit au TTL court, meurt au budget (filet)" \
-  || fail "transactionnel session : durée de vie incorrecte ($out)"
+[[ "$out" == *"fenetre-> auto"* && "$out" == *"session-> manuel"* \
+   && "$out" == *"inconnu-> manuel"* && "$out" == *"absent-> manuel"* \
+   && "$out" == *"auto= auto"* && "$out" == *"manuel= manuel"* ]] \
+  && pass "transactionnel lot 2 : mapping compat fenetre→auto, session→manuel, inconnu/absent→manuel" \
+  || fail "transactionnel lot 2 : mapping compat cassé ($out)"
 
-# 4bis) Zone 4 mode=session : le bail meurt AVEC la session (close_session).
-out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_TRANSACTIONAL_LEASE_MODE=session "$PY" -c "
-from gateway.sessions import create_session, open_read_lease, is_read_lease_active, close_session
-s = create_session(client='txSess2')
-open_read_lease(s.session_id, 'alpha')
-before = is_read_lease_active(s.session_id, 'alpha')
-close_session(s.session_id)
-after = is_read_lease_active(s.session_id, 'alpha')
-print('before', before, 'after', after)
+# 4bis) ADR-0013 lot 2 : un bail RÉSIDUEL sans borne de temps (ancien mode
+#       ``session``, expires_at<=0) est TOUJOURS neutralisé — que le mode
+#       courant soit auto ou manuel (le mode global ``session`` n'existe plus).
+out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, is_read_lease_active, ReadLease, _load_active, _save, _lock_path
+from gateway._filelock import file_lock
+s = create_session(client='txResid')
+with file_lock(_lock_path(s.session_id)):
+    st = _load_active(s.session_id)
+    st.read_leases['alpha'] = ReadLease(expires_at=0.0, budget=5)  # résidu ancien mode 'session'
+    _save(st)
+import os
+os.environ['MAG_TRANSACTIONAL_LEASE_MODE'] = 'auto'
+under_auto = is_read_lease_active(s.session_id, 'alpha')
+os.environ['MAG_TRANSACTIONAL_LEASE_MODE'] = 'manuel'
+under_manuel = is_read_lease_active(s.session_id, 'alpha')
+print('under_auto', under_auto, 'under_manuel', under_manuel)
 ")"
-[[ "$out" == *"before True"* && "$out" == *"after False"* ]] \
-  && pass "transactionnel session : le bail disparaît avec la session (close)" \
-  || fail "transactionnel session : bail survit à la fermeture de session ($out)"
+[[ "$out" == *"under_auto False"* && "$out" == *"under_manuel False"* ]] \
+  && pass "transactionnel lot 2 : bail résiduel sans borne (ex-mode session) neutralisé, quel que soit le mode" \
+  || fail "transactionnel lot 2 : bail résiduel sans borne encore actif ($out)"
 
 # 5) Zone 4 mode=manuel : open_read_lease n'ouvre AUCUN bail.
 out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 \
@@ -6737,17 +6752,17 @@ print(transactional_lease_mode())
 [[ "$out" == "manuel" ]] \
   && pass "transactionnel : mode inconnu → repli fail-closed sur manuel (le plus strict)" \
   || fail "transactionnel : mode inconnu mal replié ($out)"
-out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" GWSA_TRANSACTIONAL_LEASE_MODE=session "$PY" -c "
+out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" GWSA_TRANSACTIONAL_LEASE_MODE=fenetre "$PY" -c "
 from gateway.sessions import transactional_lease_mode
 print(transactional_lease_mode())
 ")"
-[[ "$out" == "session" ]] \
-  && pass "transactionnel : mode lu aussi via GWSA_ (compat bi-nom)" \
+[[ "$out" == "auto" ]] \
+  && pass "transactionnel : mode lu aussi via GWSA_ (compat bi-nom), avec mapping fenetre→auto" \
   || fail "transactionnel : repli GWSA_ du mode cassé ($out)"
 
 # 7) Zone 2 : consommation ATOMIQUE — 24 process concurrents, budget 3 → exactement 3.
 out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_TRANSACTIONAL_LEASE_MODE=fenetre MAG_READ_LEASE_TTL_SEC=90 MAG_READ_LEASE_BUDGET=3 "$PY" -c "
+  MAG_TRANSACTIONAL_LEASE_MODE=auto MAG_READ_LEASE_TTL_SEC=90 MAG_READ_LEASE_BUDGET=3 "$PY" -c "
 import multiprocessing as mp
 from gateway.sessions import create_session, open_read_lease, try_consume_read_lease
 s = create_session(client='txRace'); sid = s.session_id
@@ -6838,7 +6853,7 @@ GWSA_ROOT="$TX2" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev
 # G1) Gate lecture : bail actif ne redemande rien ; budget épuisé rouvre (geste) ;
 #     la capacité consentie {service, catégorie} voyage bien jusqu'au broker.
 out="$(GWSA_ROOT="$TX2" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_TRANSACTIONAL_LEASE_MODE=fenetre MAG_READ_LEASE_BUDGET=2 "$PY" -c "
+  MAG_TRANSACTIONAL_LEASE_MODE=auto MAG_READ_LEASE_BUDGET=2 "$PY" -c "
 import gateway.api as api
 from gateway.sessions import create_session
 caps = []
@@ -6861,7 +6876,7 @@ print('n1', n1, 'n2', n2, 'n3', n3, 'cap', caps[0])
 
 # G2) Gate lecture : bail fermé + geste REFUSÉ → refus fail-closed (jamais d'accès).
 out="$(GWSA_ROOT="$TX2" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_TRANSACTIONAL_LEASE_MODE=fenetre MAG_READ_LEASE_BUDGET=1 "$PY" -c "
+  MAG_TRANSACTIONAL_LEASE_MODE=auto MAG_READ_LEASE_BUDGET=1 "$PY" -c "
 import gateway.api as api
 import gateway.elicitation as elic
 from gateway.sessions import create_session
@@ -7138,20 +7153,26 @@ print('get_none', g is None, 'raised', raised, 'noleak', not leaked)
   && pass "transactionnel sécu : session_id piégé rejeté, aucun fichier hors .sessions (Codex #149 P2)" \
   || fail "transactionnel sécu : traversée de chemin via session_id ($out)"
 
-# F3) Bascule de mode : un bail ouvert en session (sans borne de temps) devient
-#     inutilisable dès qu'on repasse en fenetre (le TTL court reprend).
-out="$(GWSA_ROOT="$TX4" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_TRANSACTIONAL_LEASE_MODE=session "$PY" -c "
+# F3) ADR-0013 : le mode global ``session`` est retiré — un bail SANS borne de
+#     temps (résidu de l'ancien mode, expires_at<=0) reste inutilisable après
+#     bascule de mode (auto → manuel ou l'inverse), jamais réactivé.
+out="$(GWSA_ROOT="$TX4" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 "$PY" -c "
 import os
-from gateway.sessions import create_session, open_read_lease, is_read_lease_active
-s = create_session(client='sw'); open_read_lease(s.session_id, 'alpha')
-before = is_read_lease_active(s.session_id, 'alpha')
-os.environ['MAG_TRANSACTIONAL_LEASE_MODE'] = 'fenetre'   # bascule session → fenetre
-after = is_read_lease_active(s.session_id, 'alpha')
-print('before', before, 'after', after)
+from gateway.sessions import create_session, is_read_lease_active, ReadLease, _load_active, _save, _lock_path
+from gateway._filelock import file_lock
+s = create_session(client='sw')
+with file_lock(_lock_path(s.session_id)):
+    st = _load_active(s.session_id)
+    st.read_leases['alpha'] = ReadLease(expires_at=0.0, budget=5)
+    _save(st)
+os.environ['MAG_TRANSACTIONAL_LEASE_MODE'] = 'auto'
+under_auto = is_read_lease_active(s.session_id, 'alpha')
+os.environ['MAG_TRANSACTIONAL_LEASE_MODE'] = 'manuel'
+under_manuel = is_read_lease_active(s.session_id, 'alpha')
+print('under_auto', under_auto, 'under_manuel', under_manuel)
 ")"
-[[ "$out" == *"before True"* && "$out" == *"after False"* ]] \
-  && pass "transactionnel : bail session devient inutilisable après bascule en fenetre (Codex #149 P2)" \
+[[ "$out" == *"under_auto False"* && "$out" == *"under_manuel False"* ]] \
+  && pass "transactionnel : bail sans borne (ex-mode session, retiré) jamais réactivé, quel que soit le mode (Codex #149 P2 / ADR-0013)" \
   || fail "transactionnel : bail timeless survit à la bascule de mode ($out)"
 
 # F1) Broker/gateway sync : le mode est porté par la REQUÊTE (la gateway est

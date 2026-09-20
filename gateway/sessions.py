@@ -32,7 +32,11 @@ TRANSACTIONAL_FLAG_NAME = ".transactional-consent"
 LEASE_MODE_FLAG_NAME = ".transactional-lease-mode"
 DEFAULT_READ_LEASE_TTL_SEC = 90
 DEFAULT_READ_LEASE_BUDGET = 20
-LEASE_MODES = ("fenetre", "session", "manuel")
+# ADR-0013 (raffine ADR-0012 Zone 4) : deux modes seulement. Le mode global
+# ``session`` est retiré — la portée « pour la session » devient un choix PAR
+# ACTE (grâce, cf. `session_grant_capability_session_lived`), plus un mode
+# global de durée de bail.
+LEASE_MODES = ("auto", "manuel")
 
 
 def transactional_flag_path() -> Path:
@@ -49,19 +53,24 @@ def transactional_enabled() -> bool:
 
 
 def transactional_lease_mode() -> str:
-    """Durée de vie du bail de lecture (ADR-0012, Zone 4) — mode configurable :
+    """Durée de vie du bail de lecture (ADR-0013, raffine ADR-0012 Zone 4) —
+    mode configurable, DEUX valeurs seulement :
 
-    - ``manuel`` (**défaut**) : pas de bail — CHAQUE lecture est signée. Un droit,
-      une action : le LLM ne peut jamais faire plus que l'acte approuvé (décision
-      Thomas 2026-09-17). Le plus strict.
-    - ``fenetre`` : bail = fenêtre courte (TTL) ET budget, au premier atteint —
-      groupage confort, opt-in explicite.
-    - ``session`` : bail vit aussi longtemps que la session, budget en filet.
+    - ``manuel`` (**défaut**) : par acte. Chaque acte (lecture ou écriture) est
+      signé, sans aucun bail groupé. « Pour la session » y devient un choix
+      PAR ACTE (grâce scopée à la ressource, cf. `session_has_capability` /
+      `session_grant_capability_session_lived`), jamais un mode global.
+    - ``auto`` (ex-``fenetre``) : les LECTURES sont groupées sous un bail
+      (fenêtre TTL ET budget, au premier atteint) — confort, opt-in explicite.
+      Les écritures restent signées par acte, sans grâce session (Décision 5).
 
     Lu via MAG_/GWSA_TRANSACTIONAL_LEASE_MODE, puis le marqueur fichier
-    ``.transactional-lease-mode`` (posé par l'admin). Repli fail-closed sur
-    ``manuel`` (le plus strict) si la valeur est absente, illisible ou inconnue :
-    seul un opt-in explicite ``fenetre``/``session`` desserre la lecture."""
+    ``.transactional-lease-mode`` (posé par l'admin). Compat des valeurs
+    héritées (ADR-0012, 3 modes) : ``fenetre`` → ``auto`` ; ``session`` →
+    ``manuel`` (le plus strict — on ne fait jamais hériter silencieusement un
+    desserrage de lecture). Repli fail-closed sur ``manuel`` si la valeur est
+    absente, illisible ou inconnue : seul un opt-in explicite ``auto``
+    desserre la lecture."""
     val = (env("TRANSACTIONAL_LEASE_MODE") or "").strip().lower()
     if not val:
         try:
@@ -69,6 +78,10 @@ def transactional_lease_mode() -> str:
             val = p.read_text(encoding="utf-8").strip().lower() if p.is_file() else ""
         except OSError:
             val = ""
+    if val == "fenetre":
+        return "auto"
+    if val == "session":
+        return "manuel"
     return val if val in LEASE_MODES else "manuel"
 
 
@@ -175,11 +188,12 @@ class ReadLease:
     Deux bornes : le temps (`expires_at`) et le `budget` d'opérations. La
     convention de `expires_at` encode le mode de durée de vie :
 
-    - ``expires_at > 0`` : borne de temps active (mode ``fenetre``) — le bail
+    - ``expires_at > 0`` : borne de temps active (mode ``auto``) — le bail
       referme dès `expires_at` OU budget épuisé, au premier des deux.
-    - ``expires_at <= 0`` : PAS de borne de temps propre (mode ``session``) — le
-      bail ne meurt qu'avec son budget ou avec la session (son fichier est
-      supprimé à la fermeture/expiration de session, emportant le bail).
+    - ``expires_at <= 0`` : PAS de borne de temps propre — l'ancien mode
+      global ``session`` qui produisait cette forme est RETIRÉ par ADR-0013 ;
+      un bail dans cet état est désormais toujours neutralisé par
+      `_lease_usable` (repli fail-closed sur un éventuel résidu).
 
     Le retrait ne dépend JAMAIS d'un geste du LLM : il se calcule ici, à chaque
     appel, depuis le temps et le budget (ADR-0011 §Décision 3)."""
@@ -492,28 +506,31 @@ def session_unlock(session_id: str, alias: str, minutes: int) -> SessionState:
 
 
 def _lease_usable(lease: ReadLease | None) -> bool:
-    """Un bail est-il exploitable MAINTENANT ? Actif (TTL/budget) ET cohérent avec
-    le mode courant. Bascule fail-closed (Codex #149, P2) : un bail « session »
-    (sans borne de temps, `expires_at<=0`) devient inutilisable dès que le mode
-    effectif n'est plus `session` (retour à `fenetre`, ou valeur invalide qui s'y
-    replie) — le TTL court reprend ses droits, on ne garde pas un bail éternel."""
+    """Un bail est-il exploitable MAINTENANT ? Actif (TTL/budget) ET borné dans
+    le temps. ADR-0013 retire le mode global ``session`` : un bail sans borne
+    de temps propre (`expires_at<=0`) — qu'il vienne d'un ancien fichier de
+    session écrit avant ce lot, ou de toute autre origine — est TOUJOURS
+    neutralisé, quel que soit le mode courant (fail-closed, mêmes principes
+    que Codex #149 P2 : on ne garde jamais un bail éternel). Seul ``auto``
+    ouvre encore un bail, et il est systématiquement borné en temps
+    (`open_read_lease`)."""
     if lease is None or not lease.active():
         return False
-    if lease.expires_at <= 0.0 and transactional_lease_mode() != "session":
+    if lease.expires_at <= 0.0:
         return False
     return True
 
 
 def open_read_lease(session_id: str, alias: str) -> SessionState:
-    """Ouvre un bail de lecture pour (session, alias) selon le mode de durée de
-    vie (ADR-0012, Zone 4). Un nouveau consentement REMPLACE tout bail existant
-    sur cet alias — il ne le prolonge jamais. RMW sous le verrou unique.
+    """Ouvre un bail de lecture pour (session, alias) selon le mode courant
+    (ADR-0013, raffine ADR-0012 Zone 4). Un nouveau consentement REMPLACE tout
+    bail existant sur cet alias — il ne le prolonge jamais. RMW sous le verrou
+    unique.
 
-    - ``fenetre`` : borne de temps (TTL) + budget.
-    - ``session`` : pas de borne de temps propre (`expires_at = 0`) — le bail vit
-      avec la session ; le budget reste comme filet.
+    - ``auto`` (ex-``fenetre``) : borne de temps (TTL) + budget.
     - ``manuel``  : aucun bail ouvert (chaque lecture est signée en amont) ; on
-      efface un éventuel bail résiduel.
+      efface un éventuel bail résiduel (y compris un bail sans borne de temps
+      hérité de l'ancien mode ``session``, retiré par cet ADR).
     """
     if not _session_exists(session_id):
         raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
@@ -525,9 +542,8 @@ def open_read_lease(session_id: str, alias: str) -> SessionState:
         if mode == "manuel":
             state.read_leases.pop(alias, None)
         else:
-            expires_at = (time.time() + read_lease_ttl_sec()) if mode == "fenetre" else 0.0
             state.read_leases[alias] = ReadLease(
-                expires_at=expires_at, budget=read_lease_budget()
+                expires_at=time.time() + read_lease_ttl_sec(), budget=read_lease_budget()
             )
         state.touch()
         _save(state)
