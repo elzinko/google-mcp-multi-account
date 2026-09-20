@@ -6777,6 +6777,56 @@ print('OK' if delta <= 2*60 + 2 else f'wrong:{delta}')
   && pass "transactionnel ON : minutes écrêté au plafond du bail (déprécié), pas 1440" \
   || fail "transactionnel ON : minutes non écrêté au plafond ($out)"
 
+# 9) ADR-0013 lot 1 : Capability.active() accepte la sentinelle expires_at<=0 —
+#    une grâce « pour la session » est active tant que la session vit, et
+#    disparaît avec elle (close_session).
+out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import (
+    create_session, close_session, session_grant_capability_session_lived,
+    session_has_capability,
+)
+s = create_session(client='txCapSess')
+session_grant_capability_session_lived(s.session_id, 'alpha', 'drive', 'create', 'FOLDER1')
+before = session_has_capability(s.session_id, 'alpha', 'drive', 'create', 'FOLDER1')
+close_session(s.session_id)
+after = session_has_capability(s.session_id, 'alpha', 'drive', 'create', 'FOLDER1')
+print('before', before, 'after', after)
+")"
+[[ "$out" == *"before True"* && "$out" == *"after False"* ]] \
+  && pass "transactionnel lot 1 : capacité sentinelle (expires_at=0) active tant que la session vit, meurt avec elle" \
+  || fail "transactionnel lot 1 : capacité sentinelle mal gérée ($out)"
+
+# 9bis) Non-régression : une capacité à TTL (session_grant_capability, octroi
+#       humain) expire toujours normalement — additif, pas de régression.
+out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import time
+from gateway.sessions import create_session, session_grant_capability, session_has_capability
+s = create_session(client='txCapTTL')
+session_grant_capability(s.session_id, 'alpha', 'drive', 'create', 'FOLDER1', hours=1)
+active_now = session_has_capability(s.session_id, 'alpha', 'drive', 'create', 'FOLDER1')
+# Capacité TTL classique : expires_at > now, jamais <= 0 — vérifié directement.
+from gateway.sessions import get_session
+cap = [c for c in get_session(s.session_id).capabilities if c.resource == 'FOLDER1'][0]
+print('active_now', active_now, 'expires_positive', cap.expires_at > time.time())
+")"
+[[ "$out" == *"active_now True"* && "$out" == *"expires_positive True"* ]] \
+  && pass "transactionnel lot 1 : non-régression — capacité à TTL (octroi humain) garde une expiry positive" \
+  || fail "transactionnel lot 1 : capacité à TTL régressée ($out)"
+
+# 9ter) list_sessions affiche « vit avec la session » pour une cap sentinelle,
+#       jamais un minutes_left négatif.
+out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, session_grant_capability_session_lived, list_sessions
+s = create_session(client='txCapList')
+session_grant_capability_session_lived(s.session_id, 'alpha', 'drive', 'create', 'FOLDER1')
+row = [r for r in list_sessions() if r['session_id'] == s.session_id][0]
+cap = row['capabilities'][0]
+print('minutes_left', repr(cap['minutes_left']))
+")"
+[[ "$out" == *"minutes_left 'vit avec la session'"* ]] \
+  && pass "transactionnel lot 1 : list_sessions affiche « vit avec la session » (pas de minutes_left négatif)" \
+  || fail "transactionnel lot 1 : rendu list_sessions incorrect pour une cap sentinelle ($out)"
+
 rm -rf "$TX_ROOT"
 
 section "Consentement transactionnel — Zone 1 : cap→policy + gate (ADR-0012 lot 2)"

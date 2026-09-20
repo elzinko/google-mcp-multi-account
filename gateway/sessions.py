@@ -210,10 +210,19 @@ class Capability:
     expires_at: float = 0.0
 
     def active(self, now: float | None = None) -> bool:
+        """Actif si compte/service/opération sont posés ET pas expirée.
+
+        ``expires_at <= 0`` encode « pas de borne de temps propre » (ADR-0013
+        §Décision 1 — même convention sentinelle que `ReadLease.active`) : la
+        capacité vit tant que le fichier de session existe (grâce « pour la
+        session », écrite par `session_grant_capability_session_lived`), et
+        disparaît avec lui (TTL d'inactivité ou `close_session`). Une
+        capacité à TTL classique (`session_grant_capability`, expires_at > 0)
+        expire normalement — additif, non-régression."""
         t = now if now is not None else time.time()
         return (
             bool(self.account) and bool(self.service) and bool(self.operation)
-            and self.expires_at > t
+            and (self.expires_at <= 0.0 or self.expires_at > t)
         )
 
 
@@ -730,26 +739,24 @@ def is_session_unlocked(session_id: str, alias: str) -> bool:
     return _effective_unlocks(state).get(alias, 0.0) > now
 
 
-def session_grant_capability(
+def _write_session_capability(
     session_id: str,
     account: str,
     service: str,
     operation: str,
-    resource: str = "",
-    hours: int = 8,
+    resource: str,
+    expires_at: float,
 ) -> SessionState:
-    """Octroie une capacité fine (compte, service, opération, ressource?) à une session.
+    """RMW partagé (verrou unique, ADR-0012 Zone 2) : remplace la capacité du
+    quadruplet (compte, service, opération, ressource) par une nouvelle,
+    d'expiry `expires_at` (dédoublonnage — jamais deux capacités pour le même
+    quadruplet). Brique commune à `session_grant_capability` (octroi humain à
+    TTL, INCHANGÉ) et `session_grant_capability_session_lived` (grâce « pour
+    la session », ADR-0013) : même écriture, seule la borne de temps diffère.
 
     Réservé à la session racine — une sous-session déléguée ne peut pas
     s'élargir elle-même (même règle que `session_unlock` / `session_grant_drive`).
     """
-    account = account.strip()
-    service = service.strip().lower()
-    operation = operation.strip().lower()
-    resource = resource.strip()
-    if not account or not service or not operation:
-        raise GatewayError("account/service/operation requis", code="error")
-    # RMW sous le verrou unique (ADR-0012, Zone 2).
     if not _session_exists(session_id):
         raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
     with file_lock(_lock_path(session_id)):
@@ -762,8 +769,6 @@ def session_grant_capability(
                 "seule la session racine (ou l'humain) peut accorder une capacité",
                 code="error",
             )
-        h = max(1, min(int(hours), 168))
-        expires = time.time() + h * 3600
         caps = [
             c
             for c in state.capabilities
@@ -777,13 +782,60 @@ def session_grant_capability(
         caps.append(
             Capability(
                 account=account, service=service, operation=operation,
-                resource=resource, expires_at=expires,
+                resource=resource, expires_at=expires_at,
             )
         )
         state.capabilities = caps
         state.touch()
         _save(state)
         return state
+
+
+def session_grant_capability(
+    session_id: str,
+    account: str,
+    service: str,
+    operation: str,
+    resource: str = "",
+    hours: int = 8,
+) -> SessionState:
+    """Octroie une capacité fine (compte, service, opération, ressource?) à une
+    session, à DURÉE bornée (1-168 h). Octroi HUMAIN (`mag session grant-cap` /
+    admin) — inchangé par ADR-0013 : seul `session_grant_capability_session_lived`
+    (chemin dédié à la grâce transactionnelle) écrit la sentinelle sans borne."""
+    account = account.strip()
+    service = service.strip().lower()
+    operation = operation.strip().lower()
+    resource = resource.strip()
+    if not account or not service or not operation:
+        raise GatewayError("account/service/operation requis", code="error")
+    h = max(1, min(int(hours), 168))
+    expires = time.time() + h * 3600
+    return _write_session_capability(session_id, account, service, operation, resource, expires)
+
+
+def session_grant_capability_session_lived(
+    session_id: str,
+    account: str,
+    service: str,
+    operation: str,
+    resource: str = "",
+) -> SessionState:
+    """Écrit la grâce « pour la session » (ADR-0013 §Décisions 1/2) : capacité
+    SANS borne de temps propre (`expires_at=0.0`, sentinelle acceptée par
+    `Capability.active`) — elle vit tant que le fichier de session existe et
+    disparaît avec lui (TTL d'inactivité ou `close_session`). Chemin DÉDIÉ à
+    la grâce transactionnelle, distinct de `session_grant_capability` (octroi
+    humain à TTL, INCHANGÉ) : appelé uniquement par `_transactional_gate`
+    (gateway/api.py) au succès d'un geste dont la portée choisie est
+    ``session`` et la ressource dérivable."""
+    account = account.strip()
+    service = service.strip().lower()
+    operation = operation.strip().lower()
+    resource = resource.strip()
+    if not account or not service or not operation:
+        raise GatewayError("account/service/operation requis", code="error")
+    return _write_session_capability(session_id, account, service, operation, resource, 0.0)
 
 
 def active_capabilities(session_id: str, account: str, service: str = "") -> list[Capability]:
@@ -966,6 +1018,14 @@ def list_sessions(*, include_expired_zones: bool = False) -> list[dict[str, Any]
         caps_live: list[dict[str, Any]] = []
         for cap in state.capabilities:
             if cap.active(now):
+                # Sentinelle « pour la session » (ADR-0013 §Décision 1,
+                # expires_at<=0) : pas de minutes_left négatif — la capacité
+                # vit avec la session, jamais une durée propre.
+                minutes_left: Any = (
+                    "vit avec la session"
+                    if cap.expires_at <= 0.0
+                    else max(0, int((cap.expires_at - now) / 60))
+                )
                 caps_live.append(
                     {
                         "account": cap.account,
@@ -973,7 +1033,7 @@ def list_sessions(*, include_expired_zones: bool = False) -> list[dict[str, Any]
                         "operation": cap.operation,
                         "resource": cap.resource,
                         "expires_at": cap.expires_at,
-                        "minutes_left": max(0, int((cap.expires_at - now) / 60)),
+                        "minutes_left": minutes_left,
                     }
                 )
         children = 0
