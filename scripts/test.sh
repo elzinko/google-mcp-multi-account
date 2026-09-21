@@ -3387,6 +3387,18 @@ if [[ "$admin_ready" -eq 1 ]]; then
     && pass "admin POST /api/transactional/settings : écrit les 3 durées via mag" \
     || fail "admin POST settings ($tx_settings sttl=$sttl_file rttl=$rttl_file rbud=$rbud_file)"
 
+  # Compat legacy (Codex #150 P1) : un marqueur hérité « fenetre » doit s'afficher
+  # « auto » (comme gateway/sessions.py::transactional_lease_mode), « session » →
+  # « manuel » — jamais le défaut brut (sinon le panneau ment sur le mode effectif).
+  printf 'fenetre' > "$SESS_ROOT/.transactional-lease-mode"
+  tx_leg_f="$(curl -sf -H 'X-GWSA-Admin: 1' "http://127.0.0.1:$ADMIN_PORT/api/transactional")"
+  printf 'session' > "$SESS_ROOT/.transactional-lease-mode"
+  tx_leg_s="$(curl -sf -H 'X-GWSA-Admin: 1' "http://127.0.0.1:$ADMIN_PORT/api/transactional")"
+  printf 'auto' > "$SESS_ROOT/.transactional-lease-mode"   # restaure l'état du bloc
+  [[ "$tx_leg_f" == *'"mode":"auto"'* && "$tx_leg_s" == *'"mode":"manuel"'* ]] \
+    && pass "admin GET /api/transactional : mappe les valeurs héritées (fenetre→auto, session→manuel, Codex #150)" \
+    || fail "admin GET legacy mapping (fenetre=$tx_leg_f session=$tx_leg_s)"
+
   code_settings_bad="$(curl -s -o /dev/null -w '%{http_code}' \
     -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
     -X POST -d '{"session_ttl_sec":"abc"}' "http://127.0.0.1:$ADMIN_PORT/api/transactional/settings")"

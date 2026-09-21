@@ -567,7 +567,12 @@ const TX_DEFAULTS = {
 function readTransactionalState() {
   const consent = fs.existsSync(path.join(ROOT, ".transactional-consent"));
   const modeRaw = readText(path.join(ROOT, ".transactional-lease-mode"));
-  const mode = TX_MODES.includes(modeRaw) ? modeRaw : "manuel";
+  // Compat des valeurs héritées — miroir EXACT de gateway/sessions.py::transactional_lease_mode :
+  // fenetre → auto, session → manuel ; sinon validé contre TX_MODES, repli manuel. Sans ça, un
+  // marqueur legacy « fenetre » s'afficherait « manuel » alors que la gateway le lit « auto »
+  // (le panneau mentirait — Codex #150 P1).
+  const modeMapped = modeRaw === "fenetre" ? "auto" : modeRaw === "session" ? "manuel" : modeRaw;
+  const mode = TX_MODES.includes(modeMapped) ? modeMapped : "manuel";
   const readInt = (file, fallback) => {
     const txt = readText(path.join(ROOT, file));
     const n = parseInt(txt, 10);
