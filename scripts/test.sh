@@ -3363,6 +3363,14 @@ if [[ "$admin_ready" -eq 1 ]]; then
     && pass "admin POST /api/transactional/consent {enabled:true} : active via mag" \
     || fail "admin POST consent on ($tx_on)"
 
+  # Codex #150 P2 : mode de sécurité → un `enabled` non booléen (ex. chaîne "false")
+  # est rejeté (400), jamais interprété en silence.
+  code_consent_bad="$(curl -s -o /dev/null -w '%{http_code}' -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
+    -X POST -d '{"enabled":"false"}' "http://127.0.0.1:$ADMIN_PORT/api/transactional/consent")"
+  [[ "$code_consent_bad" == "400" ]] \
+    && pass "admin POST consent : rejette un enabled non booléen (fail-closed, Codex #150)" \
+    || fail "admin POST consent non booléen (code=$code_consent_bad)"
+
   tx_mode="$(curl -sf -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
     -X POST -d '{"mode":"auto"}' "http://127.0.0.1:$ADMIN_PORT/api/transactional/mode")"
   mode_file="$(cat "$SESS_ROOT/.transactional-lease-mode" 2>/dev/null || true)"

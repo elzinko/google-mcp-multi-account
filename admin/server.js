@@ -577,7 +577,10 @@ function readTransactionalState() {
   const consentEnv = txEnvFirst("TRANSACTIONAL_CONSENT").toLowerCase();
   const consent = ["1", "true", "yes"].includes(consentEnv)
     || fs.existsSync(path.join(ROOT, ".transactional-consent"));
-  const modeRaw = txEnvFirst("TRANSACTIONAL_LEASE_MODE") || readText(path.join(ROOT, ".transactional-lease-mode"));
+  // .toLowerCase() comme gateway/sessions.py (qui fait .strip().lower()) : sinon un
+  // override MAG_TRANSACTIONAL_LEASE_MODE=AUTO serait rejeté ici et affiché « manuel »
+  // alors que la gateway tourne en « auto » (Codex #150 P2).
+  const modeRaw = (txEnvFirst("TRANSACTIONAL_LEASE_MODE") || readText(path.join(ROOT, ".transactional-lease-mode"))).toLowerCase();
   const modeMapped = modeRaw === "fenetre" ? "auto" : modeRaw === "session" ? "manuel" : modeRaw;
   const mode = TX_MODES.includes(modeMapped) ? modeMapped : "manuel";
   // Miroir de gateway/sessions.py::_int_setting : raw vide → défaut ; sinon max(1, n) ;
@@ -776,6 +779,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && p === "/api/transactional/consent") {
       const b = await readBody(req);
+      // Mode de sécurité : exiger un booléen strict — sinon `enabled` absent passerait
+      // pour « off » et une chaîne « "false" » (truthy) pour « on » (Codex #150 P2).
+      if (typeof b.enabled !== "boolean") return send(res, 400, { error: "enabled requis (booléen true/false)" });
       const r = await mag(["transactional", b.enabled ? "on" : "off"]);
       return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).trim() });
     }
