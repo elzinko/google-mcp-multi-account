@@ -137,7 +137,6 @@ TOOLS: list[dict[str, Any]] = [
                 "body": {"type": "string"},
                 "cc": {"type": "string", "default": ""},
                 "session": _SESSION_PROPERTY,
-                "grant_scope": _GRANT_SCOPE_PROPERTY,
             },
             "required": ["alias", "to", "subject", "body", "session"],
             "additionalProperties": False,
@@ -585,7 +584,6 @@ DISPATCH: dict[str, Callable] = {
         body=kw.get("body") or "",
         cc=kw.get("cc") or "",
         session=kw.get("session") or "",
-        grant_scope=kw.get("grant_scope") or "once",
     ),
     "drive_list": lambda **kw: api.drive_list(
         alias=kw["alias"],

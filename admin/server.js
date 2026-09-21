@@ -16,7 +16,11 @@ const PORT = Number.parseInt(process.env.GWSA_ADMIN_PORT || "4877", 10);
 const HOST = "127.0.0.1";
 const REPO = path.resolve(__dirname, "..");
 const GWSA = path.join(REPO, "bin", "mag");
-const ROOT = process.env.GWSA_ROOT || path.join(os.homedir(), ".config", "gws-accounts");
+// MAG_ prioritaire, GWSA_ en repli (convention bin/mag). `mag admin` lancé avec
+// MAG_ROOT n'exporte pas forcément le GWSA_ROOT résolu à Node ; lire MAG_ROOT ici
+// garde le lecteur admin sur la MÊME racine que les écritures (qui spawnent `mag`,
+// lequel hérite MAG_ROOT) — sinon un refresh montre un état périmé (Codex #150).
+const ROOT = process.env.MAG_ROOT || process.env.GWSA_ROOT || path.join(os.homedir(), ".config", "gws-accounts");
 const DEPLOY_ROOT = process.env.GWSA_DEPLOY_ROOT || path.join(os.homedir(), ".local", "share", "google-mcp");
 const STABLE_ADMIN_PORT = 4877;
 const STABLE_BROKER_PORT = 4878;
@@ -549,9 +553,10 @@ function listSessions() {
 }
 
 // Consentement transactionnel (ADR-0013 lot 5) — état lu directement depuis les
-// marqueurs fichiers sous GWSA_ROOT (même défauts que `mag transactional status`,
-// sans passer par un sous-process pour un simple GET). Les écritures, elles,
-// passent TOUJOURS par `mag transactional …` (source de vérité de la persistance).
+// marqueurs fichiers sous ROOT (MAG_/GWSA_, cf. sa définition en tête — même
+// racine que `mag transactional …`, donc lecture et écriture alignées ; mêmes
+// défauts que `mag transactional status`, sans sous-process pour un simple GET).
+// Les écritures passent TOUJOURS par `mag transactional …` (source de vérité).
 const TX_MODES = ["manuel", "auto"];
 const TX_DEFAULTS = {
   session_ttl_sec: 28800,

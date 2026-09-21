@@ -7630,20 +7630,22 @@ GWSA_ROOT="$TX9" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev
 out="$(PYTHONPATH="$(pwd)" "$PY" -c "
 from gateway.mcp_server import TOOLS
 by_name = {t['name']: t for t in TOOLS}
-mutating = ['drive_create', 'drive_update', 'drive_copy', 'drive_upload', 'gmail_draft_create']
-sharing = ['drive_permissions_create', 'drive_permissions_delete']
+mutating = ['drive_create', 'drive_update', 'drive_copy', 'drive_upload']
+# Partage (sortant) ET brouillon (pas de périmètre-ressource, catégorie drafts
+# non éligible — Codex #150) : jamais de grant_scope au bord.
+no_scope = ['drive_permissions_create', 'drive_permissions_delete', 'gmail_draft_create']
 ok = True
 for n in mutating:
     gs = by_name[n]['inputSchema']['properties'].get('grant_scope')
     if not gs or gs.get('enum') != ['once', 'session'] or gs.get('default') != 'once':
         ok = False
-for n in sharing:
+for n in no_scope:
     if 'grant_scope' in by_name[n]['inputSchema']['properties']:
         ok = False
 print('OK' if ok else 'wrong')
 ")"
 [[ "$out" == "OK" ]] \
-  && pass "ADR-0013 lot 6 : grant_scope au schéma des 5 mutations, absent du partage" \
+  && pass "ADR-0013 lot 6 : grant_scope au schéma des 4 mutations Drive, absent du partage et des brouillons" \
   || fail "ADR-0013 lot 6 : schéma MCP grant_scope incorrect ($out)"
 
 # L6-2) Dispatch MCP : grant_scope de l'appel est bien EXTRAIT et relayé à la
@@ -7657,18 +7659,17 @@ def mk(name):
         captured[name] = kw.get('grant_scope')
         return {'ok': True}
     return fn
-for name in ('drive_create', 'drive_update', 'drive_copy', 'drive_upload', 'gmail_create_draft'):
+for name in ('drive_create', 'drive_update', 'drive_copy', 'drive_upload'):
     setattr(api, name, mk(name))
 ms.DISPATCH['drive_create'](alias='alpha', name='n', parent_id='p', session='s', grant_scope='session')
 ms.DISPATCH['drive_update'](alias='alpha', file_id='f', session='s', grant_scope='session')
 ms.DISPATCH['drive_copy'](alias='alpha', file_id='f', parent_id='p', session='s', grant_scope='session')
 ms.DISPATCH['drive_upload'](alias='alpha', path='/x', parent_id='p', session='s', grant_scope='session')
-ms.DISPATCH['gmail_draft_create'](alias='alpha', to='a@b.com', subject='s', body='b', session='s', grant_scope='session')
-ok = all(v == 'session' for v in captured.values()) and len(captured) == 5
+ok = all(v == 'session' for v in captured.values()) and len(captured) == 4
 print('OK' if ok else f'wrong {captured}')
 ")"
 [[ "$out" == "OK" ]] \
-  && pass "ADR-0013 lot 6 : dispatch MCP relaie grant_scope aux 5 fonctions api" \
+  && pass "ADR-0013 lot 6 : dispatch MCP relaie grant_scope aux 4 fonctions Drive" \
   || fail "ADR-0013 lot 6 : dispatch MCP ne relaie pas grant_scope ($out)"
 
 # L6-3) Bout en bout via le VRAI tool api.drive_create (pas _run directement) :

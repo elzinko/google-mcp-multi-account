@@ -429,9 +429,13 @@ def gmail_create_draft(
     body: str,
     cc: str = "",
     session: str = "",
-    grant_scope: str = "once",
 ) -> dict[str, Any]:
-    """Crée un brouillon — jamais d'envoi (pas de tool send en v1)."""
+    """Crée un brouillon — jamais d'envoi (pas de tool send en v1).
+
+    Pas de `grant_scope` : un brouillon n'a pas de périmètre-ressource (dossier),
+    et sa catégorie ``drafts`` n'est pas éligible à la grâce « pour la session »
+    (cf. `_GRACE_ELIGIBLE_CATEGORIES`). Exposer le choix mentirait — il retomberait
+    toujours sur « une fois » (Codex #150). Un brouillon reste signé par acte."""
     validate_alias(alias)
     if not to or not subject:
         raise GatewayError("to et subject sont requis", code="error")
@@ -464,7 +468,6 @@ def gmail_create_draft(
             "--json", json.dumps(payload),
         ],
         session=session,
-        grant_scope=grant_scope,
     )
     return {"ok": True, "alias": alias, "result": data}
 
