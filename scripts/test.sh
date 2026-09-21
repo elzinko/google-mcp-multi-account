@@ -6881,6 +6881,46 @@ print('OK' if s.unlocks.get('alpha', 0) > time.time() else 'wrong')
   && pass "flag OFF : session_unlock(minutes) inchangé (non-régression ADR-0013)" \
   || fail "flag OFF : session_unlock cassé ($out)"
 
+# 8bis-2) Codex #150 P2 : session_unlock_in_conversation REFUSE en transactionnel
+#         AVANT toute annonce/Touch ID (aucun geste humain pour rien).
+UIC_ROOT="$(mktemp -d)"
+touch "$UIC_ROOT/.elicitation-in-conversation" "$UIC_ROOT/.transactional-consent"
+out="$(GWSA_ROOT="$UIC_ROOT" PYTHONPATH="$(pwd)" MAG_ELICITATION_MOCK=1 "$PY" -c "
+import gateway.api as api, gateway.elicitation as elic
+from gateway.errors import GatewayError
+from gateway.sessions import create_session
+elic.run_elicitation_gate = lambda *a, **k: (_ for _ in ()).throw(AssertionError('geste declenche'))
+s = create_session(client='txUIC')
+try:
+    api.session_unlock_in_conversation(alias='alpha', minutes=30, session=s.session_id, confirm=True)
+    print('wrong:accepte')
+except GatewayError as e:
+    print('OK' if e.code == 'locked' else 'bad:' + str(e.code))
+except AssertionError:
+    print('wrong:geste')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "transactionnel : session_unlock_in_conversation refuse AVANT tout geste (Codex #150)" \
+  || fail "transactionnel : session_unlock_in_conversation ($out)"
+rm -rf "$UIC_ROOT"
+
+# 8bis-3) Codex #150 P2 : access_request kind=session_unlock en transactionnel guide
+#         vers « pour la session », sans suggérer `mag session unlock`.
+AR_ROOT="$(mktemp -d)"
+touch "$AR_ROOT/.transactional-consent"
+out="$(GWSA_ROOT="$AR_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import gateway.api as api
+from gateway.sessions import create_session
+s = create_session(client='txAR')
+r = api.access_request(kind='session_unlock', alias='alpha', session=s.session_id, minutes=30)
+ok = (r.get('elicitation') is False) and ('pour la session' in r.get('message','')) and ('suggested_command' not in r)
+print('OK' if ok else 'wrong:' + str(r))
+")"
+[[ "$out" == "OK" ]] \
+  && pass "transactionnel : access_request unlock guide vers « pour la session » (Codex #150)" \
+  || fail "transactionnel : access_request unlock ($out)"
+rm -rf "$AR_ROOT"
+
 # 8ter) ADR-0013 Décision 6 : durées réglables par marqueur fichier (admin),
 #       env prioritaire, repli fail-safe sur le défaut. Root jetable (pas de
 #       contamination des autres tests).

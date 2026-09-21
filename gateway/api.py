@@ -1232,6 +1232,23 @@ def access_request(
     acct_email = profile_email(alias)
     who = f"« {alias} » ({acct_email})" if acct_email else f"« {alias} »"
     if kind in ("session_unlock", "unlock"):
+        # ADR-0013 : en transactionnel, le déverrouillage par minutes n'existe plus.
+        # Ne pas suggérer `mag session unlock` (il refuserait) — guider vers le geste
+        # par acte « pour la session » (Codex #150 P2).
+        from .sessions import transactional_enabled
+        if transactional_enabled():
+            return {
+                "ok": True,
+                "elicitation": False,
+                "kind": kind,
+                "alias": alias,
+                "message": (
+                    f"Mode transactionnel actif : le déverrouillage par minutes est retiré, "
+                    f"il n'y a rien à déverrouiller à l'avance pour {who}. Pour éviter de "
+                    f"re-signer chaque écriture dans le MÊME dossier, autorise « pour la "
+                    f"session » au moment d'agir (grant_scope=session sur l'acte) — ADR-0013."
+                ),
+            }
         mins = max(1, min(int(minutes), 1440))
         sid = (session or "").strip()
         if sid or kind == "session_unlock":
@@ -1451,6 +1468,18 @@ def session_unlock_in_conversation(
         raise GatewayError("session requise (jeton de conversation)", code="error")
     require_session(sid)
     _reject_if_delegated(sid, "session_unlock_in_conversation")
+    # ADR-0013 : en transactionnel, le déverrouillage par minutes est retiré.
+    # Refuser ICI, AVANT toute annonce ou Touch ID — sinon l'humain ferait un
+    # geste biométrique pour ne recevoir qu'un refus au moment du session_unlock
+    # final (Codex #150 P2). On renvoie vers « pour la session » (choix par acte).
+    from .sessions import transactional_enabled
+    if transactional_enabled():
+        raise GatewayError(
+            "déverrouillage par minutes retiré en mode transactionnel : autorise "
+            "« pour la session » au moment d'agir (grant_scope=session sur l'acte "
+            "d'écriture) — ADR-0013",
+            code="locked",
+        )
     # Rejeter tout `confirm` non booléen (revue Codex #142) : un client peut
     # envoyer une valeur schéma-invalide mais plausible (« "confirm": "false" »)
     # que le dispatch transmet brute — sans ce garde, elle serait vue comme un

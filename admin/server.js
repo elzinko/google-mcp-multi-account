@@ -564,27 +564,37 @@ const TX_DEFAULTS = {
   read_lease_budget: 20,
 };
 
+// env d'abord (MAG_ prioritaire, GWSA_ en repli), comme gateway/sessions.py.
+function txEnvFirst(name) {
+  return (process.env["MAG_" + name] || process.env["GWSA_" + name] || "").trim();
+}
+
 function readTransactionalState() {
-  const consent = fs.existsSync(path.join(ROOT, ".transactional-consent"));
-  const modeRaw = readText(path.join(ROOT, ".transactional-lease-mode"));
-  // Compat des valeurs héritées — miroir EXACT de gateway/sessions.py::transactional_lease_mode :
-  // fenetre → auto, session → manuel ; sinon validé contre TX_MODES, repli manuel. Sans ça, un
-  // marqueur legacy « fenetre » s'afficherait « manuel » alors que la gateway le lit « auto »
-  // (le panneau mentirait — Codex #150 P1).
+  // Règles env-first IDENTIQUES à la gateway (Codex #150 P2) : l'env a priorité
+  // sur le marqueur fichier là-bas ; l'ignorer ici afficherait un état faux (ex.
+  // MAG_TRANSACTIONAL_CONSENT=1 sans marqueur → consent réellement actif). On lit
+  // donc env → marqueur → défaut, puis le mapping legacy (fenetre→auto, session→manuel).
+  const consentEnv = txEnvFirst("TRANSACTIONAL_CONSENT").toLowerCase();
+  const consent = ["1", "true", "yes"].includes(consentEnv)
+    || fs.existsSync(path.join(ROOT, ".transactional-consent"));
+  const modeRaw = txEnvFirst("TRANSACTIONAL_LEASE_MODE") || readText(path.join(ROOT, ".transactional-lease-mode"));
   const modeMapped = modeRaw === "fenetre" ? "auto" : modeRaw === "session" ? "manuel" : modeRaw;
   const mode = TX_MODES.includes(modeMapped) ? modeMapped : "manuel";
-  const readInt = (file, fallback) => {
-    const txt = readText(path.join(ROOT, file));
-    const n = parseInt(txt, 10);
-    return Number.isFinite(n) && n > 0 ? n : fallback;
+  // Miroir de gateway/sessions.py::_int_setting : raw vide → défaut ; sinon max(1, n) ;
+  // invalide → défaut.
+  const readInt = (envName, file, fallback) => {
+    const raw = txEnvFirst(envName) || readText(path.join(ROOT, file));
+    if (!raw) return fallback;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) ? Math.max(1, n) : fallback;
   };
   return {
     ok: true,
     consent,
     mode,
-    session_ttl_sec: readInt(".session-ttl-sec", TX_DEFAULTS.session_ttl_sec),
-    read_lease_ttl_sec: readInt(".read-lease-ttl-sec", TX_DEFAULTS.read_lease_ttl_sec),
-    read_lease_budget: readInt(".read-lease-budget", TX_DEFAULTS.read_lease_budget),
+    session_ttl_sec: readInt("SESSION_TTL_SEC", ".session-ttl-sec", TX_DEFAULTS.session_ttl_sec),
+    read_lease_ttl_sec: readInt("READ_LEASE_TTL_SEC", ".read-lease-ttl-sec", TX_DEFAULTS.read_lease_ttl_sec),
+    read_lease_budget: readInt("READ_LEASE_BUDGET", ".read-lease-budget", TX_DEFAULTS.read_lease_budget),
   };
 }
 
@@ -732,6 +742,11 @@ const server = http.createServer(async (req, res) => {
         return send(res, 404, { error: "session inconnue" });
       }
       if (action === "unlock") {
+        // ADR-0013 : le déverrouillage par minutes n'existe plus en transactionnel
+        // (`mag session unlock` refuserait) — refuser tôt, sans geste (Codex #150 P2).
+        if (readTransactionalState().consent) {
+          return send(res, 400, { error: "déverrouillage par minutes retiré en mode transactionnel — autoriser « pour la session » au moment d'agir (ADR-0013)" });
+        }
         const b = await readBody(req);
         if (!ALIAS_RE.test(b.alias || "")) return send(res, 400, { error: "alias invalide" });
         const mins = String(Math.min(1440, Math.max(1, parseInt(b.minutes, 10) || 60)));
