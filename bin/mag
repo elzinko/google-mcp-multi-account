@@ -1007,15 +1007,19 @@ cmd_transactional() { # mag transactional status|on|off|mode|durées — consent
     read-lease-ttl)    _tx_set_int ".read-lease-ttl-sec"  "${1:-}" "read-lease-ttl" ;;
     read-lease-budget) _tx_set_int ".read-lease-budget"   "${1:-}" "read-lease-budget" ;;
     status)
-      local consent="disabled"; [[ -f "$GWSA_ROOT/.transactional-consent" ]] && consent="enabled"
-      local mode="manuel (default)"; [[ -f "$GWSA_ROOT/.transactional-lease-mode" ]] && mode="$(cat "$GWSA_ROOT/.transactional-lease-mode")"
-      local sttl="28800 (default 8h)"; [[ -f "$GWSA_ROOT/.session-ttl-sec" ]] && sttl="$(cat "$GWSA_ROOT/.session-ttl-sec")"
-      local rttl="90 (default)"; [[ -f "$GWSA_ROOT/.read-lease-ttl-sec" ]] && rttl="$(cat "$GWSA_ROOT/.read-lease-ttl-sec")"
-      local rbud="20 (default)"; [[ -f "$GWSA_ROOT/.read-lease-budget" ]] && rbud="$(cat "$GWSA_ROOT/.read-lease-budget")"
-      echo "transactional consent: $consent"
-      echo "lease mode: $mode"
-      echo "session TTL (s): $sttl"
-      echo "auto lease window (s): $rttl / budget: $rbud"
+      # État EFFECTIF via les résolveurs gateway (env d'abord, puis marqueur, puis
+      # défaut ; mapping legacy fenetre→auto / session→manuel) — une seule source
+      # de vérité, alignée sur la gateway ET le panneau admin (Codex #150 P2).
+      REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import (transactional_enabled, transactional_lease_mode,
+                              session_ttl_sec, read_lease_ttl_sec, read_lease_budget)
+print('transactional consent:', 'enabled' if transactional_enabled() else 'disabled')
+print('lease mode:', transactional_lease_mode())
+print('session TTL (s):', session_ttl_sec())
+print('auto lease window (s):', read_lease_ttl_sec(), '/ budget:', read_lease_budget())
+"
       ;;
     *) die "usage: $SELF transactional status|on|off|mode manuel|auto|session-ttl <s>|read-lease-ttl <s>|read-lease-budget <n>" ;;
   esac

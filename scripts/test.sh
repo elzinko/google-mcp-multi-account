@@ -6970,6 +6970,16 @@ if GWSA_ROOT="$TXCLI_ROOT" "$GWSA" transactional session-ttl pasunentier >/dev/n
 else
   pass "CLI : mag transactional refuse une durée non entière (ADR-0013)"
 fi
+
+# CLI status env-first (Codex #150 P2) : `mag transactional status` reflète l'état
+# EFFECTIF (env prioritaire + mapping legacy session→manuel), comme la gateway et l'admin —
+# plus la simple lecture de marqueurs.
+TXST_ROOT="$(mktemp -d)"
+out="$(MAG_ROOT="$TXST_ROOT" MAG_TRANSACTIONAL_CONSENT=1 MAG_TRANSACTIONAL_LEASE_MODE=session MAG_SESSION_TTL_SEC=123 "$GWSA" transactional status 2>/dev/null)"
+[[ "$out" == *"consent: enabled"* && "$out" == *"lease mode: manuel"* && "$out" == *"session TTL (s): 123"* ]] \
+  && pass "CLI : mag transactional status reflète l'env-first + mapping (Codex #150)" \
+  || fail "CLI status env-first ($out)"
+rm -rf "$TXST_ROOT"
 # ADR-0013 lot 6, fix P2 : 0 n'est pas un entier ≥ 1 — une durée nulle n'a pas
 # de sens (session-ttl, fenêtre auto, budget auto). Les trois réglages sont
 # testés, `^[0-9]+$` matchait 0 à tort avant le correctif.
@@ -7667,6 +7677,30 @@ print('n1', n1, 'n2', n2, 'no_cap', no_cap)
 [[ "$out" == *"n1 1"* && "$out" == *"n2 2"* && "$out" == *"no_cap True"* ]] \
   && pass "ADR-0013 lot 4 (d) : sans ressource dérivable, « session » retombe sur « une fois » (aucune grâce)" \
   || fail "ADR-0013 lot 4 (d) : une grâce a été écrite sans ressource dérivable ($out)"
+
+# (e) Codex #150 P2 : en mode AUTO, une mutation avec grant_scope=session ne peut
+#     écrire aucune grâce → la portée SIGNÉE/affichée est normalisée à « once », pour
+#     que le reçu Touch ID ne promette pas ce qui n'aura pas lieu.
+out="$(GWSA_ROOT="$TX8" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
+  MAG_TRANSACTIONAL_LEASE_MODE=auto "$PY" -c "
+import json
+import gateway.api as api
+from gateway.sessions import create_session
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None: {'ok': True}
+captured = {}
+_og = api.run_elicitation_gate
+def _cg(f):
+    captured['scope'] = f.get('grant_scope')
+    return _og(f)
+api.run_elicitation_gate = _cg
+s = create_session(client='l4e')
+create_args = ['drive', 'files', 'create', '--json', json.dumps({'name': 'x', 'parents': ['FOLDER']})]
+api._run('alpha', create_args, session=s.session_id, grant_scope='session')
+print('scope', captured.get('scope'))
+")"
+[[ "$out" == *"scope once"* ]] \
+  && pass "ADR-0013 (Codex #150) : mode auto normalise grant_scope=session → once (reçu honnête)" \
+  || fail "ADR-0013 : scope non normalisé en auto ($out)"
 
 rm -rf "$TX8"
 

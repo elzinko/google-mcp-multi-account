@@ -243,6 +243,12 @@ def _transactional_gate(
         and category in _GRACE_ELIGIBLE_CATEGORIES
         and not _is_delegated_session(sid)
     )
+    # ADR-0013 (Codex #150 P2) : ne SIGNER/afficher que la portée réellement
+    # applicable. Hors éligibilité (mode auto, partage, catégorie non whitelistée,
+    # sous-session déléguée), « session » n'écrit aucune grâce — la normaliser à
+    # « once » pour que le reçu Touch ID ne promette pas ce qui n'aura pas lieu.
+    if scope == "session" and not grace_eligible:
+        scope = "once"
 
     # (3) Grâce déjà accordée pour ce périmètre exact → aucun geste.
     if grace_eligible and session_has_capability(sid, alias, service, category, resource):
