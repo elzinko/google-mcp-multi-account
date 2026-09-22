@@ -30,9 +30,19 @@ DEFAULT_SESSION_TTL_SEC = 8 * 3600
 # le helper `env()` (MAG_<NAME> puis GWSA_<NAME>), jamais `os.environ` nu.
 TRANSACTIONAL_FLAG_NAME = ".transactional-consent"
 LEASE_MODE_FLAG_NAME = ".transactional-lease-mode"
+# ADR-0013 Décision 6 : les durées deviennent des réglages. Chacune est lue via
+# son env (tests) PUIS un marqueur fichier posé par l'admin (déploiement réel),
+# sinon son défaut. Même patron que ``transactional_lease_mode``.
+SESSION_TTL_FLAG_NAME = ".session-ttl-sec"
+READ_LEASE_TTL_FLAG_NAME = ".read-lease-ttl-sec"
+READ_LEASE_BUDGET_FLAG_NAME = ".read-lease-budget"
 DEFAULT_READ_LEASE_TTL_SEC = 90
 DEFAULT_READ_LEASE_BUDGET = 20
-LEASE_MODES = ("fenetre", "session", "manuel")
+# ADR-0013 (raffine ADR-0012 Zone 4) : deux modes seulement. Le mode global
+# ``session`` est retiré — la portée « pour la session » devient un choix PAR
+# ACTE (grâce, cf. `session_grant_capability_session_lived`), plus un mode
+# global de durée de bail.
+LEASE_MODES = ("auto", "manuel")
 
 
 def transactional_flag_path() -> Path:
@@ -49,19 +59,24 @@ def transactional_enabled() -> bool:
 
 
 def transactional_lease_mode() -> str:
-    """Durée de vie du bail de lecture (ADR-0012, Zone 4) — mode configurable :
+    """Durée de vie du bail de lecture (ADR-0013, raffine ADR-0012 Zone 4) —
+    mode configurable, DEUX valeurs seulement :
 
-    - ``manuel`` (**défaut**) : pas de bail — CHAQUE lecture est signée. Un droit,
-      une action : le LLM ne peut jamais faire plus que l'acte approuvé (décision
-      Thomas 2026-09-17). Le plus strict.
-    - ``fenetre`` : bail = fenêtre courte (TTL) ET budget, au premier atteint —
-      groupage confort, opt-in explicite.
-    - ``session`` : bail vit aussi longtemps que la session, budget en filet.
+    - ``manuel`` (**défaut**) : par acte. Chaque acte (lecture ou écriture) est
+      signé, sans aucun bail groupé. « Pour la session » y devient un choix
+      PAR ACTE (grâce scopée à la ressource, cf. `session_has_capability` /
+      `session_grant_capability_session_lived`), jamais un mode global.
+    - ``auto`` (ex-``fenetre``) : les LECTURES sont groupées sous un bail
+      (fenêtre TTL ET budget, au premier atteint) — confort, opt-in explicite.
+      Les écritures restent signées par acte, sans grâce session (Décision 5).
 
     Lu via MAG_/GWSA_TRANSACTIONAL_LEASE_MODE, puis le marqueur fichier
-    ``.transactional-lease-mode`` (posé par l'admin). Repli fail-closed sur
-    ``manuel`` (le plus strict) si la valeur est absente, illisible ou inconnue :
-    seul un opt-in explicite ``fenetre``/``session`` desserre la lecture."""
+    ``.transactional-lease-mode`` (posé par l'admin). Compat des valeurs
+    héritées (ADR-0012, 3 modes) : ``fenetre`` → ``auto`` ; ``session`` →
+    ``manuel`` (le plus strict — on ne fait jamais hériter silencieusement un
+    desserrage de lecture). Repli fail-closed sur ``manuel`` si la valeur est
+    absente, illisible ou inconnue : seul un opt-in explicite ``auto``
+    desserre la lecture."""
     val = (env("TRANSACTIONAL_LEASE_MODE") or "").strip().lower()
     if not val:
         try:
@@ -69,34 +84,46 @@ def transactional_lease_mode() -> str:
             val = p.read_text(encoding="utf-8").strip().lower() if p.is_file() else ""
         except OSError:
             val = ""
+    if val == "fenetre":
+        return "auto"
+    if val == "session":
+        return "manuel"
     return val if val in LEASE_MODES else "manuel"
 
 
-def read_lease_ttl_sec() -> int:
-    """TTL du bail de lecture (secondes) — surchargeable via
-    MAG_/GWSA_READ_LEASE_TTL_SEC. Une des deux limites du bail en mode
-    ``fenetre`` ; la première atteinte referme."""
+def _int_setting(env_name: str, flag_name: str, default: int, minimum: int = 1) -> int:
+    """Lit un réglage entier : MAG_/GWSA_<env_name> d'abord (tests), puis le
+    marqueur fichier <flag_name> posé par l'admin (déploiement réel), sinon
+    ``default``. Repli fail-safe sur ``default`` si absent, illisible ou
+    invalide ; borné à ``>= minimum``. Même patron que
+    ``transactional_lease_mode`` (ADR-0013 Décision 6)."""
+    raw = (env(env_name) or "").strip()
+    if not raw:
+        try:
+            p = gwsa_root() / flag_name
+            raw = p.read_text(encoding="utf-8").strip() if p.is_file() else ""
+        except OSError:
+            raw = ""
+    if not raw:
+        return default
     try:
-        return max(1, int(env("READ_LEASE_TTL_SEC", str(DEFAULT_READ_LEASE_TTL_SEC))))
+        return max(minimum, int(raw))
     except (TypeError, ValueError):
-        return DEFAULT_READ_LEASE_TTL_SEC
+        return default
+
+
+def read_lease_ttl_sec() -> int:
+    """TTL du bail de lecture (secondes) — réglage (env MAG_/GWSA_READ_LEASE_TTL_SEC
+    ou marqueur admin). Une des deux limites du bail en mode ``auto`` ; la
+    première atteinte referme."""
+    return _int_setting("READ_LEASE_TTL_SEC", READ_LEASE_TTL_FLAG_NAME, DEFAULT_READ_LEASE_TTL_SEC)
 
 
 def read_lease_budget() -> int:
-    """Budget d'opérations du bail de lecture — surchargeable via
-    MAG_/GWSA_READ_LEASE_BUDGET. Seconde limite du bail (filet en mode
-    ``session``)."""
-    try:
-        return max(1, int(env("READ_LEASE_BUDGET", str(DEFAULT_READ_LEASE_BUDGET))))
-    except (TypeError, ValueError):
-        return DEFAULT_READ_LEASE_BUDGET
-
-
-def read_lease_plafond_minutes() -> int:
-    """Plafond (minutes, arrondi au supérieur) auquel `session_unlock` écrête
-    `minutes` quand le transactionnel est actif (ADR-0011 §Décision 4) — quelques
-    minutes max, jamais 1440."""
-    return max(1, -(-read_lease_ttl_sec() // 60))
+    """Budget d'opérations du bail de lecture — réglage (env
+    MAG_/GWSA_READ_LEASE_BUDGET ou marqueur admin). Seconde limite du bail en
+    mode ``auto``."""
+    return _int_setting("READ_LEASE_BUDGET", READ_LEASE_BUDGET_FLAG_NAME, DEFAULT_READ_LEASE_BUDGET)
 
 
 def sessions_dir() -> Path:
@@ -175,11 +202,12 @@ class ReadLease:
     Deux bornes : le temps (`expires_at`) et le `budget` d'opérations. La
     convention de `expires_at` encode le mode de durée de vie :
 
-    - ``expires_at > 0`` : borne de temps active (mode ``fenetre``) — le bail
+    - ``expires_at > 0`` : borne de temps active (mode ``auto``) — le bail
       referme dès `expires_at` OU budget épuisé, au premier des deux.
-    - ``expires_at <= 0`` : PAS de borne de temps propre (mode ``session``) — le
-      bail ne meurt qu'avec son budget ou avec la session (son fichier est
-      supprimé à la fermeture/expiration de session, emportant le bail).
+    - ``expires_at <= 0`` : PAS de borne de temps propre — l'ancien mode
+      global ``session`` qui produisait cette forme est RETIRÉ par ADR-0013 ;
+      un bail dans cet état est désormais toujours neutralisé par
+      `_lease_usable` (repli fail-closed sur un éventuel résidu).
 
     Le retrait ne dépend JAMAIS d'un geste du LLM : il se calcule ici, à chaque
     appel, depuis le temps et le budget (ADR-0011 §Décision 3)."""
@@ -210,10 +238,19 @@ class Capability:
     expires_at: float = 0.0
 
     def active(self, now: float | None = None) -> bool:
+        """Actif si compte/service/opération sont posés ET pas expirée.
+
+        ``expires_at <= 0`` encode « pas de borne de temps propre » (ADR-0013
+        §Décision 1 — même convention sentinelle que `ReadLease.active`) : la
+        capacité vit tant que le fichier de session existe (grâce « pour la
+        session », écrite par `session_grant_capability_session_lived`), et
+        disparaît avec lui (TTL d'inactivité ou `close_session`). Une
+        capacité à TTL classique (`session_grant_capability`, expires_at > 0)
+        expire normalement — additif, non-régression."""
         t = now if now is not None else time.time()
         return (
             bool(self.account) and bool(self.service) and bool(self.operation)
-            and self.expires_at > t
+            and (self.expires_at <= 0.0 or self.expires_at > t)
         )
 
 
@@ -377,11 +414,11 @@ def new_session_id() -> str:
 
 
 def session_ttl_sec() -> int:
-    """TTL effectif d'une session (secondes), surchargeable pour les tests."""
-    try:
-        return int(env("SESSION_TTL_SEC", str(DEFAULT_SESSION_TTL_SEC)))
-    except ValueError:
-        return DEFAULT_SESSION_TTL_SEC
+    """TTL d'inactivité d'une session (secondes) — réglage (env
+    MAG_/GWSA_SESSION_TTL_SEC ou marqueur admin, ADR-0013 Décision 6). Défaut
+    8 h ; borné à >= 1 s (comportement historique préservé) ; repli fail-safe
+    sur le défaut si illisible."""
+    return _int_setting("SESSION_TTL_SEC", SESSION_TTL_FLAG_NAME, DEFAULT_SESSION_TTL_SEC, minimum=1)
 
 
 def create_session(
@@ -457,11 +494,13 @@ def _root_session(state: SessionState) -> SessionState:
 def session_unlock(session_id: str, alias: str, minutes: int) -> SessionState:
     """Déverrouille `alias` pour la session pendant `minutes` — API inchangée.
 
-    `minutes` est DÉPRÉCIÉ quand le transactionnel est actif (ADR-0011
-    §Décision 4) : conservé pour compat, mais écrêté au plafond du bail de
-    lecture (quelques minutes max), jamais 1440. Flag OFF (défaut) :
-    comportement strictement inchangé (non-régression). RMW sous le verrou
-    unique (ADR-0012, Zone 2)."""
+    Le déverrouillage par minutes est **retiré quand le transactionnel est
+    actif** (ADR-0013 Décision 6, aboutissement d'ADR-0011 §Décision 4) : il
+    **refuse** et renvoie vers « pour la session » (le choix par acte). La
+    fenêtre de minutes était la dernière durée non voulue du modèle
+    transactionnel ; on la ferme pour de bon plutôt que de l'écrêter. Flag OFF
+    (défaut) : comportement strictement inchangé, `minutes` borné 1–1440
+    (non-régression). RMW sous le verrou unique (ADR-0012, Zone 2)."""
     if not _session_exists(session_id):
         raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
     with file_lock(_lock_path(session_id)):
@@ -474,8 +513,13 @@ def session_unlock(session_id: str, alias: str, minutes: int) -> SessionState:
                 "seule la session racine (ou l'humain) peut déverrouiller un profil",
                 code="error",
             )
-        plafond = read_lease_plafond_minutes() if transactional_enabled() else 1440
-        mins = max(1, min(int(minutes), plafond))
+        if transactional_enabled():
+            raise GatewayError(
+                "déverrouillage par minutes retiré en mode transactionnel : "
+                "autorise « pour la session » au moment d'agir (ADR-0013)",
+                code="locked",
+            )
+        mins = max(1, min(int(minutes), 1440))
         state.unlocks[alias] = time.time() + mins * 60
         state.touch()
         _save(state)
@@ -483,28 +527,31 @@ def session_unlock(session_id: str, alias: str, minutes: int) -> SessionState:
 
 
 def _lease_usable(lease: ReadLease | None) -> bool:
-    """Un bail est-il exploitable MAINTENANT ? Actif (TTL/budget) ET cohérent avec
-    le mode courant. Bascule fail-closed (Codex #149, P2) : un bail « session »
-    (sans borne de temps, `expires_at<=0`) devient inutilisable dès que le mode
-    effectif n'est plus `session` (retour à `fenetre`, ou valeur invalide qui s'y
-    replie) — le TTL court reprend ses droits, on ne garde pas un bail éternel."""
+    """Un bail est-il exploitable MAINTENANT ? Actif (TTL/budget) ET borné dans
+    le temps. ADR-0013 retire le mode global ``session`` : un bail sans borne
+    de temps propre (`expires_at<=0`) — qu'il vienne d'un ancien fichier de
+    session écrit avant ce lot, ou de toute autre origine — est TOUJOURS
+    neutralisé, quel que soit le mode courant (fail-closed, mêmes principes
+    que Codex #149 P2 : on ne garde jamais un bail éternel). Seul ``auto``
+    ouvre encore un bail, et il est systématiquement borné en temps
+    (`open_read_lease`)."""
     if lease is None or not lease.active():
         return False
-    if lease.expires_at <= 0.0 and transactional_lease_mode() != "session":
+    if lease.expires_at <= 0.0:
         return False
     return True
 
 
 def open_read_lease(session_id: str, alias: str) -> SessionState:
-    """Ouvre un bail de lecture pour (session, alias) selon le mode de durée de
-    vie (ADR-0012, Zone 4). Un nouveau consentement REMPLACE tout bail existant
-    sur cet alias — il ne le prolonge jamais. RMW sous le verrou unique.
+    """Ouvre un bail de lecture pour (session, alias) selon le mode courant
+    (ADR-0013, raffine ADR-0012 Zone 4). Un nouveau consentement REMPLACE tout
+    bail existant sur cet alias — il ne le prolonge jamais. RMW sous le verrou
+    unique.
 
-    - ``fenetre`` : borne de temps (TTL) + budget.
-    - ``session`` : pas de borne de temps propre (`expires_at = 0`) — le bail vit
-      avec la session ; le budget reste comme filet.
+    - ``auto`` (ex-``fenetre``) : borne de temps (TTL) + budget.
     - ``manuel``  : aucun bail ouvert (chaque lecture est signée en amont) ; on
-      efface un éventuel bail résiduel.
+      efface un éventuel bail résiduel (y compris un bail sans borne de temps
+      hérité de l'ancien mode ``session``, retiré par cet ADR).
     """
     if not _session_exists(session_id):
         raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
@@ -516,9 +563,8 @@ def open_read_lease(session_id: str, alias: str) -> SessionState:
         if mode == "manuel":
             state.read_leases.pop(alias, None)
         else:
-            expires_at = (time.time() + read_lease_ttl_sec()) if mode == "fenetre" else 0.0
             state.read_leases[alias] = ReadLease(
-                expires_at=expires_at, budget=read_lease_budget()
+                expires_at=time.time() + read_lease_ttl_sec(), budget=read_lease_budget()
             )
         state.touch()
         _save(state)
@@ -730,26 +776,24 @@ def is_session_unlocked(session_id: str, alias: str) -> bool:
     return _effective_unlocks(state).get(alias, 0.0) > now
 
 
-def session_grant_capability(
+def _write_session_capability(
     session_id: str,
     account: str,
     service: str,
     operation: str,
-    resource: str = "",
-    hours: int = 8,
+    resource: str,
+    expires_at: float,
 ) -> SessionState:
-    """Octroie une capacité fine (compte, service, opération, ressource?) à une session.
+    """RMW partagé (verrou unique, ADR-0012 Zone 2) : remplace la capacité du
+    quadruplet (compte, service, opération, ressource) par une nouvelle,
+    d'expiry `expires_at` (dédoublonnage — jamais deux capacités pour le même
+    quadruplet). Brique commune à `session_grant_capability` (octroi humain à
+    TTL, INCHANGÉ) et `session_grant_capability_session_lived` (grâce « pour
+    la session », ADR-0013) : même écriture, seule la borne de temps diffère.
 
     Réservé à la session racine — une sous-session déléguée ne peut pas
     s'élargir elle-même (même règle que `session_unlock` / `session_grant_drive`).
     """
-    account = account.strip()
-    service = service.strip().lower()
-    operation = operation.strip().lower()
-    resource = resource.strip()
-    if not account or not service or not operation:
-        raise GatewayError("account/service/operation requis", code="error")
-    # RMW sous le verrou unique (ADR-0012, Zone 2).
     if not _session_exists(session_id):
         raise GatewayError(f"session inconnue ou expirée « {session_id} »", code="error")
     with file_lock(_lock_path(session_id)):
@@ -762,8 +806,6 @@ def session_grant_capability(
                 "seule la session racine (ou l'humain) peut accorder une capacité",
                 code="error",
             )
-        h = max(1, min(int(hours), 168))
-        expires = time.time() + h * 3600
         caps = [
             c
             for c in state.capabilities
@@ -777,13 +819,60 @@ def session_grant_capability(
         caps.append(
             Capability(
                 account=account, service=service, operation=operation,
-                resource=resource, expires_at=expires,
+                resource=resource, expires_at=expires_at,
             )
         )
         state.capabilities = caps
         state.touch()
         _save(state)
         return state
+
+
+def session_grant_capability(
+    session_id: str,
+    account: str,
+    service: str,
+    operation: str,
+    resource: str = "",
+    hours: int = 8,
+) -> SessionState:
+    """Octroie une capacité fine (compte, service, opération, ressource?) à une
+    session, à DURÉE bornée (1-168 h). Octroi HUMAIN (`mag session grant-cap` /
+    admin) — inchangé par ADR-0013 : seul `session_grant_capability_session_lived`
+    (chemin dédié à la grâce transactionnelle) écrit la sentinelle sans borne."""
+    account = account.strip()
+    service = service.strip().lower()
+    operation = operation.strip().lower()
+    resource = resource.strip()
+    if not account or not service or not operation:
+        raise GatewayError("account/service/operation requis", code="error")
+    h = max(1, min(int(hours), 168))
+    expires = time.time() + h * 3600
+    return _write_session_capability(session_id, account, service, operation, resource, expires)
+
+
+def session_grant_capability_session_lived(
+    session_id: str,
+    account: str,
+    service: str,
+    operation: str,
+    resource: str = "",
+) -> SessionState:
+    """Écrit la grâce « pour la session » (ADR-0013 §Décisions 1/2) : capacité
+    SANS borne de temps propre (`expires_at=0.0`, sentinelle acceptée par
+    `Capability.active`) — elle vit tant que le fichier de session existe et
+    disparaît avec lui (TTL d'inactivité ou `close_session`). Chemin DÉDIÉ à
+    la grâce transactionnelle, distinct de `session_grant_capability` (octroi
+    humain à TTL, INCHANGÉ) : appelé uniquement par `_transactional_gate`
+    (gateway/api.py) au succès d'un geste dont la portée choisie est
+    ``session`` et la ressource dérivable."""
+    account = account.strip()
+    service = service.strip().lower()
+    operation = operation.strip().lower()
+    resource = resource.strip()
+    if not account or not service or not operation:
+        raise GatewayError("account/service/operation requis", code="error")
+    return _write_session_capability(session_id, account, service, operation, resource, 0.0)
 
 
 def active_capabilities(session_id: str, account: str, service: str = "") -> list[Capability]:
@@ -966,6 +1055,14 @@ def list_sessions(*, include_expired_zones: bool = False) -> list[dict[str, Any]
         caps_live: list[dict[str, Any]] = []
         for cap in state.capabilities:
             if cap.active(now):
+                # Sentinelle « pour la session » (ADR-0013 §Décision 1,
+                # expires_at<=0) : pas de minutes_left négatif — la capacité
+                # vit avec la session, jamais une durée propre.
+                minutes_left: Any = (
+                    "vit avec la session"
+                    if cap.expires_at <= 0.0
+                    else max(0, int((cap.expires_at - now) / 60))
+                )
                 caps_live.append(
                     {
                         "account": cap.account,
@@ -973,7 +1070,7 @@ def list_sessions(*, include_expired_zones: bool = False) -> list[dict[str, Any]
                         "operation": cap.operation,
                         "resource": cap.resource,
                         "expires_at": cap.expires_at,
-                        "minutes_left": max(0, int((cap.expires_at - now) / 60)),
+                        "minutes_left": minutes_left,
                     }
                 )
         children = 0

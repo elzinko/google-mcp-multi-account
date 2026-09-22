@@ -34,6 +34,8 @@ from .sessions import (
     is_session_unlocked,
     open_read_lease,
     require_session,
+    session_grant_capability_session_lived,
+    session_has_capability,
     transactional_enabled,
     transactional_lease_mode,
     try_consume_read_lease,
@@ -166,17 +168,61 @@ def _consented_cap(service: str, category: str | None) -> dict[str, str]:
     return {"service": service, "operation": category or "*"}
 
 
-def _transactional_gate(alias: str, gws_args: list[str], sid: str) -> dict[str, str]:
-    """Point de contrôle unique du consentement transactionnel (ADR-0011/0012),
-    appelé par `_run` quand `transactional_enabled()`. Rend la capacité consentie
-    à porter jusqu'au broker (Zone 1).
+# Liste blanche d'éligibilité à la grâce « pour la session » (ADR-0013
+# §Décision 4) : SEULEMENT read/create/update/delete. `share` et toute
+# catégorie inconnue (None) en sont exclus par construction — ni lookup ni
+# écriture de grâce, Touch ID par acte toujours (fail-closed par liste
+# blanche, jamais par liste noire : une catégorie future non classée reste
+# exclue tant qu'elle n'est pas explicitement ajoutée ici).
+_GRACE_ELIGIBLE_CATEGORIES = {"read", "create", "update", "delete"}
 
-    - mutation (ou mode ``manuel``, ou lecture non classée) : acte SIGNÉ lié à
-      CET acte (compte × opération × ressource), usage unique (`consume_nonce`) —
-      aucune fenêtre ; un 2ᵉ acte identique redemande un geste.
-    - lecture (modes ``fenetre``/``session``) : bail actif (TTL non écoulé ET
-      budget restant) → budget −1 ; sinon un geste « lire maintenant » ouvre un
-      bail frais dont on consomme aussitôt le premier slot.
+
+def _is_delegated_session(sid: str) -> bool:
+    """True si `sid` est une sous-session déléguée (pas la racine).
+
+    Seule la session racine peut écrire une grâce
+    (`session_grant_capability_session_lived` refuse sinon avec
+    `GatewayError(code="error")`, cf. `_write_session_capability`). Une
+    sous-session déléguée ne doit donc jamais être déclarée éligible à la
+    grâce « pour la session » (ADR-0013 lot 6, fix P1 latent) — repli
+    fail-closed si la session est illisible ici : `require_session` l'a déjà
+    validée plus haut dans `_run`."""
+    from .sessions import get_session
+    state = get_session(sid)
+    return bool(state and state.delegated)
+
+
+def _normalize_grant_scope(raw: str) -> str:
+    """Normalise la portée demandée par l'appel (ADR-0013 §Décision 3).
+
+    ``once``/``session`` reconnus tels quels ; tout le reste (absent, vide,
+    inconnu) replie sur ``once`` — seul un choix EXPLICITE « session » peut
+    desserrer, jamais une valeur par défaut ou mal formée."""
+    val = (raw or "").strip().lower()
+    return val if val in ("once", "session") else "once"
+
+
+def _transactional_gate(
+    alias: str, gws_args: list[str], sid: str, grant_scope: str = "once",
+) -> dict[str, str]:
+    """Point de contrôle unique du consentement transactionnel (ADR-0011/0012,
+    raffiné ADR-0013), appelé par `_run` quand `transactional_enabled()`. Rend
+    la capacité consentie à porter jusqu'au broker (Zone 1).
+
+    En mode ``manuel``, AVANT tout geste : (1) classer l'acte ; (2) garde-fou
+    partage — seule une catégorie de la liste blanche est éligible à la
+    grâce ; (3) si éligible ET une grâce couvre déjà ce périmètre exact
+    (compte × service × catégorie × ressource, `session_has_capability`) :
+    AUCUN geste, retour direct de la capacité consentie ; (4) sinon geste
+    signé (usage unique, `consume_nonce`) puis, au succès, si la portée
+    choisie est ``session`` ET la ressource est dérivable, écriture de la
+    grâce (`session_grant_capability_session_lived`) — sans ressource
+    dérivable, « session » retombe sur « une fois » (pas de grâce à l'échelle
+    du service). Le broker reçoit toujours un `consented_cap` SANS ressource
+    (`_consented_cap`) — `handle_exec` est inchangé (ADR-0012 Zone 1).
+
+    En mode ``auto`` : mutation par acte (jamais de grâce, Décision 5) ;
+    lecture groupée sous bail (TTL + budget) — inchangé.
 
     Fail-closed : geste refusé/absent (`ElicitationError`) → refus
     (`GatewayError` code="locked"), jamais un accès."""
@@ -185,6 +231,29 @@ def _transactional_gate(alias: str, gws_args: list[str], sid: str) -> dict[str, 
     # nomme le compte réel, pas juste l'alias, en multi-comptes (Codex #147, P2).
     email = profile_email(alias)
     mode = transactional_lease_mode()
+    scope = _normalize_grant_scope(grant_scope)
+
+    # (2) Garde-fou partage EN PREMIER : seul le mode manuel connaît la grâce
+    # « pour la session », et seule une catégorie whitelistée y est éligible.
+    # Garde (a) ADR-0013 lot 6, fix P1 : une sous-session déléguée n'est
+    # jamais éligible — ni au lookup ni à l'écriture — pour ne jamais tenter
+    # une écriture de grâce qu'elle n'a pas le droit de faire.
+    grace_eligible = (
+        mode == "manuel"
+        and category in _GRACE_ELIGIBLE_CATEGORIES
+        and not _is_delegated_session(sid)
+    )
+    # ADR-0013 (Codex #150 P2) : ne SIGNER/afficher que la portée réellement
+    # applicable. Hors éligibilité (mode auto, partage, catégorie non whitelistée,
+    # sous-session déléguée), « session » n'écrit aucune grâce — la normaliser à
+    # « once » pour que le reçu Touch ID ne promette pas ce qui n'aura pas lieu.
+    if scope == "session" and not grace_eligible:
+        scope = "once"
+
+    # (3) Grâce déjà accordée pour ce périmètre exact → aucun geste.
+    if grace_eligible and session_has_capability(sid, alias, service, category, resource):
+        return _consented_cap(service, category)
+
     if op_class == "mutation" or mode == "manuel":
         prefix = "transactional_mutation" if op_class == "mutation" else "transactional_read"
         try:
@@ -198,12 +267,25 @@ def _transactional_gate(alias: str, gws_args: list[str], sid: str) -> dict[str, 
                     # Zone 3 : lier les arguments conséquents (qui reçoit quoi) au
                     # reçu signé + au prompt. Vide pour une lecture (mode manuel).
                     "bound_args": _bound_args(gws_args) if op_class == "mutation" else {},
+                    # ADR-0013 §Décision 3 : portée signée, threadée depuis l'appel.
+                    "grant_scope": scope,
                 }
             )
         except ElicitationError as e:
             raise GatewayError(f"acte refusé — {e}", code="locked") from e
+        # (4) Au succès : « pour la session » écrit la grâce — seulement si
+        # éligible ET ressource dérivable (repli fail-closed sur « une fois »).
+        # Garde (b) ADR-0013 lot 6, fix P1 : mémoriser la grâce ne doit JAMAIS
+        # faire échouer un acte déjà approuvé (Touch ID déjà consommé) — un
+        # échec d'écriture (ex. concurrence, cas non prévu par la garde (a))
+        # retombe silencieusement sur « une fois » plutôt que de remonter.
+        if grace_eligible and scope == "session" and resource:
+            try:
+                session_grant_capability_session_lived(sid, alias, service, category, resource)
+            except GatewayError:
+                pass
         return _consented_cap(service, category)
-    # Lecture (fenetre/session) : consommer un slot de bail ATOMIQUEMENT (check +
+    # Lecture (mode auto) : consommer un slot de bail ATOMIQUEMENT (check +
     # décrément sous verrou) pour ne pas dépasser le budget signé sous concurrence
     # (Codex #147, P1). Slot indisponible → un geste ouvre un bail frais.
     if not try_consume_read_lease(sid, alias):
@@ -232,6 +314,7 @@ def _run(
     timeout: int = 60,
     raw_output: bool = False,
     session: str = "",
+    grant_scope: str = "once",
 ) -> Any:
     """Exécute un appel gws via le broker, autorisé par le jeton PORTÉ par cet appel.
 
@@ -239,6 +322,12 @@ def _run(
     quel que soit l'état de verrouillage du profil. Plus de repli sur un état
     global de process — le jeton n'est jamais lu ailleurs que dans `session`,
     le paramètre que l'appelant (gateway.mcp_server) a extrait de CET appel.
+
+    `grant_scope` (ADR-0013 §Décision 3) : indice de portée « une fois »
+    (défaut) / « pour la session » threadé au niveau de CET appel jusqu'au
+    gate transactionnel — jamais un argument métier par outil (lot 5 câble sa
+    source réelle, l'admin/Swift ; ici le défaut `once` préserve bit pour bit
+    le comportement des appelants qui ne le passent pas encore).
     """
     sid = (session or "").strip()
     gro = get_git_root() or git_toplevel()
@@ -274,7 +363,7 @@ def _run(
             # ADR-0011/0012 : le modèle transactionnel REMPLACE la fenêtre minutes.
             # Le gate route lecture/mutation (bail ou acte signé) indépendamment
             # de .locked, et produit la capacité consentie portée au broker (Zone 1).
-            consented_cap = _transactional_gate(alias, gws_args, sid)
+            consented_cap = _transactional_gate(alias, gws_args, sid, grant_scope=grant_scope)
         elif is_locked(d) and not is_session_unlocked(sid, alias):
             raise GatewayError(
                 (
@@ -347,7 +436,12 @@ def gmail_create_draft(
     cc: str = "",
     session: str = "",
 ) -> dict[str, Any]:
-    """Crée un brouillon — jamais d'envoi (pas de tool send en v1)."""
+    """Crée un brouillon — jamais d'envoi (pas de tool send en v1).
+
+    Pas de `grant_scope` : un brouillon n'a pas de périmètre-ressource (dossier),
+    et sa catégorie ``drafts`` n'est pas éligible à la grâce « pour la session »
+    (cf. `_GRACE_ELIGIBLE_CATEGORIES`). Exposer le choix mentirait — il retomberait
+    toujours sur « une fois » (Codex #150). Un brouillon reste signé par acte."""
     validate_alias(alias)
     if not to or not subject:
         raise GatewayError("to et subject sont requis", code="error")
@@ -504,6 +598,7 @@ def drive_create(
     content: str = "",
     content_type: str = "",
     session: str = "",
+    grant_scope: str = "once",
 ) -> dict[str, Any]:
     """Crée un fichier sous parent_id — soumis aux zones Drive (policy + grants).
 
@@ -527,7 +622,7 @@ def drive_create(
         "--json", json.dumps(body),
     ]
     if not content:
-        data = _run(alias, args, session=session)
+        data = _run(alias, args, session=session, grant_scope=grant_scope)
         return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
     ctype = _content_type_for(content_type, mime_type)
     with _spooled_content(content, ctype) as path:
@@ -535,6 +630,7 @@ def drive_create(
             alias,
             [*args, "--upload", str(path), "--upload-content-type", ctype],
             session=session,
+            grant_scope=grant_scope,
         )
     return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
 
@@ -645,6 +741,7 @@ def drive_copy(
     parent_id: str,
     name: str = "",
     session: str = "",
+    grant_scope: str = "once",
 ) -> dict[str, Any]:
     """Copie un fichier Drive vers parent_id — soumis aux zones côté destination.
 
@@ -668,6 +765,7 @@ def drive_copy(
             "--json", json.dumps(body),
         ],
         session=session,
+        grant_scope=grant_scope,
     )
     return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
 
@@ -679,6 +777,7 @@ def drive_upload(
     name: str = "",
     mime_type: str = "",
     session: str = "",
+    grant_scope: str = "once",
 ) -> dict[str, Any]:
     """Téléverse un fichier local (binaire compris) — soumis aux zones Drive.
 
@@ -750,6 +849,7 @@ def drive_upload(
             alias,
             [*args, "--upload", str(spool), "--upload-content-type", mime],
             session=session,
+            grant_scope=grant_scope,
         )
     finally:
         try:
@@ -786,6 +886,7 @@ def drive_update(
     content_type: str = "",
     mime_type: str = "",
     session: str = "",
+    grant_scope: str = "once",
 ) -> dict[str, Any]:
     """Met à jour un fichier Drive (nom et/ou contenu) — soumis aux zones.
 
@@ -815,12 +916,14 @@ def drive_update(
         "--json", json.dumps(body),
     ]
     if content is None:
-        data = _run(alias, args, session=session)
+        data = _run(alias, args, session=session, grant_scope=grant_scope)
         return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
     # content = remplacement INTÉGRAL (media upload). On lit d'abord le vrai
     # mimeType : un fichier Google natif ne s'édite pas ainsi (média ≠ contenu
     # structuré) → refus plutôt qu'échec silencieux / corruption d'un binaire
     # (revue F5 / Codex P1). « content » réservé aux fichiers non-natifs.
+    # (lecture incidente, PAS la mutation choisie par l'appelant : la portée
+    # demandée ne s'applique qu'à l'acte d'écriture ci-dessous)
     current = _run(
         alias,
         ["drive", "files", "get", "--params",
@@ -842,6 +945,7 @@ def drive_update(
             alias,
             [*args, "--upload", str(path), "--upload-content-type", ctype],
             session=session,
+            grant_scope=grant_scope,
         )
     return {"ok": True, "alias": alias, "result": data, **_ownership(data)}
 
@@ -1134,6 +1238,23 @@ def access_request(
     acct_email = profile_email(alias)
     who = f"« {alias} » ({acct_email})" if acct_email else f"« {alias} »"
     if kind in ("session_unlock", "unlock"):
+        # ADR-0013 : en transactionnel, le déverrouillage par minutes n'existe plus.
+        # Ne pas suggérer `mag session unlock` (il refuserait) — guider vers le geste
+        # par acte « pour la session » (Codex #150 P2).
+        from .sessions import transactional_enabled
+        if transactional_enabled():
+            return {
+                "ok": True,
+                "elicitation": False,
+                "kind": kind,
+                "alias": alias,
+                "message": (
+                    f"Mode transactionnel actif : le déverrouillage par minutes est retiré, "
+                    f"il n'y a rien à déverrouiller à l'avance pour {who}. Pour éviter de "
+                    f"re-signer chaque écriture dans le MÊME dossier, autorise « pour la "
+                    f"session » au moment d'agir (grant_scope=session sur l'acte) — ADR-0013."
+                ),
+            }
         mins = max(1, min(int(minutes), 1440))
         sid = (session or "").strip()
         if sid or kind == "session_unlock":
@@ -1353,6 +1474,18 @@ def session_unlock_in_conversation(
         raise GatewayError("session requise (jeton de conversation)", code="error")
     require_session(sid)
     _reject_if_delegated(sid, "session_unlock_in_conversation")
+    # ADR-0013 : en transactionnel, le déverrouillage par minutes est retiré.
+    # Refuser ICI, AVANT toute annonce ou Touch ID — sinon l'humain ferait un
+    # geste biométrique pour ne recevoir qu'un refus au moment du session_unlock
+    # final (Codex #150 P2). On renvoie vers « pour la session » (choix par acte).
+    from .sessions import transactional_enabled
+    if transactional_enabled():
+        raise GatewayError(
+            "déverrouillage par minutes retiré en mode transactionnel : autorise "
+            "« pour la session » au moment d'agir (grant_scope=session sur l'acte "
+            "d'écriture) — ADR-0013",
+            code="locked",
+        )
     # Rejeter tout `confirm` non booléen (revue Codex #142) : un client peut
     # envoyer une valeur schéma-invalide mais plausible (« "confirm": "false" »)
     # que le dispatch transmet brute — sans ce garde, elle serait vue comme un

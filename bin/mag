@@ -24,6 +24,7 @@
 #   mag grants <alias> [clear]                       List/clear temporary authorizations
 #   mag strongauth on|off|status                     Require signed elicitation for unlock & grant
 #   mag elicitation enroll|status                    Enroll biometric key / status
+#   mag transactional status|on|off|mode manuel|auto Transactional consent + lease mode (ADR-0013)
 #   mag admin [stop]                                 Start/stop the web interface (127.0.0.1:4877)
 #   mag broker [status|stop]                         Status/stop the broker for this GWSA_ROOT
 #   mag dev deploy [--isolated]                      Deploy the current clone as a temporary dev version
@@ -178,7 +179,7 @@ check_alias() {
   [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] \
     || die "invalid alias \"$1\" (letters, digits, - and _ only)"
   case "$1" in
-    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth|elicitation|admin|broker|dev|update|release|revert|session|vault|project|sandbox|couloir|wire) die "\"$1\" is a reserved word" ;;
+    add|list|remove|status|help|lock|unlock|policy|grant|grants|strongauth|elicitation|transactional|admin|broker|dev|update|release|revert|session|vault|project|sandbox|couloir|wire) die "\"$1\" is a reserved word" ;;
   esac
 }
 
@@ -970,6 +971,57 @@ cmd_elicitation() { # mag elicitation enroll|status|in-conversation — clé bio
       esac
       ;;
     *) die "usage: $SELF elicitation enroll [--mock] | status | in-conversation on|off|status" ;;
+  esac
+}
+
+_tx_set_int() { # $1=nom-fichier-marqueur  $2=valeur  $3=label — écrit un réglage entier (ADR-0013)
+  # >= 1 seulement : une durée de 0 n'a pas de sens (session-ttl, fenêtre auto,
+  # budget auto) — ^[0-9]+$ acceptait 0 à tort (ADR-0013 lot 6, fix P2).
+  [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || die "usage: $SELF transactional $3 <entier ≥ 1>"
+  mkdir -p "$GWSA_ROOT" && chmod 700 "$GWSA_ROOT" 2>/dev/null || true
+  printf '%s' "$2" > "$GWSA_ROOT/$1"
+  echo "✓ $3 = $2"
+}
+
+cmd_transactional() { # mag transactional status|on|off|mode|durées — consentement transactionnel (ADR-0013)
+  local sub="${1:-status}"; shift || true
+  case "$sub" in
+    on)
+      mkdir -p "$GWSA_ROOT" && chmod 700 "$GWSA_ROOT" 2>/dev/null || true
+      touch "$GWSA_ROOT/.transactional-consent"
+      echo "✓ Transactional consent ENABLED (opt-in). Reconnect the MCP client to apply."
+      ;;
+    off) rm -f "$GWSA_ROOT/.transactional-consent"; echo "Transactional consent disabled." ;;
+    mode)
+      case "${1:-}" in
+        manuel|auto)
+          mkdir -p "$GWSA_ROOT" && chmod 700 "$GWSA_ROOT" 2>/dev/null || true
+          printf '%s' "$1" > "$GWSA_ROOT/.transactional-lease-mode"
+          echo "✓ Lease mode: $1"
+          ;;
+        "") [[ -f "$GWSA_ROOT/.transactional-lease-mode" ]] && { cat "$GWSA_ROOT/.transactional-lease-mode"; echo; } || echo "manuel (default)" ;;
+        *) die "usage: $SELF transactional mode manuel|auto" ;;
+      esac
+      ;;
+    session-ttl)       _tx_set_int ".session-ttl-sec"     "${1:-}" "session-ttl" ;;
+    read-lease-ttl)    _tx_set_int ".read-lease-ttl-sec"  "${1:-}" "read-lease-ttl" ;;
+    read-lease-budget) _tx_set_int ".read-lease-budget"   "${1:-}" "read-lease-budget" ;;
+    status)
+      # État EFFECTIF via les résolveurs gateway (env d'abord, puis marqueur, puis
+      # défaut ; mapping legacy fenetre→auto / session→manuel) — une seule source
+      # de vérité, alignée sur la gateway ET le panneau admin (Codex #150 P2).
+      REPO_DIR="$REPO_DIR" GWSA_ROOT="$GWSA_ROOT" "$SYS_PYTHON" -c "
+import os, sys
+sys.path.insert(0, os.environ['REPO_DIR'])
+from gateway.sessions import (transactional_enabled, transactional_lease_mode,
+                              session_ttl_sec, read_lease_ttl_sec, read_lease_budget)
+print('transactional consent:', 'enabled' if transactional_enabled() else 'disabled')
+print('lease mode:', transactional_lease_mode())
+print('session TTL (s):', session_ttl_sec())
+print('auto lease window (s):', read_lease_ttl_sec(), '/ budget:', read_lease_budget())
+"
+      ;;
+    *) die "usage: $SELF transactional status|on|off|mode manuel|auto|session-ttl <s>|read-lease-ttl <s>|read-lease-budget <n>" ;;
   esac
 }
 
@@ -1993,6 +2045,7 @@ main() {
     grants) shift; [[ $# -ge 1 && $# -le 2 ]] || die "usage: $SELF grants <alias> [clear]"; cmd_grants "$@" ;;
     session) shift; cmd_session "$@" ;;
     elicitation) shift; cmd_elicitation "$@" ;;
+    transactional) shift; cmd_transactional "$@" ;;
     project) shift; cmd_project "$@" ;;
     vault) shift; cmd_vault "$@" ;;
     strongauth)

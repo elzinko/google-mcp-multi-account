@@ -3348,6 +3348,86 @@ if [[ "$admin_ready" -eq 1 ]]; then
   [[ "$code_origin" == "403" ]] \
     && pass "admin : refuse une Origin étrangère" \
     || fail "admin Origin guard (code=$code_origin)"
+
+  # ── Panneau admin transactionnel (ADR-0013 lot 5) ──
+  tx_get1="$(curl -sf -H 'X-GWSA-Admin: 1' "http://127.0.0.1:$ADMIN_PORT/api/transactional")"
+  [[ "$tx_get1" == *'"consent":false'* && "$tx_get1" == *'"mode":"manuel"'* \
+     && "$tx_get1" == *'"session_ttl_sec":28800'* && "$tx_get1" == *'"read_lease_ttl_sec":90'* \
+     && "$tx_get1" == *'"read_lease_budget":20'* ]] \
+    && pass "admin GET /api/transactional : défauts (consent off, mode manuel, TTL par défaut)" \
+    || fail "admin GET /api/transactional défauts ($tx_get1)"
+
+  tx_on="$(curl -sf -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
+    -X POST -d '{"enabled":true}' "http://127.0.0.1:$ADMIN_PORT/api/transactional/consent")"
+  [[ "$tx_on" == *'"ok":true'* && -f "$SESS_ROOT/.transactional-consent" ]] \
+    && pass "admin POST /api/transactional/consent {enabled:true} : active via mag" \
+    || fail "admin POST consent on ($tx_on)"
+
+  # Codex #150 P2 : mode de sécurité → un `enabled` non booléen (ex. chaîne "false")
+  # est rejeté (400), jamais interprété en silence.
+  code_consent_bad="$(curl -s -o /dev/null -w '%{http_code}' -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
+    -X POST -d '{"enabled":"false"}' "http://127.0.0.1:$ADMIN_PORT/api/transactional/consent")"
+  [[ "$code_consent_bad" == "400" ]] \
+    && pass "admin POST consent : rejette un enabled non booléen (fail-closed, Codex #150)" \
+    || fail "admin POST consent non booléen (code=$code_consent_bad)"
+
+  tx_mode="$(curl -sf -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
+    -X POST -d '{"mode":"auto"}' "http://127.0.0.1:$ADMIN_PORT/api/transactional/mode")"
+  mode_file="$(cat "$SESS_ROOT/.transactional-lease-mode" 2>/dev/null || true)"
+  [[ "$tx_mode" == *'"ok":true'* && "$mode_file" == "auto" ]] \
+    && pass "admin POST /api/transactional/mode {mode:auto} : bascule via mag" \
+    || fail "admin POST mode auto ($tx_mode mode_file=$mode_file)"
+
+  code_mode_bad="$(curl -s -o /dev/null -w '%{http_code}' \
+    -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
+    -X POST -d '{"mode":"n_importe_quoi"}' "http://127.0.0.1:$ADMIN_PORT/api/transactional/mode")"
+  [[ "$code_mode_bad" == "400" ]] \
+    && pass "admin POST /api/transactional/mode : rejette un mode invalide (fail-closed)" \
+    || fail "admin POST mode invalide (code=$code_mode_bad)"
+
+  tx_settings="$(curl -sf -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
+    -X POST -d '{"session_ttl_sec":3600,"read_lease_ttl_sec":120,"read_lease_budget":5}' \
+    "http://127.0.0.1:$ADMIN_PORT/api/transactional/settings")"
+  sttl_file="$(cat "$SESS_ROOT/.session-ttl-sec" 2>/dev/null || true)"
+  rttl_file="$(cat "$SESS_ROOT/.read-lease-ttl-sec" 2>/dev/null || true)"
+  rbud_file="$(cat "$SESS_ROOT/.read-lease-budget" 2>/dev/null || true)"
+  [[ "$tx_settings" == *'"ok":true'* && "$sttl_file" == "3600" && "$rttl_file" == "120" && "$rbud_file" == "5" ]] \
+    && pass "admin POST /api/transactional/settings : écrit les 3 durées via mag" \
+    || fail "admin POST settings ($tx_settings sttl=$sttl_file rttl=$rttl_file rbud=$rbud_file)"
+
+  # Compat legacy (Codex #150 P1) : un marqueur hérité « fenetre » doit s'afficher
+  # « auto » (comme gateway/sessions.py::transactional_lease_mode), « session » →
+  # « manuel » — jamais le défaut brut (sinon le panneau ment sur le mode effectif).
+  printf 'fenetre' > "$SESS_ROOT/.transactional-lease-mode"
+  tx_leg_f="$(curl -sf -H 'X-GWSA-Admin: 1' "http://127.0.0.1:$ADMIN_PORT/api/transactional")"
+  printf 'session' > "$SESS_ROOT/.transactional-lease-mode"
+  tx_leg_s="$(curl -sf -H 'X-GWSA-Admin: 1' "http://127.0.0.1:$ADMIN_PORT/api/transactional")"
+  printf 'auto' > "$SESS_ROOT/.transactional-lease-mode"   # restaure l'état du bloc
+  [[ "$tx_leg_f" == *'"mode":"auto"'* && "$tx_leg_s" == *'"mode":"manuel"'* ]] \
+    && pass "admin GET /api/transactional : mappe les valeurs héritées (fenetre→auto, session→manuel, Codex #150)" \
+    || fail "admin GET legacy mapping (fenetre=$tx_leg_f session=$tx_leg_s)"
+
+  code_settings_bad="$(curl -s -o /dev/null -w '%{http_code}' \
+    -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
+    -X POST -d '{"session_ttl_sec":"abc"}' "http://127.0.0.1:$ADMIN_PORT/api/transactional/settings")"
+  [[ "$code_settings_bad" == "400" ]] \
+    && pass "admin POST /api/transactional/settings : rejette une durée non entière (fail-closed)" \
+    || fail "admin POST settings invalide (code=$code_settings_bad)"
+
+  tx_get2="$(curl -sf -H 'X-GWSA-Admin: 1' "http://127.0.0.1:$ADMIN_PORT/api/transactional")"
+  [[ "$tx_get2" == *'"consent":true'* && "$tx_get2" == *'"mode":"auto"'* \
+     && "$tx_get2" == *'"session_ttl_sec":3600'* ]] \
+    && pass "admin GET /api/transactional : reflète l'état après écriture" \
+    || fail "admin GET /api/transactional après écriture ($tx_get2)"
+
+  code_tx_csrf="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$ADMIN_PORT/api/transactional")"
+  [[ "$code_tx_csrf" == "403" ]] \
+    && pass "admin /api/transactional : refuse sans X-GWSA-Admin" \
+    || fail "admin CSRF transactional (code=$code_tx_csrf)"
+
+  # remet le flag OFF pour ne pas polluer les tests suivants qui réutilisent SESS_ROOT
+  curl -sf -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
+    -X POST -d '{"enabled":false}' "http://127.0.0.1:$ADMIN_PORT/api/transactional/consent" >/dev/null
 else
   fail "admin server sessions : démarrage timeout port $ADMIN_PORT"
 fi
@@ -6645,9 +6725,9 @@ print('OK' if 1439*60 <= delta <= 1440*60 + 2 else f'wrong:{delta}')
   && pass "transactionnel OFF : minutes écrêté à 1440 (non-régression)" \
   || fail "transactionnel OFF : comportement minutes changé ($out)"
 
-# 2) Flag ON, mode fenetre (défaut) : le bail referme seul au TTL. (config via MAG_)
+# 2) Flag ON, mode auto (ex-fenetre) : le bail referme seul au TTL. (config via MAG_)
 out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_TRANSACTIONAL_LEASE_MODE=fenetre MAG_READ_LEASE_TTL_SEC=1 MAG_READ_LEASE_BUDGET=5 "$PY" -c "
+  MAG_TRANSACTIONAL_LEASE_MODE=auto MAG_READ_LEASE_TTL_SEC=1 MAG_READ_LEASE_BUDGET=5 "$PY" -c "
 import time
 from gateway.sessions import create_session, open_read_lease, is_read_lease_active
 s = create_session(client='txB')
@@ -6658,12 +6738,12 @@ after = is_read_lease_active(s.session_id, 'alpha')
 print('before', before, 'after', after)
 ")"
 [[ "$out" == *"before True"* && "$out" == *"after False"* ]] \
-  && pass "transactionnel fenetre : TTL écoulé referme seul" \
-  || fail "transactionnel fenetre : TTL n'a pas refermé ($out)"
+  && pass "transactionnel auto : TTL écoulé referme seul" \
+  || fail "transactionnel auto : TTL n'a pas refermé ($out)"
 
-# 3) Flag ON, mode fenetre : le bail referme au budget épuisé (avant le TTL).
+# 3) Flag ON, mode auto : le bail referme au budget épuisé (avant le TTL).
 out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_TRANSACTIONAL_LEASE_MODE=fenetre MAG_READ_LEASE_TTL_SEC=90 MAG_READ_LEASE_BUDGET=2 "$PY" -c "
+  MAG_TRANSACTIONAL_LEASE_MODE=auto MAG_READ_LEASE_TTL_SEC=90 MAG_READ_LEASE_BUDGET=2 "$PY" -c "
 from gateway.sessions import create_session, open_read_lease, is_read_lease_active, consume_read_lease
 s = create_session(client='txC')
 open_read_lease(s.session_id, 'alpha')
@@ -6672,40 +6752,55 @@ consume_read_lease(s.session_id, 'alpha'); after = is_read_lease_active(s.sessio
 print('mid', mid, 'after', after)
 ")"
 [[ "$out" == *"mid True"* && "$out" == *"after False"* ]] \
-  && pass "transactionnel fenetre : budget épuisé referme seul (avant TTL)" \
-  || fail "transactionnel fenetre : budget non appliqué ($out)"
+  && pass "transactionnel auto : budget épuisé referme seul (avant TTL)" \
+  || fail "transactionnel auto : budget non appliqué ($out)"
 
-# 4) Zone 4 mode=session : survit au TTL court, meurt au budget.
-out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_TRANSACTIONAL_LEASE_MODE=session MAG_READ_LEASE_TTL_SEC=1 MAG_READ_LEASE_BUDGET=2 "$PY" -c "
-import time
-from gateway.sessions import create_session, open_read_lease, is_read_lease_active, consume_read_lease
-s = create_session(client='txSess')
-open_read_lease(s.session_id, 'alpha')
-time.sleep(1.2)  # au-delà du TTL fenetre — en mode session, ne referme PAS
-survived = is_read_lease_active(s.session_id, 'alpha')
-consume_read_lease(s.session_id, 'alpha'); consume_read_lease(s.session_id, 'alpha')
-after_budget = is_read_lease_active(s.session_id, 'alpha')
-print('survived', survived, 'after_budget', after_budget)
+# 4) ADR-0013 lot 2 : les 3 mappings de compat (fenetre→auto, session→manuel,
+#    absent/inconnu→manuel) — le mode ``session`` global disparaît.
+out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import transactional_lease_mode
+import os
+os.environ['MAG_TRANSACTIONAL_LEASE_MODE'] = 'fenetre'
+a = transactional_lease_mode()
+os.environ['MAG_TRANSACTIONAL_LEASE_MODE'] = 'session'
+b = transactional_lease_mode()
+os.environ['MAG_TRANSACTIONAL_LEASE_MODE'] = 'nimportequoi'
+c = transactional_lease_mode()
+os.environ.pop('MAG_TRANSACTIONAL_LEASE_MODE', None)
+d = transactional_lease_mode()
+os.environ['MAG_TRANSACTIONAL_LEASE_MODE'] = 'auto'
+e = transactional_lease_mode()
+os.environ['MAG_TRANSACTIONAL_LEASE_MODE'] = 'manuel'
+f = transactional_lease_mode()
+print('fenetre->', a, 'session->', b, 'inconnu->', c, 'absent->', d, 'auto=', e, 'manuel=', f)
 ")"
-[[ "$out" == *"survived True"* && "$out" == *"after_budget False"* ]] \
-  && pass "transactionnel session : survit au TTL court, meurt au budget (filet)" \
-  || fail "transactionnel session : durée de vie incorrecte ($out)"
+[[ "$out" == *"fenetre-> auto"* && "$out" == *"session-> manuel"* \
+   && "$out" == *"inconnu-> manuel"* && "$out" == *"absent-> manuel"* \
+   && "$out" == *"auto= auto"* && "$out" == *"manuel= manuel"* ]] \
+  && pass "transactionnel lot 2 : mapping compat fenetre→auto, session→manuel, inconnu/absent→manuel" \
+  || fail "transactionnel lot 2 : mapping compat cassé ($out)"
 
-# 4bis) Zone 4 mode=session : le bail meurt AVEC la session (close_session).
-out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_TRANSACTIONAL_LEASE_MODE=session "$PY" -c "
-from gateway.sessions import create_session, open_read_lease, is_read_lease_active, close_session
-s = create_session(client='txSess2')
-open_read_lease(s.session_id, 'alpha')
-before = is_read_lease_active(s.session_id, 'alpha')
-close_session(s.session_id)
-after = is_read_lease_active(s.session_id, 'alpha')
-print('before', before, 'after', after)
+# 4bis) ADR-0013 lot 2 : un bail RÉSIDUEL sans borne de temps (ancien mode
+#       ``session``, expires_at<=0) est TOUJOURS neutralisé — que le mode
+#       courant soit auto ou manuel (le mode global ``session`` n'existe plus).
+out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, is_read_lease_active, ReadLease, _load_active, _save, _lock_path
+from gateway._filelock import file_lock
+s = create_session(client='txResid')
+with file_lock(_lock_path(s.session_id)):
+    st = _load_active(s.session_id)
+    st.read_leases['alpha'] = ReadLease(expires_at=0.0, budget=5)  # résidu ancien mode 'session'
+    _save(st)
+import os
+os.environ['MAG_TRANSACTIONAL_LEASE_MODE'] = 'auto'
+under_auto = is_read_lease_active(s.session_id, 'alpha')
+os.environ['MAG_TRANSACTIONAL_LEASE_MODE'] = 'manuel'
+under_manuel = is_read_lease_active(s.session_id, 'alpha')
+print('under_auto', under_auto, 'under_manuel', under_manuel)
 ")"
-[[ "$out" == *"before True"* && "$out" == *"after False"* ]] \
-  && pass "transactionnel session : le bail disparaît avec la session (close)" \
-  || fail "transactionnel session : bail survit à la fermeture de session ($out)"
+[[ "$out" == *"under_auto False"* && "$out" == *"under_manuel False"* ]] \
+  && pass "transactionnel lot 2 : bail résiduel sans borne (ex-mode session) neutralisé, quel que soit le mode" \
+  || fail "transactionnel lot 2 : bail résiduel sans borne encore actif ($out)"
 
 # 5) Zone 4 mode=manuel : open_read_lease n'ouvre AUCUN bail.
 out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 \
@@ -6737,17 +6832,17 @@ print(transactional_lease_mode())
 [[ "$out" == "manuel" ]] \
   && pass "transactionnel : mode inconnu → repli fail-closed sur manuel (le plus strict)" \
   || fail "transactionnel : mode inconnu mal replié ($out)"
-out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" GWSA_TRANSACTIONAL_LEASE_MODE=session "$PY" -c "
+out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" GWSA_TRANSACTIONAL_LEASE_MODE=fenetre "$PY" -c "
 from gateway.sessions import transactional_lease_mode
 print(transactional_lease_mode())
 ")"
-[[ "$out" == "session" ]] \
-  && pass "transactionnel : mode lu aussi via GWSA_ (compat bi-nom)" \
+[[ "$out" == "auto" ]] \
+  && pass "transactionnel : mode lu aussi via GWSA_ (compat bi-nom), avec mapping fenetre→auto" \
   || fail "transactionnel : repli GWSA_ du mode cassé ($out)"
 
 # 7) Zone 2 : consommation ATOMIQUE — 24 process concurrents, budget 3 → exactement 3.
 out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_TRANSACTIONAL_LEASE_MODE=fenetre MAG_READ_LEASE_TTL_SEC=90 MAG_READ_LEASE_BUDGET=3 "$PY" -c "
+  MAG_TRANSACTIONAL_LEASE_MODE=auto MAG_READ_LEASE_TTL_SEC=90 MAG_READ_LEASE_BUDGET=3 "$PY" -c "
 import multiprocessing as mp
 from gateway.sessions import create_session, open_read_lease, try_consume_read_lease
 s = create_session(client='txRace'); sid = s.session_id
@@ -6763,19 +6858,205 @@ print('consumed', sum(res))
   && pass "transactionnel Zone 2 : consommation atomique — budget jamais dépassé sous concurrence" \
   || fail "transactionnel Zone 2 : budget dépassé (course non sérialisée) ($out)"
 
-# 8) Flag ON : session_unlock(minutes) écrêté au plafond du bail (~2 min), pas 1440.
-out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_READ_LEASE_TTL_SEC=90 "$PY" -c "
-import time
-from gateway.sessions import create_session, session_unlock
-s = create_session(client='txPlaf')
-s = session_unlock(s.session_id, 'alpha', 2000)
-delta = s.unlocks['alpha'] - time.time()
-print('OK' if delta <= 2*60 + 2 else f'wrong:{delta}')
+# 8) ADR-0013 Décision 6 : session_unlock(minutes) REFUSE en transactionnel
+#    (la fenêtre de minutes est retirée, on renvoie vers « pour la session »),
+#    et n'arme aucun unlock.
+out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 "$PY" -c "
+from gateway.sessions import create_session, session_unlock, get_session
+from gateway.errors import GatewayError
+s = create_session(client='txNoUnlock')
+try:
+    session_unlock(s.session_id, 'alpha', 2000)
+    print('wrong:accepte')
+except GatewayError as e:
+    s2 = get_session(s.session_id)
+    code = getattr(e, 'code', '')
+    print('OK' if (code == 'locked' and not s2.unlocks) else 'bad:' + str(code) + ':' + str(s2.unlocks))
 ")"
 [[ "$out" == "OK" ]] \
-  && pass "transactionnel ON : minutes écrêté au plafond du bail (déprécié), pas 1440" \
-  || fail "transactionnel ON : minutes non écrêté au plafond ($out)"
+  && pass "transactionnel ON : session_unlock(minutes) refuse, aucun unlock armé (ADR-0013)" \
+  || fail "transactionnel ON : session_unlock aurait dû refuser ($out)"
+
+# 8bis) Non-régression : flag transactionnel OFF → session_unlock arme toujours la fenêtre.
+out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import time
+from gateway.sessions import create_session, session_unlock
+s = create_session(client='txOffUnlock')
+s = session_unlock(s.session_id, 'alpha', 30)
+print('OK' if s.unlocks.get('alpha', 0) > time.time() else 'wrong')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "flag OFF : session_unlock(minutes) inchangé (non-régression ADR-0013)" \
+  || fail "flag OFF : session_unlock cassé ($out)"
+
+# 8bis-2) Codex #150 P2 : session_unlock_in_conversation REFUSE en transactionnel
+#         AVANT toute annonce/Touch ID (aucun geste humain pour rien).
+UIC_ROOT="$(mktemp -d)"
+touch "$UIC_ROOT/.elicitation-in-conversation" "$UIC_ROOT/.transactional-consent"
+out="$(GWSA_ROOT="$UIC_ROOT" PYTHONPATH="$(pwd)" MAG_ELICITATION_MOCK=1 "$PY" -c "
+import gateway.api as api, gateway.elicitation as elic
+from gateway.errors import GatewayError
+from gateway.sessions import create_session
+elic.run_elicitation_gate = lambda *a, **k: (_ for _ in ()).throw(AssertionError('geste declenche'))
+s = create_session(client='txUIC')
+try:
+    api.session_unlock_in_conversation(alias='alpha', minutes=30, session=s.session_id, confirm=True)
+    print('wrong:accepte')
+except GatewayError as e:
+    print('OK' if e.code == 'locked' else 'bad:' + str(e.code))
+except AssertionError:
+    print('wrong:geste')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "transactionnel : session_unlock_in_conversation refuse AVANT tout geste (Codex #150)" \
+  || fail "transactionnel : session_unlock_in_conversation ($out)"
+rm -rf "$UIC_ROOT"
+
+# 8bis-3) Codex #150 P2 : access_request kind=session_unlock en transactionnel guide
+#         vers « pour la session », sans suggérer `mag session unlock`.
+AR_ROOT="$(mktemp -d)"
+touch "$AR_ROOT/.transactional-consent"
+out="$(GWSA_ROOT="$AR_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import gateway.api as api
+from gateway.sessions import create_session
+s = create_session(client='txAR')
+r = api.access_request(kind='session_unlock', alias='alpha', session=s.session_id, minutes=30)
+ok = (r.get('elicitation') is False) and ('pour la session' in r.get('message','')) and ('suggested_command' not in r)
+print('OK' if ok else 'wrong:' + str(r))
+")"
+[[ "$out" == "OK" ]] \
+  && pass "transactionnel : access_request unlock guide vers « pour la session » (Codex #150)" \
+  || fail "transactionnel : access_request unlock ($out)"
+rm -rf "$AR_ROOT"
+
+# 8ter) ADR-0013 Décision 6 : durées réglables par marqueur fichier (admin),
+#       env prioritaire, repli fail-safe sur le défaut. Root jetable (pas de
+#       contamination des autres tests).
+DUR_ROOT="$(mktemp -d)"
+out="$(GWSA_ROOT="$DUR_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import pathlib, os
+from gateway import sessions as S
+root = pathlib.Path(os.environ['GWSA_ROOT'])
+(root / S.SESSION_TTL_FLAG_NAME).write_text('3600')
+(root / S.READ_LEASE_TTL_FLAG_NAME).write_text('45')
+(root / S.READ_LEASE_BUDGET_FLAG_NAME).write_text('7')
+a = (S.session_ttl_sec(), S.read_lease_ttl_sec(), S.read_lease_budget())
+(root / S.READ_LEASE_BUDGET_FLAG_NAME).write_text('pasunentier')
+b = S.read_lease_budget()
+print('OK' if a == (3600, 45, 7) and b == S.DEFAULT_READ_LEASE_BUDGET else 'wrong:' + str(a) + ':' + str(b))
+")"
+[[ "$out" == "OK" ]] \
+  && pass "transactionnel : durées réglables par marqueur admin + repli fail-safe (ADR-0013)" \
+  || fail "transactionnel : durées non réglables ($out)"
+
+out="$(GWSA_ROOT="$DUR_ROOT" PYTHONPATH="$(pwd)" MAG_SESSION_TTL_SEC=120 "$PY" -c "
+import pathlib, os
+from gateway import sessions as S
+root = pathlib.Path(os.environ['GWSA_ROOT'])
+(root / S.SESSION_TTL_FLAG_NAME).write_text('3600')
+print('OK' if S.session_ttl_sec() == 120 else 'wrong:' + str(S.session_ttl_sec()))
+")"
+[[ "$out" == "OK" ]] \
+  && pass "transactionnel : env prioritaire sur le marqueur de durée (ADR-0013)" \
+  || fail "transactionnel : priorité env cassée ($out)"
+rm -rf "$DUR_ROOT"
+
+# 8quater bis) CLI `mag transactional` (ADR-0013 lot 5) : écrit mode + durée, relus
+#              par le code ; root jetable (pas de contamination) ; non-entier refusé.
+TXCLI_ROOT="$(mktemp -d)"
+GWSA_ROOT="$TXCLI_ROOT" "$GWSA" transactional mode auto >/dev/null 2>&1
+GWSA_ROOT="$TXCLI_ROOT" "$GWSA" transactional session-ttl 3600 >/dev/null 2>&1
+out="$(GWSA_ROOT="$TXCLI_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import transactional_lease_mode, session_ttl_sec
+print('OK' if transactional_lease_mode() == 'auto' and session_ttl_sec() == 3600 else 'wrong')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "CLI : mag transactional écrit mode+durée, relus par le code (ADR-0013)" \
+  || fail "CLI : mag transactional non relu ($out)"
+if GWSA_ROOT="$TXCLI_ROOT" "$GWSA" transactional session-ttl pasunentier >/dev/null 2>&1; then
+  fail "CLI : mag transactional session-ttl a accepté un non-entier"
+else
+  pass "CLI : mag transactional refuse une durée non entière (ADR-0013)"
+fi
+
+# CLI status env-first (Codex #150 P2) : `mag transactional status` reflète l'état
+# EFFECTIF (env prioritaire + mapping legacy session→manuel), comme la gateway et l'admin —
+# plus la simple lecture de marqueurs.
+TXST_ROOT="$(mktemp -d)"
+out="$(MAG_ROOT="$TXST_ROOT" MAG_TRANSACTIONAL_CONSENT=1 MAG_TRANSACTIONAL_LEASE_MODE=session MAG_SESSION_TTL_SEC=123 "$GWSA" transactional status 2>/dev/null)"
+[[ "$out" == *"consent: enabled"* && "$out" == *"lease mode: manuel"* && "$out" == *"session TTL (s): 123"* ]] \
+  && pass "CLI : mag transactional status reflète l'env-first + mapping (Codex #150)" \
+  || fail "CLI status env-first ($out)"
+rm -rf "$TXST_ROOT"
+# ADR-0013 lot 6, fix P2 : 0 n'est pas un entier ≥ 1 — une durée nulle n'a pas
+# de sens (session-ttl, fenêtre auto, budget auto). Les trois réglages sont
+# testés, `^[0-9]+$` matchait 0 à tort avant le correctif.
+if GWSA_ROOT="$TXCLI_ROOT" "$GWSA" transactional session-ttl 0 >/dev/null 2>&1; then
+  fail "CLI : mag transactional session-ttl a accepté 0"
+else
+  pass "CLI : mag transactional session-ttl refuse 0 (ADR-0013 lot 6)"
+fi
+if GWSA_ROOT="$TXCLI_ROOT" "$GWSA" transactional read-lease-ttl 0 >/dev/null 2>&1; then
+  fail "CLI : mag transactional read-lease-ttl a accepté 0"
+else
+  pass "CLI : mag transactional read-lease-ttl refuse 0 (ADR-0013 lot 6)"
+fi
+if GWSA_ROOT="$TXCLI_ROOT" "$GWSA" transactional read-lease-budget 0 >/dev/null 2>&1; then
+  fail "CLI : mag transactional read-lease-budget a accepté 0"
+else
+  pass "CLI : mag transactional read-lease-budget refuse 0 (ADR-0013 lot 6)"
+fi
+rm -rf "$TXCLI_ROOT"
+
+# 9) ADR-0013 lot 1 : Capability.active() accepte la sentinelle expires_at<=0 —
+#    une grâce « pour la session » est active tant que la session vit, et
+#    disparaît avec elle (close_session).
+out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import (
+    create_session, close_session, session_grant_capability_session_lived,
+    session_has_capability,
+)
+s = create_session(client='txCapSess')
+session_grant_capability_session_lived(s.session_id, 'alpha', 'drive', 'create', 'FOLDER1')
+before = session_has_capability(s.session_id, 'alpha', 'drive', 'create', 'FOLDER1')
+close_session(s.session_id)
+after = session_has_capability(s.session_id, 'alpha', 'drive', 'create', 'FOLDER1')
+print('before', before, 'after', after)
+")"
+[[ "$out" == *"before True"* && "$out" == *"after False"* ]] \
+  && pass "transactionnel lot 1 : capacité sentinelle (expires_at=0) active tant que la session vit, meurt avec elle" \
+  || fail "transactionnel lot 1 : capacité sentinelle mal gérée ($out)"
+
+# 9bis) Non-régression : une capacité à TTL (session_grant_capability, octroi
+#       humain) expire toujours normalement — additif, pas de régression.
+out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+import time
+from gateway.sessions import create_session, session_grant_capability, session_has_capability
+s = create_session(client='txCapTTL')
+session_grant_capability(s.session_id, 'alpha', 'drive', 'create', 'FOLDER1', hours=1)
+active_now = session_has_capability(s.session_id, 'alpha', 'drive', 'create', 'FOLDER1')
+# Capacité TTL classique : expires_at > now, jamais <= 0 — vérifié directement.
+from gateway.sessions import get_session
+cap = [c for c in get_session(s.session_id).capabilities if c.resource == 'FOLDER1'][0]
+print('active_now', active_now, 'expires_positive', cap.expires_at > time.time())
+")"
+[[ "$out" == *"active_now True"* && "$out" == *"expires_positive True"* ]] \
+  && pass "transactionnel lot 1 : non-régression — capacité à TTL (octroi humain) garde une expiry positive" \
+  || fail "transactionnel lot 1 : capacité à TTL régressée ($out)"
+
+# 9ter) list_sessions affiche « vit avec la session » pour une cap sentinelle,
+#       jamais un minutes_left négatif.
+out="$(GWSA_ROOT="$TX_ROOT" PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.sessions import create_session, session_grant_capability_session_lived, list_sessions
+s = create_session(client='txCapList')
+session_grant_capability_session_lived(s.session_id, 'alpha', 'drive', 'create', 'FOLDER1')
+row = [r for r in list_sessions() if r['session_id'] == s.session_id][0]
+cap = row['capabilities'][0]
+print('minutes_left', repr(cap['minutes_left']))
+")"
+[[ "$out" == *"minutes_left 'vit avec la session'"* ]] \
+  && pass "transactionnel lot 1 : list_sessions affiche « vit avec la session » (pas de minutes_left négatif)" \
+  || fail "transactionnel lot 1 : rendu list_sessions incorrect pour une cap sentinelle ($out)"
 
 rm -rf "$TX_ROOT"
 
@@ -6788,7 +7069,7 @@ GWSA_ROOT="$TX2" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev
 # G1) Gate lecture : bail actif ne redemande rien ; budget épuisé rouvre (geste) ;
 #     la capacité consentie {service, catégorie} voyage bien jusqu'au broker.
 out="$(GWSA_ROOT="$TX2" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_TRANSACTIONAL_LEASE_MODE=fenetre MAG_READ_LEASE_BUDGET=2 "$PY" -c "
+  MAG_TRANSACTIONAL_LEASE_MODE=auto MAG_READ_LEASE_BUDGET=2 "$PY" -c "
 import gateway.api as api
 from gateway.sessions import create_session
 caps = []
@@ -6811,7 +7092,7 @@ print('n1', n1, 'n2', n2, 'n3', n3, 'cap', caps[0])
 
 # G2) Gate lecture : bail fermé + geste REFUSÉ → refus fail-closed (jamais d'accès).
 out="$(GWSA_ROOT="$TX2" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_TRANSACTIONAL_LEASE_MODE=fenetre MAG_READ_LEASE_BUDGET=1 "$PY" -c "
+  MAG_TRANSACTIONAL_LEASE_MODE=auto MAG_READ_LEASE_BUDGET=1 "$PY" -c "
 import gateway.api as api
 import gateway.elicitation as elic
 from gateway.sessions import create_session
@@ -7038,6 +7319,11 @@ cases = [
     build_payload('transactional_mutation:gmail:users:drafts:create', alias='perso',
                   email='perso@gmail.com',
                   bound_args={'to': ['a@x.com', 'b@x.com'], 'cc': ['c@x.com'], 'subject': 'Hi'}),
+    # ADR-0013 : la portée choisie doit s'afficher à l'identique Python↔Swift.
+    build_payload('transactional_mutation:drive:files:create', alias='perso',
+                  email='perso@gmail.com', target='DOSSIER-A', grant_scope='session'),
+    build_payload('transactional_mutation:drive:files:create', alias='perso',
+                  email='perso@gmail.com', target='DOSSIER-A', grant_scope='once'),
     build_payload('transactional_read:gmail:users:messages:list', alias='perso', email='perso@gmail.com'),
     build_payload('transactional_read_lease', alias='perso', email='perso@gmail.com'),
     build_payload('session_unlock', alias='perso', email='perso@gmail.com', session_id='S1', minutes=30),
@@ -7088,20 +7374,26 @@ print('get_none', g is None, 'raised', raised, 'noleak', not leaked)
   && pass "transactionnel sécu : session_id piégé rejeté, aucun fichier hors .sessions (Codex #149 P2)" \
   || fail "transactionnel sécu : traversée de chemin via session_id ($out)"
 
-# F3) Bascule de mode : un bail ouvert en session (sans borne de temps) devient
-#     inutilisable dès qu'on repasse en fenetre (le TTL court reprend).
-out="$(GWSA_ROOT="$TX4" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 \
-  MAG_TRANSACTIONAL_LEASE_MODE=session "$PY" -c "
+# F3) ADR-0013 : le mode global ``session`` est retiré — un bail SANS borne de
+#     temps (résidu de l'ancien mode, expires_at<=0) reste inutilisable après
+#     bascule de mode (auto → manuel ou l'inverse), jamais réactivé.
+out="$(GWSA_ROOT="$TX4" PYTHONPATH="$(pwd)" MAG_TRANSACTIONAL_CONSENT=1 "$PY" -c "
 import os
-from gateway.sessions import create_session, open_read_lease, is_read_lease_active
-s = create_session(client='sw'); open_read_lease(s.session_id, 'alpha')
-before = is_read_lease_active(s.session_id, 'alpha')
-os.environ['MAG_TRANSACTIONAL_LEASE_MODE'] = 'fenetre'   # bascule session → fenetre
-after = is_read_lease_active(s.session_id, 'alpha')
-print('before', before, 'after', after)
+from gateway.sessions import create_session, is_read_lease_active, ReadLease, _load_active, _save, _lock_path
+from gateway._filelock import file_lock
+s = create_session(client='sw')
+with file_lock(_lock_path(s.session_id)):
+    st = _load_active(s.session_id)
+    st.read_leases['alpha'] = ReadLease(expires_at=0.0, budget=5)
+    _save(st)
+os.environ['MAG_TRANSACTIONAL_LEASE_MODE'] = 'auto'
+under_auto = is_read_lease_active(s.session_id, 'alpha')
+os.environ['MAG_TRANSACTIONAL_LEASE_MODE'] = 'manuel'
+under_manuel = is_read_lease_active(s.session_id, 'alpha')
+print('under_auto', under_auto, 'under_manuel', under_manuel)
 ")"
-[[ "$out" == *"before True"* && "$out" == *"after False"* ]] \
-  && pass "transactionnel : bail session devient inutilisable après bascule en fenetre (Codex #149 P2)" \
+[[ "$out" == *"under_auto False"* && "$out" == *"under_manuel False"* ]] \
+  && pass "transactionnel : bail sans borne (ex-mode session, retiré) jamais réactivé, quel que soit le mode (Codex #149 P2 / ADR-0013)" \
   || fail "transactionnel : bail timeless survit à la bascule de mode ($out)"
 
 # F1) Broker/gateway sync : le mode est porté par la REQUÊTE (la gateway est
@@ -7245,6 +7537,324 @@ print('OK' if (b1.get('content','').startswith('media:sha256:') and b1 != b2) el
   || fail "transactionnel Zone 3 : create ne distingue pas les contenus ($out)"
 
 rm -rf "$TX6"
+
+section "ADR-0013 lot 3 — portée signée grant_scope (une fois / pour la session)"
+
+TX7="$(mktemp -d)"; mkdir -p "$TX7/alpha"
+PY="/usr/bin/python3"; [[ -x "$PY" ]] || PY="$(command -v python3)"
+GWSA_ROOT="$TX7" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
+
+# L4-1) build_payload : grant_scope entre dans le payload SIGNÉ (clés triées,
+#       canonical_json) — absent quand non fourni (non-régression des actions
+#       historiques), distinct pour « once » vs « session ».
+out="$(PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.elicitation import build_payload, canonical_json
+p_absent = build_payload('transactional_mutation:drive:files:create', target='F1')
+p_once = build_payload('transactional_mutation:drive:files:create', target='F1', grant_scope='once')
+p_session = build_payload('transactional_mutation:drive:files:create', target='F1', grant_scope='session')
+b_absent, b_once, b_session = canonical_json(p_absent), canonical_json(p_once), canonical_json(p_session)
+ok = (
+    'grant_scope' not in p_absent
+    and p_once.get('grant_scope') == 'once'
+    and p_session.get('grant_scope') == 'session'
+    and b_once != b_session
+)
+print('OK' if ok else f'wrong absent={b_absent} once={b_once} session={b_session}')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "ADR-0013 lot 3 : grant_scope dans le payload signé, absent si non fourni, distinct once/session" \
+  || fail "ADR-0013 lot 3 : grant_scope mal intégré au payload ($out)"
+
+# L4-2) Octets canoniques via le chemin mock HMAC : deux portées différentes
+#       signent différemment ; une signature ne vérifie que son propre payload.
+out="$(GWSA_ROOT="$TX7" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 "$PY" -c "
+from gateway.elicitation import build_payload, sign_mock, verify_mock
+p1 = build_payload('transactional_mutation:drive:files:create', target='F1', grant_scope='once')
+p2 = build_payload('transactional_mutation:drive:files:create', target='F1', grant_scope='session')
+s1, s2 = sign_mock(p1), sign_mock(p2)
+ok = s1 != s2 and verify_mock(p1, s1) and verify_mock(p2, s2) and not verify_mock(p1, s2)
+print('OK' if ok else 'wrong')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "ADR-0013 lot 3 : octets canoniques distincts once/session (mock HMAC)" \
+  || fail "ADR-0013 lot 3 : signature mock insensible à grant_scope ($out)"
+
+# L4-3) Le prompt Touch ID affiche la portée choisie.
+out="$(PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.elicitation import build_payload, prompt_from_payload
+p_once = build_payload('transactional_mutation:drive:files:create', alias='perso', email='perso@gmail.com', target='F1', grant_scope='once')
+p_sess = build_payload('transactional_mutation:drive:files:create', alias='perso', email='perso@gmail.com', target='F1', grant_scope='session')
+s_once, s_sess = prompt_from_payload(p_once), prompt_from_payload(p_sess)
+ok = 'une fois' in s_once and 'pour la session' in s_sess and s_once != s_sess
+print('OK' if ok else f'wrong once={s_once!r} sess={s_sess!r}')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "ADR-0013 lot 3 : le prompt Touch ID affiche la portée choisie" \
+  || fail "ADR-0013 lot 3 : prompt sans mention de la portée ($out)"
+
+rm -rf "$TX7"
+
+section "ADR-0013 lot 4 — cœur du gate : grâce « pour la session » (les 4 critères d'acceptation)"
+
+TX8="$(mktemp -d)"; mkdir -p "$TX8/alpha"
+PY="/usr/bin/python3"; [[ -x "$PY" ]] || PY="$(command -v python3)"
+GWSA_ROOT="$TX8" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
+
+# (a)+(b) Un 2ᵉ acte de création dans le MÊME dossier après « session » passe
+#         SANS geste ; un dossier DIFFÉRENT redemande.
+out="$(GWSA_ROOT="$TX8" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
+  MAG_TRANSACTIONAL_LEASE_MODE=manuel "$PY" -c "
+import json
+import gateway.api as api
+from gateway.sessions import create_session
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None: {'ok': True}
+calls = {'n': 0}; _og = api.run_elicitation_gate
+def _cg(f):
+    calls['n'] += 1
+    return _og(f)
+api.run_elicitation_gate = _cg
+s = create_session(client='l4ab')
+
+def create_args(folder):
+    return ['drive', 'files', 'create', '--params', json.dumps({'fields': 'id'}),
+            '--json', json.dumps({'name': 'f', 'parents': [folder]})]
+
+api._run('alpha', create_args('FOLDERX'), session=s.session_id, grant_scope='session')
+n1 = calls['n']
+api._run('alpha', create_args('FOLDERX'), session=s.session_id)  # même dossier, portée par défaut
+n2 = calls['n']
+api._run('alpha', create_args('FOLDERY'), session=s.session_id)  # dossier différent
+n3 = calls['n']
+print('n1', n1, 'n2', n2, 'n3', n3)
+")"
+[[ "$out" == *"n1 1"* && "$out" == *"n2 1"* && "$out" == *"n3 2"* ]] \
+  && pass "ADR-0013 lot 4 (a)(b) : même dossier après « session » → sans geste ; autre dossier → redemande" \
+  || fail "ADR-0013 lot 4 (a)(b) : grâce mal scopée à la ressource ($out)"
+
+# (c) Le partage (permissions create/delete) redemande TOUJOURS, même avec
+#     grant_scope=session répété sur le MÊME fichier — jamais de grâce partage.
+out="$(GWSA_ROOT="$TX8" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
+  MAG_TRANSACTIONAL_LEASE_MODE=manuel "$PY" -c "
+import json
+import gateway.api as api
+from gateway.sessions import create_session
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None: {'ok': True}
+calls = {'n': 0}; _og = api.run_elicitation_gate
+def _cg(f):
+    calls['n'] += 1
+    return _og(f)
+api.run_elicitation_gate = _cg
+s = create_session(client='l4c')
+
+perm_args = ['drive', 'permissions', 'create', '--params', json.dumps({'fileId': 'FILEZ'}),
+             '--json', json.dumps({'type': 'user', 'role': 'reader', 'emailAddress': 'a@b.com'})]
+api._run('alpha', perm_args, session=s.session_id, grant_scope='session')
+n1 = calls['n']
+api._run('alpha', perm_args, session=s.session_id, grant_scope='session')
+n2 = calls['n']
+print('n1', n1, 'n2', n2)
+")"
+[[ "$out" == *"n1 1"* && "$out" == *"n2 2"* ]] \
+  && pass "ADR-0013 lot 4 (c) : partage redemande toujours, jamais couvert par « pour la session »" \
+  || fail "ADR-0013 lot 4 (c) : une grâce a couvert un partage ($out)"
+
+# (d) Écriture « session » SANS ressource dérivable (ex. drive files copy sans
+#     parents identifiable) → aucune grâce écrite, retombe sur « une fois ».
+out="$(GWSA_ROOT="$TX8" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
+  MAG_TRANSACTIONAL_LEASE_MODE=manuel "$PY" -c "
+import json
+import gateway.api as api
+from gateway.sessions import create_session, session_has_capability
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None: {'ok': True}
+calls = {'n': 0}; _og = api.run_elicitation_gate
+def _cg(f):
+    calls['n'] += 1
+    return _og(f)
+api.run_elicitation_gate = _cg
+s = create_session(client='l4d')
+
+copy_args = ['drive', 'files', 'copy', '--params', json.dumps({'fileId': 'SRC', 'fields': 'id'}),
+             '--json', json.dumps({'name': 'copy'})]  # pas de 'parents' → resource non dérivable
+api._run('alpha', copy_args, session=s.session_id, grant_scope='session')
+n1 = calls['n']
+api._run('alpha', copy_args, session=s.session_id)  # portée par défaut : doit redemander (aucune grâce écrite)
+n2 = calls['n']
+no_cap = not session_has_capability(s.session_id, 'alpha', 'drive', 'create', '')
+print('n1', n1, 'n2', n2, 'no_cap', no_cap)
+")"
+[[ "$out" == *"n1 1"* && "$out" == *"n2 2"* && "$out" == *"no_cap True"* ]] \
+  && pass "ADR-0013 lot 4 (d) : sans ressource dérivable, « session » retombe sur « une fois » (aucune grâce)" \
+  || fail "ADR-0013 lot 4 (d) : une grâce a été écrite sans ressource dérivable ($out)"
+
+# (e) Codex #150 P2 : en mode AUTO, une mutation avec grant_scope=session ne peut
+#     écrire aucune grâce → la portée SIGNÉE/affichée est normalisée à « once », pour
+#     que le reçu Touch ID ne promette pas ce qui n'aura pas lieu.
+out="$(GWSA_ROOT="$TX8" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
+  MAG_TRANSACTIONAL_LEASE_MODE=auto "$PY" -c "
+import json
+import gateway.api as api
+from gateway.sessions import create_session
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None: {'ok': True}
+captured = {}
+_og = api.run_elicitation_gate
+def _cg(f):
+    captured['scope'] = f.get('grant_scope')
+    return _og(f)
+api.run_elicitation_gate = _cg
+s = create_session(client='l4e')
+create_args = ['drive', 'files', 'create', '--json', json.dumps({'name': 'x', 'parents': ['FOLDER']})]
+api._run('alpha', create_args, session=s.session_id, grant_scope='session')
+print('scope', captured.get('scope'))
+")"
+[[ "$out" == *"scope once"* ]] \
+  && pass "ADR-0013 (Codex #150) : mode auto normalise grant_scope=session → once (reçu honnête)" \
+  || fail "ADR-0013 : scope non normalisé en auto ($out)"
+
+rm -rf "$TX8"
+
+section "ADR-0013 lot 6 — brancher le bord (grant_scope) + fix P1 sous-session + P2 catégorie inconnue"
+
+TX9="$(mktemp -d)"; mkdir -p "$TX9/alpha"
+PY="/usr/bin/python3"; [[ -x "$PY" ]] || PY="$(command -v python3)"
+GWSA_ROOT="$TX9" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
+
+# L6-1) Schéma MCP : grant_scope exposé (enum once/session, défaut once) sur
+#       les 5 mutations NON-partage — JAMAIS sur les tools de partage
+#       (garde-fou ADR-0013 Décision 4).
+out="$(PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.mcp_server import TOOLS
+by_name = {t['name']: t for t in TOOLS}
+mutating = ['drive_create', 'drive_update', 'drive_copy', 'drive_upload']
+# Partage (sortant) ET brouillon (pas de périmètre-ressource, catégorie drafts
+# non éligible — Codex #150) : jamais de grant_scope au bord.
+no_scope = ['drive_permissions_create', 'drive_permissions_delete', 'gmail_draft_create']
+ok = True
+for n in mutating:
+    gs = by_name[n]['inputSchema']['properties'].get('grant_scope')
+    if not gs or gs.get('enum') != ['once', 'session'] or gs.get('default') != 'once':
+        ok = False
+for n in no_scope:
+    if 'grant_scope' in by_name[n]['inputSchema']['properties']:
+        ok = False
+print('OK' if ok else 'wrong')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "ADR-0013 lot 6 : grant_scope au schéma des 4 mutations Drive, absent du partage et des brouillons" \
+  || fail "ADR-0013 lot 6 : schéma MCP grant_scope incorrect ($out)"
+
+# L6-2) Dispatch MCP : grant_scope de l'appel est bien EXTRAIT et relayé à la
+#       fonction api correspondante, pour les 5 tools câblés.
+out="$(PYTHONPATH="$(pwd)" "$PY" -c "
+import gateway.mcp_server as ms
+import gateway.api as api
+captured = {}
+def mk(name):
+    def fn(**kw):
+        captured[name] = kw.get('grant_scope')
+        return {'ok': True}
+    return fn
+for name in ('drive_create', 'drive_update', 'drive_copy', 'drive_upload'):
+    setattr(api, name, mk(name))
+ms.DISPATCH['drive_create'](alias='alpha', name='n', parent_id='p', session='s', grant_scope='session')
+ms.DISPATCH['drive_update'](alias='alpha', file_id='f', session='s', grant_scope='session')
+ms.DISPATCH['drive_copy'](alias='alpha', file_id='f', parent_id='p', session='s', grant_scope='session')
+ms.DISPATCH['drive_upload'](alias='alpha', path='/x', parent_id='p', session='s', grant_scope='session')
+ok = all(v == 'session' for v in captured.values()) and len(captured) == 4
+print('OK' if ok else f'wrong {captured}')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "ADR-0013 lot 6 : dispatch MCP relaie grant_scope aux 4 fonctions Drive" \
+  || fail "ADR-0013 lot 6 : dispatch MCP ne relaie pas grant_scope ($out)"
+
+# L6-3) Bout en bout via le VRAI tool api.drive_create (pas _run directement) :
+#       1er acte sur DOSSIER-A demande le geste, 2e acte même dossier passe
+#       SANS geste, un dossier différent redemande.
+out="$(GWSA_ROOT="$TX9" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
+  MAG_TRANSACTIONAL_LEASE_MODE=manuel "$PY" -c "
+import gateway.api as api
+from gateway.sessions import create_session
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None: {'ok': True}
+calls = {'n': 0}; _og = api.run_elicitation_gate
+def _cg(f):
+    calls['n'] += 1
+    return _og(f)
+api.run_elicitation_gate = _cg
+s = create_session(client='l6e2e')
+api.drive_create(alias='alpha', name='f1', parent_id='DOSSIER-A', session=s.session_id, grant_scope='session')
+n1 = calls['n']
+api.drive_create(alias='alpha', name='f2', parent_id='DOSSIER-A', session=s.session_id)  # même dossier, portée par défaut
+n2 = calls['n']
+api.drive_create(alias='alpha', name='f3', parent_id='DOSSIER-B', session=s.session_id)  # dossier différent
+n3 = calls['n']
+print('n1', n1, 'n2', n2, 'n3', n3)
+")"
+[[ "$out" == *"n1 1"* && "$out" == *"n2 1"* && "$out" == *"n3 2"* ]] \
+  && pass "ADR-0013 lot 6 : drive_create câblé de bout en bout — même dossier sans geste, autre dossier redemande" \
+  || fail "ADR-0013 lot 6 : câblage bout en bout de drive_create incorrect ($out)"
+
+# L6-4) Fix P1 : sous-session déléguée + scope=session → l'acte PASSE (Touch ID
+#       déjà consommé), AUCUNE grâce écrite (ni côté racine ni côté enfant),
+#       et surtout aucune exception ne remonte (la mémorisation de la grâce ne
+#       doit jamais faire échouer un acte déjà autorisé).
+out="$(GWSA_ROOT="$TX9" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
+  MAG_TRANSACTIONAL_LEASE_MODE=manuel "$PY" -c "
+import json
+import gateway.api as api
+from gateway.sessions import create_session, create_child_session, session_has_capability
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None: {'ok': True}
+root = create_session(client='l6p1root')
+child = create_child_session(root.session_id, client='l6p1child')
+
+def create_args(folder):
+    return ['drive', 'files', 'create', '--params', json.dumps({'fields': 'id'}),
+            '--json', json.dumps({'name': 'f', 'parents': [folder]})]
+
+exc = None
+try:
+    r = api._run('alpha', create_args('FOLDERDELEG'), session=child.session_id, grant_scope='session')
+    act_ok = r.get('ok') is True
+except Exception as e:
+    exc = repr(e); act_ok = False
+no_cap_root = not session_has_capability(root.session_id, 'alpha', 'drive', 'create', 'FOLDERDELEG')
+no_cap_child = not session_has_capability(child.session_id, 'alpha', 'drive', 'create', 'FOLDERDELEG')
+print('act_ok', act_ok, 'exc', exc, 'no_cap_root', no_cap_root, 'no_cap_child', no_cap_child)
+")"
+[[ "$out" == *"act_ok True"* && "$out" == *"exc None"* \
+   && "$out" == *"no_cap_root True"* && "$out" == *"no_cap_child True"* ]] \
+  && pass "ADR-0013 lot 6, fix P1 : sous-session déléguée + scope=session → acte passe, aucune grâce, pas d'exception" \
+  || fail "ADR-0013 lot 6, fix P1 : sous-session déléguée casse l'acte ou écrit une grâce ($out)"
+
+# L6-5) Fix P2 : une catégorie hors liste blanche (méthode non classée →
+#       categorize() rend None) n'est JAMAIS éligible à la grâce, même avec
+#       scope=session — ni lookup ni écriture (fail-closed par liste blanche).
+out="$(GWSA_ROOT="$TX9" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
+  MAG_TRANSACTIONAL_LEASE_MODE=manuel "$PY" -c "
+import json
+import gateway.api as api
+from gateway.sessions import create_session, active_capabilities
+api.run_via_broker = lambda alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None: {'ok': True}
+calls = {'n': 0}; _og = api.run_elicitation_gate
+def _cg(f):
+    calls['n'] += 1
+    return _og(f)
+api.run_elicitation_gate = _cg
+s = create_session(client='l6p2')
+
+# méthode non reconnue (ni read/create/update/delete/share) → categorize() = None
+weird_args = ['drive', 'files', 'frobnicate', '--params', json.dumps({'fileId': 'FILEW'})]
+api._run('alpha', weird_args, session=s.session_id, grant_scope='session')
+n1 = calls['n']
+api._run('alpha', weird_args, session=s.session_id, grant_scope='session')
+n2 = calls['n']
+caps_after = active_capabilities(s.session_id, 'alpha', 'drive')
+print('n1', n1, 'n2', n2, 'caps_after', caps_after)
+")"
+[[ "$out" == *"n1 1"* && "$out" == *"n2 2"* && "$out" == *"caps_after []"* ]] \
+  && pass "ADR-0013 lot 6, fix P2 : catégorie inconnue jamais éligible à la grâce (fail-closed)" \
+  || fail "ADR-0013 lot 6, fix P2 : une grâce a été consultée/écrite pour une catégorie inconnue ($out)"
+
+rm -rf "$TX9"
+
 
 # --- Bilan ------------------------------------------------------------------
 

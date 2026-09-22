@@ -16,7 +16,11 @@ const PORT = Number.parseInt(process.env.GWSA_ADMIN_PORT || "4877", 10);
 const HOST = "127.0.0.1";
 const REPO = path.resolve(__dirname, "..");
 const GWSA = path.join(REPO, "bin", "mag");
-const ROOT = process.env.GWSA_ROOT || path.join(os.homedir(), ".config", "gws-accounts");
+// MAG_ prioritaire, GWSA_ en repli (convention bin/mag). `mag admin` lancé avec
+// MAG_ROOT n'exporte pas forcément le GWSA_ROOT résolu à Node ; lire MAG_ROOT ici
+// garde le lecteur admin sur la MÊME racine que les écritures (qui spawnent `mag`,
+// lequel hérite MAG_ROOT) — sinon un refresh montre un état périmé (Codex #150).
+const ROOT = process.env.MAG_ROOT || process.env.GWSA_ROOT || path.join(os.homedir(), ".config", "gws-accounts");
 const DEPLOY_ROOT = process.env.GWSA_DEPLOY_ROOT || path.join(os.homedir(), ".local", "share", "google-mcp");
 const STABLE_ADMIN_PORT = 4877;
 const STABLE_BROKER_PORT = 4878;
@@ -548,6 +552,55 @@ function listSessions() {
   return out;
 }
 
+// Consentement transactionnel (ADR-0013 lot 5) — état lu directement depuis les
+// marqueurs fichiers sous ROOT (MAG_/GWSA_, cf. sa définition en tête — même
+// racine que `mag transactional …`, donc lecture et écriture alignées ; mêmes
+// défauts que `mag transactional status`, sans sous-process pour un simple GET).
+// Les écritures passent TOUJOURS par `mag transactional …` (source de vérité).
+const TX_MODES = ["manuel", "auto"];
+const TX_DEFAULTS = {
+  session_ttl_sec: 28800,
+  read_lease_ttl_sec: 90,
+  read_lease_budget: 20,
+};
+
+// env d'abord (MAG_ prioritaire, GWSA_ en repli), comme gateway/sessions.py.
+function txEnvFirst(name) {
+  return (process.env["MAG_" + name] || process.env["GWSA_" + name] || "").trim();
+}
+
+function readTransactionalState() {
+  // Règles env-first IDENTIQUES à la gateway (Codex #150 P2) : l'env a priorité
+  // sur le marqueur fichier là-bas ; l'ignorer ici afficherait un état faux (ex.
+  // MAG_TRANSACTIONAL_CONSENT=1 sans marqueur → consent réellement actif). On lit
+  // donc env → marqueur → défaut, puis le mapping legacy (fenetre→auto, session→manuel).
+  const consentEnv = txEnvFirst("TRANSACTIONAL_CONSENT").toLowerCase();
+  const consent = ["1", "true", "yes"].includes(consentEnv)
+    || fs.existsSync(path.join(ROOT, ".transactional-consent"));
+  // .toLowerCase() comme gateway/sessions.py (qui fait .strip().lower()) : sinon un
+  // override MAG_TRANSACTIONAL_LEASE_MODE=AUTO serait rejeté ici et affiché « manuel »
+  // alors que la gateway tourne en « auto » (Codex #150 P2).
+  const modeRaw = (txEnvFirst("TRANSACTIONAL_LEASE_MODE") || readText(path.join(ROOT, ".transactional-lease-mode"))).toLowerCase();
+  const modeMapped = modeRaw === "fenetre" ? "auto" : modeRaw === "session" ? "manuel" : modeRaw;
+  const mode = TX_MODES.includes(modeMapped) ? modeMapped : "manuel";
+  // Miroir de gateway/sessions.py::_int_setting : raw vide → défaut ; sinon max(1, n) ;
+  // invalide → défaut.
+  const readInt = (envName, file, fallback) => {
+    const raw = txEnvFirst(envName) || readText(path.join(ROOT, file));
+    if (!raw) return fallback;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) ? Math.max(1, n) : fallback;
+  };
+  return {
+    ok: true,
+    consent,
+    mode,
+    session_ttl_sec: readInt("SESSION_TTL_SEC", ".session-ttl-sec", TX_DEFAULTS.session_ttl_sec),
+    read_lease_ttl_sec: readInt("READ_LEASE_TTL_SEC", ".read-lease-ttl-sec", TX_DEFAULTS.read_lease_ttl_sec),
+    read_lease_budget: readInt("READ_LEASE_BUDGET", ".read-lease-budget", TX_DEFAULTS.read_lease_budget),
+  };
+}
+
 function validPolicy(p) {
   if (p === null) return true;
   if (typeof p !== "object" || Array.isArray(p)) return false;
@@ -692,6 +745,11 @@ const server = http.createServer(async (req, res) => {
         return send(res, 404, { error: "session inconnue" });
       }
       if (action === "unlock") {
+        // ADR-0013 : le déverrouillage par minutes n'existe plus en transactionnel
+        // (`mag session unlock` refuserait) — refuser tôt, sans geste (Codex #150 P2).
+        if (readTransactionalState().consent) {
+          return send(res, 400, { error: "déverrouillage par minutes retiré en mode transactionnel — autoriser « pour la session » au moment d'agir (ADR-0013)" });
+        }
         const b = await readBody(req);
         if (!ALIAS_RE.test(b.alias || "")) return send(res, 400, { error: "alias invalide" });
         const mins = String(Math.min(1440, Math.max(1, parseInt(b.minutes, 10) || 60)));
@@ -715,6 +773,50 @@ const server = http.createServer(async (req, res) => {
         const r = await mag(["session", "close", sid]);
         return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).trim() });
       }
+    }
+    if (req.method === "GET" && p === "/api/transactional") {
+      return send(res, 200, readTransactionalState());
+    }
+    if (req.method === "POST" && p === "/api/transactional/consent") {
+      const b = await readBody(req);
+      // Mode de sécurité : exiger un booléen strict — sinon `enabled` absent passerait
+      // pour « off » et une chaîne « "false" » (truthy) pour « on » (Codex #150 P2).
+      if (typeof b.enabled !== "boolean") return send(res, 400, { error: "enabled requis (booléen true/false)" });
+      const r = await mag(["transactional", b.enabled ? "on" : "off"]);
+      return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).trim() });
+    }
+    if (req.method === "POST" && p === "/api/transactional/mode") {
+      const b = await readBody(req);
+      const mode = String(b.mode || "");
+      if (!TX_MODES.includes(mode)) return send(res, 400, { error: "mode invalide (manuel|auto)" });
+      const r = await mag(["transactional", "mode", mode]);
+      return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).trim() });
+    }
+    if (req.method === "POST" && p === "/api/transactional/settings") {
+      const b = await readBody(req);
+      const fields = [
+        ["session_ttl_sec", "session-ttl"],
+        ["read_lease_ttl_sec", "read-lease-ttl"],
+        ["read_lease_budget", "read-lease-budget"],
+      ];
+      const toApply = [];
+      for (const [key, cliSub] of fields) {
+        if (b[key] === undefined) continue;
+        const raw = b[key];
+        const n = typeof raw === "number" ? raw : Number.parseInt(String(raw), 10);
+        if (!Number.isInteger(n) || n <= 0 || String(n) !== String(raw).trim()) {
+          return send(res, 400, { error: `${key} doit être un entier positif` });
+        }
+        toApply.push([cliSub, n]);
+      }
+      if (!toApply.length) return send(res, 400, { error: "aucun réglage fourni" });
+      const outs = [];
+      for (const [cliSub, n] of toApply) {
+        const r = await mag(["transactional", cliSub, String(n)]);
+        if (r.code) return send(res, 500, { ok: false, out: (r.stdout + r.stderr).trim() });
+        outs.push((r.stdout + r.stderr).trim());
+      }
+      return send(res, 200, { ok: true, out: outs.join("\n") });
     }
     if (req.method === "GET" && p === "/api/log") {
       const lines = tailFile(path.join(ROOT, "usage.jsonl"), 300)

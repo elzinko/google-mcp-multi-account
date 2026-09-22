@@ -2030,6 +2030,7 @@ main.ck-main { max-width:1400px; margin:0; }
         <div class="hmenu-pop" id="morePop" role="menu" hidden>
           <button role="menuitem" onclick="closeMore();openDev()">🛠 Développement</button>
           <button role="menuitem" onclick="closeMore();openSetup()">🩺 Santé du setup</button>
+          <button role="menuitem" onclick="closeMore();openTransactional()">🔐 Consentement transactionnel</button>
         </div>
       </div>
       <span id="verBadge" class="ck-ver" title="Version du code servi par cette admin">…</span>
@@ -2375,6 +2376,48 @@ main.ck-main { max-width:1400px; margin:0; }
   </div>
 </dialog>
 
+<dialog id="dTransactional" class="ck-modal ck-modal--wide">
+  <div class="ck-modal__head">
+    <div class="ck-modal__title">🔐 Consentement transactionnel</div>
+    <p class="ck-modal__subtitle">Chaque acte du LLM demande ton accord (Touch ID) au lieu d'un déverrouillage par
+    minutes. Réglages ADR-0013 — <b>opt-in, désactivé par défaut</b>.</p>
+  </div>
+  <div class="ck-modal__body">
+    <fieldset>
+      <legend>Activation</legend>
+      <label class="zline">
+        <input type="checkbox" id="txConsentBox" onchange="setTxConsent(this.checked)">
+        Activer le consentement transactionnel
+      </label>
+      <div class="ck-callout ck-callout--info"><span class="ck-callout__ico" aria-hidden="true">ℹ️</span><span>
+      Désactivé : rien ne change (déverrouillage par minutes comme avant). Activé : le déverrouillage par minutes
+      est refusé, remplacé par un accord acte par acte.</span></div>
+    </fieldset>
+    <fieldset>
+      <legend>Mode</legend>
+      <div class="ck-segmented" role="group" aria-label="Mode de consentement" id="txModeSeg">
+        <button type="button" data-mode="manuel" onclick="setTxMode('manuel')" aria-pressed="false">Manuel (défaut)</button>
+        <button type="button" data-mode="auto" onclick="setTxMode('auto')" aria-pressed="false">Auto</button>
+      </div>
+      <div class="ck-callout ck-callout--info"><span class="ck-callout__ico" aria-hidden="true">ℹ️</span><span>
+      <b>Manuel</b> : un geste par acte ; « pour la session » évite de le répéter pour le même dossier.
+      <b>Auto</b> : les lectures s'ouvrent en fenêtre groupée ; les écritures restent signées par acte,
+      sans grâce de session. Le partage reste toujours signé, dans les deux modes.</span></div>
+    </fieldset>
+    <fieldset>
+      <legend>Durées</legend>
+      <div class="grid">
+        <label>TTL de session (secondes)<br><input type="number" min="1" id="txSessionTtl" style="width:100%"></label>
+        <label>Fenêtre auto (secondes)<br><input type="number" min="1" id="txReadLeaseTtl" style="width:100%"></label>
+        <label>Budget auto (lectures)<br><input type="number" min="1" id="txReadLeaseBudget" style="width:100%"></label>
+      </div>
+      <div class="addrow"><span class="note" style="margin:0">Une session inactive au-delà du TTL se referme ; la fenêtre/budget auto bornent la lecture groupée en mode Auto.</span>
+        <button class="small" onclick="saveTxSettings()">Enregistrer les durées</button></div>
+    </fieldset>
+  </div>
+  <div class="ck-modal__foot"><button onclick="dTransactional.close()">Fermer</button></div>
+</dialog>
+
 <dialog id="dConfirm" class="dlg-confirm ck-modal">
   <div class="dlg-confirm-inner">
     <div class="dlg-confirm-head ck-modal__head">
@@ -2472,6 +2515,52 @@ let IAM_PROPAGATING = null; // Set<email> réparés, en attente de propagation G
 // réafficher les comptes en échec (Codex P2, #112). Nettoyé seulement par « Revérifier »
 // (recheckIam) ou implicitement quand le compte n'est plus « missing » (voir isProp).
 async function openSetup() { $("setupBody").innerHTML = "Chargement…"; dSetup.showModal(); await renderSetup(); }
+
+// --- Consentement transactionnel (ADR-0013 lot 5) ---------------------------
+async function openTransactional() { dTransactional.showModal(); await refreshTransactional(); }
+async function refreshTransactional() {
+  let s;
+  try { s = await api("/api/transactional"); } catch (e) { toast(e.message); return; }
+  $("txConsentBox").checked = !!s.consent;
+  $("txSessionTtl").value = s.session_ttl_sec;
+  $("txReadLeaseTtl").value = s.read_lease_ttl_sec;
+  $("txReadLeaseBudget").value = s.read_lease_budget;
+  $("txModeSeg").querySelectorAll("button[data-mode]").forEach((b) =>
+    b.setAttribute("aria-pressed", b.dataset.mode === s.mode ? "true" : "false"));
+}
+async function setTxConsent(enabled) {
+  // return dans le catch (comme setTxMode/saveTxSettings) : sinon un POST en échec
+  // (ex. mag ne peut pas écrire la racine) afficherait quand même un toast de succès
+  // — un changement de mode de sécurité raté paraîtrait réussi (Codex #150 P2).
+  try { await api("/api/transactional/consent", { method: "POST", body: JSON.stringify({ enabled }) }); }
+  catch (e) { toast(e.message); return; }
+  await refreshTransactional();
+  // Toast basé sur l'état EFFECTIF après refresh, pas sur la demande : un override d'env
+  // (MAG_TRANSACTIONAL_CONSENT) peut maintenir le consentement actif malgré un clic « off »
+  // (le marqueur, de priorité inférieure, ne le désactive pas) — Codex #150 P2.
+  const eff = $("txConsentBox").checked;
+  toast(eff ? "Consentement transactionnel activé" : "Consentement transactionnel désactivé");
+}
+async function setTxMode(mode) {
+  try { await api("/api/transactional/mode", { method: "POST", body: JSON.stringify({ mode }) }); }
+  catch (e) { toast(e.message); return; }
+  await refreshTransactional();
+  toast("Mode : " + mode);
+}
+async function saveTxSettings() {
+  const body = {
+    session_ttl_sec: Number.parseInt($("txSessionTtl").value, 10),
+    read_lease_ttl_sec: Number.parseInt($("txReadLeaseTtl").value, 10),
+    read_lease_budget: Number.parseInt($("txReadLeaseBudget").value, 10),
+  };
+  if (Object.values(body).some((n) => !Number.isInteger(n) || n <= 0)) {
+    toast("durées : entiers positifs uniquement"); return;
+  }
+  try { await api("/api/transactional/settings", { method: "POST", body: JSON.stringify(body) }); }
+  catch (e) { toast(e.message); return; }
+  await refreshTransactional();
+  toast("Durées enregistrées");
+}
 async function recheckIam() { IAM_PROPAGATING = null; await renderSetup(); }
 async function renderSetup() {
   let r;
