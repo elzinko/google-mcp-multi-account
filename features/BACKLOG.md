@@ -87,6 +87,7 @@
 | [0103](done/0103-refonte-barre-navigation-admin.md) | Refonte de la barre de navigation de l'admin (header/menu standard) | feature | P2 |  | 0060 | google-mcp-multi-account | ✅ shipped | #128 |
 | [0106](done/0106-vue-compte-orientee-sessions.md) | Vue compte orientée sessions — compteur, liste des sessions et droits par session | feature | P2 |  |  | google-mcp-multi-account | ✅ shipped | #132 |
 | [20260905175129735](done/20260905175129735_durcir-rollback-updater-codex-postmerge.md) | Durcir le cluster updater — findings Codex post-merge (#134/#135/#136) | bug | P2 |  |  | google-mcp-multi-account | ✅ shipped | #146 |
+| [20260910170000000](20260910170000000_traduire-scripts-helper-mag-parite-mcp.md) | Traduire en anglais les scripts helper opérationnels de mag + parité CLI/MCP | feature | P2 |  | 0017 | google-mcp-multi-account | 🔵 ready |  |
 | [20260912000249823](20260912000249823_renommage-gwsa-mag-avec-compat.md) | Renommage GWSA_ → MAG_ (variables d'env) avec compatibilité, sans rien casser | refactor | P2 |  |  | google-multi-account | 🟠 in-progress |  |
 | [20260916201419331](20260916201419331_gmail-list-pagination-curseur.md) | Exposer la pagination (pageToken) dans gmail_list pour parcourir tout l'historique | feature | P2 |  |  | google-multi-account | 🔵 ready |  |
 | [0001](done/0001-elicitation-signee-strongauth-v2.md) | Élicitation signée — faire monter `mag strongauth` de la présence à la signature | feature | P3 |  |  |  | 🗑️ superseded |  |
@@ -109,7 +110,6 @@
 |---|-------|------|------|---------|------|---------|--------|----|
 | [0108](0108-session-demande-sous-ensemble-droits-compte.md) | Session — demander un sous-ensemble des droits du compte (accès fin, vérifiable par session) | feature | P1 |  | 0082 | google-mcp-multi-account | 💡 idea |  |
 | [0035](0035-admin-acces-rapide-et-visu-zones.md) | Accès rapide à l'admin + visualisation des zones (icône barre de menus ?) | feature | P2 |  |  |  | 💡 idea |  |
-| [20260910170000000](20260910170000000_traduire-scripts-helper-mag-parite-mcp.md) | Traduire en anglais les scripts helper opérationnels de mag + parité CLI/MCP | feature | P2 |  | 0017 | google-mcp-multi-account | 💡 idea |  |
 | [20260922221816747](20260922221816747_popup-swift-deux-boutons-portee.md) | Popup Touch ID à deux boutons « Une fois / Pour la session » (ergonomie du geste) | feature | P2 |  | 0082 | google-multi-account | 💡 idea |  |
 | [0003](0003-vault-credentials-hors-perimetre-agent.md) | Vault credentials hors périmètre agent (Phase 2.1) | feature | P3 |  |  |  | 💡 idea |  |
 | [0006](0006-harnais-test-manuel-hybride.md) | Harnais hybride pour les tests manuels — script pour la mécanique, LLM pour la glu | feature | P3 |  |  |  | 💡 idea |  |

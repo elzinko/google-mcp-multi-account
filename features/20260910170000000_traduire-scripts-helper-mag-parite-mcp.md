@@ -6,8 +6,8 @@ priority: P2
 product: google-mcp-multi-account
 version:
 epic: 0017
-status: idea
-ready:
+status: ready
+ready: 2026-09-29
 pr:
 created: 2026-09-10
 ---
@@ -29,6 +29,13 @@ est **entièrement anglais et autonome**. `remote-approval-cli.py` et `elicitati
 été **exclus** de 0019 : traduire leur préfixe laissait le **contenu de l'exception** (construit
 en français par `gateway/*.py`) en français — une sortie moitié-anglais/moitié-français, pire
 que tout-français. Ils reviennent ici **avec leur source gateway**.
+
+> **Décisions de grooming (2026-09-29).** Deux questions ouvertes tranchées pour rendre la fiche
+> constructible :
+> 1. **Parité MCP** : on angliciser **aussi** les messages du canal MCP (`gateway/*`, ex.
+>    « mot réservé » → « reserved word »). La surface produit est EN — un seul vocabulaire.
+> 2. **Valeur de log** `"refus"`/`"ok"` : **conservée** telle quelle. L'admin reste FR ; seul le
+>    **texte CLI** du refus passe en anglais, pas la valeur journalisée.
 
 ## Contexte / problème
 
@@ -69,9 +76,10 @@ assertions, comme dans 0019.
       traduits) ; assertion `test.sh` (rejeu remote-approval, ~5478) synchronisée.
 - [ ] `mag update`, `mag dev deploy`, `mag dev <sandbox>` : sorties utilisateur en anglais ;
       assertions `test.sh` correspondantes synchronisées (rouge si retour au FR).
-- [ ] Message de refus de policy (`mag : ✗ policy …`) en anglais ; la valeur de log `"refus"`
-      traitée selon la décision de conception ci-dessus (garder si l'admin reste FR).
-- [ ] Décision tranchée + documentée sur la parité MCP (`gateway/*`) : EN aussi, ou CLI-only.
+- [ ] Message de refus de policy (`mag : ✗ policy …`) en anglais ; la **valeur de log**
+      `"refus"`/`"ok"` **conservée** (admin FR — décidé au grooming).
+- [x] Parité MCP tranchée (grooming 2026-09-29) : **EN aussi** sur le canal MCP
+      (`gateway/profiles.py` « mot réservé » → « reserved word ») — surface produit unifiée EN.
 - [ ] `./scripts/test.sh` vert.
 
 ## Comment vérifier
