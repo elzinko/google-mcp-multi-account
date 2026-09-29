@@ -397,6 +397,7 @@ def gmail_list(
     alias: str,
     query: str = "",
     max_results: int = 10,
+    page_token: str = "",
     session: str = "",
 ) -> dict[str, Any]:
     validate_alias(alias)
@@ -404,6 +405,8 @@ def gmail_list(
     params: dict[str, Any] = {"userId": "me", "maxResults": max_results}
     if query:
         params["q"] = query
+    if page_token:
+        params["pageToken"] = page_token
     data = _run(
         alias,
         ["gmail", "users", "messages", "list", "--params", json.dumps(params)],
