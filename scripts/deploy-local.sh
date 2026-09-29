@@ -181,6 +181,11 @@ if [[ "$MODE" == "check" ]]; then
   [[ -n "$PYTHON" ]] || die "python3 not found"
 
   # Le python ne fait QUE lire (config + current) — aucune écriture, nulle part.
+  # « || rc=$? » : sous « set -e », une affectation dont la substitution de
+  # commande sort en erreur (sys.exit(3) ci-dessous) avorterait le script AVANT
+  # que $out ne soit lu et que « die "$error" » n'affiche son message (revue
+  # adversariale P0 — sinon exit 3 muet, message perdu).
+  rc=0
   out="$(
     CONFIG_PATH="$CONFIG_PATH" SERVER_NAME="$CHECK_NAME" CURRENT_LINK="$CURRENT_LINK" \
     DEPLOY_ROOT="$DEPLOY_ROOT" "$PYTHON" - <<'PY'
@@ -226,8 +231,7 @@ print(f"current_version={version_of(current)}")
 aligned = wired == current or wired.startswith(current + os.sep)
 print("result=aligned" if aligned else "result=drift")
 PY
-  )"
-  rc=$?
+  )" || rc=$?
 
   wired=""; wired_version=""; current=""; current_version=""; result=""; error=""
   while IFS= read -r line; do

@@ -2202,17 +2202,37 @@ CHK_HASH_AFTER="$(shasum -a 256 "$CHKCFG" | cut -d' ' -f1)"
   || fail "--check : la config client a été modifiée (ne doit JAMAIS arriver)"
 
 out_chk_noent="$(GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" --check --config "$TMP/absent.json" 2>&1)"; rc=$?
-[[ "$rc" -ne 0 && "$out_chk_noent" == *"absent.json"* ]] \
-  && pass "--check : config introuvable → refus explicite" \
+[[ "$rc" -eq 1 && "$out_chk_noent" == *"absent.json"* ]] \
+  && pass "--check : config introuvable → refus explicite (exit 1, message nommé)" \
   || fail "--check : config introuvable → refus explicite (rc=$rc, out=$out_chk_noent)"
 
+# --- entrée absente : exit 1 (PAS 3 résiduel du python) + message qui NOMME
+# l'entrée cherchée (pas juste « rc != 0 », tautologique — revue adversariale) ---
 cat > "$CHKCFG" <<EOF
 {"mcpServers": {}}
 EOF
 out_chk_noentry="$(GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" --check --config "$CHKCFG" 2>&1)"; rc=$?
-[[ "$rc" -ne 0 ]] \
-  && pass "--check : aucune entrée « google-multi-account » dans la config → refus" \
-  || fail "--check : entrée absente → refus (rc=$rc)"
+[[ "$rc" -eq 1 && "$out_chk_noentry" == *"google-multi-account"* ]] \
+  && pass "--check : aucune entrée « google-multi-account » dans la config → refus (exit 1, message nommé)" \
+  || fail "--check : entrée absente → refus (rc=$rc, out=$out_chk_noentry)"
+
+# --- entrée présente mais SANS « command » (JSON valide, mais rien à comparer) ---
+cat > "$CHKCFG" <<EOF
+{"mcpServers": {"google-multi-account": {"env": {}}}}
+EOF
+out_chk_nocmd="$(GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" --check --config "$CHKCFG" 2>&1)"; rc=$?
+[[ "$rc" -eq 1 && "$out_chk_nocmd" == *"google-multi-account"* ]] \
+  && pass "--check : entrée sans « command » → refus (exit 1, message nommé)" \
+  || fail "--check : entrée sans « command » → refus (rc=$rc, out=$out_chk_nocmd)"
+
+# --- JSON invalide : le python sort en erreur (sys.exit 3) — sous « set -e »,
+# ça avortait le script AVANT que le message ne soit lu (P0 revue adversariale :
+# rc=3 muet, code mort). Le fix doit ramener ça en exit 1 avec message clair. ---
+printf '{ceci nest pas du JSON' > "$CHKCFG"
+out_chk_badjson="$(GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" --check --config "$CHKCFG" 2>&1)"; rc=$?
+[[ "$rc" -eq 1 && "$out_chk_badjson" == *"invalid JSON"* ]] \
+  && pass "--check : JSON invalide → refus (exit 1, PAS le 3 résiduel du python, message clair)" \
+  || fail "--check : JSON invalide → refus (rc=$rc, out=$out_chk_badjson)"
 
 # --- Publication et mise à jour (fiche 0029) --------------------------------
 #
