@@ -93,8 +93,8 @@ def deny(profile_dir, args, service, msg):
     log_usage(profile_dir, "refus", args, msg)
     sys.stderr.write(
         "mag : ✗ policy %s — %s\n"
-        "       Élicitation : demander à l'utilisateur d'élargir la policy\n"
-        "       (« mag policy %s show » pour voir, interface admin pour modifier).\n"
+        "       Elicitation: ask the user to widen the policy\n"
+        "       (« mag policy %s show » to view, admin interface to edit).\n"
         % (service, msg, alias)
     )
     sys.exit(4)
@@ -189,16 +189,16 @@ def zone_hint(alias):
     sid = (env("SESSION_ID") or "").strip()
     if sid:
         return (
-            "aucune zone d'écriture active pour cette session — demander à l'utilisateur "
-            "« mag session grant %s %s \"<dossier>\" [heures] » ou access_request "
-            "kind=session_grant (zone limitée à cette conversation)"
+            "no active write zone for this session — ask the user to run "
+            "« mag session grant %s %s \"<folder>\" [hours] » or access_request "
+            "kind=session_grant (zone limited to this conversation)"
             % (sid, alias)
         )
     return (
-        "aucune zone d'écriture active — demander une autorisation temporaire "
-        "(« mag session grant <session_id> %s \"<dossier>\" » via MCP, ou legacy "
-        "« mag grant %s \"<dossier>\" » partagé poste entier, déprécié) ou permanente "
-        "(« mag policy %s allow <dossier> » / interface admin)"
+        "no active write zone — request a temporary grant "
+        "(« mag session grant <session_id> %s \"<folder>\" » via MCP, or legacy "
+        "« mag grant %s \"<folder>\" » shared across the whole machine, deprecated) or a permanent one "
+        "(« mag policy %s allow <folder> » / admin interface)"
         % (alias, alias, alias)
     )
 
@@ -255,12 +255,12 @@ def check_drive(profile_dir, drive_raw, args, pos):
         return
 
     if method == "emptytrash":
-        deny(profile_dir, args, "drive", "emptyTrash interdit (suppression définitive)")
+        deny(profile_dir, args, "drive", "emptyTrash forbidden (permanent deletion)")
 
     if resource in SHARE_RESOURCES:
         if not drive.get("share"):
             deny(profile_dir, args, "drive",
-                 "partage refusé par la policy (« %s %s »)" % (resource, pos[-1]))
+                 "sharing denied by policy (« %s %s »)" % (resource, pos[-1]))
         check_session_caps(profile_dir, args, "drive", "share")
         return
 
@@ -269,12 +269,12 @@ def check_drive(profile_dir, drive_raw, args, pos):
         allowed_flag = drive.get(cat, False)
         if not allowed_flag:
             deny(profile_dir, args, "drive",
-                 "%s refusé·e par la policy (« %s %s »)"
-                 % (LABELS_FR.get(cat, cat), resource, pos[-1]))
+                 "%s denied by policy (« %s %s »)"
+                 % (LABELS.get(cat, cat), resource, pos[-1]))
         if drive.get("zonesOnly"):
             deny(profile_dir, args, "drive",
-                 "« %s %s » non vérifiable par zones — utiliser files create/update "
-                 "avec un parent autorisé" % (resource, pos[-1]))
+                 "« %s %s » not checkable by zones — use files create/update "
+                 "with an allowed parent" % (resource, pos[-1]))
         check_session_caps(profile_dir, args, "drive", cat)
         return
 
@@ -286,7 +286,7 @@ def check_drive(profile_dir, drive_raw, args, pos):
         cat = "update"
     else:
         deny(profile_dir, args, "drive",
-             "méthode files « %s » non classifiable — refusée par prudence" % pos[-1])
+             "files method « %s » not classifiable — denied out of caution" % pos[-1])
     # Option A (fiche 0037) : mettre à la corbeille EST une suppression, même quand
     # l'API le fait via « files update {"trashed": true} » (classé « update » sur le
     # seul nom de méthode). On regarde le corps : trashed=true → catégorie delete,
@@ -299,7 +299,7 @@ def check_drive(profile_dir, drive_raw, args, pos):
             cat = "delete"
     if not drive.get(cat, False):
         deny(profile_dir, args, "drive",
-             "%s refusé·e par la policy (« files %s »)" % (LABELS_FR.get(cat, cat), pos[-1]))
+             "%s denied by policy (« files %s »)" % (LABELS.get(cat, cat), pos[-1]))
 
     if not drive.get("zonesOnly"):
         # Policy sans zones : la policy autorise l'écriture partout, mais une session
@@ -324,36 +324,36 @@ def check_drive(profile_dir, drive_raw, args, pos):
         parents = body.get("parents") or []
         if not parents:
             deny(profile_dir, args, "drive",
-                 "files %s sans parent dans --json — préciser \"parents\": "
-                 "[<dossier autorisé>] (zones actives : mag grants %s)" % (pos[-1], alias))
+                 "files %s has no parent in --json — specify \"parents\": "
+                 "[<allowed folder>] (active zones: mag grants %s)" % (pos[-1], alias))
         for p in parents:
             if not _session_drive_ok(profile_dir, p, cat):
                 deny(profile_dir, args, "drive",
-                     "« drive:%s » vers %s hors capacités/zones de session — "
+                     "« drive:%s » to %s outside session capabilities/zones — "
                      "mag session grant-capability" % (cat, p))
             if not under_allowed(profile_dir, p, zones):
                 deny(profile_dir, args, "drive",
-                     "parent/destination %s hors zone d'écriture autorisée" % p)
+                     "parent/destination %s outside allowed write zone" % p)
         return
 
     fid = params.get("fileId")
     if not fid:
         deny(profile_dir, args, "drive",
-             "files %s sans fileId identifiable — refusé par prudence" % pos[-1])
+             "files %s has no identifiable fileId — denied out of caution" % pos[-1])
     # Option B (fiche 0037) : la RACINE d'une zone est une frontière immuable —
     # jamais corbeillée / renommée / déplacée, même sous delete:true. Seul son
     # CONTENU (les descendants) est modifiable. « Retirer une zone » est un geste
     # de config (« mag grant revoke »), pas une opération Drive.
     if fid in zones:
         deny(profile_dir, args, "drive",
-             "cible %s = racine d'une zone (frontière immuable) — créer/modifier "
-             "seulement DEDANS ; retirer la zone via « mag grant revoke »" % fid)
+             "target %s = zone root (immutable boundary) — create/modify "
+             "only INSIDE it; remove the zone via « mag grant revoke »" % fid)
     if not _session_drive_ok(profile_dir, fid, cat):
         deny(profile_dir, args, "drive",
-             "« drive:%s » vers %s hors capacités/zones de session — "
+             "« drive:%s » to %s outside session capabilities/zones — "
              "mag session grant-capability" % (cat, fid))
     if not under_allowed(profile_dir, fid, zones):
-        deny(profile_dir, args, "drive", "cible %s hors zone d'écriture autorisée" % fid)
+        deny(profile_dir, args, "drive", "target %s outside allowed write zone" % fid)
     # Un déplacement (addParents/removeParents, dans --params OU --json) peut faire
     # SORTIR un fichier de sa zone. Toute destination ajoutée doit rester en zone ;
     # un retrait de parent sans réancrage explicite en zone est refusé (le fichier
@@ -362,18 +362,18 @@ def check_drive(profile_dir, drive_raw, args, pos):
     if add_parents:
         for p in str(add_parents).split(","):
             if not under_allowed(profile_dir, p, zones):
-                deny(profile_dir, args, "drive", "addParents %s hors zone autorisée" % p)
+                deny(profile_dir, args, "drive", "addParents %s outside allowed zone" % p)
     remove_parents = params.get("removeParents") or body.get("removeParents")
     if remove_parents and not add_parents:
         deny(profile_dir, args, "drive",
-             "removeParents sans addParents en zone — un retrait de parent peut "
-             "sortir le fichier de sa zone ; réancrer explicitement via addParents")
+             "removeParents without addParents in a zone — removing a parent could "
+             "move the file out of its zone; re-anchor explicitly via addParents")
 
 
-LABELS_FR = {
-    "read": "lecture", "create": "création", "update": "modification",
-    "delete": "suppression", "send": "envoi", "drafts": "brouillons",
-    "labels": "libellés", "share": "partage", "settings": "réglages",
+LABELS = {
+    "read": "read", "create": "create", "update": "update",
+    "delete": "delete", "send": "send", "drafts": "drafts",
+    "labels": "labels", "share": "share", "settings": "settings",
 }
 
 
@@ -445,10 +445,10 @@ def check_session_caps(profile_dir, args, service, operation, resource=""):
     if not _session_cap_allows(caps, service, operation, resource):
         deny(
             profile_dir, args, service,
-            "%s « %s » hors capacités de session%s — access_request "
+            "%s « %s » outside session capabilities%s — access_request "
             "kind=session_grant_capability"
             % (
-                LABELS_FR.get(operation, operation), service,
+                LABELS.get(operation, operation), service,
                 (" (%s:%s)" % (service, resource)) if resource else " (%s:%s)" % (service, operation),
             ),
         )
@@ -513,7 +513,7 @@ def _gate_drive_session(profile_dir, args, pos):
     for t in targets:
         if not _session_drive_ok(profile_dir, t, cat):
             deny(profile_dir, args, "drive",
-                 "« drive:%s »%s hors capacités/zones de session — access_request "
+                 "« drive:%s »%s outside session capabilities/zones — access_request "
                  "kind=session_grant_capability" % (cat, (" %s" % t) if t else ""))
 
 
@@ -551,10 +551,10 @@ def main():
         with open(policy_path) as f:
             pol = json.load(f)
     except Exception:
-        log_usage(profile_dir, "refus", args, "policy.json illisible/corrompu")
+        log_usage(profile_dir, "refus", args, "policy.json unreadable/corrupted")
         sys.stderr.write(
-            "mag : ✗ policy — policy.json présent mais illisible (corrompu) : "
-            "refus par sécurité. Corriger ou recréer la policy du profil.\n"
+            "mag : ✗ policy — policy.json present but unreadable (corrupted): "
+            "denied for safety. Fix or recreate the profile's policy.\n"
         )
         sys.exit(4)
 
@@ -576,8 +576,8 @@ def main():
     if _project_fail_closed():
         deny(
             profile_dir, args, service,
-            "manifeste projet invalide/altéré/supprimé après confiance — refus "
-            "(anti-downgrade) — reconstituer/signer .gwsa/manifest.json "
+            "project manifest invalid/altered/removed after being trusted — denied "
+            "(anti-downgrade) — rebuild/sign .gwsa/manifest.json "
             "(« mag project sign »)",
         )
 
@@ -590,9 +590,9 @@ def main():
         # Default-deny : service non déclaré = refus (chat, meet, people, …).
         deny(
             profile_dir, args, service,
-            "service « %s » non déclaré dans la policy — refus (default-deny). "
-            "Élicitation : demander à l'utilisateur d'ajouter ce service via "
-            "l'interface admin ou policy.json" % service,
+            "service « %s » not declared in the policy — denied (default-deny). "
+            "Elicitation: ask the user to add this service via "
+            "the admin interface or policy.json" % service,
         )
 
     if service == "drive":
@@ -603,22 +603,22 @@ def main():
     cat = categorize(service, resources, raw_method)
     if cat is None:
         deny(profile_dir, args, service,
-             "méthode « %s » non classifiable — refusée par prudence" % raw_method)
+             "method « %s » not classifiable — denied out of caution" % raw_method)
     # Pas de défaut « read libre » : seule une clé explicite True autorise.
     if not svc_pol.get(cat, False):
         deny(profile_dir, args, service,
-             "%s refusé·e par la policy (« %s %s »)"
-             % (LABELS_FR.get(cat, cat), " ".join(resources) or service, raw_method))
+             "%s denied by policy (« %s %s »)"
+             % (LABELS.get(cat, cat), " ".join(resources) or service, raw_method))
     # Intersection couche projet (.gwsa) : plafond services si déclaré
     alias = os.path.basename(os.path.abspath(profile_dir))
     mcap = _manifest_service_cap(alias, service, cat)
     if mcap is False:
         deny(
             profile_dir, args, service,
-            "%s « %s » hors périmètre manifeste projet (.gwsa/manifest.json) — "
-            "éditer le manifeste puis « mag project sign », ou access_request "
+            "%s « %s » outside the project manifest scope (.gwsa/manifest.json) — "
+            "edit the manifest then « mag project sign », or access_request "
             "kind=project_grant"
-            % (LABELS_FR.get(cat, cat), service),
+            % (LABELS.get(cat, cat), service),
         )
     # Ressource propre au service (Gmail labelId, Calendar calendarId, …) —
     # sans elle, la granularité ressource des capacités de session ne

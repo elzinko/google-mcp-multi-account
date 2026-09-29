@@ -2322,7 +2322,7 @@ section "update.sh — mettre à jour le poste en une commande"
 
 rm -rf "$RELDEP" "$RELCONF"
 out_u="$(relenv "$UPDATE" --check 2>&1)"; rc=$?
-[[ "$rc" -eq 0 && "$out_u" == *"aucune"* && "$out_u" == *"v1.0.0"* && ! -d "$RELDEP" ]] \
+[[ "$rc" -eq 0 && "$out_u" == *"none"* && "$out_u" == *"v1.0.0"* && ! -d "$RELDEP" ]] \
   && pass "update --check : dit installé/disponible, n'écrit rien" \
   || fail "update --check : écrit ou n'informe pas"
 
@@ -2336,8 +2336,8 @@ relenv "$UPDATE" >/dev/null 2>&1; rc=$?
   || fail "update : entrée client absente ou figée sur une version"
 
 out_u="$(relenv "$UPDATE" 2>&1)"; rc=$?
-[[ "$rc" -eq 0 && "$out_u" == *"déjà à jour"* ]] \
-  && pass "update : relancé sans rien à faire → « déjà à jour » (idempotent)" \
+[[ "$rc" -eq 0 && "$out_u" == *"already up to date"* ]] \
+  && pass "update : relancé sans rien à faire → « already up to date » (idempotent)" \
   || fail "update : devrait être idempotent"
 
 out_u="$(relenv "$UPDATE" --to v0.1.0 2>&1)"; rc=$?
@@ -2357,7 +2357,7 @@ relenv "$UPDATE" --to v9.9.9 >/dev/null 2>&1; rc=$?
 
 # depuis la COPIE INSTALLÉE (sans .git) : le relais par .source doit marcher
 out_u="$(relenv "$RELDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
-[[ "$rc" -eq 0 && "$out_u" == *"clone source"* && "$out_u" == *"v1.0.0"* ]] \
+[[ "$rc" -eq 0 && "$out_u" == *"source clone"* && "$out_u" == *"v1.0.0"* ]] \
   && pass "update : lancé depuis la copie installée, retrouve le clone via .source" \
   || fail "update : ne retrouve pas le clone depuis la copie installée"
 
@@ -2370,7 +2370,7 @@ out_h="$(relenv "$UPDATE" --help 2>&1)"; rc=$?
 [[ "$out_h" == *"revert"* ]] \
   && pass "update --help : documente le rollback (mag revert)" \
   || fail "update --help : rollback non documenté"
-[[ "$out_h" == *"Exemple"* || "$out_h" == *"exemple"* ]] \
+[[ "$out_h" == *"Example"* || "$out_h" == *"example"* ]] \
   && pass "update --help : donne un exemple" \
   || fail "update --help : aucun exemple"
 
@@ -2563,7 +2563,7 @@ section "update.sh — guide de refresh affiché inconditionnellement après re-
 # que c'est le shell APPELANT (pas le process de l'updater) qui a le chemin
 # en cache.
 out_guide="$(PATH="$FAKEBIN:$PATH" relenv "$UPDATE" --force 2>&1)"
-[[ "$out_guide" == *"nom canonique"* && "$out_guide" == *"hash -r"* ]] \
+[[ "$out_guide" == *"canonical"* && "$out_guide" == *"hash -r"* ]] \
   && pass "update : guide de refresh affiché même quand « mag » est déjà résolu dans ce process (condition non inversée)" \
   || fail "update : guide de refresh masqué à tort alors que « mag » est déjà résolu (out=$out_guide)"
 
@@ -2585,7 +2585,7 @@ reserved release
 
 # délégation : mag update passe la main au script, arguments compris
 out_g="$(gwenv "$GW" update --check 2>&1)"; rc=$?
-[[ "$rc" -eq 0 && "$out_g" == *"disponible"* ]] \
+[[ "$rc" -eq 0 && "$out_g" == *"available"* ]] \
   && pass "mag update : délègue au script (--check transmis)" \
   || fail "mag update : délégation cassée"
 
@@ -2620,20 +2620,20 @@ GWSA_CLI_LINK="$LINK" relenv "$UPDATE" --force >/dev/null 2>&1
 
 # déjà correct → idempotent
 out_l="$(GWSA_CLI_LINK="$LINK" relenv "$UPDATE" --force 2>&1)"
-[[ "$out_l" == *"déjà sur la copie installée"* ]] \
+[[ "$out_l" == *"already on the installed copy"* ]] \
   && pass "lien PATH : déjà correct → rien à faire (idempotent)" \
   || fail "lien PATH : devrait se dire déjà correct"
 
 # cible étrangère au projet → on ne touche pas
 ln -sfn "/usr/bin/true" "$LINK"
 out_l="$(GWSA_CLI_LINK="$LINK" relenv "$UPDATE" --force 2>&1)"
-[[ "$(readlink "$LINK")" == "/usr/bin/true" && "$out_l" == *"hors projet"* ]] \
+[[ "$(readlink "$LINK")" == "/usr/bin/true" && "$out_l" == *"outside the project"* ]] \
   && pass "lien PATH : cible étrangère laissée intacte (avertissement)" \
   || fail "lien PATH : a écrasé une cible étrangère"
 
 # bac à sable sans lien désigné → on ne touche à rien (le PATH réel est sacré)
 out_l="$(GWSA_DEPLOY_ROOT="$RELDEP" GWSA_DESKTOP_CONFIG="$RELCONF" "$UPDATE" --force 2>&1)"
-[[ "$out_l" == *"sans GWSA_CLI_LINK"* ]] \
+[[ "$out_l" == *"overridden without GWSA_CLI_LINK"* ]] \
   && pass "lien PATH : dépôt surchargé sans GWSA_CLI_LINK → aucun lien touché" \
   || fail "lien PATH : un test pourrait atteindre le mag réel du PATH"
 
@@ -2641,7 +2641,7 @@ out_l="$(GWSA_DEPLOY_ROOT="$RELDEP" GWSA_DESKTOP_CONFIG="$RELCONF" "$UPDATE" --f
 rm -f "$LINK"
 printf '#!/bin/sh\necho vrai fichier\n' > "$LINK"; chmod +x "$LINK"
 out_l="$(GWSA_CLI_LINK="$LINK" relenv "$UPDATE" --force 2>&1)"
-[[ ! -L "$LINK" && "$(cat "$LINK")" == *"vrai fichier"* && "$out_l" == *"pas un lien"* ]] \
+[[ ! -L "$LINK" && "$(cat "$LINK")" == *"vrai fichier"* && "$out_l" == *"not a symlink"* ]] \
   && pass "lien PATH : fichier réel jamais remplacé par un lien" \
   || fail "lien PATH : a écrasé un fichier réel"
 
@@ -2824,7 +2824,7 @@ done
 # bac à sable sans GWSA_CLI_LINK : deploy-local --rollback ne doit toucher à
 # AUCUN lien réel du PATH (même garde-fou que côté update.sh).
 out_dlr2="$(GWSA_DEPLOY_ROOT="$RBDEP" "$RB/scripts/deploy-local.sh" --rollback v1.0.0-post-mag 2>&1)"; rc=$?
-[[ "$rc" -eq 0 && "$out_dlr2" == *"sans GWSA_CLI_LINK"* ]] \
+[[ "$rc" -eq 0 && "$out_dlr2" == *"overridden without GWSA_CLI_LINK"* ]] \
   && pass "deploy-local --rollback : dépôt surchargé sans GWSA_CLI_LINK → aucun lien touché" \
   || fail "deploy-local --rollback : un test pourrait atteindre le mag réel du PATH"
 
@@ -2917,7 +2917,7 @@ fi
 # update --check depuis la copie installée SANS clone : lit GitHub, se dit à jour
 out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/mag" \
          "$GHDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
-[[ "$rc" -eq 0 && "$out_u" == *"à jour"* ]] \
+[[ "$rc" -eq 0 && "$out_u" == *"up to date"* ]] \
   && pass "update --check : sans clone, interroge GitHub et se dit à jour" \
   || fail "update --check sans clone : sortie inattendue"
 
@@ -2943,7 +2943,7 @@ out_u="$(GWSA_TAGS_URL="file://$TMP/inexistant.json" GWSA_TARBALL_BASE="file://$
 # --check --to <tag inexistant> : sans clone, refus (comme refs/tags côté clone). Codex P2.
 out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/mag" \
          "$GHDEP/current/scripts/update.sh" --check --to v9.9.9 2>&1)"; rc=$?
-[[ "$rc" -ne 0 && "$out_u" == *"introuvable"* ]] \
+[[ "$rc" -ne 0 && "$out_u" == *"not found"* ]] \
   && pass "update --check --to : tag inexistant refusé (validé contre GitHub)" \
   || fail "update --check --to : tag bidon accepté à tort"
 
@@ -3007,14 +3007,14 @@ GADEP="$GA/.local/share/google-mcp"
 ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/mag" GWSA_ALLOW_NO_GWS=1 bash install.sh >/dev/null 2>&1
 out_u="$(ghenv GWSA_DEPLOY_ROOT="$GADEP" GWSA_CLI_LINK="$GA/mag" \
          "$GADEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
-[[ "$rc" -eq 0 && "$out_u" == *"GitHub"* && "$out_u" != *"aucune version"* ]] \
+[[ "$rc" -eq 0 && "$out_u" == *"GitHub"* && "$out_u" != *"no published version"* ]] \
   && pass "update : install sous un dépôt git ancêtre → mode github (marqueurs, pas walk-up)" \
   || fail "update : détecté à tort comme clone sous un ancêtre git"
 
 # régression P3 : « update --to » sans valeur → pas d'abandon silencieux (retombe latest)
 out_u="$(ghenv GWSA_DEPLOY_ROOT="$GHDEP" GWSA_CLI_LINK="$GHBIN/mag" \
          "$GHDEP/current/scripts/update.sh" --check --to 2>&1)"; rc=$?
-[[ "$rc" -eq 0 && "$out_u" == *"disponible"* ]] \
+[[ "$rc" -eq 0 && "$out_u" == *"available"* ]] \
   && pass "update --to sans valeur : retombe sur latest (pas d'abandon silencieux)" \
   || fail "update --to sans valeur : abandon silencieux (set -e)"
 
@@ -3131,7 +3131,7 @@ rm -rf "$NOG"
 out_u="$(env GWSA_TAGS_URL="file://$GHTAGS" GWSA_TARBALL_BASE="file://$GHTB" \
          GWSA_DEPLOY_ROOT="$NOGDEP" GWSA_CLI_LINK="$TMP/noggwsa" \
          "$NOGDEP/current/scripts/update.sh" --check 2>&1)"; rc=$?
-[[ "$rc" -ne 0 && "$out_u" == *"provenance inconnue"* ]] \
+[[ "$rc" -ne 0 && "$out_u" == *"unknown provenance"* ]] \
   && pass "update : clone non-GitHub supprimé → refus (provenance inconnue, pas d'upstream)" \
   || fail "update : fallback silencieux sur upstream quand provenance inconnue"
 
@@ -4285,7 +4285,7 @@ def w():
         consume_nonce('expiry-under-lock', expires_at=exp)
         res['r'] = 'ok'
     except ElicitationError as e:
-        res['r'] = 'expired' if 'expiré' in str(e) else 'other:' + str(e)
+        res['r'] = 'expired' if 'expired' in str(e) else 'other:' + str(e)
 t = threading.Thread(target=w); t.start()
 time.sleep(2)                           # on tient le verrou au-delà du TTL
 fcntl.flock(fd, fcntl.LOCK_UN); os.close(fd)
@@ -6342,7 +6342,7 @@ Path('$response_file2').write_text(json.dumps(assertion))
 replay_out="$(GWSA_ROOT="$RA_OOP" "$PY" scripts/remote-approval-cli.py verify \
   --challenge-id "$challenge_id" --response "$response_file2" 2>&1)"
 replay_rc=$?
-[[ "$replay_rc" != "0" ]] && echo "$replay_out" | grep -q "approbation distante" \
+[[ "$replay_rc" != "0" ]] && echo "$replay_out" | grep -q "remote approval" \
   && pass "remote_approval CLI : rejeu d'un challenge_id déjà clos (« verify ») → refusé (pending one-shot)" \
   || fail "remote_approval CLI : rejeu de challenge_id non refusé ($replay_out, rc=$replay_rc)"
 
@@ -6352,7 +6352,7 @@ replay_rc=$?
 trav_out="$(GWSA_ROOT="$RA_OOP" "$PY" scripts/remote-approval-cli.py verify \
   --challenge-id "../../etc/passwd" --response "$response_file" 2>&1)"
 trav_rc=$?
-[[ "$trav_rc" != "0" ]] && echo "$trav_out" | grep -qi "challenge_id invalide" \
+[[ "$trav_rc" != "0" ]] && echo "$trav_out" | grep -qi "invalid challenge_id" \
   && pass "remote_approval CLI : challenge_id de traversée (../) refusé (Codex P2, PR #113)" \
   || fail "remote_approval CLI : traversée de challenge_id non refusée ($trav_out, rc=$trav_rc)"
 
@@ -6489,8 +6489,8 @@ cr_o2=$(cat "$CO2" 2>/dev/null)
 cr_ok=0; cr_refused=0
 [[ "$cr_o1" == "ok" ]] && cr_ok=$((cr_ok + 1))
 [[ "$cr_o2" == "ok" ]] && cr_ok=$((cr_ok + 1))
-[[ "$cr_o1" == refused:*invalide* ]] && cr_refused=$((cr_refused + 1))
-[[ "$cr_o2" == refused:*invalide* ]] && cr_refused=$((cr_refused + 1))
+[[ "$cr_o1" == refused:*invalid* ]] && cr_refused=$((cr_refused + 1))
+[[ "$cr_o2" == refused:*invalid* ]] && cr_refused=$((cr_refused + 1))
 if [[ $cr_ok -eq 1 && $cr_refused -eq 1 ]]; then
   pass "remote_approval : course de clones (2 défis frais, même sign_count) — exactement un accepté, l'autre refusé (fiche 0083)"
 else
@@ -6765,7 +6765,7 @@ MARKER_AFTER="$(readlink "$TRAP_MARKER" 2>/dev/null)"
   || fail "dépréciation : le marqueur reste piégé vers la cible de l'attaquant (readlink=$MARKER_AFTER)"
 
 section "Message de fin d'update — guide de refresh terminal (fiche 0092)"
-if grep -q "hash -r" scripts/update.sh && grep -q "nom canonique" scripts/update.sh; then
+if grep -q "hash -r" scripts/update.sh && grep -q "canonical" scripts/update.sh; then
   pass "scripts/update.sh mentionne le refresh terminal (hash -r) et le nom canonique mag"
 else
   fail "scripts/update.sh ne guide pas le refresh terminal / ne nomme pas mag"

@@ -15,11 +15,11 @@ from .vault import has_credentials
 def validate_alias(alias: str) -> str:
     if not alias or not ALIAS_RE.match(alias):
         raise GatewayError(
-            f"alias invalide « {alias} » (lettres, chiffres, - et _ uniquement)",
+            f"invalid alias « {alias} » (letters, digits, - and _ only)",
             code="alias",
         )
     if alias in RESERVED:
-        raise GatewayError(f"« {alias} » est un mot réservé", code="alias")
+        raise GatewayError(f"« {alias} » is a reserved word", code="alias")
     return alias
 
 

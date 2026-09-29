@@ -282,9 +282,9 @@ def _save_nonces(nonces: dict[str, float]) -> None:
 
 def consume_nonce(nonce: str, *, expires_at: int) -> None:
     if not nonce:
-        raise ElicitationError("nonce manquant")
+        raise ElicitationError("missing nonce")
     if int(time.time()) > int(expires_at):
-        raise ElicitationError("défi expiré — relancer la commande")
+        raise ElicitationError("expired challenge — re-run the command")
     # Verrou inter-process (fiche 0084) : reload → check → save doivent être
     # atomiques face à deux process concurrents (Touch ID local + approbation
     # passkey distante brûlent leur nonce par ce même chemin). Le rechargement
@@ -295,10 +295,10 @@ def consume_nonce(nonce: str, *, expires_at: int) -> None:
         # d'acquisition du verrou peut franchir expires_at ; sans ce re-check, un
         # défi expiré PENDANT l'attente serait consommé. Temps frais, sous le verrou.
         if int(time.time()) > int(expires_at):
-            raise ElicitationError("défi expiré — relancer la commande")
+            raise ElicitationError("expired challenge — re-run the command")
         nonces = _load_nonces()
         if nonce in nonces:
-            raise ElicitationError("rejeu refusé (nonce déjà consommé)")
+            raise ElicitationError("replay denied (nonce already consumed)")
         _test_race_delay()
         nonces[nonce] = float(expires_at)
         _save_nonces(nonces)
@@ -339,9 +339,9 @@ def _sign_helper_cmd() -> list[str]:
     swift = env("SYS_SWIFT", "/usr/bin/swift")
     script = REPO_DIR / "scripts" / SIGN_HELPER_NAME
     if not Path(swift).is_file():
-        raise ElicitationError(f"Swift introuvable ({swift}) — xcode-select --install")
+        raise ElicitationError(f"Swift not found ({swift}) — xcode-select --install")
     if not script.is_file():
-        raise ElicitationError(f"helper de signature absent ({script})")
+        raise ElicitationError(f"signing helper missing ({script})")
     return [swift, str(script)]
 
 
@@ -355,19 +355,19 @@ def _swift_sign(payload: dict[str, Any]) -> str:
     )
     if proc.returncode == 2:
         raise ElicitationError(
-            "biométrie indisponible — pas d'accord silencieux "
-            "(capot fermé, pas de Touch ID, ou clé non enrôlée : mag elicitation enroll)"
+            "biometrics unavailable — no silent consent "
+            "(lid closed, no Touch ID, or key not enrolled: mag elicitation enroll)"
         )
     if proc.returncode != 0:
         detail = (proc.stderr or proc.stdout or "").strip()
-        raise ElicitationError(detail or "signature refusée")
+        raise ElicitationError(detail or "signature rejected")
     try:
         receipt = json.loads(proc.stdout.strip())
     except json.JSONDecodeError as e:
-        raise ElicitationError(f"réponse helper invalide : {e}") from e
+        raise ElicitationError(f"invalid helper response: {e}") from e
     sig = str(receipt.get("signature") or "")
     if not sig:
-        raise ElicitationError("signature absente dans le reçu")
+        raise ElicitationError("missing signature in receipt")
     return sig
 
 
@@ -513,8 +513,8 @@ def check_inconv_throttle(session_id: str) -> None:
         last = data.get(session_id)
         if last is not None and now - last < INCONV_THROTTLE_SEC:
             raise ElicitationError(
-                "élicitation en conversation déjà en cours pour cette session — "
-                "réessayer dans quelques secondes"
+                "in-conversation elicitation already in progress for this session — "
+                "retry in a few seconds"
             )
         data = {k: v for k, v in data.items() if now - v < 86400}
         data[session_id] = now
@@ -548,8 +548,8 @@ def inconv_inflight_guard():
             yield
     except BlockingIOError:
         raise ElicitationError(
-            "une élicitation en conversation est déjà en cours — "
-            "attendre qu'elle se termine avant de réessayer"
+            "an in-conversation elicitation is already in progress — "
+            "wait for it to finish before retrying"
         )
 
 
@@ -557,11 +557,11 @@ def run_elicitation_gate(fields: dict[str, Any]) -> None:
     """Point d'entrée : construit le payload, obtient signature, vérifie, journalise."""
     if not is_enrolled():
         raise ElicitationError(
-            "élicitation signée requise mais non enrôlée — exécuter : mag elicitation enroll"
+            "signed elicitation required but not enrolled — run: mag elicitation enroll"
         )
     action = str(fields.get("action") or "")
     if not action:
-        raise ElicitationError("action manquante")
+        raise ElicitationError("missing action")
     ba = fields.get("bound_args")
     payload = build_payload(
         action,
@@ -576,7 +576,7 @@ def run_elicitation_gate(fields: dict[str, Any]) -> None:
     )
     signature = obtain_signature(payload)
     if not verify_signature(payload, signature):
-        raise ElicitationError("signature invalide — action refusée")
+        raise ElicitationError("invalid signature — action denied")
     consume_nonce(str(payload["nonce"]), expires_at=int(payload["expires_at"]))
     log_receipt(payload, signature)
 
@@ -595,7 +595,7 @@ def enroll_secure() -> dict[str, Any]:
     )
     if proc.returncode != 0:
         detail = (proc.stderr or proc.stdout or "").strip()
-        raise ElicitationError(detail or "échec enrôlement")
+        raise ElicitationError(detail or "enrollment failed")
     meta: dict[str, Any] = {"ok": True, "mode": "p256", "public_key": str(pub)}
     try:
         meta.update(json.loads((proc.stdout or "").strip().splitlines()[-1]))
