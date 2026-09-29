@@ -50,8 +50,8 @@ en fouillant la config à la main le 2026-07-26.
 > Cockpit (#128) + `serverInfo` du handshake `initialize`. Résiduel = **surface agent** (sans
 > terminal) + détection de dérive, non faits.
 
-- [ ] `setup_status` annonce sa version et son couloir (chemin binaire, port broker) : l'agent sait à qui il parle, sans terminal.
-- [ ] Une commande de contrôle (`deploy-local.sh --check` ou `mag doctor`) signale la dérive entre l'entrée réellement branchée dans la config du client et `~/.local/share/google-mcp/current`.
+- [x] `setup_status` annonce sa version et son couloir (chemin binaire, port broker) : l'agent sait à qui il parle, sans terminal. **Livré (PR #151).**
+- [ ] Contrôle de dérive → **carvé** dans [[20260929172213000]] (`deploy-local.sh --check`) — reporté à son propre cycle (lire la config réelle du client est un morceau à part).
 
 ## Notes
 
