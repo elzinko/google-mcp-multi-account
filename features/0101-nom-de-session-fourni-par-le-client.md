@@ -6,7 +6,7 @@ priority: P1
 product: google-mcp-multi-account
 version:
 epic: 0082
-status: idea
+status: blocked
 ready:
 pr:
 created: 2026-08-30
@@ -19,6 +19,11 @@ le nom vient du **client MCP** (la conversation), pas d'une étiquette posée à
 l'admin. La session porte alors un nom lisible, affiché et triable dans le panneau
 Sessions.
 
+> ⛔ **Bloquée (2026-09-29).** Dépendance non levée : aucun canal MCP standard ne transmet
+> un **titre de conversation** (les clients envoient `clientInfo.name`, le nom de l'app).
+> Débloquer suppose une décision de conception **et** un canal client réel — c'est un STOP
+> humain, hors périmètre d'un build autonome.
+>
 > ⚠️ **Dépendance à lever avant de groomer `ready`.** Les clients actuels (Claude Desktop,
 > Cursor) envoient le **nom de l'app** (`clientInfo.name`), pas un **titre de conversation**.
 > Il n'existe pas, à ce jour, de canal standard MCP pour un titre par conversation. Cette

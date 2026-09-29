@@ -5,11 +5,18 @@ type: chore
 priority: P2
 version:
 epic:
-status: idea
-ready:
+status: ready
+ready: 2026-09-29
 pr:
 created: 2026-07-27
 ---
+
+## En clair
+
+Le mot « jeton » (plomberie OAuth) a fui dans les surfaces lues par l'humain. L'admin est
+déjà nettoyé. Reste le **hors-admin** : `CLAUDE.md`, `SECURITY.md`, docs, sorties `mag`.
+Cette fiche remplace « token/jeton expiré » par « connexion à Google expirée — à refaire »
+et pose un glossaire, pour un seul vocabulaire côté humain.
 
 ## Contexte / Problème
 

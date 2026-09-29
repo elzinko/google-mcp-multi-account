@@ -93,6 +93,10 @@ de tests + hygiène), tous bon marché. Cette fiche les regroupe pour tirer la v
 
 ## Notes
 
+- **Carve 2026-09-29** : les deux cases « tests » du volet 🟠 (admin anti-DNS-rebinding +
+  invariants `DEFAULT_POLICY`) sont sorties dans leur propre fiche prête à construire
+  [[20260929153720000]] (tests seulement). Le reste de 0074 (site DNS, hygiène repo,
+  durcissements latents) reste ici.
 - **Anti-doublon** : les items sont majoritairement **nouveaux**. Ceux qui recoupent
   des fiches existantes y restent gérés, cette fiche les **cite sans dupliquer** :
   [[0028]] (`--prune`), [[0034]] (« zone = territoire »), [[0039]] (bannir « jeton »),

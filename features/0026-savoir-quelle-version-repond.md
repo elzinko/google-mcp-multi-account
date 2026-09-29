@@ -5,11 +5,21 @@ type: feature
 priority: P2
 version:
 epic:
-status: idea
-ready:
+status: ready
+ready: 2026-09-29
 pr:
 created: 2026-07-26
 ---
+
+## En clair
+
+Depuis une conversation, rien ne dit **quelle version du MCP répond**, ni si la version
+**branchée** diffère de la version **déployée**. Cette fiche fait annoncer la version par les
+tools (via `setup_status`) et ajoute un contrôle qui signale la dérive — sans terminal.
+
+**POC visé** : `setup_status` annonce version + couloir (chemin binaire, port broker). Le
+contrôle de dérive (`mag doctor` / `deploy-local.sh --check`) suit dans le même sprint si le
+POC tient.
 
 > **Frontière (non-doublon avec [[0042]]).** 0026 = surface **agent** : version
 > annoncée via les tools (`setup_status`) + détection de dérive config ↔

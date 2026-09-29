@@ -39,12 +39,14 @@
 | [0097](done/0097-composants-transverses.md) | Finir la migration des dialogues et écrans restants vers le design system Cockpit | feature | P1 |  | 0060 | google-mcp-multi-account | ✅ shipped | #133 |
 | [0098](done/0098-micro-routeur-vues.md) | Micro-routeur — formaliser les vues (pages vs modales), un seul registre de poll | refactor | P1 |  | 0060 | google-mcp-multi-account | ✅ shipped | #139 |
 | [0099](done/0099-sessions-pilote-tri-liste-vignettes.md) | Sessions — tranche pilote du design system (cartes régulières + tri + bascule liste/vignettes) | feature | P1 |  | 0060 | google-mcp-multi-account | ✅ shipped | #128 |
+| [0101](0101-nom-de-session-fourni-par-le-client.md) | Nom lisible de session, fourni par le client MCP | feature | P1 |  | 0082 | google-mcp-multi-account | ⛔ blocked |  |
 | [0102](done/0102-journal-page-monitoring-filtres-par-session.md) | Journal en page dédiée — filtres + journal par session (virage monitoring) | feature | P1 |  | 0060 | google-mcp-multi-account | ✅ shipped | #128 |
 | [0104](done/0104-app-shell-responsive-mobile.md) | App shell responsive — navigation et rendu mobile pro (bottom-nav + top-bar) | feature | P1 |  | 0060 | google-mcp-multi-account | ✅ shipped | #128 |
 | [0107](done/0107-vue-compte-droits-sur-place.md) | Vue compte — piloter les droits sur place (remplacer la modale Policy) + nettoyer la liste | feature | P1 |  | 0060 | google-mcp-multi-account | ✅ shipped | #131 |
 | [20260910194019668](done/20260910194019668_elicitation-in-conversation-opt-in.md) | Élicitation dans la conversation — popup sans terminal, confirmé dans le chat (opt-in) | feature | P1 |  | 0082 | google-mcp-multi-account | ✅ shipped | #142 |
 | [20260911135931576](done/20260911135931576_deverrouillage-transactionnel-vs-minutes.md) | Déverrouillage transactionnel — remplacer la fenêtre de minutes par un consentement par demande | feature | P1 |  | 0082 | google-multi-account | ✅ shipped | #149 |
 | [20260920141424574](done/20260920141424574_consentement-une-fois-ou-session.md) | Consentement « une fois / pour la session » + mode réglable depuis l'admin (raffinement transactionnel) | feature | P1 |  | 0082 | google-multi-account | ✅ shipped | #150 |
+| [20260929153720000](20260929153720000_tests-securite-default-policy-anti-dns-rebinding.md) | Combler deux trous de tests sécurité — invariants DEFAULT_POLICY + admin anti-DNS-rebinding | bug | P1 |  |  | google-multi-account | 🔵 ready |  |
 | [0002](done/0002-durcir-modele-policy-default-deny.md) | Durcir le modèle de policy — décisions « default-deny » soulevées par l'audit | feature | P2 |  |  |  | ✅ shipped | #12 |
 | [0007](done/0007-provisioning-idempotent-declaratif.md) | Provisioning GCP idempotent/déclaratif — durcir provision-gcp.sh ou passer à Terraform | feature | P2 |  |  |  | ✅ shipped | #10 |
 | [0008](done/0008-connexion-dynamique-compte-elicitation.md) | Connexion dynamique d'un nouveau compte via élicitation forte (access_request kind=add_account) | feature | P2 |  |  |  | ✅ shipped | #7 |
@@ -54,9 +56,11 @@
 | [0013](done/0013-brancher-claude-desktop-auto.md) | Brancher le serveur MCP dans Claude Desktop en un geste (script idempotent) | feature | P2 |  |  |  | ✅ shipped | #15 |
 | [0016](done/0016-readme-porte-entree-open-source.md) | Porte d'entrée open-source — README copiable, SECURITY.md, licence MIT, badges | feature | P2 |  |  |  | ✅ shipped | #16 |
 | [0022](done/0022-doc-critique-technique.md) | Doc de critique technique lisible (forces / limites / risques) référencée au README | feature | P2 |  |  |  | ✅ shipped | #23 |
+| [0026](0026-savoir-quelle-version-repond.md) | Savoir quelle version répond — version annoncée par les tools, dérive détectée | feature | P2 |  |  |  | 🔵 ready |  |
 | [0027](done/0027-deployer-un-commit-non-tagge.md) | Déployer un commit non taggé pour essayer une PR (couloir jetable) | feature | P2 |  |  |  | ✅ shipped | #48 |
 | [0032](done/0032-touchid-nomme-compte-et-produit.md) | La notification Touch ID doit nommer le compte et le produit, pas l'alias seul | feature | P2 |  |  |  | ✅ shipped | #48 |
 | [0036](done/0036-admin-clarte-cartes-profil.md) | Refonte des cartes profil de l'admin — liste, page de compte, zones (spec maquette v11) | feature | P2 |  |  |  | ✅ shipped | #44 |
+| [0039](0039-harmoniser-vocabulaire-jeton.md) | Bannir « jeton/token » des surfaces utilisateur — un seul vocabulaire (accès / connexion) | chore | P2 |  |  |  | 🔵 ready |  |
 | [0040](done/0040-brancher-mcp-claude-code.md) | Le déploiement branche Claude Desktop mais pas Claude Code (CLI) — généraliser | feature | P2 |  |  |  | ✅ shipped | #43 |
 | [0041](done/0041-ecart-policy-surface-mcp.md) | Clarifier l'écart policy admin ↔ surface MCP (Drive copie, contenu, modification) | bug | P2 |  |  |  | ✅ shipped | #52 |
 | [0042](done/0042-version-connecteur-et-maj.md) | Version visible dans le connecteur MCP + mise à jour guidée | feature | P2 | V2 |  |  | ✅ shipped | #128 |
@@ -84,6 +88,7 @@
 | [0106](done/0106-vue-compte-orientee-sessions.md) | Vue compte orientée sessions — compteur, liste des sessions et droits par session | feature | P2 |  |  | google-mcp-multi-account | ✅ shipped | #132 |
 | [20260905175129735](done/20260905175129735_durcir-rollback-updater-codex-postmerge.md) | Durcir le cluster updater — findings Codex post-merge (#134/#135/#136) | bug | P2 |  |  | google-mcp-multi-account | ✅ shipped | #146 |
 | [20260912000249823](20260912000249823_renommage-gwsa-mag-avec-compat.md) | Renommage GWSA_ → MAG_ (variables d'env) avec compatibilité, sans rien casser | refactor | P2 |  |  | google-multi-account | 🟠 in-progress |  |
+| [20260916201419331](20260916201419331_gmail-list-pagination-curseur.md) | Exposer la pagination (pageToken) dans gmail_list pour parcourir tout l'historique | feature | P2 |  |  | google-multi-account | 🔵 ready |  |
 | [0001](done/0001-elicitation-signee-strongauth-v2.md) | Élicitation signée — faire monter `mag strongauth` de la présence à la signature | feature | P3 |  |  |  | 🗑️ superseded |  |
 | [0090](0090-documenter-statut-oauth-verification.md) | Documenter et outiller le statut OAuth (warning « non vérifiée » + Testing→Production) | feature | P3 |  |  |  | ❓ todo |  |
 | [0093](done/0093-coherence-nommage-mag-produit-mcp.md) | Cohérence de nommage — relier `mag` / google-multi-account / repo sans casser le MCP | feature | P3 |  |  |  | ✅ shipped | #144 |
@@ -102,13 +107,9 @@
 
 | # | Titre | Type | Prio | Version | Épic | Produit | Statut | PR |
 |---|-------|------|------|---------|------|---------|--------|----|
-| [0101](0101-nom-de-session-fourni-par-le-client.md) | Nom lisible de session, fourni par le client MCP | feature | P1 |  | 0082 | google-mcp-multi-account | 💡 idea |  |
 | [0108](0108-session-demande-sous-ensemble-droits-compte.md) | Session — demander un sous-ensemble des droits du compte (accès fin, vérifiable par session) | feature | P1 |  | 0082 | google-mcp-multi-account | 💡 idea |  |
-| [0026](0026-savoir-quelle-version-repond.md) | Savoir quelle version répond — version annoncée par les tools, dérive détectée | feature | P2 |  |  |  | 💡 idea |  |
 | [0035](0035-admin-acces-rapide-et-visu-zones.md) | Accès rapide à l'admin + visualisation des zones (icône barre de menus ?) | feature | P2 |  |  |  | 💡 idea |  |
-| [0039](0039-harmoniser-vocabulaire-jeton.md) | Bannir « jeton/token » des surfaces utilisateur — un seul vocabulaire (accès / connexion) | chore | P2 |  |  |  | 💡 idea |  |
 | [20260910170000000](20260910170000000_traduire-scripts-helper-mag-parite-mcp.md) | Traduire en anglais les scripts helper opérationnels de mag + parité CLI/MCP | feature | P2 |  | 0017 | google-mcp-multi-account | 💡 idea |  |
-| [20260916201419331](20260916201419331_gmail-list-pagination-curseur.md) | Exposer la pagination (pageToken) dans gmail_list pour parcourir tout l'historique | feature | P2 |  |  | google-multi-account | 💡 idea |  |
 | [20260922221816747](20260922221816747_popup-swift-deux-boutons-portee.md) | Popup Touch ID à deux boutons « Une fois / Pour la session » (ergonomie du geste) | feature | P2 |  | 0082 | google-multi-account | 💡 idea |  |
 | [0003](0003-vault-credentials-hors-perimetre-agent.md) | Vault credentials hors périmètre agent (Phase 2.1) | feature | P3 |  |  |  | 💡 idea |  |
 | [0006](0006-harnais-test-manuel-hybride.md) | Harnais hybride pour les tests manuels — script pour la mécanique, LLM pour la glu | feature | P3 |  |  |  | 💡 idea |  |

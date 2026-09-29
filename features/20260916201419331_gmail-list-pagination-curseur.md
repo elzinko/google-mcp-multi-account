@@ -6,8 +6,8 @@ priority: P2
 product: google-multi-account
 version:
 epic:
-status: idea
-ready:
+status: ready
+ready: 2026-09-29
 pr:
 created: 2026-09-16
 ---
