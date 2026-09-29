@@ -397,8 +397,8 @@ def gmail_list(
     alias: str,
     query: str = "",
     max_results: int = 10,
-    page_token: str = "",
     session: str = "",
+    page_token: str = "",
 ) -> dict[str, Any]:
     validate_alias(alias)
     max_results = max(1, min(int(max_results), 50))
