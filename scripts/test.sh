@@ -7855,6 +7855,23 @@ print('n1', n1, 'n2', n2, 'caps_after', caps_after)
 
 rm -rf "$TX9"
 
+section "Vocabulaire humain (fiche 0039) — plus de « token/jeton » hors admin"
+# Le mot « jeton » reste légitime en doc technique (SECURITY.md, ADR, design
+# tokens CSS) : ces fichiers sont hors du grep ci-dessous. Sur les surfaces
+# ciblées par la fiche (CLAUDE.md, docs/usage.md, protocoles de tests
+# manuels), « token »/« jeton » (nu ou dans « … expiré », « … en place », etc.)
+# est banni entièrement, pas seulement le motif « … expiré » (Codex #153 P2 :
+# un grep trop étroit avait laissé passer « état du token », « token en
+# place »). Seule exception : la règle sécurité de CLAUDE.md qui liste
+# `~/.config/gws-accounts/` (tokens) — une instruction interne sur des
+# fichiers, pas un message d'état adressé à l'utilisateur.
+out="$(grep -rniE '\b(token|jeton)s?\b' CLAUDE.md docs/usage.md tests/manuels/*/PROTOCOLE.md 2>/dev/null | grep -v 'gws-accounts')"
+if [[ -n "$out" ]]; then
+  echo "$out"
+  fail "vocabulaire humain : « token/jeton » retrouvé sur une surface hors admin (voir ci-dessus)"
+else
+  pass "vocabulaire humain : aucune surface hors admin ne dit « token/jeton » (hors règle sécurité gws-accounts)"
+fi
 
 # --- Bilan ------------------------------------------------------------------
 

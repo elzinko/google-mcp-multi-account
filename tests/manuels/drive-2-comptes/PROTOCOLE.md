@@ -22,7 +22,7 @@ Prompt de lancement : voir [PROMPT.md](PROMPT.md).
    *Pourquoi l'humain ?* En mode zones le LLM ne peut écrire nulle part tant
    qu'aucune zone n'est accordée — créer le bac à sable est un geste humain,
    et c'est voulu.
-3. Jetons : si un compte n'a pas servi depuis > 7 jours (app OAuth en mode
+3. Connexion Google : si un compte n'a pas servi depuis > 7 jours (app OAuth en mode
    *Testing*), prévoir une reconnexion `mag add <alias>` en cours de route
    (le protocole le détecte, erreur `exit code 2`).
 
@@ -50,8 +50,8 @@ Conventions : toutes les commandes agent passent par
   mag unlock ALIAS2 30
   ```
 
-- Re-vérifier `auth status` des 2 profils. `exit code 2` → token expiré :
-  proposer `mag add <alias>` puis reprendre.
+- Re-vérifier `auth status` des 2 profils. `exit code 2` → connexion à Google
+  expirée : proposer `mag add <alias>` puis reprendre.
 
 ### Phase 2 — élicitation « grant » (l'humain accorde les zones)
 
@@ -173,7 +173,7 @@ les grants expirent tout seuls, verrous et grants se referment automatiquement
 
 | Symptôme | Cause | Remède |
 |---|---|---|
-| `exit code 2` sur un profil | Token expiré (app en *Testing*, 7 j) | `mag add <alias>` puis reprendre |
+| `exit code 2` sur un profil | Connexion à Google expirée (app en *Testing*, 7 j) | `mag add <alias>` puis reprendre |
 | `403 … required permission to use project <id>` | Le compte n'est pas membre du projet GCP de l'app OAuth (quota project) | Rôle `serviceUsageConsumer` à accorder — voir docs/setup-oauth.md §7 |
 | `dossier « ZZ-TESTS » introuvable ou ambigu` | Pas créé, mal orthographié, ou deux dossiers du même nom | Créer/renommer dans Drive web, ou donner l'ID (fin de l'URL du dossier) |
 | Refus « non vérifiable par zones » sur `+upload` | Comportement voulu | `files create/update` + `--upload` |

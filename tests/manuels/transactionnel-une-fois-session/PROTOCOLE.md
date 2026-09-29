@@ -24,7 +24,7 @@ Prompt de lancement : voir [PROMPT.md](PROMPT.md).
    ```
 3. `mag strongauth status` : Touch ID actif = le vrai geste. (Sans strongauth, le
    consentement passe quand même par le chemin signé ; le test reste valable.)
-4. Jetons : si le compte n'a pas servi depuis > 7 j (app OAuth *Testing*), prévoir
+4. Connexion Google : si le compte n'a pas servi depuis > 7 j (app OAuth *Testing*), prévoir
    `mag add <alias>` en cours de route (erreur `exit code 2`).
 
 ## Déroulé (ce que l'agent doit faire)
@@ -101,7 +101,7 @@ Touch ID **affiche la portée demandée** avant que l'humain pose le doigt.
 ## Dépannage
 | Symptôme | Cause | Remède |
 |---|---|---|
-| `exit code 2` | Token expiré (app *Testing*, 7 j) | `mag add <alias>` puis reprendre |
+| `exit code 2` | Connexion à Google expirée (app *Testing*, 7 j) | `mag add <alias>` puis reprendre |
 | Le choix « session » n'apparaît pas | Mode `auto` actif | Repasser en `manuel` (admin ou `mag transactional mode manuel`) |
 | Le 2ᵉ acte redemande alors qu'on a dit « session » | Dossier différent, ou session expirée | Vérifier le dossier exact / la session |
 | Un partage passe sans geste | **Bug à remonter** — le partage doit toujours redemander | — |

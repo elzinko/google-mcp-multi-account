@@ -18,7 +18,7 @@ un compte par son **adresse email** (le plus clair) et on appelle
 mag vous@gmail.com gmail users messages list --params '{"userId":"me","maxResults":5}'
 mag vous@gmail.com drive files list --params '{"pageSize":10}'
 mag vous@gmail.com calendar +agenda --today    # agenda du jour
-mag vous@gmail.com auth status                 # état du token
+mag vous@gmail.com auth status                 # état de la connexion
 ```
 
 > **Alias = raccourci optionnel.** Si l'email est long à taper, nomme le compte
@@ -31,7 +31,7 @@ les cas non couverts par le MCP.
 
 ## Connexion sur demande (élicitation)
 
-Un profil peut être **verrouillé** : il reste connecté (token en place) mais
+Un profil peut être **verrouillé** : il reste connecté (connexion en place) mais
 refuse toute commande tant que tu ne l'as pas déverrouillé explicitement —
 le LLM qui se heurte au verrou doit te le demander.
 
