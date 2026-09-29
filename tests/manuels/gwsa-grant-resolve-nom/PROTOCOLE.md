@@ -39,7 +39,7 @@ Google, à la **racine** du Drive :
 zone n'est accordée — et accorder une zone est justement ce qu'on teste. Le
 bac à sable est donc forcément un geste humain.
 
-Jetons : si un compte n'a pas servi depuis > 7 jours (app OAuth en mode
+Connexion Google : si un compte n'a pas servi depuis > 7 jours (app OAuth en mode
 *Testing*), prévoir `mag add <alias>` en cours de route (erreur `exit code 2`).
 
 ## Déroulé (ce que l'agent doit faire)
@@ -65,8 +65,8 @@ Conventions : commandes agent via `GWSA_CLIENT=claude-code mag …` (jamais
   mag unlock mw 30
   ```
 
-- Re-vérifier `auth status` des deux profils. `exit code 2` → token expiré :
-  proposer `mag add <alias>` puis reprendre.
+- Re-vérifier `auth status` des deux profils. `exit code 2` → connexion à
+  Google expirée : proposer `mag add <alias>` puis reprendre.
 
 ### Phase 2 — cas nominal : le nom résout, par compte
 
@@ -208,7 +208,7 @@ corbeiller la racine d'une zone (fiche 0037).
 
 | Symptôme | Cause | Remède |
 |---|---|---|
-| `exit code 2` sur un profil | Token expiré (app en *Testing*, 7 j) | `mag add <alias>` puis reprendre |
+| `exit code 2` sur un profil | Connexion à Google expirée (app en *Testing*, 7 j) | `mag add <alias>` puis reprendre |
 | `403 … required permission to use project <id>` | Compte non membre du projet GCP | Rôle `serviceUsageConsumer` — docs/setup-oauth.md §7 |
 | `ZZ-TESTS` introuvable alors qu'il existe | Créé dans un sous-dossier, ou dans l'autre compte, ou à la corbeille | Le placer à la **racine** du bon Drive, hors corbeille |
 | Touch ID apparaît sur un cas négatif | **Régression** — l'élicitation passerait avant la résolution | Test échoué : ouvrir une fiche backlog |

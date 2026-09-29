@@ -7855,6 +7855,15 @@ print('n1', n1, 'n2', n2, 'caps_after', caps_after)
 
 rm -rf "$TX9"
 
+section "Vocabulaire humain (fiche 0039) — plus de « token/jeton expiré » hors admin"
+# Le mot « jeton » reste légitime en doc technique (SECURITY.md, ADR, design
+# tokens CSS) ; seule la formule adressée à l'humain « token/jeton expiré »
+# est bannie sur les surfaces ciblées par la fiche.
+if grep -rniE "token expir|jeton expir" CLAUDE.md docs/usage.md tests/manuels/*/PROTOCOLE.md 2>/dev/null; then
+  fail "vocabulaire humain : « token/jeton expiré » retrouvé sur une surface hors admin (voir ci-dessus)"
+else
+  pass "vocabulaire humain : aucune surface hors admin ne dit « token/jeton expiré »"
+fi
 
 # --- Bilan ------------------------------------------------------------------
 

@@ -32,7 +32,7 @@ Inverser A/B en fin de test (phase optionnelle) pour couvrir les deux sens.
    (`http://127.0.0.1:4877`) ou en éditant la policy :
    - cocher **partage** sur le profil **source** (`perso` en premier run)
    - remettre `share: false` après le test si souhaité
-4. Jetons : si un compte n'a pas servi depuis > 7 jours, prévoir
+4. Connexion Google : si un compte n'a pas servi depuis > 7 jours, prévoir
    `mag add <alias>` (erreur `exit code 2`).
 
 ## Tools MCP utilisés

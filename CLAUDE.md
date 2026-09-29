@@ -55,8 +55,9 @@ test manuel », lire `tests/manuels/README.md` — chaque test y stocke son
 prompt (`PROMPT.md`) et son protocole (`PROTOCOLE.md`) ; le dérouler phase
 par phase en laissant l'humain exécuter unlock/grant.
 
-Erreur `exit code 2` (auth) sur un profil → token expiré : proposer
-`mag add <alias>` pour reconnecter (l'app OAuth en mode Testing expire à 7 jours).
+Erreur `exit code 2` (auth) sur un profil → connexion à Google expirée, à
+refaire : proposer `mag add <alias>` pour reconnecter (l'app OAuth en mode
+Testing expire à 7 jours).
 
 Erreur `403 … required permission to use project <id>` → le compte n'a pas le
 rôle IAM `serviceUsageConsumer` sur le projet GCP de l'app OAuth : proposer à

@@ -61,12 +61,14 @@ suivent pas :
 > refonte Cockpit (#128) — « token » n'apparaît plus que comme variable CSS (design tokens).
 > Reste **uniquement** les surfaces **hors admin** (CLAUDE.md, SECURITY.md, docs, sorties CLI).
 
-- [ ] `CLAUDE.md` : remplacer « token expiré » (l. ~57) par « connexion à Google
+- [x] `CLAUDE.md` : remplacer « token expiré » (l. ~57) par « connexion à Google
       expirée — à refaire ».
 - [x] Modale de déconnexion admin : « tokens » retiré — refonte Cockpit #128 (côté humain).
-- [ ] `SECURITY.md` : « jeton » → glossaire (verrou / connexion), sans 3ᵉ mot.
-- [ ] Docs (`docs/usage.md`, protocole tests manuels) + sorties `mag` lues par
-      l'humain : idem.
+- [x] `SECURITY.md` : « jeton » → glossaire (verrou / connexion), sans 3ᵉ mot.
+- [x] Docs (`docs/usage.md`, protocole tests manuels) + sorties `mag` lues par
+      l'humain : idem — `docs/usage.md` et `bin/mag` étaient déjà propres (aucun
+      « jeton/token » adressé à l'humain) ; les 4 protocoles `tests/manuels/**`
+      corrigés.
 
 ## Notes
 

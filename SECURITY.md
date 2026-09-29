@@ -9,6 +9,13 @@ Ce document résume ce qui est en place, ce qui ne l'est pas encore, et comment
 signaler un problème. Le modèle de menace complet (surfaces de confiance,
 garanties phase par phase) : [docs/threat-model.md](docs/threat-model.md).
 
+**Glossaire (vocabulaire technique de ce document vs interface).** Ce document
+garde le vocabulaire technique OAuth, pour rester précis. Côté interface et
+messages lus par l'utilisateur, deux mots seulement : **verrou** (CLI
+`lock`/`unlock`) = accès verrouillé dans l'interface ; **jeton OAuth** = la
+« connexion » dans l'interface (« connexion à Google expirée » quand il a
+expiré).
+
 ## Ce qui est en place
 
 | Mesure | Concrètement |
