@@ -90,6 +90,7 @@
 | [20260910170000000](20260910170000000_traduire-scripts-helper-mag-parite-mcp.md) | Traduire en anglais les scripts helper opérationnels de mag + parité CLI/MCP | feature | P2 |  | 0017 | google-mcp-multi-account | 🔵 ready |  |
 | [20260912000249823](20260912000249823_renommage-gwsa-mag-avec-compat.md) | Renommage GWSA_ → MAG_ (variables d'env) avec compatibilité, sans rien casser | refactor | P2 |  |  | google-multi-account | 🟠 in-progress |  |
 | [20260916201419331](20260916201419331_gmail-list-pagination-curseur.md) | Exposer la pagination (pageToken) dans gmail_list pour parcourir tout l'historique | feature | P2 |  |  | google-multi-account | 🔵 ready |  |
+| [20260929172213000](20260929172213000_deploy-local-check-derive-config-client.md) | Détecter la dérive config client ↔ déploiement — deploy-local.sh --check | feature | P2 |  |  | google-multi-account | 🔵 ready |  |
 | [0001](done/0001-elicitation-signee-strongauth-v2.md) | Élicitation signée — faire monter `mag strongauth` de la présence à la signature | feature | P3 |  |  |  | 🗑️ superseded |  |
 | [0090](0090-documenter-statut-oauth-verification.md) | Documenter et outiller le statut OAuth (warning « non vérifiée » + Testing→Production) | feature | P3 |  |  |  | ❓ todo |  |
 | [0093](done/0093-coherence-nommage-mag-produit-mcp.md) | Cohérence de nommage — relier `mag` / google-multi-account / repo sans casser le MCP | feature | P3 |  |  |  | ✅ shipped | #144 |
