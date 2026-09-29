@@ -183,7 +183,7 @@ if [[ "$MODE" == "rollback" ]]; then
 fi
 
 # ── déploiement ──────────────────────────────────────────────────
-step "Contrôles"
+step "Checks"
 SOURCE_REF=""
 if [[ "$SOURCE_TYPE" == "github" ]]; then
   # Chemin « sans clone » (fiche 0020) : on ne fige pas une référence git locale
@@ -293,7 +293,7 @@ fi
 point_current_at "$VERSION"
 ok "current → $VERSION"
 
-step "Recyclage du broker"
+step "Broker recycling"
 # Sans ça, le broker déjà lancé continue de servir l'ANCIEN code : il ne se
 # relance pas tout seul (ensure_broker_running ne redémarre pas un broker vivant).
 stop_broker
