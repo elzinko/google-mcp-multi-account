@@ -1301,6 +1301,69 @@ else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m drive_update + permissions\n'
 fi
 
+section "Gateway — pagination gmail_list (page_token / nextPageToken, fiche 20260916201419331)"
+# Miroir de drive_permissions_list : page_token en entrée → pageToken transmis
+# à gws ; nextPageToken de la réponse ressort au client ; sans page_token,
+# forme de sortie inchangée (compatibilité).
+if python3 - <<'PY'
+import json
+
+import gateway.api as api
+from gateway.errors import GatewayError
+
+CALLS = []
+
+
+def flags(args):
+    return {a: args[i + 1] for i, a in enumerate(args) if a.startswith("--")}
+
+
+def method_of(args):
+    return tuple(a for a in args[: next((i for i, a in enumerate(args)
+                                          if a.startswith("-")), len(args))])
+
+
+alias = "testprof"
+
+# 1. Sans page_token : comportement inchangé (pas de pageToken transmis).
+def fake_run_no_cursor(alias, args, timeout=60, **_kw):
+    CALLS.append(args)
+    return {"messages": [{"id": "MSG1"}]}
+
+
+api._run = fake_run_no_cursor
+CALLS.clear()
+out = api.gmail_list(alias, query="is:unread")
+args = CALLS[-1]
+assert method_of(args) == ("gmail", "users", "messages", "list"), args
+params = json.loads(flags(args)["--params"])
+assert "pageToken" not in params, params
+assert out == {"ok": True, "alias": alias, "result": {"messages": [{"id": "MSG1"}]}}, out
+
+# 2. page_token fourni → pageToken transmis dans les params de la requête gws.
+CALLS.clear()
+api.gmail_list(alias, page_token="TOK1")
+params = json.loads(flags(CALLS[-1])["--params"])
+assert params.get("pageToken") == "TOK1", CALLS[-1]
+
+# 3. nextPageToken de la réponse ressort au niveau du résultat de l'outil.
+def fake_run_with_cursor(alias, args, timeout=60, **_kw):
+    CALLS.append(args)
+    return {"messages": [{"id": "MSG2"}], "nextPageToken": "TOK2"}
+
+
+api._run = fake_run_with_cursor
+CALLS.clear()
+out = api.gmail_list(alias, page_token="TOK1")
+assert out["result"]["nextPageToken"] == "TOK2", out
+print("ok")
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m gmail_list — page_token en entrée, nextPageToken en sortie\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m gmail_list — pagination (page_token / nextPageToken)\n'
+fi
+
 section "Broker — sortie brute raw_output vs JSON (drive_read, fiche 0043)"
 # drive_read lit du CONTENU, pas du JSON : le broker doit rendre stdout VERBATIM
 # (ni .strip(), ni json.loads, décodage tolérant). La suite API monkeypatche

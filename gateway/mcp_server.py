@@ -90,13 +90,21 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "gmail_list",
-        "description": "Liste des messages Gmail du profil alias (lecture). Pas d'envoi.",
+        "description": (
+            "Liste des messages Gmail du profil alias (lecture). Pas d'envoi. "
+            "Pagination : passer page_token pour la page suivante ; si la réponse "
+            "contient nextPageToken, il reste des messages à parcourir."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "alias": {"type": "string", "description": "Profil mag (ex. perso)"},
                 "query": {"type": "string", "description": "Requête Gmail (ex. is:unread)", "default": ""},
                 "max_results": {"type": "integer", "description": "1–50", "default": 10},
+                "page_token": {
+                    "type": "string",
+                    "description": "Jeton de page suivante (nextPageToken du résultat précédent)",
+                },
                 "session": _SESSION_PROPERTY,
             },
             "required": ["alias", "session"],
@@ -569,6 +577,7 @@ DISPATCH: dict[str, Callable] = {
         alias=kw["alias"],
         query=kw.get("query") or "",
         max_results=int(kw.get("max_results") or 10),
+        page_token=kw.get("page_token") or "",
         session=kw.get("session") or "",
     ),
     "gmail_get": lambda **kw: api.gmail_get(
