@@ -14,6 +14,9 @@
 #   ./scripts/deploy-local.sh --list         # deployed versions (* = current)
 #   ./scripts/deploy-local.sh --rollback X   # switches current back to version X
 #   ./scripts/deploy-local.sh --github v0.2.0 # …from the GitHub tarball, no clone (fiche 0020)
+#   ./scripts/deploy-local.sh --check        # compares the client's wired binary to current
+#     [--config PATH]  # client config path (defaults to Claude Desktop's own)
+#     [--name NAME]    # MCP server entry to read (default: google-multi-account)
 #
 # Refuses a dirty tree or an untagged HEAD: a deployed version must be
 # identifiable. Destination overridable via GWSA_DEPLOY_ROOT (used by tests).
@@ -88,6 +91,8 @@ ROLLBACK_TO=""
 WANT_TAG=""
 SOURCE_TYPE="git"   # git (git archive du clone) | github (tarball d'un tag, sans clone)
 GH_TAG=""
+CHECK_CONFIG=""
+CHECK_NAME="google-multi-account"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --print|--dry-run) DRY=1 ;;
@@ -98,7 +103,12 @@ while [[ $# -gt 0 ]]; do
     --list) MODE="list" ;;
     --rollback) shift; ROLLBACK_TO="${1:-}"; MODE="rollback" ;;
     --rollback=*) ROLLBACK_TO="${1#*=}"; MODE="rollback" ;;
-    -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --check) MODE="check" ;;
+    --config) shift; CHECK_CONFIG="${1:-}" ;;
+    --config=*) CHECK_CONFIG="${1#*=}" ;;
+    --name) shift; CHECK_NAME="${1:-}" ;;
+    --name=*) CHECK_NAME="${1#*=}" ;;
+    -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "unknown argument « $1 » (see --help)" ;;
   esac
   # `|| break` : un flag à valeur en dernière position (« --github »/« --tag »/
@@ -148,6 +158,106 @@ if [[ "$MODE" == "list" ]]; then
   done
   [[ -n "$found" ]] || die "no version deployed in $DEPLOY_ROOT"
   exit 0
+fi
+
+# ── --check ──────────────────────────────────────────────────────
+# Lecture seule : compare le binaire réellement branché dans la config du
+# client MCP (ex. Claude Desktop) au lien « current ». N'écrit jamais la
+# config client — le correctif reste un geste humain (fiche 20260929172213000).
+if [[ "$MODE" == "check" ]]; then
+  CONFIG_PATH="$CHECK_CONFIG"
+  if [[ -z "$CONFIG_PATH" ]]; then
+    case "$(uname -s)" in
+      Darwin) CONFIG_PATH="$HOME/Library/Application Support/Claude/claude_desktop_config.json" ;;
+      Linux)  CONFIG_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/Claude/claude_desktop_config.json" ;;
+      *) die "unsupported OS for auto-detection — use --config <path to the client's config file>" ;;
+    esac
+  fi
+  [[ -f "$CONFIG_PATH" ]] || die "client config not found: $CONFIG_PATH"
+  [[ -L "$CURRENT_LINK" ]] || die "no « current » deployment in $DEPLOY_ROOT — nothing to compare against"
+
+  PYTHON="/usr/bin/python3"
+  [[ -x "$PYTHON" ]] || PYTHON="$(command -v python3 || true)"
+  [[ -n "$PYTHON" ]] || die "python3 not found"
+
+  # Le python ne fait QUE lire (config + current) — aucune écriture, nulle part.
+  out="$(
+    CONFIG_PATH="$CONFIG_PATH" SERVER_NAME="$CHECK_NAME" CURRENT_LINK="$CURRENT_LINK" \
+    DEPLOY_ROOT="$DEPLOY_ROOT" "$PYTHON" - <<'PY'
+import json, os, sys
+
+cfg = os.environ["CONFIG_PATH"]
+name = os.environ["SERVER_NAME"]
+current_link = os.environ["CURRENT_LINK"]
+deploy_root = os.environ["DEPLOY_ROOT"]
+
+raw = open(cfg, encoding="utf-8").read().strip()
+try:
+    data = json.loads(raw) if raw else {}
+except json.JSONDecodeError as e:
+    print(f"error=invalid JSON in {cfg}: {e}")
+    sys.exit(3)
+
+servers = data.get("mcpServers") if isinstance(data, dict) else None
+entry = servers.get(name) if isinstance(servers, dict) else None
+command = entry.get("command") if isinstance(entry, dict) else None
+if not command:
+    print(f"error=no entry « {name} » with a « command » in {cfg}")
+    sys.exit(3)
+
+def version_of(path):
+    # Nom lisible : le composant juste sous DEPLOY_ROOT (ex. v1.0.0), sinon le
+    # chemin brut (ex. binaire hors déploiement — clone de travail = « dev »).
+    root = os.path.realpath(deploy_root) + os.sep
+    if path.startswith(root):
+        return path[len(root):].split(os.sep, 1)[0]
+    return path
+
+wired = os.path.realpath(command)
+current = os.path.realpath(current_link)
+
+print(f"wired={wired}")
+print(f"wired_version={version_of(wired)}")
+print(f"current={current}")
+print(f"current_version={version_of(current)}")
+# « current » désigne le dossier racine de la version déployée (ex. …/v1.0.0),
+# alors que le binaire branché vit en dessous (ex. …/v1.0.0/bin/google-mcp) :
+# aligné = le binaire branché vit SOUS ce dossier, pas égal à lui.
+aligned = wired == current or wired.startswith(current + os.sep)
+print("result=aligned" if aligned else "result=drift")
+PY
+  )"
+  rc=$?
+
+  wired=""; wired_version=""; current=""; current_version=""; result=""; error=""
+  while IFS= read -r line; do
+    case "$line" in
+      wired=*)           wired="${line#wired=}" ;;
+      wired_version=*)   wired_version="${line#wired_version=}" ;;
+      current=*)         current="${line#current=}" ;;
+      current_version=*) current_version="${line#current_version=}" ;;
+      result=*)          result="${line#result=}" ;;
+      error=*)           error="${line#error=}" ;;
+    esac
+  done <<< "$out"
+
+  [[ -n "$error" ]] && die "$error"
+  [[ "$rc" -ne 0 && -z "$result" ]] && die "--check failed (code $rc)"
+
+  case "$result" in
+    aligned)
+      ok "client and « current » agree: $current_version ($current)"
+      exit 0 ;;
+    drift)
+      warn "drift detected — the client is NOT wired to « current »"
+      echo "  client (« $CHECK_NAME ») : $wired_version  ($wired)"
+      echo "  current                  : $current_version  ($current)"
+      echo
+      echo "Fix (human step): $CURRENT_LINK/scripts/install-claude-desktop.sh"
+      exit 1 ;;
+    *)
+      die "unexpected --check status: « $result »" ;;
+  esac
 fi
 
 # ── --rollback ───────────────────────────────────────────────────
