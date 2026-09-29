@@ -108,7 +108,7 @@ def _pending_path(challenge_id: str) -> Path:
     # est accepté — un id contenant « / », « .. » ou un chemin absolu est refusé
     # AVANT toute construction de chemin (fail-closed).
     if not _CHALLENGE_ID_RE.match(challenge_id or ""):
-        raise RemoteApprovalError("challenge_id invalide — jeton hexadécimal requis")
+        raise RemoteApprovalError("invalid challenge_id — hexadecimal token required")
     return pending_dir() / f"{challenge_id}.json"
 
 
@@ -148,7 +148,7 @@ def forge_challenge(fields: dict[str, Any]) -> ChallengeEnvelope:
     """Forge le défi — réutilise le payload canonique ADR-0005, lié à `session_id`."""
     action = str(fields.get("action") or "")
     if not action:
-        raise RemoteApprovalError("action manquante")
+        raise RemoteApprovalError("missing action")
     payload = build_payload(
         action,
         alias=str(fields.get("alias") or ""),
@@ -172,7 +172,7 @@ def open_remote_challenge(fields: dict[str, Any]) -> tuple[ChallengeEnvelope, st
     """
     if load_enrollment() is None:
         raise RemoteApprovalError(
-            "aucune passkey téléphone enrôlée — exécuter : "
+            "no phone passkey enrolled — run: "
             "scripts/remote-approval-cli.py enroll"
         )
     envelope = forge_challenge(fields)
@@ -202,7 +202,7 @@ def close_remote_challenge(challenge_id: str, assertion: dict[str, Any]) -> dict
     """
     if load_enrollment() is None:
         raise RemoteApprovalError(
-            "aucune passkey téléphone enrôlée — exécuter : "
+            "no phone passkey enrolled — run: "
             "scripts/remote-approval-cli.py enroll"
         )
     path = _pending_path(challenge_id)
@@ -210,7 +210,7 @@ def close_remote_challenge(challenge_id: str, assertion: dict[str, Any]) -> dict
         raw = path.read_text(encoding="utf-8")
     except OSError:
         raise RemoteApprovalError(
-            "défi distant introuvable ou déjà consommé — action refusée"
+            "remote challenge not found or already consumed — action denied"
         ) from None
     try:
         path.unlink()
@@ -219,17 +219,17 @@ def close_remote_challenge(challenge_id: str, assertion: dict[str, Any]) -> dict
     try:
         payload = json.loads(raw)
     except ValueError:
-        raise RemoteApprovalError("défi distant corrompu — action refusée") from None
+        raise RemoteApprovalError("remote challenge corrupted — action denied") from None
     envelope = ChallengeEnvelope(payload=payload, prompt=prompt_from_payload(payload))
     with file_lock(enrollment_lock_path()):
         enrollment = load_enrollment()
         if enrollment is None:
             raise RemoteApprovalError(
-                "aucune passkey téléphone enrôlée — exécuter : "
+                "no phone passkey enrolled — run: "
                 "scripts/remote-approval-cli.py enroll"
             )
         if not verify_assertion(envelope, assertion, enrollment):
-            raise RemoteApprovalError("assertion distante invalide — action refusée")
+            raise RemoteApprovalError("invalid remote assertion — action denied")
     consume_nonce(str(envelope.payload["nonce"]), expires_at=int(envelope.payload["expires_at"]))
     log_receipt(envelope.payload, f"remote-passkey:{enrollment.credential_id}")
     return envelope.payload
@@ -245,17 +245,17 @@ def enroll_phone(registration: dict[str, Any]) -> PhoneEnrollment:
     """
     if registration.get("be"):
         raise RemoteApprovalError(
-            "passkey synchronisable (backup-eligible) refusée — "
-            "exiger un authentificateur device-bound"
+            "synchronizable passkey (backup-eligible) rejected — "
+            "a device-bound authenticator is required"
         )
     if str(registration.get("uv") or "") != "biometric":
         raise RemoteApprovalError(
-            "vérification biométrique requise à l'enrôlement — PIN/autre refusé"
+            "biometric verification required at enrollment — PIN/other rejected"
         )
     credential_id = str(registration.get("credential_id") or "")
     public_key = str(registration.get("public_key") or "")
     if not credential_id or not public_key:
-        raise RemoteApprovalError("credential_id / public_key requis à l'enrôlement")
+        raise RemoteApprovalError("credential_id / public_key required at enrollment")
     enrollment = PhoneEnrollment(
         credential_id=credential_id,
         aaguid=str(registration.get("aaguid") or ""),
@@ -405,7 +405,7 @@ def run_remote_approval_gate(
     """
     if load_enrollment() is None:
         raise RemoteApprovalError(
-            "aucune passkey téléphone enrôlée — exécuter : "
+            "no phone passkey enrolled — run: "
             "scripts/remote-approval-cli.py enroll"
         )
     envelope = forge_challenge(fields)
@@ -413,7 +413,7 @@ def run_remote_approval_gate(
     assertion = channel.await_response(request_id, timeout=timeout)
     if not assertion:
         raise RemoteApprovalError(
-            "aucune réponse du téléphone (refus, timeout ou canal indisponible) — action refusée"
+            "no response from phone (denied, timeout, or channel unavailable) — action denied"
         )
     # Anti-clonage TOCTOU (fiche 0083) : reload FRAIS sous le verrou, jamais
     # l'objet chargé plus haut — même raisonnement que `close_remote_challenge`.
@@ -421,11 +421,11 @@ def run_remote_approval_gate(
         enrollment = load_enrollment()
         if enrollment is None:
             raise RemoteApprovalError(
-                "aucune passkey téléphone enrôlée — exécuter : "
+                "no phone passkey enrolled — run: "
                 "scripts/remote-approval-cli.py enroll"
             )
         if not verify_assertion(envelope, assertion, enrollment):
-            raise RemoteApprovalError("assertion distante invalide — action refusée")
+            raise RemoteApprovalError("invalid remote assertion — action denied")
     consume_nonce(str(envelope.payload["nonce"]), expires_at=int(envelope.payload["expires_at"]))
     log_receipt(envelope.payload, f"remote-passkey:{enrollment.credential_id}")
     return envelope.payload

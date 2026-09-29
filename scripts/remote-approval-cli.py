@@ -38,18 +38,18 @@ from gateway.remote_approval import (  # noqa: E402
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="mag approbation distante par passkey")
+    p = argparse.ArgumentParser(description="mag remote approval via passkey")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     e = sub.add_parser("enroll")
     e.add_argument("--json", required=True, help="registration (credential_id, public_key, uv, be, …)")
 
     c = sub.add_parser("challenge")
-    c.add_argument("--json", required=True, help="champs payload (action, alias, session_id, …)")
+    c.add_argument("--json", required=True, help="payload fields (action, alias, session_id, …)")
 
     v = sub.add_parser("verify")
-    v.add_argument("--challenge-id", required=True, help="identifiant retourné par `challenge`")
-    v.add_argument("--response", required=True, help="fichier JSON : assertion signée par le téléphone")
+    v.add_argument("--challenge-id", required=True, help="id returned by `challenge`")
+    v.add_argument("--response", required=True, help="JSON file: assertion signed by the phone")
 
     args = p.parse_args()
     try:
@@ -73,13 +73,13 @@ def main() -> int:
             print(json.dumps(payload, ensure_ascii=False))
             return 0
     except RemoteApprovalError as e:
-        print(f"approbation distante : {e}", file=sys.stderr)
+        print(f"remote approval: {e}", file=sys.stderr)
         return 1
     except json.JSONDecodeError as e:
-        print(f"approbation distante : JSON invalide — {e}", file=sys.stderr)
+        print(f"remote approval: invalid JSON — {e}", file=sys.stderr)
         return 1
     except OSError as e:
-        print(f"approbation distante : {e}", file=sys.stderr)
+        print(f"remote approval: {e}", file=sys.stderr)
         return 1
     return 1
 

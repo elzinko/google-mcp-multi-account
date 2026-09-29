@@ -21,15 +21,15 @@ from gateway.elicitation import (  # noqa: E402
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="mag élicitation signée")
+    p = argparse.ArgumentParser(description="mag signed elicitation")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("status")
     e = sub.add_parser("enroll")
-    e.add_argument("--mock", action="store_true", help="clé HMAC test (CI/Linux)")
+    e.add_argument("--mock", action="store_true", help="test HMAC key (CI/Linux)")
 
     g = sub.add_parser("gate")
-    g.add_argument("--json", required=True, help="champs payload (action, alias, …)")
+    g.add_argument("--json", required=True, help="payload fields (action, alias, …)")
 
     args = p.parse_args()
     try:
@@ -47,10 +47,10 @@ def main() -> int:
             run_elicitation_gate(fields)
             return 0
     except ElicitationError as e:
-        print(f"elicitation : {e}", file=sys.stderr)
+        print(f"elicitation: {e}", file=sys.stderr)
         return 1
     except json.JSONDecodeError as e:
-        print(f"elicitation : JSON invalide — {e}", file=sys.stderr)
+        print(f"elicitation: invalid JSON — {e}", file=sys.stderr)
         return 1
     return 1
 

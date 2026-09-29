@@ -19,7 +19,7 @@ def validate_alias(alias: str) -> str:
             code="alias",
         )
     if alias in RESERVED:
-        raise GatewayError(f"« {alias} » est un mot réservé", code="alias")
+        raise GatewayError(f"« {alias} » is a reserved word", code="alias")
     return alias
 
 
