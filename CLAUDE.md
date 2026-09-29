@@ -42,7 +42,7 @@ Tasks) depuis des agents LLM, via le serveur MCP local (`bin/google-mcp` →
 mag admin # interface d'admin web → http://127.0.0.1:4877 (stop pour arrêter)
 mag list # profils + état
 mag add <alias> # connecter un nouveau compte (navigateur) + policy prudente
-mag <alias> auth status # état du token d'un profil
+mag <alias> auth status # état de la connexion d'un profil
 mag lock <alias> / mag unlock <alias> [min|off] # verrou « accès sur demande »
 mag grants <alias> / mag grant <alias> <dossier> [h] # zones Drive temporaires
 mag strongauth status # Touch ID exigé pour unlock/grant ?
