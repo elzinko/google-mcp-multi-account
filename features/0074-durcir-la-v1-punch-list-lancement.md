@@ -73,11 +73,11 @@ de tests + hygiène), tous bon marché. Cette fiche les regroupe pour tirer la v
       README ↔ docs.
 - [ ] **Collision d'id 0073** (#82 transfert Drive vs #86 pagination gmail_list) —
       renuméroter l'un. ⏳ **Time-sensitive** tant que les 2 sont brouillons.
-- [ ] **Tests admin anti-DNS-rebinding** : bad-Host + bad-Origin → 403.
-      *(admin/server.js:672,677 ; seul le no-header est testé)*
-- [ ] **Test `DEFAULT_POLICY`** : invariants `send/delete/share=false`,
-      `zonesOnly=true`, `writeFolders=[]` (+ via `policy-check.py`).
-      *(gateway/default_policy.py — 0 occurrence dans les tests)*
+- [x] **Tests admin anti-DNS-rebinding** : bad-Host + bad-Origin → 403.
+      *(fait : `scripts/test.sh:3336-3350` ; garde `admin/server.js:689-696`)*
+- [x] **Test `DEFAULT_POLICY`** : invariants `send/delete/share=false`,
+      `zonesOnly=true`, `writeFolders=[]`.
+      *(fait : `scripts/test.sh:3449`)*
 
 ### 🟢 Confort (post-v1)
 - [ ] Hygiène repo : supprimer les **13 branches distantes obsolètes** ; verrouiller
@@ -93,10 +93,10 @@ de tests + hygiène), tous bon marché. Cette fiche les regroupe pour tirer la v
 
 ## Notes
 
-- **Carve 2026-09-29** : les deux cases « tests » du volet 🟠 (admin anti-DNS-rebinding +
-  invariants `DEFAULT_POLICY`) sont sorties dans leur propre fiche prête à construire
-  [[20260929153720000]] (tests seulement). Le reste de 0074 (site DNS, hygiène repo,
-  durcissements latents) reste ici.
+- **Carve 2026-09-29 (annulé le jour même)** : les deux cases « tests » ont été carvées vers
+  [[20260929153720000]], mais la vérification a montré que **ces tests existent déjà**
+  (`scripts/test.sh:3336-3350` et `:3449`). Cases cochées ci-dessus ; fiche carvée →
+  superseded. Le reste de 0074 (site DNS, hygiène repo, durcissements latents) reste ici.
 - **Anti-doublon** : les items sont majoritairement **nouveaux**. Ceux qui recoupent
   des fiches existantes y restent gérés, cette fiche les **cite sans dupliquer** :
   [[0028]] (`--prune`), [[0034]] (« zone = territoire »), [[0039]] (bannir « jeton »),

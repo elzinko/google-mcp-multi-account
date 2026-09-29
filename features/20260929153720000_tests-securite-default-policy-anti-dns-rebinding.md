@@ -6,11 +6,17 @@ priority: P1
 product: google-multi-account
 version:
 epic:
-status: ready
+status: superseded
 ready: 2026-09-29
 pr:
 created: 2026-09-29
 ---
+
+> 🗑️ **Superseded le 2026-09-29 (jour de création).** La vérification amont a montré que les
+> trois tests visés **existent déjà** : bad-Host → 403 (`scripts/test.sh:3338`), bad-Origin →
+> 403 (`scripts/test.sh:3346`), invariants `DEFAULT_POLICY` (`scripts/test.sh:3449`). Le carve
+> s'appuyait sur des cases de [[0074]] **périmées** (écrites le 2026-08-08, tests ajoutés
+> depuis). Rien à construire — cases 0074 cochées. Fiche gardée pour la trace.
 
 ## En clair
 
