@@ -1456,6 +1456,15 @@ assert all(a["iam"] == "unknown" for a in r["accounts"]), r
 # Profil verrouillé → commande unlock proposée ; rien n'est exécuté.
 assert any("mag unlock acct1" in a for a in r["next_actions"]), r["next_actions"]
 assert (d / ".locked").exists() and not (d / ".unlock-until").exists(), "setup_status ne doit rien muter"
+
+# Fiche 0026 : l'agent doit savoir QUI répond, sans terminal — version + couloir.
+from gateway.version import server_version
+from gateway.broker_server import broker_host, broker_port
+assert r["version"] == server_version() and r["version"], r
+couloir = r["couloir"]
+assert couloir["broker_host"] == broker_host(), couloir
+assert couloir["broker_port"] == broker_port(), couloir
+assert couloir["root"] == str(root), couloir
 print("ok")
 PY
 then

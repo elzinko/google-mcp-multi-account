@@ -19,8 +19,10 @@ import shutil
 import subprocess
 from typing import Any, Optional
 
-from .config import gwsa_root
+from .broker_server import broker_host, broker_port
+from .config import REPO_DIR, gwsa_root
 from .profiles import list_profiles
+from .version import server_version
 
 ROLE_SUC = "roles/serviceusage.serviceUsageConsumer"
 
@@ -118,6 +120,13 @@ def setup_status() -> dict[str, Any]:
 
     return {
         "ok": True,
+        "version": server_version(),
+        "couloir": {
+            "binary": str(REPO_DIR / "bin" / "google-mcp"),
+            "broker_host": broker_host(),
+            "broker_port": broker_port(),
+            "root": str(root),
+        },
         "project_id": project or None,
         "published": published or None,
         "client_secret": client_secret,
