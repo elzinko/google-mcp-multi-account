@@ -2169,6 +2169,71 @@ out_rb_prev="$(GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" --rollback previous 2>&1)"; rc=
   && pass "--rollback previous refusé : la vraie cible de « previous » n'a pas été perdue" \
   || fail "--rollback previous : la cible de « previous » a été écrasée malgré le refus"
 
+section "deploy-local.sh --check — détecter la dérive config client ↔ déploiement (fiche 20260929172213000)"
+
+# À ce stade $DEP/current pointe v1.0.0 (rollback plus haut). On simule une
+# config client (JSON bidon, jamais la vraie config Claude Desktop) branchée
+# soit sur la même cible que current (aligné), soit ailleurs (dérive).
+CHKCFG="$TMP/fake-claude-desktop-config.json"
+CURRENT_REAL="$(cd "$DEP/current" && pwd -P)"
+
+cat > "$CHKCFG" <<EOF
+{"mcpServers": {"google-multi-account": {"command": "$CURRENT_REAL/bin/google-mcp"}}}
+EOF
+GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" --check --config "$CHKCFG" >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 ]] \
+  && pass "--check : config alignée sur current → OK (exit 0)" \
+  || fail "--check : config alignée sur current → OK (exit 0), obtenu rc=$rc"
+
+cat > "$CHKCFG" <<EOF
+{"mcpServers": {"google-multi-account": {"command": "$DEP/v1.1.0/bin/google-mcp"}}}
+EOF
+out_chk="$(GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" --check --config "$CHKCFG" 2>&1)"; rc=$?
+[[ "$rc" -ne 0 && "$out_chk" == *"v1.1.0"* && "$out_chk" == *"v1.0.0"* ]] \
+  && pass "--check : config dérivée d'une autre version → écart nommé (exit non-zéro)" \
+  || fail "--check : dérive détectée + versions nommées (rc=$rc, out=$out_chk)"
+
+# Lecture seule : le fichier de config bidon n'est jamais modifié par --check.
+CHK_HASH_BEFORE="$(shasum -a 256 "$CHKCFG" | cut -d' ' -f1)"
+GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" --check --config "$CHKCFG" >/dev/null 2>&1
+CHK_HASH_AFTER="$(shasum -a 256 "$CHKCFG" | cut -d' ' -f1)"
+[[ "$CHK_HASH_BEFORE" == "$CHK_HASH_AFTER" ]] \
+  && pass "--check : lecture seule, la config client n'est pas modifiée" \
+  || fail "--check : la config client a été modifiée (ne doit JAMAIS arriver)"
+
+out_chk_noent="$(GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" --check --config "$TMP/absent.json" 2>&1)"; rc=$?
+[[ "$rc" -eq 1 && "$out_chk_noent" == *"absent.json"* ]] \
+  && pass "--check : config introuvable → refus explicite (exit 1, message nommé)" \
+  || fail "--check : config introuvable → refus explicite (rc=$rc, out=$out_chk_noent)"
+
+# --- entrée absente : exit 1 (PAS 3 résiduel du python) + message qui NOMME
+# l'entrée cherchée (pas juste « rc != 0 », tautologique — revue adversariale) ---
+cat > "$CHKCFG" <<EOF
+{"mcpServers": {}}
+EOF
+out_chk_noentry="$(GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" --check --config "$CHKCFG" 2>&1)"; rc=$?
+[[ "$rc" -eq 1 && "$out_chk_noentry" == *"google-multi-account"* ]] \
+  && pass "--check : aucune entrée « google-multi-account » dans la config → refus (exit 1, message nommé)" \
+  || fail "--check : entrée absente → refus (rc=$rc, out=$out_chk_noentry)"
+
+# --- entrée présente mais SANS « command » (JSON valide, mais rien à comparer) ---
+cat > "$CHKCFG" <<EOF
+{"mcpServers": {"google-multi-account": {"env": {}}}}
+EOF
+out_chk_nocmd="$(GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" --check --config "$CHKCFG" 2>&1)"; rc=$?
+[[ "$rc" -eq 1 && "$out_chk_nocmd" == *"google-multi-account"* ]] \
+  && pass "--check : entrée sans « command » → refus (exit 1, message nommé)" \
+  || fail "--check : entrée sans « command » → refus (rc=$rc, out=$out_chk_nocmd)"
+
+# --- JSON invalide : le python sort en erreur (sys.exit 3) — sous « set -e »,
+# ça avortait le script AVANT que le message ne soit lu (P0 revue adversariale :
+# rc=3 muet, code mort). Le fix doit ramener ça en exit 1 avec message clair. ---
+printf '{ceci nest pas du JSON' > "$CHKCFG"
+out_chk_badjson="$(GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" --check --config "$CHKCFG" 2>&1)"; rc=$?
+[[ "$rc" -eq 1 && "$out_chk_badjson" == *"invalid JSON"* ]] \
+  && pass "--check : JSON invalide → refus (exit 1, PAS le 3 résiduel du python, message clair)" \
+  || fail "--check : JSON invalide → refus (rc=$rc, out=$out_chk_badjson)"
+
 # --- Publication et mise à jour (fiche 0029) --------------------------------
 #
 # Hermétique : dépôt git jouet sous $TMP, aucun remote, aucun réseau, suite de
