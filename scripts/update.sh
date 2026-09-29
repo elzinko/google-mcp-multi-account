@@ -1,28 +1,28 @@
 #!/usr/bin/env bash
-# update.sh — mettre à jour le MCP de ce poste, comme un produit installé.
+# update.sh — update this machine's MCP, like an installed product.
 #
-# Une seule commande : prend la dernière version publiée, l'installe à côté de
-# l'ancienne, bascule « current » dessus, recycle le broker, et ne branche
-# Claude Desktop que si son entrée manque ou pointe ailleurs.
+# One command: takes the latest published version, installs it alongside the
+# previous one, switches "current" to it, recycles the broker, and only
+# wires up Claude Desktop if its entry is missing or points elsewhere.
 #
-# Usage :
-#   ./scripts/update.sh              # installe la dernière version publiée
-#   ./scripts/update.sh --to v0.1.0  # …ou une version précise (rollback manuel)
-#   ./scripts/update.sh --check      # dit installé / disponible, n'écrit rien
-#   ./scripts/update.sh --force      # réinstalle même si déjà à jour
+# Usage:
+#   ./scripts/update.sh              # installs the latest published version
+#   ./scripts/update.sh --to v0.1.0  # …or a specific version (manual rollback)
+#   ./scripts/update.sh --check      # reports installed / available, writes nothing
+#   ./scripts/update.sh --force      # reinstalls even if already up to date
 #
-# Marche aussi depuis la copie installée (relais par « .source » vers le clone).
-# Sans clone du tout — installé par curl, ou clone supprimé — il lit la dernière
-# version et son tarball depuis GitHub, plus besoin de garder un clone (fiche 0020).
+# Also works from the installed copy (relayed via ".source" to the clone).
+# With no clone at all — installed via curl, or clone removed — it reads the
+# latest version and its tarball from GitHub, no need to keep a clone (fiche 0020).
 #
-# Rollback (fiche 0091) : chaque bascule de « current » pose un lien « previous ».
-# Pour revenir en arrière après une mise à jour qui pose problème :
-#   mag revert                       # rebascule sur la version précédente, direct
-#   ./scripts/update.sh --to v0.1.0  # …ou en visant un tag précis
+# Rollback (fiche 0091): each switch of "current" sets a "previous" link.
+# To go back after an update that causes trouble:
+#   mag revert                       # switches back to the previous version, directly
+#   ./scripts/update.sh --to v0.1.0  # …or targeting a specific tag
 #
-# Exemple :
-#   ./scripts/update.sh --to v0.1.0  # revient précisément à v0.1.0
-#   mag revert                       # revient à la version installée juste avant
+# Example:
+#   ./scripts/update.sh --to v0.1.0  # goes back precisely to v0.1.0
+#   mag revert                       # goes back to the version installed just before
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -66,7 +66,7 @@ while [[ $# -gt 0 ]]; do
     --to) shift; WANT="${1:-}" ;;
     --to=*) WANT="${1#*=}" ;;
     -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *) die "argument inconnu « $1 » (voir --help)" ;;
+    *) die "unknown argument « $1 » (see --help)" ;;
   esac
   # `|| break` : un flag à valeur en dernière position (« --to » nu) a déjà vidé
   # $@ ; sans ça, ce shift échoue et set -e avorte en silence (revue adversariale P3).
@@ -89,7 +89,7 @@ if [[ -e "$HERE/.git" ]] && git -C "$HERE" rev-parse --git-dir >/dev/null 2>&1; 
   SRC="$HERE"; MODE_SRC="clone"
 elif [[ -s "$HERE/.source" ]] && git -C "$(cat "$HERE/.source")" rev-parse --git-dir >/dev/null 2>&1; then
   # Copie installée DEPUIS un clone : relais vers le clone source noté dans .source.
-  SRC="$(cat "$HERE/.source")"; ok "clone source : $SRC"; MODE_SRC="clone"
+  SRC="$(cat "$HERE/.source")"; ok "source clone: $SRC"; MODE_SRC="clone"
 else
   # .origin (install sans clone), clone supprimé, ou rien d'exploitable → GitHub.
   # C'est ce qui rend l'update « standard » et robuste à un ancêtre git fortuit.
@@ -100,15 +100,15 @@ step "Versions"
 if [[ "$MODE_SRC" == "clone" ]]; then
   git -C "$SRC" fetch --quiet --tags 2>/dev/null || warn "fetch impossible — je travaille avec les tags locaux"
   LATEST="$(git -C "$SRC" tag --list 'v[0-9]*' --sort=-v:refname | head -1)"
-  [[ -n "$LATEST" ]] || die "aucune version publiée (aucun tag) — « ./scripts/release.sh » d'abord"
+  [[ -n "$LATEST" ]] || die "no published version (no tag) — run « ./scripts/release.sh » first"
   TARGET_VERSION="${WANT:-$LATEST}"
   if [[ -n "$WANT" ]]; then
     git -C "$SRC" rev-parse -q --verify "refs/tags/$WANT" >/dev/null \
-      || die "version « $WANT » inconnue (git -C $SRC tag pour la liste)"
+      || die "unknown version « $WANT » (git -C $SRC tag for the list)"
   fi
 else
-  command -v curl >/dev/null 2>&1 || die "curl est requis pour mettre à jour sans clone"
-  [[ -f "$LIB_GH" ]] || die "lib introuvable : $LIB_GH"
+  command -v curl >/dev/null 2>&1 || die "curl is required to update without a clone"
+  [[ -f "$LIB_GH" ]] || die "lib not found: $LIB_GH"
   # Restaurer le dépôt d'origine : si l'install venait d'un fork (GWSA_REPO),
   # .origin le note — mais un « mag update » ultérieur ne le relit pas, et on
   # interrogerait le dépôt par défaut (mauvais repo/tags). Revue Codex P2.
@@ -125,42 +125,42 @@ else
   # exploitable et sans GWSA_REPO. On ne DEVINE pas le dépôt — sinon on
   # installerait le code d'upstream à la place du vrai (revue Codex). Refus.
   if [[ -z "${GWSA_REPO:-}" && -e "$HERE/.source" ]]; then
-    die "provenance inconnue : déploiement issu d'un clone désormais absent, sans .origin GitHub — réinstalle via « curl … | bash » (qui note la provenance), ou précise GWSA_REPO=owner/repo"
+    die "unknown provenance: deployment came from a clone that is now gone, with no exploitable GitHub .origin — reinstall via « curl … | bash » (which records the provenance), or set GWSA_REPO=owner/repo"
   fi
   # shellcheck source=scripts/lib-github-release.sh
   source "$LIB_GH"
-  ok "sans clone — versions lues depuis GitHub $(gh_repo)"
-  LATEST="$(gh_latest_tag)" || die "impossible de joindre GitHub (dernier tag introuvable) — réessaie plus tard"
+  ok "no clone — versions read from GitHub $(gh_repo)"
+  LATEST="$(gh_latest_tag)" || die "could not reach GitHub (latest tag not found) — try again later"
   TARGET_VERSION="${WANT:-$LATEST}"
   if [[ -n "$WANT" ]]; then
     # Comme le chemin clone valide « refs/tags/$WANT » : sans clone, on confirme
     # le tag contre la liste publiée — sinon « --check --to <typo> » mentirait
     # (« installerait : v9.9.9 », rc 0). Revue Codex P2.
     gh_tag_exists "$WANT" \
-      || die "version « $WANT » introuvable sur GitHub $(gh_repo) (ou GitHub injoignable)"
+      || die "version « $WANT » not found on GitHub $(gh_repo) (or GitHub unreachable)"
   fi
 fi
 
 INSTALLED=""
 [[ -L "$DEPLOY_ROOT/current" ]] && INSTALLED="$(basename "$(readlink "$DEPLOY_ROOT/current")")"
 
-echo "  installée  : ${INSTALLED:-aucune}"
-echo "  disponible : $LATEST"
-[[ -n "$WANT" ]] && echo "  demandée   : $WANT"
+echo "  installed  : ${INSTALLED:-none}"
+echo "  available  : $LATEST"
+[[ -n "$WANT" ]] && echo "  requested  : $WANT"
 
 if [[ -n "$CHECK" ]]; then
-  step "Contrôle seul (--check) : rien n'est écrit"
+  step "Check only (--check): nothing is written"
   if [[ "$INSTALLED" == "$TARGET_VERSION" ]]; then
-    ok "déjà à jour"
+    ok "already up to date"
   else
-    echo "  installerait : $TARGET_VERSION"
+    echo "  would install : $TARGET_VERSION"
   fi
   exit 0
 fi
 
 if [[ "$INSTALLED" == "$TARGET_VERSION" && -z "$FORCE" ]]; then
-  step "Rien à faire"
-  ok "déjà à jour ($INSTALLED) — « --force » pour réinstaller quand même"
+  step "Nothing to do"
+  ok "already up to date ($INSTALLED) — « --force » to reinstall anyway"
   # ne PAS sortir : on saute l'installation, mais on répare quand même les liens
   # du PATH plus bas (mag + alias gma/gwsa). Sinon une install antérieure qui n'a
   # que gma/gwsa n'obtiendrait jamais « mag » par « update » (Codex #114 round 3).
@@ -171,20 +171,20 @@ fi
 # que réparer les liens du PATH plus bas.
 if [[ -z "${SKIP_INSTALL:-}" ]]; then
 # ── installation ─────────────────────────────────────────────────
-step "Installation de $TARGET_VERSION"
+step "Installing $TARGET_VERSION"
 if [[ "$MODE_SRC" == "clone" ]]; then
   "$SRC/scripts/deploy-local.sh" --tag "$TARGET_VERSION" \
-    || die "déploiement en échec — rien n'a basculé"
+    || die "deployment failed — nothing was switched over"
 else
   # Depuis la copie installée : son propre deploy-local.sh sait tirer le tarball.
   "$HERE/scripts/deploy-local.sh" --github "$TARGET_VERSION" \
-    || die "déploiement en échec — rien n'a basculé"
+    || die "deployment failed — nothing was switched over"
 fi
 
 # ── branchement des clients, seulement si nécessaire ─────────────
 # Deux clients, deux configs séparées : Claude Desktop (fichier JSON dédié) et
 # Claude Code (le CLI `claude`, config ~/.claude.json). On branche les deux.
-step "Branchement"
+step "Wiring"
 INSTALLER="$DEPLOY_ROOT/current/scripts/install-claude-desktop.sh"
 CC_INSTALLER="$DEPLOY_ROOT/current/scripts/install-claude-code.sh"
 CONFIG="${MAG_DESKTOP_CONFIG:-${GWSA_DESKTOP_CONFIG:-$HOME/Library/Application Support/Claude/claude_desktop_config.json}}"  # compat bi-nom (fiche 20260912000249823)
@@ -206,13 +206,13 @@ PY
 # Claude Desktop
 CURRENT_CMD="$(entry_command)"
 if [[ "$CURRENT_CMD" == "$EXPECTED" ]]; then
-  ok "Claude Desktop : déjà branché sur current — config inchangée"
+  ok "Claude Desktop: already wired to current — config unchanged"
 elif [[ -x "$INSTALLER" ]]; then
   "$INSTALLER" --config "$CONFIG" >/dev/null \
-    && ok "Claude Desktop : branché sur $EXPECTED" \
-    || warn "Claude Desktop : branchement automatique en échec — lance « $INSTALLER »"
+    && ok "Claude Desktop: wired to $EXPECTED" \
+    || warn "Claude Desktop: automatic wiring failed — run « $INSTALLER »"
 else
-  warn "installeur Desktop introuvable ($INSTALLER) — branchement à faire à la main"
+  warn "Desktop installer not found ($INSTALLER) — wire it by hand"
 fi
 
 # Claude Code (CLI) — best-effort : seulement si `claude` est installé. Le script
@@ -220,13 +220,13 @@ fi
 if command -v claude >/dev/null 2>&1; then
   if [[ -x "$CC_INSTALLER" ]]; then
     "$CC_INSTALLER" >/dev/null \
-      && ok "Claude Code (CLI) : branché sur $EXPECTED" \
-      || warn "Claude Code : branchement en échec — lance « $CC_INSTALLER »"
+      && ok "Claude Code (CLI): wired to $EXPECTED" \
+      || warn "Claude Code: wiring failed — run « $CC_INSTALLER »"
   else
-    warn "installeur Claude Code introuvable ($CC_INSTALLER)"
+    warn "Claude Code installer not found ($CC_INSTALLER)"
   fi
 else
-  ok "CLI « claude » absent — Claude Code non branché (normal si tu n'utilises que Desktop)"
+  ok "CLI « claude » absent — Claude Code not wired (normal if you only use Desktop)"
 fi
 
 fi  # fin du bloc sauté quand « déjà à jour »
@@ -249,14 +249,14 @@ if [[ -n "$CLI_LINK_LOADED" ]]; then
   retarget_cli_links "$SRC" "$DEPLOY_ROOT"
   MAG_RELINKED=1
 else
-  warn "helper de re-ciblage introuvable ($LIBCLI) — lien du PATH non géré"
+  warn "retargeting helper not found ($LIBCLI) — PATH link not managed"
 fi
 
-step "Terminé — un dernier geste"
-echo "Redémarre Claude Desktop (Cmd-Q puis relance) : le serveur MCP est lancé"
-echo "par l'application, il ne se recharge pas tout seul."
+step "Done — one last thing"
+echo "Restart Claude Desktop (Cmd-Q then relaunch): the MCP server is launched"
+echo "by the application, it does not reload on its own."
 echo
-echo "Vérifier ensuite : le serveur doit annoncer « $TARGET_VERSION »."
+echo "Then verify: the server should announce « $TARGET_VERSION »."
 
 # Guide de refresh terminal (fiche 0092) : le nom canonique en ligne de
 # commande est désormais « mag » (gwsa/gma restent invocables, dépréciés).
@@ -272,12 +272,12 @@ echo "Vérifier ensuite : le serveur doit annoncer « $TARGET_VERSION »."
 # on ne peut pas déduire l'état du cache du shell appelant depuis ce process.
 if [[ -n "${MAG_RELINKED:-}" ]]; then
   echo
-  echo "${Y}Le nom canonique en ligne de commande est « mag ».${N}"
-  echo "Ce shell ne le voit pas encore (chemin mis en cache) : ouvre un nouveau"
-  echo "terminal, ou lance « hash -r » dans celui-ci, puis retape « mag »."
-  echo "(Si cet update a été lancé depuis une release pré-#114 — avant le"
-  echo "renommage gma/gwsa → mag —, l'ancien update.sh ne connaît pas « mag » :"
-  echo "relance « mag update » une fois sur une release ≥ #114.)"
+  echo "${Y}The canonical command-line name is « mag ».${N}"
+  echo "This shell does not see it yet (cached path): open a new"
+  echo "terminal, or run « hash -r » in this one, then retype « mag »."
+  echo "(If this update was run from a pre-#114 release — before the"
+  echo "gma/gwsa → mag rename —, the old update.sh does not know « mag »:"
+  echo "re-run « mag update » once you are on a release ≥ #114.)"
 fi
 
 # Rappel de rollback (fiche 0091) : seulement quand une installation a eu lieu
@@ -287,10 +287,10 @@ if [[ -z "${SKIP_INSTALL:-}" ]]; then
   [[ -L "$DEPLOY_ROOT/previous" ]] && PREVIOUS_VERSION="$(basename "$(readlink "$DEPLOY_ROOT/previous")")"
   echo
   if [[ -n "$PREVIOUS_VERSION" ]]; then
-    echo "Pour revenir en arrière : mag revert (ou mag update --to $PREVIOUS_VERSION)."
+    echo "To roll back: mag revert (or mag update --to $PREVIOUS_VERSION)."
   else
     # 1er install : aucune version précédente enregistrée — « mag revert »
     # échouerait encore. Il deviendra utile dès la prochaine mise à jour (revue 0091 P2).
-    echo "Pour revenir en arrière après une prochaine mise à jour : mag revert."
+    echo "To roll back after a future update: mag revert."
   fi
 fi

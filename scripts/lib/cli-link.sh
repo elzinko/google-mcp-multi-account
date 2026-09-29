@@ -51,7 +51,7 @@ retarget_cli_links() {
   # touche à RIEN. Un test ne doit jamais pouvoir réécrire le mag du PATH réel
   # — c'est arrivé une fois, en retirant une garde pendant un test de mutation.
   if [[ -n "${GWSA_DEPLOY_ROOT:-}" && -z "${GWSA_CLI_LINK:-}" ]]; then
-    warn "dépôt d'installation surchargé sans GWSA_CLI_LINK — lien du PATH laissé tel quel"
+    warn "install dir overridden without GWSA_CLI_LINK — PATH link left as-is"
     return 0
   fi
 
@@ -62,28 +62,28 @@ retarget_cli_links() {
   [[ -x "$expected" ]] || expected="$deploy_root/current/bin/gwsa"
   [[ -x "$expected" ]] || expected="$deploy_root/current/bin/gma"
 
-  [[ -n "$link" ]] || { warn "mag absent du PATH — lien non posé"; return 0; }
-  [[ -x "$expected" ]] || { warn "binaire absent de la copie installée — liens inchangés"; return 0; }
+  [[ -n "$link" ]] || { warn "mag missing from PATH — no link set"; return 0; }
+  [[ -x "$expected" ]] || { warn "binary missing from the installed copy — links unchanged"; return 0; }
 
   if [[ ! -L "$link" ]]; then
-    warn "« $link » n'est pas un lien symbolique — laissé tel quel"
+    warn "« $link » is not a symlink — left as-is"
     return 0
   fi
   target="$(readlink "$link")"
   if [[ "$target" == "$expected" ]]; then
-    ok "mag du PATH déjà sur la copie installée"
+    ok "PATH mag already on the installed copy"
     # ne PAS return : on continue pour (re)poser les alias gma/gwsa manquants
   else
     case "$target" in
       "$src"/bin/mag|"$deploy_root"/*/bin/mag) ;;
       # cibles legacy d'une install antérieure (lien nommé gma/gwsa) — à migrer aussi
       "$src"/bin/gma|"$src"/bin/gwsa|"$deploy_root"/*/bin/gma|"$deploy_root"/*/bin/gwsa) ;;
-      *) warn "mag du PATH pointe « $target » (hors projet) — laissé tel quel"; return 0 ;;
+      *) warn "PATH mag points at « $target » (outside the project) — left as-is"; return 0 ;;
     esac
     if ln -sfn "$expected" "$link" 2>/dev/null; then
-      ok "mag du PATH → $expected"
+      ok "PATH mag → $expected"
     else
-      warn "impossible de réécrire « $link » — à refaire à la main : ln -sfn \"$expected\" \"$link\""
+      warn "could not rewrite « $link » — redo it by hand: ln -sfn \"$expected\" \"$link\""
     fi
   fi
 
@@ -94,11 +94,11 @@ retarget_cli_links() {
   for _name in mag gma gwsa; do
     _nlink="$(dirname "$link")/$_name"
     if [[ -e "$_nlink" && ! -L "$_nlink" ]]; then
-      warn "« $_nlink » n'est pas un lien symbolique — laissé tel quel"
+      warn "« $_nlink » is not a symlink — left as-is"
     elif ln -sfn "$expected" "$_nlink" 2>/dev/null; then
-      ok "$_name du PATH → $expected"
+      ok "$_name PATH → $expected"
     else
-      warn "impossible de poser « $_nlink » — à faire à la main : ln -sfn \"$expected\" \"$_nlink\""
+      warn "could not set « $_nlink » — do it by hand: ln -sfn \"$expected\" \"$_nlink\""
     fi
   done
 }
