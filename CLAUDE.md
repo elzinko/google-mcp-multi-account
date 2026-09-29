@@ -31,8 +31,9 @@ Tasks) depuis des agents LLM, via le serveur MCP local (`bin/google-mcp` →
 8. **Écriture Drive = élicitation.** Si refus de zone : `access_request`
    kind=`grant` avec le dossier, puis attendre l'accord humain
    (`mag grant …` ou admin). Les grants expirent : redemander est normal.
-9. **S'identifier dans le journal** : le MCP positionne `GWSA_CLIENT=mcp` ;
-   en shell : `GWSA_CLIENT=claude-code mag …`.
+9. **S'identifier dans le journal** : le MCP positionne `MAG_CLIENT=mcp` ;
+   en shell : `MAG_CLIENT=claude-code mag …` (`GWSA_CLIENT` reste accepté en repli
+   pendant le renommage `GWSA_ → MAG_`, mais n'est plus la forme à utiliser).
 
 ## Commandes utiles
 

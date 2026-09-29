@@ -85,7 +85,7 @@ def log_usage(
         return
     python = SYS_PYTHON if os.path.isfile(SYS_PYTHON) else "python3"
     env = dict(os.environ)
-    env["GWSA_CLIENT"] = client or "broker"
+    env["MAG_CLIENT"] = client or "broker"
     env["GWSA_LOG_DECISION"] = decision
     env["GWSA_LOG_REASON"] = reason
     if session_id:

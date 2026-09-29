@@ -160,7 +160,7 @@ def check_policy(
     # profile_path ; sans ça, la remontée des parents échoue → tout drive_update /
     # copie / création en sous-dossier est refusé à tort (revue sécurité F1).
     env["GWSA_GWS_CONFIG_DIR"] = str(gws_config_dir(profile_path.name))
-    env["GWSA_CLIENT"] = client or "broker"
+    env["MAG_CLIENT"] = client or "broker"
     if session_id:
         env["GWSA_SESSION_ID"] = session_id
     if git_root:
