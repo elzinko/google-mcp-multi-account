@@ -481,6 +481,214 @@ def gmail_create_draft(
     return {"ok": True, "alias": alias, "result": data}
 
 
+# Libellés système Gmail : leur pose/retrait a des effets hors « curation ».
+# `TRASH`/`SPAM` sont destructifs (poser TRASH = corbeiller), `INBOX` archive,
+# etc. gmail_labels_modify les REFUSE — il n'agit que sur des libellés
+# utilisateur. Denylist appliquée AVANT tout appel (défense en profondeur), en
+# plus du contrôle du `type` renvoyé par labels.list.
+_GMAIL_SYSTEM_LABELS = frozenset({
+    "INBOX", "SPAM", "TRASH", "UNREAD", "STARRED", "IMPORTANT",
+    "SENT", "DRAFT", "CHAT",
+})
+_GMAIL_SYSTEM_PREFIXES = ("CATEGORY_",)
+# Borne de l'API messages.batchModify (un seul lot d'ids par appel).
+_GMAIL_BATCH_MAX = 1000
+
+
+def _clean_str_list(x: Optional[list[str]]) -> list[str]:
+    """Liste de chaînes non vides, dédoublonnée, ordre préservé. Tolère un
+    scalaire (une chaîne seule) au bord de l'API."""
+    if x is None:
+        return []
+    if isinstance(x, str):
+        x = [x]
+    out: list[str] = []
+    for item in x:
+        s = str(item).strip()
+        if s and s not in out:
+            out.append(s)
+    return out
+
+
+def _is_system_label_name(name: str) -> bool:
+    """Un nom qui désigne (ou imite) un libellé système Gmail — refusé d'emblée."""
+    up = name.strip().upper()
+    if up in _GMAIL_SYSTEM_LABELS:
+        return True
+    return any(up.startswith(p) for p in _GMAIL_SYSTEM_PREFIXES)
+
+
+def gmail_labels_modify(
+    alias: str,
+    add_labels: Optional[list[str]] = None,
+    remove_labels: Optional[list[str]] = None,
+    message_ids: Optional[list[str]] = None,
+    thread_ids: Optional[list[str]] = None,
+    create_missing: bool = True,
+    session: str = "",
+) -> dict[str, Any]:
+    """Pose et/ou retire des libellés UTILISATEUR sur des messages/threads Gmail.
+
+    Curaté et réversible : retirer annule poser. N'ENVOIE jamais de mail et ne
+    SUPPRIME jamais rien. N'agit QUE sur des libellés `user` (ex. « gc/to-delete »)
+    et refuse tout libellé système (TRASH, SPAM, INBOX…) — car dans Gmail, poser
+    TRASH revient à corbeiller. Les seules commandes gws émises sont : labels
+    list/create (résolution nom → id, création si absent), messages batchModify
+    (un lot), threads modify (un par thread). Jamais trash/delete/batchDelete/send.
+
+    Passe par `_run` comme toute écriture : policy, verrous et élicitation
+    s'appliquent ; l'opération tombe dans la catégorie `labels` (cf.
+    gateway.categorize), autorisée par gmail.labels. Un refus remonte à l'humain.
+    """
+    validate_alias(alias)
+    if not isinstance(create_missing, bool):
+        raise GatewayError("create_missing doit être un booléen (true/false)", code="error")
+    adds = _clean_str_list(add_labels)
+    removes = _clean_str_list(remove_labels)
+    msg_ids = _clean_str_list(message_ids)
+    thr_ids = _clean_str_list(thread_ids)
+
+    if not adds and not removes:
+        raise GatewayError(
+            "au moins un libellé dans add_labels ou remove_labels est requis",
+            code="error",
+        )
+    if not msg_ids and not thr_ids:
+        raise GatewayError(
+            "au moins un message_id ou thread_id est requis", code="error",
+        )
+    overlap = sorted(set(adds) & set(removes))
+    if overlap:
+        raise GatewayError(
+            f"libellé(s) à la fois en pose et en retrait : {', '.join(overlap)} "
+            f"— contradictoire",
+            code="error",
+        )
+    if len(msg_ids) > _GMAIL_BATCH_MAX:
+        raise GatewayError(
+            f"trop de message_ids ({len(msg_ids)} > {_GMAIL_BATCH_MAX}) — "
+            f"découper en plusieurs appels",
+            code="error",
+        )
+    # Garde 1 (AVANT tout appel) : jamais un libellé système, ni en pose ni en
+    # retrait. Empêche de corbeiller/archiver via cet outil, même en cas d'état
+    # de compte inattendu.
+    for name in (*adds, *removes):
+        if _is_system_label_name(name):
+            raise GatewayError(
+                f"libellé système « {name} » interdit — gmail_labels_modify ne "
+                f"pose/retire que des libellés utilisateur (jamais TRASH, SPAM, "
+                f"INBOX…) ; il ne corbeille et n'archive jamais",
+                code="error",
+            )
+
+    # Résolution nom → id via labels list (lecture). gws renvoie
+    # {"labels": [{"id", "name", "type"}, …]}.
+    listing = _run(
+        alias,
+        ["gmail", "users", "labels", "list", "--params", json.dumps({"userId": "me"})],
+        session=session,
+    )
+    labels = listing.get("labels") if isinstance(listing, dict) else None
+    by_name: dict[str, dict] = {}
+    if isinstance(labels, list):
+        for lab in labels:
+            if isinstance(lab, dict) and lab.get("name"):
+                by_name[str(lab["name"])] = lab
+
+    def _existing_user_id(name: str) -> Optional[str]:
+        """Id d'un libellé EXISTANT et de type utilisateur, ou None si absent.
+        Garde 2 : un nom qui résout vers un libellé système est refusé."""
+        lab = by_name.get(name)
+        if lab is None:
+            return None
+        if str(lab.get("type") or "user").lower() != "user":
+            raise GatewayError(
+                f"« {name} » est un libellé système — refusé (utilisateur seulement)",
+                code="error",
+            )
+        lid = str(lab.get("id") or "")
+        if not lid:
+            raise GatewayError(f"libellé « {name} » sans id exploitable", code="exec")
+        return lid
+
+    label_ids: dict[str, str] = {}
+    created: list[str] = []
+
+    add_ids: list[str] = []
+    for name in adds:
+        lid = _existing_user_id(name)
+        if lid is None:
+            if not create_missing:
+                raise GatewayError(
+                    f"libellé « {name} » introuvable et create_missing=false",
+                    code="not_found",
+                )
+            made = _run(
+                alias,
+                ["gmail", "users", "labels", "create",
+                 "--params", json.dumps({"userId": "me"}),
+                 "--json", json.dumps({"name": name})],
+                session=session,
+            )
+            lid = str(made.get("id") or "") if isinstance(made, dict) else ""
+            if not lid:
+                raise GatewayError(
+                    f"création du libellé « {name} » sans id renvoyé", code="exec",
+                )
+            created.append(name)
+        label_ids[name] = lid
+        add_ids.append(lid)
+
+    remove_ids: list[str] = []
+    for name in removes:
+        lid = _existing_user_id(name)
+        if lid is None:
+            # Retrait d'un libellé absent = rien à annuler : refus explicite
+            # (jamais de création en retrait).
+            raise GatewayError(
+                f"libellé « {name} » introuvable — rien à retirer", code="not_found",
+            )
+        label_ids[name] = lid
+        remove_ids.append(lid)
+
+    body_labels: dict[str, Any] = {}
+    if add_ids:
+        body_labels["addLabelIds"] = add_ids
+    if remove_ids:
+        body_labels["removeLabelIds"] = remove_ids
+
+    # Messages : un seul batchModify (un geste transactionnel couvre le lot).
+    if msg_ids:
+        _run(
+            alias,
+            ["gmail", "users", "messages", "batchModify",
+             "--params", json.dumps({"userId": "me"}),
+             "--json", json.dumps({"ids": msg_ids, **body_labels})],
+            session=session,
+        )
+    # Threads : l'API n'a pas de batchModify → un modify par thread.
+    for tid in thr_ids:
+        _run(
+            alias,
+            ["gmail", "users", "threads", "modify",
+             "--params", json.dumps({"userId": "me", "id": tid}),
+             "--json", json.dumps(body_labels)],
+            session=session,
+        )
+
+    return {
+        "ok": True,
+        "alias": alias,
+        "added": adds,
+        "removed": removes,
+        "created_labels": created,
+        "label_ids": label_ids,
+        "messages": msg_ids,
+        "threads": thr_ids,
+    }
+
+
 def _ownership(f: Any) -> dict[str, Any]:
     """Propriétaire d'un fichier Drive, lisible sans fouiller la réponse brute.
 

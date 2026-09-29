@@ -69,6 +69,18 @@ def categorize(service: str, resources: list[str], raw_method: str) -> str | Non
             return "drafts"
         if "labels" in res and m not in READ_METHODS:
             return "labels"
+        # Poser/retirer un libellé passe par « messages/threads modify »
+        # (et « messages batchModify »). Le corps de ces appels est UNIQUEMENT
+        # {addLabelIds, removeLabelIds} (ModifyMessageRequest) : ils ne font que
+        # gérer des libellés. On les classe donc « labels » — comme la gestion
+        # des définitions de libellés — et non « update » générique. La
+        # pose/retrait devient autorisable par gmail.labels (déjà true par
+        # défaut, default_policy) sans ouvrir gmail.update. La ressource
+        # opérante reste "" (messages modify est exclu d'_OPERAND_PARAM à
+        # dessein : add ET remove = opérande ambigu → fail-closed pour une
+        # capacité scopée ; une capacité gmail:labels non scopée matche).
+        if res and res[-1] in ("messages", "threads") and m in ("modify", "batchmodify"):
+            return "labels"
         if m in ("triage", "watch"):
             return "read"
 
@@ -339,6 +351,29 @@ def consequential_args(
 
     if service == "gmail" and "drafts" in res and method in ("create", "update"):
         return _gmail_message_headers(args)
+
+    # Pose/retrait de libellé (« messages/threads modify », « batchModify ») :
+    # lier QUI (ids) reçoit QUOI (libellés ajoutés/retirés) au reçu signé, sinon
+    # deux poses différentes (gc/to-delete vs gc/kept) signeraient pareil
+    # (même classe de défaut que Codex #149 P2). Listes triées = canonique.
+    if service == "gmail" and res and res[-1] in ("messages", "threads") \
+            and method in ("modify", "batchmodify"):
+        params = parse_json_flag(args, "--params")
+        body = parse_json_flag(args, "--json")
+        out: dict = {}
+        single = params.get("id")
+        ids = body.get("ids")
+        if single:
+            out["ids"] = [str(single)]
+        elif isinstance(ids, list) and ids:
+            out["ids"] = sorted(str(i) for i in ids if i)
+        add = body.get("addLabelIds")
+        rem = body.get("removeLabelIds")
+        if isinstance(add, list) and add:
+            out["addLabelIds"] = sorted(str(x) for x in add if x)
+        if isinstance(rem, list) and rem:
+            out["removeLabelIds"] = sorted(str(x) for x in rem if x)
+        return out
 
     if service == "drive" and "permissions" in res:
         params = parse_json_flag(args, "--params")
