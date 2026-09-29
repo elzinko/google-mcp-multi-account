@@ -79,6 +79,9 @@ def categorize(service: str, resources: list[str], raw_method: str) -> str | Non
         # opérante reste "" (messages modify est exclu d'_OPERAND_PARAM à
         # dessein : add ET remove = opérande ambigu → fail-closed pour une
         # capacité scopée ; une capacité gmail:labels non scopée matche).
+        # Un modify touchant un libellé SYSTÈME (TRASH/SPAM/INBOX…) est
+        # ré-escaladé hors « labels » par `gmail_labels_override` (appelé par
+        # policy-check ET l'audit) — sinon on corbeillerait sous labels:true.
         if res and res[-1] in ("messages", "threads") and m in ("modify", "batchmodify"):
             return "labels"
         if m in ("triage", "watch"):
@@ -265,6 +268,61 @@ def drive_files_trash_override(
     if body.get("trashed") is True or params.get("trashed") is True:
         return "delete"
     return operation
+
+
+# Libellés système Gmail (pour ces libellés, l'id EST le nom). Les toucher via
+# un « messages/threads modify » n'est PAS de la curation de libellé
+# utilisateur : TRASH/SPAM déplacent le message, les autres changent un état
+# système (INBOX=archive au retrait, UNREAD, IMPORTANT, catégories…).
+_GMAIL_SYSTEM_LABEL_IDS = frozenset({
+    "INBOX", "SPAM", "TRASH", "UNREAD", "STARRED", "IMPORTANT",
+    "SENT", "DRAFT", "CHAT",
+    "CATEGORY_PERSONAL", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS",
+    "CATEGORY_UPDATES", "CATEGORY_FORUMS",
+})
+# Libellés système DESTRUCTIFS : poser TRASH corbeille, poser SPAM classe en
+# spam — à traiter comme « delete » (refusé sous delete:false).
+_GMAIL_DESTRUCTIVE_LABEL_IDS = frozenset({"TRASH", "SPAM"})
+
+
+def gmail_labels_override(
+    resources: list[str], raw_method: str, operation: str, args: list[str],
+) -> str:
+    """Escalade la catégorie d'un « gmail messages/threads modify|batchModify »
+    selon les LIBELLÉS touchés (corps --json), pour que l'AUTORISATION
+    (`scripts/policy-check.py`) ET l'AUDIT (`gateway.usage.infer_call`) voient
+    la vraie conséquence — pas juste « labels ». Sans ce garde, `messages
+    modify --json {"addLabelIds":["TRASH"]}` passerait sous `gmail.labels:true`
+    et corbeillerait le message, contournant `delete:false` (P1, revue Codex
+    PR #156) : policy-check ne regarde pas les ids de libellés.
+
+    Un libellé SYSTÈME sort de la curation :
+      - TRASH/SPAM → « delete » (refusé sous delete:false) ;
+      - tout autre libellé système (INBOX=archive au retrait, UNREAD…) → « update ».
+    Libellés UTILISATEUR uniquement → « labels » inchangé (l'op curatée voulue).
+
+    Même patron que `drive_files_trash_override` (fiche 0037) : une
+    reclassification qui dépend du CORPS, partagée par les deux consommateurs.
+    N'agit que si `operation == "labels"` (ce que rend `categorize` pour ces
+    modify) — sinon renvoie l'opération telle quelle."""
+    if operation != "labels":
+        return operation
+    res = [r.lower() for r in resources]
+    if not (res and res[-1] in ("messages", "threads")
+            and norm(raw_method) in ("modify", "batchmodify")):
+        return operation
+    body = parse_json_flag(args, "--json")
+    touched: list[str] = []
+    for key in ("addLabelIds", "removeLabelIds"):
+        val = body.get(key)
+        if isinstance(val, list):
+            touched.extend(str(x).upper() for x in val if x)
+    sys_touched = [t for t in touched if t in _GMAIL_SYSTEM_LABEL_IDS]
+    if not sys_touched:
+        return operation
+    if any(t in _GMAIL_DESTRUCTIVE_LABEL_IDS for t in sys_touched):
+        return "delete"
+    return "update"
 
 
 # ---------------------------------------------------------------------------

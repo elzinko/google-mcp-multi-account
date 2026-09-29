@@ -47,6 +47,7 @@ from gateway.categorize import (  # noqa: E402
     SHARE_RESOURCES,
     categorize,
     drive_files_trash_override,
+    gmail_labels_override,
     norm,
     norm_service,
     operand_resource,
@@ -604,6 +605,11 @@ def main():
     if cat is None:
         deny(profile_dir, args, service,
              "method « %s » not classifiable — denied out of caution" % raw_method)
+    # Un « gmail messages/threads modify » touchant un libellé SYSTÈME n'est pas
+    # une simple curation « labels » : TRASH/SPAM → delete, autre système →
+    # update (revue Codex PR #156, P1). policy-check ne regardant que la
+    # méthode laissait sinon « addLabelIds:[TRASH] » corbeiller sous labels:true.
+    cat = gmail_labels_override(resources, raw_method, cat, args)
     # Pas de défaut « read libre » : seule une clé explicite True autorise.
     if not svc_pol.get(cat, False):
         deny(profile_dir, args, service,

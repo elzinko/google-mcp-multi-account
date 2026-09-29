@@ -10,6 +10,7 @@ from .categorize import (
     READ_METHODS,
     categorize,
     drive_files_trash_override,
+    gmail_labels_override,
     norm,
     norm_service,
     operand_resource,
@@ -66,6 +67,10 @@ def infer_call(gws_args: list[str]) -> tuple[str, str, str]:
     resources, raw_method = positionals[:-1], positionals[-1]
     operation = categorize(service, resources, raw_method) or _fallback_operation(norm(raw_method))
     operation = drive_files_trash_override(resources, raw_method, operation, gws_args)
+    # Même escalade que policy-check pour un « gmail messages/threads modify »
+    # touchant un libellé SYSTÈME (TRASH/SPAM → delete, autre → update) : l'audit
+    # journalise la capacité qui a réellement autorisé l'appel (fiche 0080).
+    operation = gmail_labels_override(resources, raw_method, operation, gws_args)
     resource = operand_resource(service, resources, raw_method, gws_args)
     return service, operation, resource
 

@@ -339,6 +339,27 @@ check 0 "gmail labels create autorisé si labels:true"                    gmail 
 check 0 "gmail messages modify autorisé si labels:true (pose de libellé)"  gmail users messages modify --params '{"id":"x"}'
 check 0 "gmail messages batchModify autorisé si labels:true"              gmail users messages batchModify --json '{"ids":["x"]}'
 check 0 "gmail threads modify autorisé si labels:true"                    gmail users threads modify --params '{"id":"x"}'
+# Garde-fou libellé SYSTÈME (revue Codex PR #156, P1) : policy-check ne regarde
+# pas que la méthode. Un modify qui touche un libellé système est ré-escaladé
+# hors « labels » (TRASH/SPAM → delete, autre → update) — sinon un appel CLI
+# direct « addLabelIds:[TRASH] » corbeillerait sous labels:true, delete:false.
+check 4 "messages modify addLabelIds TRASH → delete, refusé (delete:false)"  gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["TRASH"]}'
+check 4 "messages modify addLabelIds SPAM → delete, refusé"                  gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["SPAM"]}'
+check 4 "messages modify removeLabelIds INBOX (archive) → update, refusé"    gmail users messages modify --params '{"id":"x"}' --json '{"removeLabelIds":["INBOX"]}'
+check 4 "messages batchModify addLabelIds TRASH → delete, refusé"           gmail users messages batchModify --json '{"ids":["x"],"addLabelIds":["TRASH"]}'
+check 0 "messages modify addLabelIds libellé UTILISATEUR → labels, autorisé" gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["Label_42"]}'
+# La distinction delete/update est cohérente avec la policy explicite.
+policy <<'EOF'
+{"gmail": {"read": true, "drafts": false, "send": false, "labels": true,
+           "update": true, "delete": false, "settings": false}}
+EOF
+check 4 "TRASH reste refusé même sous update:true (c'est un delete)"         gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["TRASH"]}'
+check 0 "removeLabelIds INBOX autorisé sous update:true (archive = update)"  gmail users messages modify --params '{"id":"x"}' --json '{"removeLabelIds":["INBOX"]}'
+policy <<'EOF'
+{"gmail": {"read": true, "drafts": false, "send": false, "labels": true,
+           "update": false, "delete": true, "settings": false}}
+EOF
+check 0 "addLabelIds TRASH autorisé sous delete:true (escaladé en delete)"   gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["TRASH"]}'
 
 # --- 3. Garde-fous du wrapper mag ------------------------------------------
 
