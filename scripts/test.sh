@@ -886,6 +886,8 @@ def fake_run(alias, args, timeout=60, **kw):
         return json.loads(json.dumps(LABELS_FIXTURE))
     if m == ("gmail", "users", "labels", "create"):
         body = json.loads(args[args.index("--json") + 1])
+        if body["name"] == "gc/boom":  # création en échec simulée (quota / geste décliné)
+            raise GatewayError("quota dépassé (simulé)", code="exec")
         # L'API crée un libellé UTILISATEUR ; id neuf.
         return {"id": "Label_new_" + body["name"].replace("/", "_"),
                 "name": body["name"], "type": "user"}
@@ -1039,6 +1041,55 @@ out = api.gmail_labels_modify(alias, add_labels=["gc/kept"], message_ids=["m1"],
 assert out["ok"] is True and out["failures"] == [], out
 assert out["messages_modified"] == ["m1"] and out["threads_modified"] == ["t_ok"], out
 assert_no_destructive()
+
+# 10. Création PARTIELLE (P2 Codex #156) : deux libellés absents, la 2ᵉ création
+# échoue → ok:false, created_labels expose le 1ᵉ (effet de bord réel), failures
+# porte l'échec, AUCUNE cible touchée (jeu de libellés incomplet).
+CALLS.clear()
+out = api.gmail_labels_modify(alias, add_labels=["gc/a", "gc/boom"], message_ids=["m1"])
+assert out["ok"] is False, out
+assert out["created_labels"] == ["gc/a"], out
+assert out["messages_modified"] == [] and out["threads_modified"] == [], out
+assert len(out["failures"]) == 1 and out["failures"][0]["kind"] == "label_create", out["failures"]
+assert out["failures"][0]["name"] == "gc/boom", out["failures"]
+assert not any(method_of(a) == ("gmail", "users", "messages", "batchModify") for a in CALLS), \
+    "aucune cible ne doit être touchée si une création a échoué (jeu incomplet)"
+assert_no_destructive()
+
+# 11. Échec de la SEULE/1ᵉ création (rien créé) → lève proprement (pas de
+# résultat partiel vide, cohérent avec un échec sans effet de bord).
+CALLS.clear()
+try:
+    api.gmail_labels_modify(alias, add_labels=["gc/boom"], message_ids=["m1"])
+    raise SystemExit("échec de la seule création aurait dû lever")
+except GatewayError as e:
+    assert e.code == "exec", e.code
+
+# 12. Dépendance gmail.read explicite (P2 Codex #156) : si labels.list est refusé
+# par la policy, l'erreur nomme la dépendance gmail.read.
+def deny_list(alias, args, timeout=60, **kw):
+    if method_of(args) == ("gmail", "users", "labels", "list"):
+        raise GatewayError("read denied by policy", code="exec")
+    return {}
+api._run = deny_list
+try:
+    api.gmail_labels_modify(alias, add_labels=["gc/x"], message_ids=["m1"])
+    raise SystemExit("un refus de labels.list aurait dû remonter")
+except GatewayError as e:
+    assert "gmail.read" in str(e), str(e)
+
+# Un VERROU/session sur labels.list remonte tel quel (pas de hint read).
+def lock_list(alias, args, timeout=60, **kw):
+    if method_of(args) == ("gmail", "users", "labels", "list"):
+        raise GatewayError("profil verrouillé", code="locked")
+    return {}
+api._run = lock_list
+try:
+    api.gmail_labels_modify(alias, add_labels=["gc/x"], message_ids=["m1"])
+    raise SystemExit("un verrou aurait dû remonter")
+except GatewayError as e:
+    assert e.code == "locked", e.code
+api._run = fake_run
 
 print("ok")
 PY

@@ -596,12 +596,26 @@ def gmail_labels_modify(
             )
 
     # Résolution nom → id via labels list (lecture). gws renvoie
-    # {"labels": [{"id", "name", "type"}, …]}.
-    listing = _run(
-        alias,
-        ["gmail", "users", "labels", "list", "--params", json.dumps({"userId": "me"})],
-        session=session,
-    )
+    # {"labels": [{"id", "name", "type"}, …]}. labels.list est catégorisé
+    # « read » : cet outil a donc besoin de gmail.read EN PLUS de gmail.labels
+    # (dépendance explicite — revue Codex #156, P2). Si le refus vient de la
+    # policy (pas d'un verrou/session, qui remontent tels quels), on nomme la
+    # dépendance pour qu'une policy « labels seulement » comprenne le manque.
+    try:
+        listing = _run(
+            alias,
+            ["gmail", "users", "labels", "list", "--params", json.dumps({"userId": "me"})],
+            session=session,
+        )
+    except GatewayError as e:
+        if e.code in ("locked", "session", "delegated"):
+            raise
+        raise GatewayError(
+            "gmail_labels_modify doit lister les libellés pour résoudre leurs "
+            "noms (labels.list = catégorie gmail.read) : activer gmail.read EN "
+            f"PLUS de gmail.labels. Refus policy : {e}",
+            code=e.code,
+        ) from e
     labels = listing.get("labels") if isinstance(listing, dict) else None
     by_name: dict[str, dict] = {}
     if isinstance(labels, list):
@@ -659,23 +673,54 @@ def gmail_labels_modify(
         label_ids[name] = lid
         remove_ids.append(lid)
 
-    # Tout est validé → créer les libellés manquants (PREMIÈRE mutation).
+    # Tout est validé → créer les libellés manquants (PREMIÈRE mutation). Si une
+    # création échoue APRÈS qu'une autre a réussi (geste décliné, quota Gmail…),
+    # on n'applique PAS un jeu de libellés incomplet et on EXPOSE les libellés
+    # déjà créés (effet de bord réel) plutôt que de tout jeter (revue Codex #156,
+    # P2). Rien de créé encore → l'échec remonte proprement (aucun effet de bord).
     created: list[str] = []
+    create_failure: dict[str, Any] | None = None
     for name in to_create:
-        made = _run(
-            alias,
-            ["gmail", "users", "labels", "create",
-             "--params", json.dumps({"userId": "me"}),
-             "--json", json.dumps({"name": name})],
-            session=session,
-        )
+        try:
+            made = _run(
+                alias,
+                ["gmail", "users", "labels", "create",
+                 "--params", json.dumps({"userId": "me"}),
+                 "--json", json.dumps({"name": name})],
+                session=session,
+            )
+        except GatewayError as e:
+            if not created:
+                raise  # aucun libellé créé → échec propre (exception d'origine)
+            create_failure = {"kind": "label_create", "name": name, "code": e.code, "error": str(e)}
+            break
         lid = str(made.get("id") or "") if isinstance(made, dict) else ""
         if not lid:
-            raise GatewayError(
-                f"création du libellé « {name} » sans id renvoyé", code="exec",
-            )
+            if not created:
+                raise GatewayError(
+                    f"création du libellé « {name} » sans id renvoyé", code="exec",
+                )
+            create_failure = {
+                "kind": "label_create", "name": name, "code": "exec",
+                "error": "création sans id renvoyé",
+            }
+            break
         label_ids[name] = lid
         created.append(name)
+
+    if create_failure is not None:
+        # Jeu de libellés incomplet : ne toucher aucune cible, exposer le partiel.
+        return {
+            "ok": False,
+            "alias": alias,
+            "added": adds,
+            "removed": removes,
+            "created_labels": created,
+            "label_ids": label_ids,
+            "messages_modified": [],
+            "threads_modified": [],
+            "failures": [create_failure],
+        }
 
     add_ids: list[str] = [label_ids[name] for name in adds]
 

@@ -163,7 +163,8 @@ TOOLS: list[dict[str, Any]] = [
             "les libellés posés / retirés / créés, et failures (échecs par "
             "cible — résultat partiel possible, ok=false si au moins un échec). "
             "Soumis à la policy (catégorie gmail.labels), aux verrous et à "
-            "l'élicitation."
+            "l'élicitation. Nécessite AUSSI gmail.read : les noms de libellés "
+            "sont résolus via labels.list (lecture)."
         ),
         "inputSchema": {
             "type": "object",

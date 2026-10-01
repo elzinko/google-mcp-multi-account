@@ -92,6 +92,15 @@ précis échoue en fermé — comportement voulu.
 - **Policy / verrous / élicitation respectés** : l'outil compose `_run` comme les
   autres écritures ; un refus (policy, verrou) remonte à l'humain, jamais contourné.
 
+### Dépendance de policy
+
+L'outil résout les **noms** de libellés en ids via `labels.list`, catégorisé
+`read`. Il nécessite donc **`gmail.read` EN PLUS de `gmail.labels`**. La policy
+prudente par défaut a les deux à `true` ; une policy « labels seulement »
+(`read:false`) est refusée à la résolution, avec un message qui nomme la
+dépendance. Décision : ne pas reclasser `labels.list` en `labels` — ce serait en
+faire une mutation qui exigerait un geste Touch ID pour une simple lecture.
+
 ## Critères d'acceptation
 
 - [ ] `gmail_labels_modify` pose un ou plusieurs libellés sur des messages et/ou
