@@ -95,6 +95,7 @@
 | [0001](done/0001-elicitation-signee-strongauth-v2.md) | Élicitation signée — faire monter `mag strongauth` de la présence à la signature | feature | P3 |  |  |  | 🗑️ superseded |  |
 | [0090](0090-documenter-statut-oauth-verification.md) | Documenter et outiller le statut OAuth (warning « non vérifiée » + Testing→Production) | feature | P3 |  |  |  | ❓ todo |  |
 | [0093](done/0093-coherence-nommage-mag-produit-mcp.md) | Cohérence de nommage — relier `mag` / google-multi-account / repo sans casser le MCP | feature | P3 |  |  |  | ✅ shipped | #144 |
+| [20261001155202000](20261001155202000_aligner-classif-drive-upload-create.md) | Classification « drive files upload » — aligner policy-check sur create, comme le gate et l'audit | bug | P3 |  |  | google-multi-account | 🟠 in-progress | #159 |
 
 ## 🧭 Épics (jamais tirables — tirer leurs enfants ready, ADR-0017)
 
