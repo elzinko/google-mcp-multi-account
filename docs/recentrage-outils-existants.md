@@ -8,8 +8,8 @@ et où concentrer l'effort.
 Les outils qui existent règlent un problème **voisin et plus simple** que le nôtre : brancher
 ou consulter Gmail sans effort. Aucun ne fournit notre raison d'être — l'accès **souverain**,
 **multi-comptes**, avec **consentement par acte** et **identité par conversation**.
-Conclusion : arrêter de construire la partie « lire », garder la partie « agir sous contrôle ».
-Une seule question tranche le reste.
+Piste, à confirmer par le spike : déléguer la partie « lire », garder la partie « agir sous
+contrôle ». Une seule question tranche le reste.
 
 ## Le constat
 - **msgvault** — archive locale, lecture seule. Plusieurs Gmail dans une base, recherche
@@ -20,9 +20,12 @@ Une seule question tranche le reste.
   Elles acceptent un serveur MCP tiers, mais le font tourner **en conteneur**, loin du
   Secure Enclave et de Touch ID.
 
-## Ce qu'on abandonne (ne plus construire)
-La **lecture et la recherche sur l'historique** de plusieurs comptes Gmail.
-msgvault le fait déjà, en local, multi-comptes, avec un MCP. Le réécrire n'apporte rien.
+## Candidat à l'abandon — à confirmer par le spike
+**Hypothèse, pas encore une décision** : la **lecture et la recherche sur l'historique** de
+plusieurs comptes Gmail pourraient être déléguées à msgvault, qui le fait déjà en local avec
+un MCP. À vérifier d'abord par le spike : le **multi-comptes réel** et la **fraîcheur** de
+l'archive. **Tant que le spike n'a pas rendu « go », on ne retire rien** à la lecture ni à la
+pagination existantes.
 
 ## Ce qu'on garde (le différenciateur — introuvable ailleurs)
 - Plusieurs comptes Gmail avec **identité par conversation** (droits signés par conversation).
@@ -57,7 +60,7 @@ boîte vivante. Le « live » reste chez nous.
 1. Répondre à la question ci-dessus, à froid.
 2. **Spike 30 min** : lancer msgvault sur les comptes, vérifier que sa lecture couvre le
    besoin « consulter ». Fiche backlog dédiée :
-   [`features/20260930214101550_spike-msgvault-lecture-gmail.md`](../features/20260930214101550_spike-msgvault-lecture-gmail.md).
+   `features/20260930214101550_spike-msgvault-lecture-gmail.md`.
 3. Si on garde la couche : décider comment le serveur est atteint — client Claude direct
    (simple), ou pont HTTP pour une coquille type NanoClaw (transport HTTP à ajouter).
 
