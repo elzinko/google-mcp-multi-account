@@ -321,13 +321,70 @@ policy <<'EOF'
 EOF
 check 4 "emptyTrash refusé même avec delete:true (irréversible)"          drive files empty-trash --params '{}'
 check 4 "gmail labels create refusé si labels:false"                     gmail users labels create --json '{}'
-check 4 "gmail messages modify refusé si update:false"                   gmail users messages modify --params '{"id":"x"}'
+# Pose/retrait de libellé = « messages/threads modify » (ModifyMessageRequest =
+# {addLabelIds, removeLabelIds}) : classé « labels », pas « update » (fiche
+# 20260929235257000). Ici labels:false → refusés (update:false ne joue plus).
+check 4 "gmail messages modify refusé si labels:false"                   gmail users messages modify --params '{"id":"x"}'
+check 4 "gmail messages batchModify refusé si labels:false"              gmail users messages batchModify --json '{"ids":["x"]}'
+check 4 "gmail threads modify refusé si labels:false"                    gmail users threads modify --params '{"id":"x"}'
 check 4 "calendar acl insert (partage d'agenda) refusé si share:false"   calendar acl insert --json '{}'
 policy <<'EOF'
 {"gmail": {"read": true, "drafts": false, "send": false, "labels": true,
            "update": false, "delete": false, "settings": false}}
 EOF
 check 0 "gmail labels create autorisé si labels:true"                    gmail users labels create --json '{}'
+# La pose/retrait de libellé tombe dans « labels » : autorisée par labels:true
+# SANS ouvrir update (update reste false ici) — c'est ce qui fait marcher
+# gmail_labels_modify avec la policy prudente par défaut.
+check 0 "gmail messages modify autorisé si labels:true (pose de libellé)"  gmail users messages modify --params '{"id":"x"}'
+check 0 "gmail messages batchModify autorisé si labels:true"              gmail users messages batchModify --json '{"ids":["x"]}'
+check 0 "gmail threads modify autorisé si labels:true"                    gmail users threads modify --params '{"id":"x"}'
+# Garde-fou libellé SYSTÈME (revue Codex PR #156, P1) : policy-check ne regarde
+# pas que la méthode. Un modify qui touche un libellé système est ré-escaladé
+# hors « labels » (TRASH/SPAM → delete, autre → update) — sinon un appel CLI
+# direct « addLabelIds:[TRASH] » corbeillerait sous labels:true, delete:false.
+check 4 "messages modify addLabelIds TRASH → delete, refusé (delete:false)"  gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["TRASH"]}'
+check 4 "messages modify addLabelIds SPAM → delete, refusé"                  gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["SPAM"]}'
+check 4 "messages modify removeLabelIds INBOX (archive) → update, refusé"    gmail users messages modify --params '{"id":"x"}' --json '{"removeLabelIds":["INBOX"]}'
+check 4 "messages batchModify addLabelIds TRASH → delete, refusé"           gmail users messages batchModify --json '{"ids":["x"],"addLabelIds":["TRASH"]}'
+check 0 "messages modify addLabelIds libellé UTILISATEUR → labels, autorisé" gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["Label_42"]}'
+# La distinction delete/update est cohérente avec la policy explicite.
+policy <<'EOF'
+{"gmail": {"read": true, "drafts": false, "send": false, "labels": true,
+           "update": true, "delete": false, "settings": false}}
+EOF
+check 4 "TRASH reste refusé même sous update:true (c'est un delete)"         gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["TRASH"]}'
+check 0 "removeLabelIds INBOX autorisé sous update:true (archive = update)"  gmail users messages modify --params '{"id":"x"}' --json '{"removeLabelIds":["INBOX"]}'
+policy <<'EOF'
+{"gmail": {"read": true, "drafts": false, "send": false, "labels": true,
+           "update": false, "delete": true, "settings": false}}
+EOF
+check 0 "addLabelIds TRASH autorisé sous delete:true (escaladé en delete)"   gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["TRASH"]}'
+# Retirer TRASH/SPAM = RESTAURATION (non destructif) → « update », pas « delete »
+# (P2 Codex #156) : update:true/delete:false autorise la restauration sans ouvrir delete.
+policy <<'EOF'
+{"gmail": {"read": true, "drafts": false, "send": false, "labels": true,
+           "update": true, "delete": false, "settings": false}}
+EOF
+check 0 "removeLabelIds TRASH (restauration) autorisé sous update:true/delete:false" gmail users messages modify --params '{"id":"x"}' --json '{"removeLabelIds":["TRASH"]}'
+check 4 "addLabelIds TRASH (corbeille) refusé sous update:true/delete:false"         gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["TRASH"]}'
+# Payload MIXTE (plusieurs classes dans le même modify) : refusé en bloc, même
+# sous une policy permissive. Un modèle à catégorie unique ne peut exiger toutes
+# les classes ; collapser laisserait labels:false passer via update/delete:true
+# (2ᵉ P1 revue Codex #156). La curation (gmail_labels_modify) n'émet jamais de
+# mixte — seul un appel CLI mixte fait main est refusé.
+policy <<'EOF'
+{"gmail": {"read": true, "drafts": false, "send": false, "labels": false,
+           "update": true, "delete": true, "settings": false}}
+EOF
+check 4 "mixte user+UNREAD refusé sous labels:false même si update:true"      gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["UNREAD","Label_42"]}'
+check 4 "mixte user+TRASH refusé sous labels:false même si delete:true"       gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["TRASH","Label_42"]}'
+policy <<'EOF'
+{"gmail": {"read": true, "drafts": false, "send": false, "labels": true,
+           "update": true, "delete": true, "settings": false}}
+EOF
+check 4 "mixte refusé même sous policy permissive (labels+update+delete true)" gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["UNREAD","Label_42"]}'
+check 0 "pur libellé utilisateur sous policy permissive reste autorisé"       gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["Label_42"]}'
 
 # --- 3. Garde-fous du wrapper mag ------------------------------------------
 
@@ -636,7 +693,7 @@ fi
 
 # MCP tools/list smoke (stdio JSON-RPC, une requête)
 MCP_OUT="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | python3 -m gateway 2>/dev/null | head -1)"
-if echo "$MCP_OUT" | python3 -c 'import json,sys; r=json.load(sys.stdin); names=[t["name"] for t in r["result"]["tools"]]; assert "gmail_list" in names and "gmail_draft_create" in names and "setup_status" in names; assert not any(t["name"]=="gmail_send" for t in r["result"]["tools"]); ar=[t for t in r["result"]["tools"] if t["name"]=="access_request"][0]; assert "add_account" in ar["inputSchema"]["properties"]["kind"]["enum"]; assert "project_grant" in ar["inputSchema"]["properties"]["kind"]["enum"]; dc=[t for t in r["result"]["tools"] if t["name"]=="drive_create"][0]; assert "content" in dc["inputSchema"]["properties"] and "text/markdown" in dc["inputSchema"]["properties"]["content_type"]["enum"]; assert all(n in names for n in ("drive_read","drive_copy","drive_upload","gmail_attachment_get","drive_update","drive_permissions_list","drive_permissions_create","drive_permissions_delete")); pc=[t for t in r["result"]["tools"] if t["name"]=="drive_permissions_create"][0]; assert "transfer_ownership" not in pc["inputSchema"]["properties"] and "owner" not in pc["inputSchema"]["properties"]["role"]["enum"]'; then
+if echo "$MCP_OUT" | python3 -c 'import json,sys; r=json.load(sys.stdin); names=[t["name"] for t in r["result"]["tools"]]; assert "gmail_list" in names and "gmail_draft_create" in names and "setup_status" in names; assert not any(t["name"]=="gmail_send" for t in r["result"]["tools"]); ar=[t for t in r["result"]["tools"] if t["name"]=="access_request"][0]; assert "add_account" in ar["inputSchema"]["properties"]["kind"]["enum"]; assert "project_grant" in ar["inputSchema"]["properties"]["kind"]["enum"]; dc=[t for t in r["result"]["tools"] if t["name"]=="drive_create"][0]; assert "content" in dc["inputSchema"]["properties"] and "text/markdown" in dc["inputSchema"]["properties"]["content_type"]["enum"]; assert all(n in names for n in ("drive_read","drive_copy","drive_upload","gmail_attachment_get","drive_update","drive_permissions_list","drive_permissions_create","drive_permissions_delete")); pc=[t for t in r["result"]["tools"] if t["name"]=="drive_permissions_create"][0]; assert "transfer_ownership" not in pc["inputSchema"]["properties"] and "owner" not in pc["inputSchema"]["properties"]["role"]["enum"]; assert "gmail_labels_modify" in names; lm=[t for t in r["result"]["tools"] if t["name"]=="gmail_labels_modify"][0]; assert all(k in lm["inputSchema"]["properties"] for k in ("add_labels","remove_labels","message_ids","thread_ids","create_missing")); assert not any(t["name"] in ("gmail_send","gmail_trash","gmail_delete","gmail_labels_delete") for t in r["result"]["tools"])'; then
   PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m MCP tools/list (Gmail+Drive+setup_status, pas de send)\n'
 else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m MCP tools/list\n'
@@ -804,6 +861,328 @@ then
   PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m paramètres de chemin + brouillon + propriétaire + contenu Drive\n'
 else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m arguments gws construits (fiche 0024)\n'
+fi
+
+section "Gateway — gmail_labels_modify : pose/retrait curaté, jamais destructif (fiche 20260929235257000)"
+if python3 - <<'PY'
+import json
+
+import gateway.api as api
+from gateway.errors import GatewayError
+
+CALLS = []
+# Compte simulé : un libellé UTILISATEUR existant, des libellés SYSTÈME, et un
+# libellé de type système au nom quelconque (piège : le nom ne trahit pas le type).
+LABELS_FIXTURE = {"labels": [
+    {"id": "Label_keep", "name": "gc/kept", "type": "user"},
+    {"id": "TRASH", "name": "TRASH", "type": "system"},
+    {"id": "INBOX", "name": "INBOX", "type": "system"},
+    {"id": "Label_lookalike", "name": "Facture", "type": "system"},
+]}
+
+
+def method_of(args):
+    return tuple(a for a in args[: next((i for i, a in enumerate(args)
+                                         if a.startswith("-")), len(args))])
+
+
+def fake_run(alias, args, timeout=60, **kw):
+    """Remplace l'aller-retour broker : on inspecte la commande gws construite."""
+    CALLS.append(list(args))
+    m = method_of(args)
+    if m == ("gmail", "users", "labels", "list"):
+        return json.loads(json.dumps(LABELS_FIXTURE))
+    if m == ("gmail", "users", "labels", "create"):
+        body = json.loads(args[args.index("--json") + 1])
+        if body["name"] == "gc/boom":  # création en échec simulée (quota / geste décliné)
+            raise GatewayError("quota dépassé (simulé)", code="exec")
+        # L'API crée un libellé UTILISATEUR ; id neuf.
+        return {"id": "Label_new_" + body["name"].replace("/", "_"),
+                "name": body["name"], "type": "user"}
+    if m == ("gmail", "users", "threads", "modify"):
+        params = json.loads(args[args.index("--params") + 1])
+        if params.get("id") == "t_bad":  # cible en faute simulée (P2)
+            raise GatewayError("thread introuvable (simulé)", code="exec")
+    return {}  # messages batchModify (204) / threads modify : pas de corps utile
+
+
+api._run = fake_run
+
+
+def assert_no_destructive():
+    """Invariant central : aucune commande émise n'est un envoi ni une
+    suppression, et aucun libellé SYSTÈME ne se glisse dans add/removeLabelIds."""
+    for args in CALLS:
+        low = tuple(x.lower() for x in method_of(args))
+        for bad in ("send", "trash", "delete", "batchdelete", "spam", "untrash"):
+            assert bad not in low, f"commande interdite émise : {method_of(args)}"
+        j = next((args[i + 1] for i, a in enumerate(args) if a == "--json"), None)
+        if not j:
+            continue
+        body = json.loads(j)
+        for key in ("addLabelIds", "removeLabelIds"):
+            for lid in body.get(key, []):
+                assert lid not in ("TRASH", "SPAM", "INBOX", "UNREAD", "IMPORTANT", "STARRED"), \
+                    f"libellé système {lid} dans {key}"
+
+
+alias = "testprof"
+
+# 1. POSE : libellé absent → créé (utilisateur) ; messages via UN batchModify.
+CALLS.clear()
+out = api.gmail_labels_modify(alias, add_labels=["gc/to-delete"], message_ids=["m1", "m2"])
+assert out["created_labels"] == ["gc/to-delete"], out
+lid = out["label_ids"]["gc/to-delete"]
+methods = [method_of(a) for a in CALLS]
+assert ("gmail", "users", "labels", "list") in methods, methods
+assert ("gmail", "users", "labels", "create") in methods, methods
+bm = next(a for a in CALLS if method_of(a) == ("gmail", "users", "messages", "batchModify"))
+assert json.loads(bm[bm.index("--params") + 1]) == {"userId": "me"}, bm
+bmj = json.loads(bm[bm.index("--json") + 1])
+assert bmj["ids"] == ["m1", "m2"], bmj
+assert bmj["addLabelIds"] == [lid] and "removeLabelIds" not in bmj, bmj
+assert_no_destructive()
+
+# 2. RETRAIT (réversibilité) : libellé EXISTANT (gc/kept), AUCUNE création.
+CALLS.clear()
+out = api.gmail_labels_modify(alias, remove_labels=["gc/kept"], message_ids=["m1"])
+assert out["created_labels"] == [], out
+assert not any(method_of(a) == ("gmail", "users", "labels", "create") for a in CALLS), CALLS
+bm = next(a for a in CALLS if method_of(a) == ("gmail", "users", "messages", "batchModify"))
+bmj = json.loads(bm[bm.index("--json") + 1])
+assert bmj["removeLabelIds"] == ["Label_keep"] and "addLabelIds" not in bmj, bmj
+assert_no_destructive()
+
+# 3. THREADS : un modify par thread, l'id de thread en --params.
+CALLS.clear()
+api.gmail_labels_modify(alias, add_labels=["gc/kept"], thread_ids=["t1", "t2"])
+tmods = [a for a in CALLS if method_of(a) == ("gmail", "users", "threads", "modify")]
+assert len(tmods) == 2, tmods
+tids = sorted(json.loads(a[a.index("--params") + 1])["id"] for a in tmods)
+assert tids == ["t1", "t2"], tids
+assert not any(method_of(a) == ("gmail", "users", "messages", "batchModify") for a in CALLS), \
+    "aucun batchModify sans message"
+assert_no_destructive()
+
+# 4. GARDE libellé système (nom) : refus AVANT tout appel, pose comme retrait.
+for bad in ("TRASH", "SPAM", "INBOX", "trash", "Category_promotions"):
+    CALLS.clear()
+    try:
+        api.gmail_labels_modify(alias, add_labels=[bad], message_ids=["m1"])
+        raise SystemExit(f"pose du libellé système {bad} aurait dû être refusée")
+    except GatewayError as e:
+        assert e.code == "error", e.code
+    assert CALLS == [], f"aucun appel ne doit partir pour {bad} (refus en amont), or {CALLS}"
+try:
+    api.gmail_labels_modify(alias, remove_labels=["TRASH"], message_ids=["m1"])
+    raise SystemExit("retrait de TRASH aurait dû être refusé")
+except GatewayError as e:
+    assert e.code == "error", e.code
+
+# 5. GARDE type système résolu : nom quelconque mais type=system → refus.
+CALLS.clear()
+try:
+    api.gmail_labels_modify(alias, add_labels=["Facture"], message_ids=["m1"])
+    raise SystemExit("un libellé de type système aurait dû être refusé")
+except GatewayError as e:
+    assert e.code == "error", e.code
+assert not any(method_of(a) == ("gmail", "users", "messages", "batchModify") for a in CALLS), \
+    "aucune pose ne doit partir quand un libellé résout vers un type système"
+
+# 6. Refus de forme : cible vide, libellés vides, chevauchement, absents.
+def refuse(kwargs, code):
+    try:
+        api.gmail_labels_modify(alias, **kwargs)
+        raise SystemExit(f"aurait dû refuser : {kwargs}")
+    except GatewayError as e:
+        assert e.code == code, (e.code, kwargs)
+
+refuse({"add_labels": ["gc/x"]}, "error")                                   # pas de cible
+refuse({"message_ids": ["m1"]}, "error")                                    # pas de libellé
+refuse({"add_labels": ["gc/x"], "remove_labels": ["gc/x"], "message_ids": ["m1"]}, "error")  # chevauchement
+refuse({"add_labels": ["gc/new"], "message_ids": ["m1"], "create_missing": False}, "not_found")
+refuse({"remove_labels": ["gc/inexistant"], "message_ids": ["m1"]}, "not_found")
+# Bornes des listes qui se déploient (P2 Codex #156) : thread_ids et libellés
+# add/remove plafonnés (sinon fan-out illimité → serveur stdio monopolisé + N gestes).
+refuse({"add_labels": ["gc/x"], "thread_ids": ["t%d" % i for i in range(101)]}, "error")
+refuse({"add_labels": ["gc/l%d" % i for i in range(51)], "message_ids": ["m1"]}, "error")
+refuse({"remove_labels": ["gc/l%d" % i for i in range(51)], "message_ids": ["m1"]}, "error")
+# Éléments non-chaînes refusés au bord (le dispatch MCP ne valide pas le schéma,
+# maxItems/types indicatifs) : str(None) ne doit pas devenir le libellé « None »
+# créé puis appliqué (P2 Codex #156).
+refuse({"add_labels": [None], "message_ids": ["m1"]}, "error")
+refuse({"add_labels": ["gc/x"], "message_ids": [123]}, "error")
+refuse({"remove_labels": [{"x": 1}], "message_ids": ["m1"]}, "error")
+
+# 7. Pas de mutation partielle (P1→P2 Codex #156) : validation COMPLÈTE avant
+# toute création. Un add d'un libellé absent + un remove d'un inexistant dans le
+# même appel → refus SANS avoir émis le moindre labels create.
+CALLS.clear()
+try:
+    api.gmail_labels_modify(alias, add_labels=["gc/new"], remove_labels=["gc/inexistant"], message_ids=["m1"])
+    raise SystemExit("add(absent)+remove(inexistant) aurait dû refuser")
+except GatewayError as e:
+    assert e.code == "not_found", e.code
+assert not any(method_of(a) == ("gmail", "users", "labels", "create") for a in CALLS), \
+    f"aucun labels create avant validation complète, or {[method_of(a) for a in CALLS]}"
+assert all(method_of(a) == ("gmail", "users", "labels", "list") for a in CALLS), \
+    f"seul labels list (lecture) est permis à ce stade, or {[method_of(a) for a in CALLS]}"
+
+# Idem avec un add valide-à-créer suivi d'un add de TYPE système : refus avant
+# création (le type ne se voit qu'après labels list, mais avant tout create).
+CALLS.clear()
+try:
+    api.gmail_labels_modify(alias, add_labels=["gc/new", "Facture"], message_ids=["m1"])
+    raise SystemExit("add(créable)+add(type système) aurait dû refuser")
+except GatewayError as e:
+    assert e.code == "error", e.code
+assert not any(method_of(a) == ("gmail", "users", "labels", "create") for a in CALLS), \
+    f"aucun create avant validation du type, or {[method_of(a) for a in CALLS]}"
+
+# 8. Résultat PARTIEL (P2 Codex #156) : message OK + thread en faute → ok:false,
+# le message reste signalé modifié, le thread va dans failures ; la modif du
+# message a bien eu lieu (batchModify émis) — pas masquée par l'échec du thread.
+CALLS.clear()
+out = api.gmail_labels_modify(alias, add_labels=["gc/kept"], message_ids=["m1"],
+                             thread_ids=["t_ok", "t_bad"])
+assert out["ok"] is False, out
+assert out["messages_modified"] == ["m1"], out
+assert out["threads_modified"] == ["t_ok"], out
+assert len(out["failures"]) == 1, out["failures"]
+assert out["failures"][0]["kind"] == "thread" and out["failures"][0]["id"] == "t_bad", out["failures"]
+assert any(method_of(a) == ("gmail", "users", "messages", "batchModify") for a in CALLS), \
+    "le message doit avoir été modifié malgré l'échec du thread suivant"
+assert_no_destructive()
+
+# 8b. TOUTES les cibles échouent → added/removed vides (rien appliqué), ok:false
+# — pas d'annonce de pose qui n'a pas eu lieu (P2 Codex #156).
+CALLS.clear()
+out = api.gmail_labels_modify(alias, add_labels=["gc/kept"], thread_ids=["t_bad"])
+assert out["ok"] is False, out
+assert out["threads_modified"] == [] and out["messages_modified"] == [], out
+assert out["added"] == [] and out["removed"] == [], out
+assert len(out["failures"]) == 1 and out["failures"][0]["id"] == "t_bad", out["failures"]
+assert_no_destructive()
+
+# 9. Tout réussit → ok:true, failures vide, cibles listées, added reflète l'appliqué.
+CALLS.clear()
+out = api.gmail_labels_modify(alias, add_labels=["gc/kept"], message_ids=["m1"], thread_ids=["t_ok"])
+assert out["ok"] is True and out["failures"] == [], out
+assert out["messages_modified"] == ["m1"] and out["threads_modified"] == ["t_ok"], out
+assert out["added"] == ["gc/kept"] and out["removed"] == [], out
+assert_no_destructive()
+
+# 10. Création PARTIELLE (P2 Codex #156) : deux libellés absents, la 2ᵉ création
+# échoue → ok:false, created_labels expose le 1ᵉ (effet de bord réel), failures
+# porte l'échec, AUCUNE cible touchée (jeu de libellés incomplet).
+CALLS.clear()
+out = api.gmail_labels_modify(alias, add_labels=["gc/a", "gc/boom"], message_ids=["m1"])
+assert out["ok"] is False, out
+assert out["created_labels"] == ["gc/a"], out
+assert out["messages_modified"] == [] and out["threads_modified"] == [], out
+assert out["added"] == [] and out["removed"] == [], out  # rien appliqué
+assert len(out["failures"]) == 1 and out["failures"][0]["kind"] == "label_create", out["failures"]
+assert out["failures"][0]["name"] == "gc/boom", out["failures"]
+assert not any(method_of(a) == ("gmail", "users", "messages", "batchModify") for a in CALLS), \
+    "aucune cible ne doit être touchée si une création a échoué (jeu incomplet)"
+assert_no_destructive()
+
+# 11. Échec de la SEULE/1ᵉ création (rien créé) → lève proprement (pas de
+# résultat partiel vide, cohérent avec un échec sans effet de bord).
+CALLS.clear()
+try:
+    api.gmail_labels_modify(alias, add_labels=["gc/boom"], message_ids=["m1"])
+    raise SystemExit("échec de la seule création aurait dû lever")
+except GatewayError as e:
+    assert e.code == "exec", e.code
+
+# 12. Dépendance gmail.read nommée UNIQUEMENT pour un VRAI refus de policy
+# (broker code="policy") — P2 Codex #156.
+def deny_list_policy(alias, args, timeout=60, **kw):
+    if method_of(args) == ("gmail", "users", "labels", "list"):
+        raise GatewayError("gmail read denied by policy", code="policy")
+    return {}
+api._run = deny_list_policy
+try:
+    api.gmail_labels_modify(alias, add_labels=["gc/x"], message_ids=["m1"])
+    raise SystemExit("un refus policy de labels.list aurait dû remonter")
+except GatewayError as e:
+    assert e.code == "policy" and "gmail.read" in str(e), (e.code, str(e))
+
+# Tout AUTRE échec de labels.list remonte TEL QUEL, sans conseil read trompeur :
+# creds révoquées / timeout / gws absent (code="exec"), verrou, auth broker —
+# sinon on masque la cause actionnable (revue Codex #156, P2).
+for _code, _msg in (("exec", "binaire gws introuvable"), ("locked", "profil verrouillé"),
+                    ("auth", "token broker invalide")):
+    def deny_list(alias, args, timeout=60, _c=_code, _m=_msg, **kw):
+        if method_of(args) == ("gmail", "users", "labels", "list"):
+            raise GatewayError(_m, code=_c)
+        return {}
+    api._run = deny_list
+    try:
+        api.gmail_labels_modify(alias, add_labels=["gc/x"], message_ids=["m1"])
+        raise SystemExit("échec %s de labels.list aurait dû remonter" % _code)
+    except GatewayError as e:
+        assert e.code == _code, (e.code, _code)
+        assert "gmail.read" not in str(e), "cause %s réécrite à tort en conseil read : %s" % (_code, e)
+api._run = fake_run
+
+print("ok")
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m gmail_labels_modify : pose/retrait curaté, libellés système refusés, zéro op destructive\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m gmail_labels_modify (fiche 20260929235257000)\n'
+fi
+
+section "Gateway — gmail labels : gate transactionnel + reçu signé accordés (Codex #156)"
+if python3 - <<'PY'
+import gateway.api as api
+from gateway.categorize import consequential_args
+
+
+def gate_cat(json_body, method="modify", resource="messages", params='{"id":"x"}'):
+    # _classify_operation renvoie (op_class, resource, op_label, service, category)
+    args = ["gmail", "users", resource, method, "--params", params, "--json", json_body]
+    return api._classify_operation(args)[4]
+
+
+# Le gate transactionnel applique le MÊME override que policy-check : un modify
+# touchant un libellé système n'est pas signé « labels » mais delete/update —
+# sinon le cap SIGNÉ ne couvrirait pas ce que le broker exige, et un acte pourtant
+# approuvé + autorisé serait refusé (P2 Codex #156).
+assert gate_cat('{"addLabelIds":["TRASH"]}') == "delete", "TRASH → delete au gate"
+assert gate_cat('{"addLabelIds":["SPAM"]}') == "delete", "SPAM → delete"
+assert gate_cat('{"removeLabelIds":["INBOX"]}') == "update", "INBOX (archive) → update"
+assert gate_cat('{"addLabelIds":["Label_42"]}') == "labels", "libellé utilisateur → labels"
+assert gate_cat('{"ids":["m"],"addLabelIds":["TRASH"]}', method="batchModify") == "delete"
+assert gate_cat('{"addLabelIds":["Label_42"]}', resource="threads") == "labels"
+# Retrait de TRASH/SPAM = restauration (non destructif) → « update », pas « delete »
+# (P2 Codex #156) : pose et retrait sont distingués.
+assert gate_cat('{"removeLabelIds":["TRASH"]}') == "update", "retrait TRASH = restauration → update"
+assert gate_cat('{"removeLabelIds":["SPAM"]}') == "update", "retrait SPAM → update"
+assert gate_cat('{"addLabelIds":["TRASH"]}') == "delete", "pose TRASH reste delete"
+
+# Le NOM du libellé créé est lié au reçu signé : deux créations distinctes
+# produisent des arguments conséquents DIFFÉRENTS (P2 Codex #156).
+def bind_create(name):
+    return consequential_args(
+        "gmail", ["users", "labels"], "create",
+        ["gmail", "users", "labels", "create",
+         "--params", '{"userId":"me"}', "--json", '{"name":"%s"}' % name],
+    )
+
+b1 = bind_create("gc/to-delete")
+b2 = bind_create("gc/kept")
+assert b1 == {"name": "gc/to-delete"}, b1
+assert b2 == {"name": "gc/kept"}, b2
+assert b1 != b2, "deux noms de libellé doivent signer différemment"
+print("ok")
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m gmail labels : gate classe comme policy-check + nom du libellé lié au reçu signé\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m gmail labels : gate transactionnel / reçu signé (Codex #156)\n'
 fi
 
 section "Gateway — lire / copier / téléverser / pièces jointes (fiche 0043)"

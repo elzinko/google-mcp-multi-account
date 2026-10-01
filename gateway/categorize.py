@@ -69,6 +69,21 @@ def categorize(service: str, resources: list[str], raw_method: str) -> str | Non
             return "drafts"
         if "labels" in res and m not in READ_METHODS:
             return "labels"
+        # Poser/retirer un libellé passe par « messages/threads modify »
+        # (et « messages batchModify »). Le corps de ces appels est UNIQUEMENT
+        # {addLabelIds, removeLabelIds} (ModifyMessageRequest) : ils ne font que
+        # gérer des libellés. On les classe donc « labels » — comme la gestion
+        # des définitions de libellés — et non « update » générique. La
+        # pose/retrait devient autorisable par gmail.labels (déjà true par
+        # défaut, default_policy) sans ouvrir gmail.update. La ressource
+        # opérante reste "" (messages modify est exclu d'_OPERAND_PARAM à
+        # dessein : add ET remove = opérande ambigu → fail-closed pour une
+        # capacité scopée ; une capacité gmail:labels non scopée matche).
+        # Un modify touchant un libellé SYSTÈME (TRASH/SPAM/INBOX…) est
+        # ré-escaladé hors « labels » par `gmail_labels_override` (appelé par
+        # policy-check ET l'audit) — sinon on corbeillerait sous labels:true.
+        if res and res[-1] in ("messages", "threads") and m in ("modify", "batchmodify"):
+            return "labels"
         if m in ("triage", "watch"):
             return "read"
 
@@ -255,6 +270,95 @@ def drive_files_trash_override(
     return operation
 
 
+# Libellés système Gmail (pour ces libellés, l'id EST le nom). Les toucher via
+# un « messages/threads modify » n'est PAS de la curation de libellé
+# utilisateur : TRASH/SPAM déplacent le message, les autres changent un état
+# système (INBOX=archive au retrait, UNREAD, IMPORTANT, catégories…).
+_GMAIL_SYSTEM_LABEL_IDS = frozenset({
+    "INBOX", "SPAM", "TRASH", "UNREAD", "STARRED", "IMPORTANT",
+    "SENT", "DRAFT", "CHAT",
+    "CATEGORY_PERSONAL", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS",
+    "CATEGORY_UPDATES", "CATEGORY_FORUMS",
+})
+# Libellés système DESTRUCTIFS : poser TRASH corbeille, poser SPAM classe en
+# spam — à traiter comme « delete » (refusé sous delete:false).
+_GMAIL_DESTRUCTIVE_LABEL_IDS = frozenset({"TRASH", "SPAM"})
+# Sentinelle de refus pour un payload MIXTE (plusieurs classes de policy dans le
+# même modify) : aucune policy n'a cette clé, donc `svc_pol.get(...)` est False
+# → refus (fail-closed). Voir `gmail_labels_override`.
+_GMAIL_MIXED_LABEL_SENTINEL = "labels_system_mixed"
+
+
+def gmail_labels_override(
+    resources: list[str], raw_method: str, operation: str, args: list[str],
+) -> str:
+    """Reclasse un « gmail messages/threads modify|batchModify » selon les
+    LIBELLÉS touchés (corps --json), pour que l'AUTORISATION
+    (`scripts/policy-check.py`) ET l'AUDIT (`gateway.usage.infer_call`) voient
+    la vraie conséquence — pas juste « labels ». Sans ce garde, `messages
+    modify --json {"addLabelIds":["TRASH"]}` passerait sous `gmail.labels:true`
+    et corbeillerait le message, contournant `delete:false` (P1, revue Codex
+    PR #156) : policy-check ne regarde pas les ids de libellés.
+
+    Chaque libellé touché requiert une classe de policy :
+      - libellé UTILISATEUR → « labels » ;
+      - TRASH/SPAM (corbeille/spam) → « delete » ;
+      - tout autre libellé système (INBOX=archive au retrait, UNREAD…) → « update ».
+
+    Une seule classe touchée → cette catégorie. PLUSIEURS classes dans le même
+    appel (ex. un libellé utilisateur + UNREAD) → refus (sentinelle qu'aucune
+    policy n'accorde) : un modèle de policy à catégorie unique ne peut pas
+    exiger toutes les classes à la fois, et collapser vers une seule laisserait
+    une classe désactivée (labels:false) passer via une autre activée
+    (update/delete:true) — 2ᵉ P1 revue Codex PR #156. La curation n'émet jamais
+    de payload mixte (`gmail_labels_modify` refuse les libellés système) ; seul
+    un appel CLI mixte fait main est refusé (à scinder en appels par classe).
+
+    Même patron que `drive_files_trash_override` (fiche 0037) : une
+    reclassification qui dépend du CORPS, partagée par les deux consommateurs.
+    N'agit que si `operation == "labels"` (ce que rend `categorize` pour ces
+    modify) — sinon renvoie l'opération telle quelle."""
+    if operation != "labels":
+        return operation
+    res = [r.lower() for r in resources]
+    if not (res and res[-1] in ("messages", "threads")
+            and norm(raw_method) in ("modify", "batchmodify")):
+        return operation
+    body = parse_json_flag(args, "--json")
+    classes: set[str] = set()
+    # POSE (addLabelIds) : poser TRASH/SPAM est destructif → « delete » ; autre
+    # libellé système → « update » ; libellé utilisateur → « labels ».
+    add = body.get("addLabelIds")
+    for x in add if isinstance(add, list) else []:
+        if not x:
+            continue
+        lid = str(x).upper()
+        if lid in _GMAIL_DESTRUCTIVE_LABEL_IDS:
+            classes.add("delete")
+        elif lid in _GMAIL_SYSTEM_LABEL_IDS:
+            classes.add("update")
+        else:
+            classes.add("labels")
+    # RETRAIT (removeLabelIds) : retirer un libellé système est une RESTAURATION
+    # ou un changement de méta (retirer TRASH/SPAM = restaurer, retirer INBOX =
+    # etc.) — jamais destructif → « update » (revue Codex #156, P2). Libellé
+    # utilisateur → « labels ».
+    rem = body.get("removeLabelIds")
+    for x in rem if isinstance(rem, list) else []:
+        if not x:
+            continue
+        lid = str(x).upper()
+        if lid in _GMAIL_SYSTEM_LABEL_IDS:
+            classes.add("update")
+        else:
+            classes.add("labels")
+    if not classes:
+        return operation
+    if len(classes) == 1:
+        return next(iter(classes))
+    return _GMAIL_MIXED_LABEL_SENTINEL
+
+
 # ---------------------------------------------------------------------------
 # Arguments CONSÉQUENTS liés au reçu signé (ADR-0012, Zone 3)
 #
@@ -339,6 +443,46 @@ def consequential_args(
 
     if service == "gmail" and "drafts" in res and method in ("create", "update"):
         return _gmail_message_headers(args)
+
+    # Pose/retrait de libellé (« messages/threads modify », « batchModify ») :
+    # lier QUI (ids) reçoit QUOI (libellés ajoutés/retirés) au reçu signé, sinon
+    # deux poses différentes (gc/to-delete vs gc/kept) signeraient pareil
+    # (même classe de défaut que Codex #149 P2). Listes triées = canonique.
+    if service == "gmail" and res and res[-1] in ("messages", "threads") \
+            and method in ("modify", "batchmodify"):
+        params = parse_json_flag(args, "--params")
+        body = parse_json_flag(args, "--json")
+        out: dict = {}
+        single = params.get("id")
+        ids = body.get("ids")
+        if single:
+            out["ids"] = [str(single)]
+        elif isinstance(ids, list) and ids:
+            out["ids"] = sorted(str(i) for i in ids if i)
+        add = body.get("addLabelIds")
+        rem = body.get("removeLabelIds")
+        if isinstance(add, list) and add:
+            out["addLabelIds"] = sorted(str(x) for x in add if x)
+        if isinstance(rem, list) and rem:
+            out["removeLabelIds"] = sorted(str(x) for x in rem if x)
+        return out
+
+    # Définition de libellé (« gmail labels create/update/patch ») : lier le NOM
+    # (et l'id en update) au reçu signé, sinon créer « gc/to-delete » et créer un
+    # autre libellé signeraient à l'identique — l'humain ne saurait pas quel nom
+    # il approuve (revue Codex PR #156, P2). `name` vient du corps --json, `id`
+    # du chemin --params.
+    if service == "gmail" and res and res[-1] == "labels" \
+            and method in ("create", "update", "patch"):
+        params = parse_json_flag(args, "--params")
+        body = parse_json_flag(args, "--json")
+        out = {}
+        lid = params.get("id")
+        if lid:
+            out["id"] = str(lid)
+        if isinstance(body, dict) and body.get("name"):
+            out["name"] = str(body.get("name"))
+        return out
 
     if service == "drive" and "permissions" in res:
         params = parse_json_flag(args, "--params")

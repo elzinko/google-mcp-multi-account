@@ -151,6 +151,66 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "gmail_labels_modify",
+        "description": (
+            "Pose et/ou retire des LIBELLÉS Gmail sur des messages et/ou des "
+            "threads (curaté, réversible). Crée le libellé s'il manque "
+            "(create_missing, défaut). N'agit QUE sur des libellés UTILISATEUR "
+            "(ex. « gc/to-delete ») — refuse tout libellé système (TRASH, SPAM, "
+            "INBOX…). N'ENVOIE jamais de mail et ne SUPPRIME jamais (ni corbeille "
+            "ni archive). Pour annuler : rappeler avec remove_labels. Renvoie "
+            "messages_modified / threads_modified (cibles réellement modifiées), "
+            "added / removed (libellés réellement appliqués — vides si aucune "
+            "cible modifiée), created_labels (libellés créés), et failures "
+            "(échecs par cible — résultat partiel possible, ok=false si ≥1 échec). "
+            "Soumis à la policy (catégorie gmail.labels), aux verrous et à "
+            "l'élicitation. Nécessite AUSSI gmail.read : les noms de libellés "
+            "sont résolus via labels.list (lecture)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "alias": {"type": "string", "description": "Profil mag (ex. perso)"},
+                "add_labels": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 50,
+                    "description": (
+                        "Noms de libellés à POSER (créés en libellé utilisateur "
+                        "s'ils manquent et create_missing). Jamais de libellé système. "
+                        "Max 50."
+                    ),
+                },
+                "remove_labels": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 50,
+                    "description": "Noms de libellés à RETIRER (annulation). Doivent exister. Max 50.",
+                },
+                "message_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 1000,
+                    "description": "Ids de messages Gmail à modifier (batchModify, un lot). Max 1000.",
+                },
+                "thread_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 100,
+                    "description": "Ids de threads Gmail à modifier (un modify par thread). Max 100.",
+                },
+                "create_missing": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Créer un libellé de add_labels s'il n'existe pas (utilisateur).",
+                },
+                "session": _SESSION_PROPERTY,
+            },
+            "required": ["alias", "session"],
+            "additionalProperties": False,
+        },
+    },
+    {
         "name": "drive_list",
         "description": (
             "Liste des fichiers Drive (lecture). Filtre optionnel parent / query. "
@@ -592,6 +652,17 @@ DISPATCH: dict[str, Callable] = {
         subject=kw["subject"],
         body=kw.get("body") or "",
         cc=kw.get("cc") or "",
+        session=kw.get("session") or "",
+    ),
+    "gmail_labels_modify": lambda **kw: api.gmail_labels_modify(
+        alias=kw["alias"],
+        add_labels=kw.get("add_labels") or [],
+        remove_labels=kw.get("remove_labels") or [],
+        message_ids=kw.get("message_ids") or [],
+        thread_ids=kw.get("thread_ids") or [],
+        # Valeur BRUTE (pas de `or True` : bool("false")==True et un « False »
+        # explicite ne doit pas redevenir True) — l'api rejette tout non-booléen.
+        create_missing=kw.get("create_missing", True),
         session=kw.get("session") or "",
     ),
     "drive_list": lambda **kw: api.drive_list(

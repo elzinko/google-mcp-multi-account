@@ -22,7 +22,13 @@ from .config import (
     upload_roots,
     upload_spool,
 )
-from .categorize import categorize, consequential_args, norm_service, operand_resource
+from .categorize import (
+    categorize,
+    consequential_args,
+    gmail_labels_override,
+    norm_service,
+    operand_resource,
+)
 from .context import get_git_root
 from .elicitation import ElicitationError, run_elicitation_gate
 from .errors import GatewayError
@@ -132,6 +138,13 @@ def _classify_operation(gws_args: list[str]) -> tuple[str, str, str, str, str | 
         return "mutation", "", service, service, None
     resources, raw_method = pos[:-1], pos[-1]
     category = categorize(service, resources, raw_method)
+    # Même reclassification dépendante du CORPS que policy-check (revue Codex
+    # #156, P2) : un « gmail messages/threads modify » touchant un libellé
+    # système est delete/update, pas labels. Sans ça, le cap SIGNÉ porterait
+    # « labels » alors que policy-check exige « delete »/« update » → l'acte
+    # approuvé serait refusé au broker (cap porté ne couvrant pas la vraie
+    # catégorie). Le gate et le vérificateur doivent s'accorder.
+    category = gmail_labels_override(resources, raw_method, category, gws_args)
     resource = operand_resource(service, resources, raw_method, gws_args)
     op_class = "lecture" if category == "read" else "mutation"
     op_label = ":".join([service, *resources, raw_method])
@@ -479,6 +492,340 @@ def gmail_create_draft(
         session=session,
     )
     return {"ok": True, "alias": alias, "result": data}
+
+
+# Libellés système Gmail : leur pose/retrait a des effets hors « curation ».
+# `TRASH`/`SPAM` sont destructifs (poser TRASH = corbeiller), `INBOX` archive,
+# etc. gmail_labels_modify les REFUSE — il n'agit que sur des libellés
+# utilisateur. Denylist appliquée AVANT tout appel (défense en profondeur), en
+# plus du contrôle du `type` renvoyé par labels.list.
+_GMAIL_SYSTEM_LABELS = frozenset({
+    "INBOX", "SPAM", "TRASH", "UNREAD", "STARRED", "IMPORTANT",
+    "SENT", "DRAFT", "CHAT",
+})
+_GMAIL_SYSTEM_PREFIXES = ("CATEGORY_",)
+# Bornes défensives sur les listes qui se DÉPLOIENT (chacune → un ou des `_run`,
+# donc un geste transactionnel) : sans elles, une grosse requête MCP
+# monopoliserait le serveur stdio mono-thread et multiplierait les popups
+# (revue Codex #156, P2). messages = 1 seul batchModify (limite d'API 1000) ;
+# threads = un `_run` par thread ; libellés = résolution/création par libellé.
+_GMAIL_BATCH_MAX = 1000
+_GMAIL_THREADS_MAX = 100
+_GMAIL_LABELS_MAX = 50
+
+
+def _clean_str_list(x: Any, field: str, max_len: int) -> list[str]:
+    """Liste de chaînes non vides, dédoublonnée (ordre préservé), VALIDÉE au bord
+    de l'API. Le dispatch MCP ne valide pas l'inputSchema — `maxItems` et les
+    types n'y sont qu'indicatifs —, donc on contrôle ici (revue Codex #156, P2) :
+
+    - borne la longueur BRUTE d'abord : une liste démesurée est rejetée AVANT tout
+      travail (pas de blocage du serveur stdio mono-thread sur une liste géante) ;
+    - refuse tout élément non-chaîne : sinon `str(None)` deviendrait le libellé
+      « None », créé puis appliqué (au lieu d'une erreur d'entrée) ;
+    - déduplique via un set (O(n) — pas de `in list` quadratique).
+
+    Tolère un scalaire (une chaîne seule) au bord de l'API."""
+    if x is None:
+        return []
+    if isinstance(x, str):
+        x = [x]
+    if not isinstance(x, list):
+        raise GatewayError(f"{field} doit être une liste de chaînes", code="error")
+    if len(x) > max_len:
+        raise GatewayError(
+            f"{field} : trop d'éléments ({len(x)} > {max_len}) — découper en "
+            f"plusieurs appels",
+            code="error",
+        )
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in x:
+        if not isinstance(item, str):
+            raise GatewayError(
+                f"{field} : chaque élément doit être une chaîne "
+                f"(reçu {type(item).__name__})",
+                code="error",
+            )
+        s = item.strip()
+        if s and s not in seen:
+            seen.add(s)
+            out.append(s)
+    return out
+
+
+def _is_system_label_name(name: str) -> bool:
+    """Un nom qui désigne (ou imite) un libellé système Gmail — refusé d'emblée."""
+    up = name.strip().upper()
+    if up in _GMAIL_SYSTEM_LABELS:
+        return True
+    return any(up.startswith(p) for p in _GMAIL_SYSTEM_PREFIXES)
+
+
+def gmail_labels_modify(
+    alias: str,
+    add_labels: Optional[list[str]] = None,
+    remove_labels: Optional[list[str]] = None,
+    message_ids: Optional[list[str]] = None,
+    thread_ids: Optional[list[str]] = None,
+    create_missing: bool = True,
+    session: str = "",
+) -> dict[str, Any]:
+    """Pose et/ou retire des libellés UTILISATEUR sur des messages/threads Gmail.
+
+    Curaté et réversible : retirer annule poser. N'ENVOIE jamais de mail et ne
+    SUPPRIME jamais rien. N'agit QUE sur des libellés `user` (ex. « gc/to-delete »)
+    et refuse tout libellé système (TRASH, SPAM, INBOX…) — car dans Gmail, poser
+    TRASH revient à corbeiller. Les seules commandes gws émises sont : labels
+    list/create (résolution nom → id, création si absent), messages batchModify
+    (un lot), threads modify (un par thread). Jamais trash/delete/batchDelete/send.
+
+    Passe par `_run` comme toute écriture : policy, verrous et élicitation
+    s'appliquent ; l'opération tombe dans la catégorie `labels` (cf.
+    gateway.categorize), autorisée par gmail.labels. Un refus remonte à l'humain.
+    """
+    validate_alias(alias)
+    if not isinstance(create_missing, bool):
+        raise GatewayError("create_missing doit être un booléen (true/false)", code="error")
+    # Longueur bornée + éléments validés chaînes dès le bord (cf. _clean_str_list).
+    adds = _clean_str_list(add_labels, "add_labels", _GMAIL_LABELS_MAX)
+    removes = _clean_str_list(remove_labels, "remove_labels", _GMAIL_LABELS_MAX)
+    msg_ids = _clean_str_list(message_ids, "message_ids", _GMAIL_BATCH_MAX)
+    thr_ids = _clean_str_list(thread_ids, "thread_ids", _GMAIL_THREADS_MAX)
+
+    if not adds and not removes:
+        raise GatewayError(
+            "au moins un libellé dans add_labels ou remove_labels est requis",
+            code="error",
+        )
+    if not msg_ids and not thr_ids:
+        raise GatewayError(
+            "au moins un message_id ou thread_id est requis", code="error",
+        )
+    overlap = sorted(set(adds) & set(removes))
+    if overlap:
+        raise GatewayError(
+            f"libellé(s) à la fois en pose et en retrait : {', '.join(overlap)} "
+            f"— contradictoire",
+            code="error",
+        )
+    # Garde 1 (AVANT tout appel) : jamais un libellé système, ni en pose ni en
+    # retrait. Empêche de corbeiller/archiver via cet outil, même en cas d'état
+    # de compte inattendu.
+    for name in (*adds, *removes):
+        if _is_system_label_name(name):
+            raise GatewayError(
+                f"libellé système « {name} » interdit — gmail_labels_modify ne "
+                f"pose/retire que des libellés utilisateur (jamais TRASH, SPAM, "
+                f"INBOX…) ; il ne corbeille et n'archive jamais",
+                code="error",
+            )
+
+    # Résolution nom → id via labels list (lecture). gws renvoie
+    # {"labels": [{"id", "name", "type"}, …]}. labels.list est catégorisé
+    # « read » : cet outil a donc besoin de gmail.read EN PLUS de gmail.labels
+    # (dépendance explicite — revue Codex #156, P2). Si le refus vient de la
+    # policy (pas d'un verrou/session, qui remontent tels quels), on nomme la
+    # dépendance pour qu'une policy « labels seulement » comprenne le manque.
+    try:
+        listing = _run(
+            alias,
+            ["gmail", "users", "labels", "list", "--params", json.dumps({"userId": "me"})],
+            session=session,
+        )
+    except GatewayError as e:
+        # N'ajouter le conseil gmail.read QUE pour un vrai refus de policy
+        # (broker code="policy"). Tout autre échec de labels.list — creds OAuth
+        # révoquées, timeout Gmail, binaire gws absent (code="exec"), verrou,
+        # session… — remonte TEL QUEL : le réécrire en « activer gmail.read »
+        # masquerait la cause actionnable et enverrait vers une policy peut-être
+        # déjà correcte (revue Codex #156, P2).
+        if e.code != "policy":
+            raise
+        raise GatewayError(
+            "gmail_labels_modify doit lister les libellés pour résoudre leurs "
+            "noms (labels.list = catégorie gmail.read) : activer gmail.read EN "
+            f"PLUS de gmail.labels. Refus policy : {e}",
+            code=e.code,
+        ) from e
+    labels = listing.get("labels") if isinstance(listing, dict) else None
+    by_name: dict[str, dict] = {}
+    if isinstance(labels, list):
+        for lab in labels:
+            if isinstance(lab, dict) and lab.get("name"):
+                by_name[str(lab["name"])] = lab
+
+    def _existing_user_id(name: str) -> Optional[str]:
+        """Id d'un libellé EXISTANT et de type utilisateur, ou None si absent.
+        Garde 2 : un nom qui résout vers un libellé système est refusé."""
+        lab = by_name.get(name)
+        if lab is None:
+            return None
+        if str(lab.get("type") or "user").lower() != "user":
+            raise GatewayError(
+                f"« {name} » est un libellé système — refusé (utilisateur seulement)",
+                code="error",
+            )
+        lid = str(lab.get("id") or "")
+        if not lid:
+            raise GatewayError(f"libellé « {name} » sans id exploitable", code="exec")
+        return lid
+
+    # Résolution/validation en DEUX temps (revue Codex PR #156, P2) : d'abord
+    # TOUT valider en lecture seule — existence et type utilisateur de chaque
+    # add ET remove, plus create_missing pour les absents —, ENSUITE seulement
+    # créer les libellés manquants. Sinon un add créait un libellé puis un
+    # remove inexistant (ou un add de type système) échouait APRÈS, laissant
+    # une mutation partielle derrière. L'outil ne supprimant jamais un libellé,
+    # on ne peut pas « défaire » une création : la validation en amont EST la
+    # barrière.
+    label_ids: dict[str, str] = {}
+    to_create: list[str] = []
+    for name in adds:
+        lid = _existing_user_id(name)  # lève si le nom résout vers un type système
+        if lid is None:
+            if not create_missing:
+                raise GatewayError(
+                    f"libellé « {name} » introuvable et create_missing=false",
+                    code="not_found",
+                )
+            to_create.append(name)
+        else:
+            label_ids[name] = lid
+
+    remove_ids: list[str] = []
+    for name in removes:
+        lid = _existing_user_id(name)  # lève si type système
+        if lid is None:
+            # Retrait d'un libellé absent = rien à annuler : refus explicite
+            # (jamais de création en retrait).
+            raise GatewayError(
+                f"libellé « {name} » introuvable — rien à retirer", code="not_found",
+            )
+        label_ids[name] = lid
+        remove_ids.append(lid)
+
+    # Tout est validé → créer les libellés manquants (PREMIÈRE mutation). Si une
+    # création échoue APRÈS qu'une autre a réussi (geste décliné, quota Gmail…),
+    # on n'applique PAS un jeu de libellés incomplet et on EXPOSE les libellés
+    # déjà créés (effet de bord réel) plutôt que de tout jeter (revue Codex #156,
+    # P2). Rien de créé encore → l'échec remonte proprement (aucun effet de bord).
+    created: list[str] = []
+    create_failure: dict[str, Any] | None = None
+    for name in to_create:
+        try:
+            made = _run(
+                alias,
+                ["gmail", "users", "labels", "create",
+                 "--params", json.dumps({"userId": "me"}),
+                 "--json", json.dumps({"name": name})],
+                session=session,
+            )
+        except GatewayError as e:
+            if not created:
+                raise  # aucun libellé créé → échec propre (exception d'origine)
+            create_failure = {"kind": "label_create", "name": name, "code": e.code, "error": str(e)}
+            break
+        lid = str(made.get("id") or "") if isinstance(made, dict) else ""
+        if not lid:
+            if not created:
+                raise GatewayError(
+                    f"création du libellé « {name} » sans id renvoyé", code="exec",
+                )
+            create_failure = {
+                "kind": "label_create", "name": name, "code": "exec",
+                "error": "création sans id renvoyé",
+            }
+            break
+        label_ids[name] = lid
+        created.append(name)
+
+    if create_failure is not None:
+        # Jeu de libellés incomplet : ne toucher aucune cible, exposer le partiel.
+        # `added`/`removed` = libellés RÉELLEMENT appliqués → vides ici (aucune
+        # cible touchée), pour ne pas faire croire à une pose réussie (revue
+        # Codex #156, P2). `created_labels` dit ce qui a été créé (défini).
+        return {
+            "ok": False,
+            "alias": alias,
+            "added": [],
+            "removed": [],
+            "created_labels": created,
+            "label_ids": label_ids,
+            "messages_modified": [],
+            "threads_modified": [],
+            "failures": [create_failure],
+        }
+
+    add_ids: list[str] = [label_ids[name] for name in adds]
+
+    body_labels: dict[str, Any] = {}
+    if add_ids:
+        body_labels["addLabelIds"] = add_ids
+    if remove_ids:
+        body_labels["removeLabelIds"] = remove_ids
+
+    # Application par cible, avec résultat PARTIEL explicite (revue Codex #156,
+    # P2) : une cible déjà étiquetée ne doit pas être masquée par l'échec d'une
+    # cible suivante (ex. message valide, puis thread au mauvais id). On applique
+    # chaque unité, on collecte succès ET échecs, et `ok` reflète l'absence
+    # d'échec. La validation ayant tout vérifié en amont, un échec ici vise une
+    # cible réellement en faute (id inexistant) ou un acte décliné sur une cible
+    # précise (geste refusé en mode manuel) — journalisé par cible plutôt que de
+    # lever et perdre ce qui a déjà réussi. Un refus AVANT exécution (profil
+    # verrouillé, policy) lève pourtant encore : il tombe au 1ᵉ `_run` (labels
+    # list, phase lecture), avant toute application — rien n'est alors étiqueté.
+    messages_modified: list[str] = []
+    threads_modified: list[str] = []
+    failures: list[dict[str, Any]] = []
+
+    # Messages : un seul batchModify (atomique pour le lot ; un geste le couvre).
+    if msg_ids:
+        try:
+            _run(
+                alias,
+                ["gmail", "users", "messages", "batchModify",
+                 "--params", json.dumps({"userId": "me"}),
+                 "--json", json.dumps({"ids": msg_ids, **body_labels})],
+                session=session,
+            )
+            messages_modified = list(msg_ids)
+        except GatewayError as e:
+            failures.append(
+                {"kind": "messages", "ids": list(msg_ids), "code": e.code, "error": str(e)}
+            )
+    # Threads : l'API n'a pas de batchModify → un modify par thread.
+    for tid in thr_ids:
+        try:
+            _run(
+                alias,
+                ["gmail", "users", "threads", "modify",
+                 "--params", json.dumps({"userId": "me", "id": tid}),
+                 "--json", json.dumps(body_labels)],
+                session=session,
+            )
+            threads_modified.append(tid)
+        except GatewayError as e:
+            failures.append(
+                {"kind": "thread", "id": tid, "code": e.code, "error": str(e)}
+            )
+
+    # `added`/`removed` = libellés RÉELLEMENT appliqués : si aucune cible n'a été
+    # modifiée (toutes en échec), les laisser vides plutôt que d'annoncer une pose
+    # qui n'a pas eu lieu (revue Codex #156, P2). `created_labels` reste exposé
+    # (libellés définis), quel que soit le sort des cibles.
+    applied = bool(messages_modified or threads_modified)
+    return {
+        "ok": not failures,
+        "alias": alias,
+        "added": adds if applied else [],
+        "removed": removes if applied else [],
+        "created_labels": created,
+        "label_ids": label_ids,
+        "messages_modified": messages_modified,
+        "threads_modified": threads_modified,
+        "failures": failures,
+    }
 
 
 def _ownership(f: Any) -> dict[str, Any]:
