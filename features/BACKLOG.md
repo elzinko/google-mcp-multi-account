@@ -1,7 +1,7 @@
 # Backlog — mega-city
 
 > Index auto-généré (`regen-backlog.sh` mega-city, via `/ezk-backlog regen`) — **ne pas éditer à la main**. Source de vérité = le front-matter de chaque fiche.
-> Guide du dossier : [README.md](README.md). Statuts : 💡 idea · 🔵 ready · 🟠 in-progress · ⛔ blocked · ✅ shipped · 🗑️ superseded.
+> Guide du dossier : [README.md](README.md). Statuts : 💡 idea · 🔵 ready · 🟠 in-progress · ✅ shipped · 🗑️ superseded · 🔀 merged · 🧩 split.
 
 > 📋 Séquence décidée (curée, hors index) : [PLAN.md](PLAN.md).
 
@@ -113,6 +113,7 @@
 | [0108](0108-session-demande-sous-ensemble-droits-compte.md) | Session — demander un sous-ensemble des droits du compte (accès fin, vérifiable par session) | feature | P1 |  | 0082 | google-mcp-multi-account | 💡 idea |  |
 | [0035](0035-admin-acces-rapide-et-visu-zones.md) | Accès rapide à l'admin + visualisation des zones (icône barre de menus ?) | feature | P2 |  |  |  | 💡 idea |  |
 | [20260922221816747](20260922221816747_popup-swift-deux-boutons-portee.md) | Popup Touch ID à deux boutons « Une fois / Pour la session » (ergonomie du geste) | feature | P2 |  | 0082 | google-multi-account | 💡 idea |  |
+| [20260930214101550](20260930214101550_spike-msgvault-lecture-gmail.md) | Spike — évaluer msgvault comme source de lecture Gmail multi-comptes | chore | P2 |  |  | google-mcp-multi-account | 💡 idea |  |
 | [0003](0003-vault-credentials-hors-perimetre-agent.md) | Vault credentials hors périmètre agent (Phase 2.1) | feature | P3 |  |  |  | 💡 idea |  |
 | [0006](0006-harnais-test-manuel-hybride.md) | Harnais hybride pour les tests manuels — script pour la mécanique, LLM pour la glu | feature | P3 |  |  |  | 💡 idea |  |
 | [0018](0018-cross-platform-hors-macos.md) | Cross-platform — faire tourner le projet hors macOS (Linux, Intel) | feature | P3 |  | 0017 |  | 💡 idea |  |
