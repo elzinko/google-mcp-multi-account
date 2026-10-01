@@ -225,6 +225,7 @@ def _normalize_grant_scope(raw: str) -> str:
 
 def _transactional_gate(
     alias: str, gws_args: list[str], sid: str, grant_scope: str = "once",
+    act: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     """Point de contrôle unique du consentement transactionnel (ADR-0011/0012,
     raffiné ADR-0013), appelé par `_run` quand `transactional_enabled()`. Rend
@@ -253,6 +254,16 @@ def _transactional_gate(
     email = profile_email(alias)
     mode = transactional_lease_mode()
     scope = _normalize_grant_scope(grant_scope)
+
+    # ADR-0014 — acte de CURATION DE LIBELLÉS (gmail_labels_modify : plusieurs
+    # appels broker de catégories read/labels, UN seul consentement humain).
+    # `act` (interne, jamais exposé au schéma MCP) mémorise que l'acte est
+    # consenti ; un même geste couvre la lecture de résolution (read) ET les
+    # écritures (labels). Garde fail-closed : SEULS les sous-appels gmail de
+    # catégorie read/labels sont routés ici — tout le reste (y compris un modify
+    # re-classé delete/update par un libellé système) retombe sur le gate normal.
+    if act is not None and service == "gmail" and category in ("read", "labels"):
+        return _gmail_label_act_gate(alias, sid, email, mode, scope, service, category, act)
 
     # (2) Garde-fou partage EN PREMIER : seul le mode manuel connaît la grâce
     # « pour la session », et seule une catégorie whitelistée y est éligible.
@@ -329,6 +340,74 @@ def _transactional_gate(
     return _consented_cap(service, category)
 
 
+def _gmail_label_act_gate(
+    alias: str, sid: str, email: str, mode: str, scope: str,
+    service: str, category: str, act: dict[str, Any],
+) -> dict[str, str]:
+    """Consentement UNIQUE d'un acte de curation de libellés (ADR-0014).
+
+    Un acte `gmail_labels_modify` = plusieurs appels broker de catégories
+    différentes : `read` (labels.list, résolution des noms) et `labels` (création
+    + messages/threads modify). Les gater un par un demanderait plusieurs Touch
+    ID pour UN acte. On consent donc UNE fois ici, puis chaque appel de l'acte
+    est autorisé sous ce consentement — le broker re-vérifie chacun par son
+    `consented_cap` (Zone 1, inchangé).
+
+    En `manuel` + `session`, on écrit UNE grâce account-scoped `(gmail, labels,
+    "")` : le périmètre d'une curation EST la boîte, borné par la policy
+    `gmail.labels` et le garde-fou « jamais de libellé système » (api +
+    categorize). Cette grâce couvre AUSSI la lecture de résolution de l'acte
+    (sous-grant lié à l'acte) — on ne persiste JAMAIS de grâce `gmail:read`
+    large. Un acte suivant dans la session ne redemande alors aucun geste.
+
+    Jamais d'envoi, de suppression ni de partage : l'appelant
+    (`_transactional_gate`) ne route ici que les catégories gmail read/labels ;
+    un modify touchant un libellé système est re-classé delete/update par
+    `categorize` AVANT ce point, donc jamais autorisé par le cap `labels`."""
+    grace_eligible = (mode == "manuel" and not _is_delegated_session(sid))
+    # Hors éligibilité (auto, sous-session déléguée), « session » n'écrit aucune
+    # grâce : normaliser à « once » pour que le reçu Touch ID ne promette pas ce
+    # qui n'aura pas lieu (même honnêteté que le gate principal, Codex #150 P2).
+    if scope == "session" and not grace_eligible:
+        scope = "once"
+    # Déjà consenti dans CET acte (un sous-appel précédent a passé le geste ou
+    # trouvé la grâce) → autoriser ce sous-appel sans nouveau geste.
+    if act.get("granted"):
+        return _consented_cap(service, category)
+    # Grâce « pour la session » déjà posée sur la curation de cette boîte →
+    # aucun geste. Couvre aussi la lecture de résolution (read) de l'acte.
+    if grace_eligible and session_has_capability(sid, alias, "gmail", "labels", ""):
+        act["granted"] = True
+        return _consented_cap(service, category)
+    # Sinon : UN geste signé pour l'acte ENTIER (la curation est une mutation →
+    # geste en auto comme en manuel). Le prompt nomme l'acte, les libellés et la
+    # portée (bound_args = résumé fourni par gmail_labels_modify).
+    try:
+        run_elicitation_gate(
+            {
+                "action": "transactional_mutation:gmail:users:labels:modify",
+                "alias": alias,
+                "email": email,
+                "target": "",
+                "session_id": sid,
+                "bound_args": act.get("summary") or {},
+                "grant_scope": scope,
+            }
+        )
+    except ElicitationError as e:
+        raise GatewayError(f"acte refusé — {e}", code="locked") from e
+    act["granted"] = True
+    # « Pour la session » : écrire la grâce account-scoped. Filet (garde (b)
+    # ADR-0013 lot 6) : un échec d'écriture ne fait JAMAIS échouer un acte déjà
+    # approuvé (Touch ID consommé) — on retombe silencieusement sur « une fois ».
+    if grace_eligible and scope == "session":
+        try:
+            session_grant_capability_session_lived(sid, alias, "gmail", "labels", "")
+        except GatewayError:
+            pass
+    return _consented_cap(service, category)
+
+
 def _run(
     alias: str,
     gws_args: list[str],
@@ -336,6 +415,7 @@ def _run(
     raw_output: bool = False,
     session: str = "",
     grant_scope: str = "once",
+    act: dict[str, Any] | None = None,
 ) -> Any:
     """Exécute un appel gws via le broker, autorisé par le jeton PORTÉ par cet appel.
 
@@ -349,6 +429,12 @@ def _run(
     gate transactionnel — jamais un argument métier par outil (lot 5 câble sa
     source réelle, l'admin/Swift ; ici le défaut `once` préserve bit pour bit
     le comportement des appelants qui ne le passent pas encore).
+
+    `act` (ADR-0014) : objet d'acte PARTAGÉ entre les plusieurs appels broker
+    d'UN acte de curation de libellés (`gmail_labels_modify`). INTERNE — jamais
+    exposé au schéma MCP. Porté à travers chaque sous-appel, il permet au gate
+    de ne demander qu'UN seul geste pour l'acte entier (voir
+    `_gmail_label_act_gate`). `None` (défaut) = acte simple, un geste par appel.
     """
     sid = (session or "").strip()
     gro = get_git_root() or git_toplevel()
@@ -384,7 +470,7 @@ def _run(
             # ADR-0011/0012 : le modèle transactionnel REMPLACE la fenêtre minutes.
             # Le gate route lecture/mutation (bail ou acte signé) indépendamment
             # de .locked, et produit la capacité consentie portée au broker (Zone 1).
-            consented_cap = _transactional_gate(alias, gws_args, sid, grant_scope=grant_scope)
+            consented_cap = _transactional_gate(alias, gws_args, sid, grant_scope=grant_scope, act=act)
         elif is_locked(d) and not is_session_unlocked(sid, alias):
             raise GatewayError(
                 (
@@ -578,6 +664,7 @@ def gmail_labels_modify(
     thread_ids: Optional[list[str]] = None,
     create_missing: bool = True,
     session: str = "",
+    grant_scope: str = "once",
 ) -> dict[str, Any]:
     """Pose et/ou retire des libellés UTILISATEUR sur des messages/threads Gmail.
 
@@ -591,6 +678,13 @@ def gmail_labels_modify(
     Passe par `_run` comme toute écriture : policy, verrous et élicitation
     s'appliquent ; l'opération tombe dans la catégorie `labels` (cf.
     gateway.categorize), autorisée par gmail.labels. Un refus remonte à l'humain.
+
+    Consentement transactionnel (ADR-0014) : un acte = plusieurs appels broker
+    (labels list/create, messages batchModify, threads modify) de deux
+    catégories (`read` pour résoudre les noms, `labels` pour écrire). On porte un
+    objet d'acte à travers chaque sous-appel pour ne demander qu'UN geste pour
+    l'acte entier (résolution comprise). `grant_scope=session` étend le
+    consentement « pour la session » (grâce account-scoped `gmail:labels`).
     """
     validate_alias(alias)
     if not isinstance(create_missing, bool):
@@ -629,17 +723,38 @@ def gmail_labels_modify(
                 code="error",
             )
 
+    # ADR-0014 : UN acte = UN consentement. On porte un objet d'acte (interne,
+    # jamais exposé au schéma MCP) à travers CHAQUE sous-appel `_run`. Le gate
+    # transactionnel ne demande alors qu'UN geste pour l'acte, puis autorise la
+    # résolution (read) et les écritures (labels) sous ce consentement.
+    # `grant_scope=session` l'étend « pour la session ». Le résumé nourrit le
+    # prompt Touch ID (quels libellés, combien de cibles).
+    act_summary: dict[str, Any] = {}
+    if adds:
+        act_summary["add"] = sorted(adds)
+    if removes:
+        act_summary["remove"] = sorted(removes)
+    if msg_ids:
+        act_summary["messages"] = len(msg_ids)
+    if thr_ids:
+        act_summary["threads"] = len(thr_ids)
+    act: dict[str, Any] = {"granted": False, "summary": act_summary}
+
     # Résolution nom → id via labels list (lecture). gws renvoie
     # {"labels": [{"id", "name", "type"}, …]}. labels.list est catégorisé
     # « read » : cet outil a donc besoin de gmail.read EN PLUS de gmail.labels
-    # (dépendance explicite — revue Codex #156, P2). Si le refus vient de la
-    # policy (pas d'un verrou/session, qui remontent tels quels), on nomme la
-    # dépendance pour qu'une policy « labels seulement » comprenne le manque.
+    # (dépendance explicite — revue Codex #156, P2). En transactionnel, cette
+    # lecture est couverte par le consentement de l'acte (ADR-0014), via `act`.
+    # Si le refus vient de la policy COMPTE (pas d'un verrou/session, qui
+    # remontent tels quels), on nomme la dépendance pour qu'une policy « labels
+    # seulement » comprenne le manque.
     try:
         listing = _run(
             alias,
             ["gmail", "users", "labels", "list", "--params", json.dumps({"userId": "me"})],
             session=session,
+            grant_scope=grant_scope,
+            act=act,
         )
     except GatewayError as e:
         # N'ajouter le conseil gmail.read QUE pour un vrai refus de policy
@@ -728,6 +843,8 @@ def gmail_labels_modify(
                  "--params", json.dumps({"userId": "me"}),
                  "--json", json.dumps({"name": name})],
                 session=session,
+                grant_scope=grant_scope,
+                act=act,
             )
         except GatewayError as e:
             if not created:
@@ -796,6 +913,8 @@ def gmail_labels_modify(
                  "--params", json.dumps({"userId": "me"}),
                  "--json", json.dumps({"ids": msg_ids, **body_labels})],
                 session=session,
+                grant_scope=grant_scope,
+                act=act,
             )
             messages_modified = list(msg_ids)
         except GatewayError as e:
@@ -811,6 +930,8 @@ def gmail_labels_modify(
                  "--params", json.dumps({"userId": "me", "id": tid}),
                  "--json", json.dumps(body_labels)],
                 session=session,
+                grant_scope=grant_scope,
+                act=act,
             )
             threads_modified.append(tid)
         except GatewayError as e:

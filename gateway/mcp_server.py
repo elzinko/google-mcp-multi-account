@@ -165,7 +165,10 @@ TOOLS: list[dict[str, Any]] = [
             "(échecs par cible — résultat partiel possible, ok=false si ≥1 échec). "
             "Soumis à la policy (catégorie gmail.labels), aux verrous et à "
             "l'élicitation. Nécessite AUSSI gmail.read : les noms de libellés "
-            "sont résolus via labels.list (lecture)."
+            "sont résolus via labels.list (lecture). En consentement "
+            "transactionnel, UN seul geste couvre tout l'acte — la lecture de "
+            "résolution comprise ; « grant_scope=session » l'étend « pour la "
+            "session » (les actes suivants ne redemandent plus de geste)."
         ),
         "inputSchema": {
             "type": "object",
@@ -205,6 +208,7 @@ TOOLS: list[dict[str, Any]] = [
                     "description": "Créer un libellé de add_labels s'il n'existe pas (utilisateur).",
                 },
                 "session": _SESSION_PROPERTY,
+                "grant_scope": _GRANT_SCOPE_PROPERTY,
             },
             "required": ["alias", "session"],
             "additionalProperties": False,
@@ -664,6 +668,7 @@ DISPATCH: dict[str, Callable] = {
         # explicite ne doit pas redevenir True) — l'api rejette tout non-booléen.
         create_missing=kw.get("create_missing", True),
         session=kw.get("session") or "",
+        grant_scope=kw.get("grant_scope") or "once",
     ),
     "drive_list": lambda **kw: api.drive_list(
         alias=kw["alias"],

@@ -104,6 +104,7 @@ nav:
           - ADR-0011 · Consentement transactionnel par session: adr/ADR-0011-consentement-transactionnel-par-session.md
           - ADR-0012 · Consentement transactionnel — propagation: adr/ADR-0012-consentement-transactionnel-propagation.md
           - ADR-0013 · Consentement « une fois / pour la session »: adr/ADR-0013-consentement-une-fois-ou-session.md
+          - ADR-0014 · gmail_labels_modify dans le transactionnel: adr/ADR-0014-gmail-labels-modify-transactionnel.md
   - Contribuer:
       - Comment contribuer: contribuer.md
       - Validation des PR: PR_VALIDATION.md
