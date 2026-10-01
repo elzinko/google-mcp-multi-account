@@ -1054,11 +1054,22 @@ assert any(method_of(a) == ("gmail", "users", "messages", "batchModify") for a i
     "le message doit avoir été modifié malgré l'échec du thread suivant"
 assert_no_destructive()
 
-# 9. Tout réussit → ok:true, failures vide, cibles listées.
+# 8b. TOUTES les cibles échouent → added/removed vides (rien appliqué), ok:false
+# — pas d'annonce de pose qui n'a pas eu lieu (P2 Codex #156).
+CALLS.clear()
+out = api.gmail_labels_modify(alias, add_labels=["gc/kept"], thread_ids=["t_bad"])
+assert out["ok"] is False, out
+assert out["threads_modified"] == [] and out["messages_modified"] == [], out
+assert out["added"] == [] and out["removed"] == [], out
+assert len(out["failures"]) == 1 and out["failures"][0]["id"] == "t_bad", out["failures"]
+assert_no_destructive()
+
+# 9. Tout réussit → ok:true, failures vide, cibles listées, added reflète l'appliqué.
 CALLS.clear()
 out = api.gmail_labels_modify(alias, add_labels=["gc/kept"], message_ids=["m1"], thread_ids=["t_ok"])
 assert out["ok"] is True and out["failures"] == [], out
 assert out["messages_modified"] == ["m1"] and out["threads_modified"] == ["t_ok"], out
+assert out["added"] == ["gc/kept"] and out["removed"] == [], out
 assert_no_destructive()
 
 # 10. Création PARTIELLE (P2 Codex #156) : deux libellés absents, la 2ᵉ création
@@ -1069,6 +1080,7 @@ out = api.gmail_labels_modify(alias, add_labels=["gc/a", "gc/boom"], message_ids
 assert out["ok"] is False, out
 assert out["created_labels"] == ["gc/a"], out
 assert out["messages_modified"] == [] and out["threads_modified"] == [], out
+assert out["added"] == [] and out["removed"] == [], out  # rien appliqué
 assert len(out["failures"]) == 1 and out["failures"][0]["kind"] == "label_create", out["failures"]
 assert out["failures"][0]["name"] == "gc/boom", out["failures"]
 assert not any(method_of(a) == ("gmail", "users", "messages", "batchModify") for a in CALLS), \

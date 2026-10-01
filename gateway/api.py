@@ -742,11 +742,14 @@ def gmail_labels_modify(
 
     if create_failure is not None:
         # Jeu de libellés incomplet : ne toucher aucune cible, exposer le partiel.
+        # `added`/`removed` = libellés RÉELLEMENT appliqués → vides ici (aucune
+        # cible touchée), pour ne pas faire croire à une pose réussie (revue
+        # Codex #156, P2). `created_labels` dit ce qui a été créé (défini).
         return {
             "ok": False,
             "alias": alias,
-            "added": adds,
-            "removed": removes,
+            "added": [],
+            "removed": [],
             "created_labels": created,
             "label_ids": label_ids,
             "messages_modified": [],
@@ -807,11 +810,16 @@ def gmail_labels_modify(
                 {"kind": "thread", "id": tid, "code": e.code, "error": str(e)}
             )
 
+    # `added`/`removed` = libellés RÉELLEMENT appliqués : si aucune cible n'a été
+    # modifiée (toutes en échec), les laisser vides plutôt que d'annoncer une pose
+    # qui n'a pas eu lieu (revue Codex #156, P2). `created_labels` reste exposé
+    # (libellés définis), quel que soit le sort des cibles.
+    applied = bool(messages_modified or threads_modified)
     return {
         "ok": not failures,
         "alias": alias,
-        "added": adds,
-        "removed": removes,
+        "added": adds if applied else [],
+        "removed": removes if applied else [],
         "created_labels": created,
         "label_ids": label_ids,
         "messages_modified": messages_modified,

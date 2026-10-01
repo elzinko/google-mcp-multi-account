@@ -74,8 +74,10 @@ précis échoue en fermé — comportement voulu.
   de `add_labels` (libellés `user`) si `create_missing`.
 - **Application** : messages via un seul `messages batchModify` (un geste couvre le
   lot) ; threads via `threads modify` (un par thread).
-- **Sortie JSON** : ids touchés + libellés posés / retirés / créés + table
-  nom → id.
+- **Sortie JSON** : `messages_modified`/`threads_modified` (cibles réellement
+  modifiées), `added`/`removed` (libellés réellement appliqués — **vides** si
+  aucune cible n'a été modifiée), `created_labels`, table nom → id, et
+  `failures` (échec par cible ; `ok=false` dès un échec).
 - Pas de `grant_scope` exposé : l'opérande d'un `messages modify` est vide
   (exclu de `_OPERAND_PARAM`), donc la grâce « pour la session » ne s'applique
   jamais — l'exposer mentirait, comme pour `gmail_draft_create`.
