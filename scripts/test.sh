@@ -360,6 +360,23 @@ policy <<'EOF'
            "update": false, "delete": true, "settings": false}}
 EOF
 check 0 "addLabelIds TRASH autorisé sous delete:true (escaladé en delete)"   gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["TRASH"]}'
+# Payload MIXTE (plusieurs classes dans le même modify) : refusé en bloc, même
+# sous une policy permissive. Un modèle à catégorie unique ne peut exiger toutes
+# les classes ; collapser laisserait labels:false passer via update/delete:true
+# (2ᵉ P1 revue Codex #156). La curation (gmail_labels_modify) n'émet jamais de
+# mixte — seul un appel CLI mixte fait main est refusé.
+policy <<'EOF'
+{"gmail": {"read": true, "drafts": false, "send": false, "labels": false,
+           "update": true, "delete": true, "settings": false}}
+EOF
+check 4 "mixte user+UNREAD refusé sous labels:false même si update:true"      gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["UNREAD","Label_42"]}'
+check 4 "mixte user+TRASH refusé sous labels:false même si delete:true"       gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["TRASH","Label_42"]}'
+policy <<'EOF'
+{"gmail": {"read": true, "drafts": false, "send": false, "labels": true,
+           "update": true, "delete": true, "settings": false}}
+EOF
+check 4 "mixte refusé même sous policy permissive (labels+update+delete true)" gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["UNREAD","Label_42"]}'
+check 0 "pur libellé utilisateur sous policy permissive reste autorisé"       gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["Label_42"]}'
 
 # --- 3. Garde-fous du wrapper mag ------------------------------------------
 
@@ -872,6 +889,10 @@ def fake_run(alias, args, timeout=60, **kw):
         # L'API crée un libellé UTILISATEUR ; id neuf.
         return {"id": "Label_new_" + body["name"].replace("/", "_"),
                 "name": body["name"], "type": "user"}
+    if m == ("gmail", "users", "threads", "modify"):
+        params = json.loads(args[args.index("--params") + 1])
+        if params.get("id") == "t_bad":  # cible en faute simulée (P2)
+            raise GatewayError("thread introuvable (simulé)", code="exec")
     return {}  # messages batchModify (204) / threads modify : pas de corps utile
 
 
@@ -996,6 +1017,28 @@ except GatewayError as e:
     assert e.code == "error", e.code
 assert not any(method_of(a) == ("gmail", "users", "labels", "create") for a in CALLS), \
     f"aucun create avant validation du type, or {[method_of(a) for a in CALLS]}"
+
+# 8. Résultat PARTIEL (P2 Codex #156) : message OK + thread en faute → ok:false,
+# le message reste signalé modifié, le thread va dans failures ; la modif du
+# message a bien eu lieu (batchModify émis) — pas masquée par l'échec du thread.
+CALLS.clear()
+out = api.gmail_labels_modify(alias, add_labels=["gc/kept"], message_ids=["m1"],
+                             thread_ids=["t_ok", "t_bad"])
+assert out["ok"] is False, out
+assert out["messages_modified"] == ["m1"], out
+assert out["threads_modified"] == ["t_ok"], out
+assert len(out["failures"]) == 1, out["failures"]
+assert out["failures"][0]["kind"] == "thread" and out["failures"][0]["id"] == "t_bad", out["failures"]
+assert any(method_of(a) == ("gmail", "users", "messages", "batchModify") for a in CALLS), \
+    "le message doit avoir été modifié malgré l'échec du thread suivant"
+assert_no_destructive()
+
+# 9. Tout réussit → ok:true, failures vide, cibles listées.
+CALLS.clear()
+out = api.gmail_labels_modify(alias, add_labels=["gc/kept"], message_ids=["m1"], thread_ids=["t_ok"])
+assert out["ok"] is True and out["failures"] == [], out
+assert out["messages_modified"] == ["m1"] and out["threads_modified"] == ["t_ok"], out
+assert_no_destructive()
 
 print("ok")
 PY

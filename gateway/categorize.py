@@ -283,23 +283,36 @@ _GMAIL_SYSTEM_LABEL_IDS = frozenset({
 # Libellés système DESTRUCTIFS : poser TRASH corbeille, poser SPAM classe en
 # spam — à traiter comme « delete » (refusé sous delete:false).
 _GMAIL_DESTRUCTIVE_LABEL_IDS = frozenset({"TRASH", "SPAM"})
+# Sentinelle de refus pour un payload MIXTE (plusieurs classes de policy dans le
+# même modify) : aucune policy n'a cette clé, donc `svc_pol.get(...)` est False
+# → refus (fail-closed). Voir `gmail_labels_override`.
+_GMAIL_MIXED_LABEL_SENTINEL = "labels_system_mixed"
 
 
 def gmail_labels_override(
     resources: list[str], raw_method: str, operation: str, args: list[str],
 ) -> str:
-    """Escalade la catégorie d'un « gmail messages/threads modify|batchModify »
-    selon les LIBELLÉS touchés (corps --json), pour que l'AUTORISATION
+    """Reclasse un « gmail messages/threads modify|batchModify » selon les
+    LIBELLÉS touchés (corps --json), pour que l'AUTORISATION
     (`scripts/policy-check.py`) ET l'AUDIT (`gateway.usage.infer_call`) voient
     la vraie conséquence — pas juste « labels ». Sans ce garde, `messages
     modify --json {"addLabelIds":["TRASH"]}` passerait sous `gmail.labels:true`
     et corbeillerait le message, contournant `delete:false` (P1, revue Codex
     PR #156) : policy-check ne regarde pas les ids de libellés.
 
-    Un libellé SYSTÈME sort de la curation :
-      - TRASH/SPAM → « delete » (refusé sous delete:false) ;
+    Chaque libellé touché requiert une classe de policy :
+      - libellé UTILISATEUR → « labels » ;
+      - TRASH/SPAM (corbeille/spam) → « delete » ;
       - tout autre libellé système (INBOX=archive au retrait, UNREAD…) → « update ».
-    Libellés UTILISATEUR uniquement → « labels » inchangé (l'op curatée voulue).
+
+    Une seule classe touchée → cette catégorie. PLUSIEURS classes dans le même
+    appel (ex. un libellé utilisateur + UNREAD) → refus (sentinelle qu'aucune
+    policy n'accorde) : un modèle de policy à catégorie unique ne peut pas
+    exiger toutes les classes à la fois, et collapser vers une seule laisserait
+    une classe désactivée (labels:false) passer via une autre activée
+    (update/delete:true) — 2ᵉ P1 revue Codex PR #156. La curation n'émet jamais
+    de payload mixte (`gmail_labels_modify` refuse les libellés système) ; seul
+    un appel CLI mixte fait main est refusé (à scinder en appels par classe).
 
     Même patron que `drive_files_trash_override` (fiche 0037) : une
     reclassification qui dépend du CORPS, partagée par les deux consommateurs.
@@ -312,17 +325,26 @@ def gmail_labels_override(
             and norm(raw_method) in ("modify", "batchmodify")):
         return operation
     body = parse_json_flag(args, "--json")
-    touched: list[str] = []
+    classes: set[str] = set()
     for key in ("addLabelIds", "removeLabelIds"):
         val = body.get(key)
-        if isinstance(val, list):
-            touched.extend(str(x).upper() for x in val if x)
-    sys_touched = [t for t in touched if t in _GMAIL_SYSTEM_LABEL_IDS]
-    if not sys_touched:
+        if not isinstance(val, list):
+            continue
+        for x in val:
+            if not x:
+                continue
+            lid = str(x).upper()
+            if lid in _GMAIL_DESTRUCTIVE_LABEL_IDS:
+                classes.add("delete")
+            elif lid in _GMAIL_SYSTEM_LABEL_IDS:
+                classes.add("update")
+            else:
+                classes.add("labels")
+    if not classes:
         return operation
-    if any(t in _GMAIL_DESTRUCTIVE_LABEL_IDS for t in sys_touched):
-        return "delete"
-    return "update"
+    if len(classes) == 1:
+        return next(iter(classes))
+    return _GMAIL_MIXED_LABEL_SENTINEL
 
 
 # ---------------------------------------------------------------------------

@@ -672,34 +672,61 @@ def gmail_labels_modify(
     if remove_ids:
         body_labels["removeLabelIds"] = remove_ids
 
-    # Messages : un seul batchModify (un geste transactionnel couvre le lot).
+    # Application par cible, avec résultat PARTIEL explicite (revue Codex #156,
+    # P2) : une cible déjà étiquetée ne doit pas être masquée par l'échec d'une
+    # cible suivante (ex. message valide, puis thread au mauvais id). On applique
+    # chaque unité, on collecte succès ET échecs, et `ok` reflète l'absence
+    # d'échec. La validation ayant tout vérifié en amont, un échec ici vise une
+    # cible réellement en faute (id inexistant) ou un acte décliné sur une cible
+    # précise (geste refusé en mode manuel) — journalisé par cible plutôt que de
+    # lever et perdre ce qui a déjà réussi. Un refus AVANT exécution (profil
+    # verrouillé, policy) lève pourtant encore : il tombe au 1ᵉ `_run` (labels
+    # list, phase lecture), avant toute application — rien n'est alors étiqueté.
+    messages_modified: list[str] = []
+    threads_modified: list[str] = []
+    failures: list[dict[str, Any]] = []
+
+    # Messages : un seul batchModify (atomique pour le lot ; un geste le couvre).
     if msg_ids:
-        _run(
-            alias,
-            ["gmail", "users", "messages", "batchModify",
-             "--params", json.dumps({"userId": "me"}),
-             "--json", json.dumps({"ids": msg_ids, **body_labels})],
-            session=session,
-        )
+        try:
+            _run(
+                alias,
+                ["gmail", "users", "messages", "batchModify",
+                 "--params", json.dumps({"userId": "me"}),
+                 "--json", json.dumps({"ids": msg_ids, **body_labels})],
+                session=session,
+            )
+            messages_modified = list(msg_ids)
+        except GatewayError as e:
+            failures.append(
+                {"kind": "messages", "ids": list(msg_ids), "code": e.code, "error": str(e)}
+            )
     # Threads : l'API n'a pas de batchModify → un modify par thread.
     for tid in thr_ids:
-        _run(
-            alias,
-            ["gmail", "users", "threads", "modify",
-             "--params", json.dumps({"userId": "me", "id": tid}),
-             "--json", json.dumps(body_labels)],
-            session=session,
-        )
+        try:
+            _run(
+                alias,
+                ["gmail", "users", "threads", "modify",
+                 "--params", json.dumps({"userId": "me", "id": tid}),
+                 "--json", json.dumps(body_labels)],
+                session=session,
+            )
+            threads_modified.append(tid)
+        except GatewayError as e:
+            failures.append(
+                {"kind": "thread", "id": tid, "code": e.code, "error": str(e)}
+            )
 
     return {
-        "ok": True,
+        "ok": not failures,
         "alias": alias,
         "added": adds,
         "removed": removes,
         "created_labels": created,
         "label_ids": label_ids,
-        "messages": msg_ids,
-        "threads": thr_ids,
+        "messages_modified": messages_modified,
+        "threads_modified": threads_modified,
+        "failures": failures,
     }
 
 

@@ -158,9 +158,12 @@ TOOLS: list[dict[str, Any]] = [
             "(create_missing, défaut). N'agit QUE sur des libellés UTILISATEUR "
             "(ex. « gc/to-delete ») — refuse tout libellé système (TRASH, SPAM, "
             "INBOX…). N'ENVOIE jamais de mail et ne SUPPRIME jamais (ni corbeille "
-            "ni archive). Pour annuler : rappeler avec remove_labels. Renvoie les "
-            "ids touchés + libellés posés / retirés / créés. Soumis à la policy "
-            "(catégorie gmail.labels), aux verrous et à l'élicitation."
+            "ni archive). Pour annuler : rappeler avec remove_labels. Renvoie "
+            "messages_modified / threads_modified (cibles réellement modifiées), "
+            "les libellés posés / retirés / créés, et failures (échecs par "
+            "cible — résultat partiel possible, ok=false si au moins un échec). "
+            "Soumis à la policy (catégorie gmail.labels), aux verrous et à "
+            "l'élicitation."
         ),
         "inputSchema": {
             "type": "object",
