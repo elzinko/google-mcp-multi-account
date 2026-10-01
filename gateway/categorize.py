@@ -455,6 +455,23 @@ def consequential_args(
             out["removeLabelIds"] = sorted(str(x) for x in rem if x)
         return out
 
+    # Définition de libellé (« gmail labels create/update/patch ») : lier le NOM
+    # (et l'id en update) au reçu signé, sinon créer « gc/to-delete » et créer un
+    # autre libellé signeraient à l'identique — l'humain ne saurait pas quel nom
+    # il approuve (revue Codex PR #156, P2). `name` vient du corps --json, `id`
+    # du chemin --params.
+    if service == "gmail" and res and res[-1] == "labels" \
+            and method in ("create", "update", "patch"):
+        params = parse_json_flag(args, "--params")
+        body = parse_json_flag(args, "--json")
+        out = {}
+        lid = params.get("id")
+        if lid:
+            out["id"] = str(lid)
+        if isinstance(body, dict) and body.get("name"):
+            out["name"] = str(body.get("name"))
+        return out
+
     if service == "drive" and "permissions" in res:
         params = parse_json_flag(args, "--params")
         req = parse_json_flag(args, "--json")

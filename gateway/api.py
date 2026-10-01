@@ -22,7 +22,13 @@ from .config import (
     upload_roots,
     upload_spool,
 )
-from .categorize import categorize, consequential_args, norm_service, operand_resource
+from .categorize import (
+    categorize,
+    consequential_args,
+    gmail_labels_override,
+    norm_service,
+    operand_resource,
+)
 from .context import get_git_root
 from .elicitation import ElicitationError, run_elicitation_gate
 from .errors import GatewayError
@@ -132,6 +138,13 @@ def _classify_operation(gws_args: list[str]) -> tuple[str, str, str, str, str | 
         return "mutation", "", service, service, None
     resources, raw_method = pos[:-1], pos[-1]
     category = categorize(service, resources, raw_method)
+    # Même reclassification dépendante du CORPS que policy-check (revue Codex
+    # #156, P2) : un « gmail messages/threads modify » touchant un libellé
+    # système est delete/update, pas labels. Sans ça, le cap SIGNÉ porterait
+    # « labels » alors que policy-check exige « delete »/« update » → l'acte
+    # approuvé serait refusé au broker (cap porté ne couvrant pas la vraie
+    # catégorie). Le gate et le vérificateur doivent s'accorder.
+    category = gmail_labels_override(resources, raw_method, category, gws_args)
     resource = operand_resource(service, resources, raw_method, gws_args)
     op_class = "lecture" if category == "read" else "mutation"
     op_label = ":".join([service, *resources, raw_method])

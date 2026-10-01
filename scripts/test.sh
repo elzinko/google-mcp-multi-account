@@ -1048,6 +1048,51 @@ else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m gmail_labels_modify (fiche 20260929235257000)\n'
 fi
 
+section "Gateway — gmail labels : gate transactionnel + reçu signé accordés (Codex #156)"
+if python3 - <<'PY'
+import gateway.api as api
+from gateway.categorize import consequential_args
+
+
+def gate_cat(json_body, method="modify", resource="messages", params='{"id":"x"}'):
+    # _classify_operation renvoie (op_class, resource, op_label, service, category)
+    args = ["gmail", "users", resource, method, "--params", params, "--json", json_body]
+    return api._classify_operation(args)[4]
+
+
+# Le gate transactionnel applique le MÊME override que policy-check : un modify
+# touchant un libellé système n'est pas signé « labels » mais delete/update —
+# sinon le cap SIGNÉ ne couvrirait pas ce que le broker exige, et un acte pourtant
+# approuvé + autorisé serait refusé (P2 Codex #156).
+assert gate_cat('{"addLabelIds":["TRASH"]}') == "delete", "TRASH → delete au gate"
+assert gate_cat('{"addLabelIds":["SPAM"]}') == "delete", "SPAM → delete"
+assert gate_cat('{"removeLabelIds":["INBOX"]}') == "update", "INBOX (archive) → update"
+assert gate_cat('{"addLabelIds":["Label_42"]}') == "labels", "libellé utilisateur → labels"
+assert gate_cat('{"ids":["m"],"addLabelIds":["TRASH"]}', method="batchModify") == "delete"
+assert gate_cat('{"addLabelIds":["Label_42"]}', resource="threads") == "labels"
+
+# Le NOM du libellé créé est lié au reçu signé : deux créations distinctes
+# produisent des arguments conséquents DIFFÉRENTS (P2 Codex #156).
+def bind_create(name):
+    return consequential_args(
+        "gmail", ["users", "labels"], "create",
+        ["gmail", "users", "labels", "create",
+         "--params", '{"userId":"me"}', "--json", '{"name":"%s"}' % name],
+    )
+
+b1 = bind_create("gc/to-delete")
+b2 = bind_create("gc/kept")
+assert b1 == {"name": "gc/to-delete"}, b1
+assert b2 == {"name": "gc/kept"}, b2
+assert b1 != b2, "deux noms de libellé doivent signer différemment"
+print("ok")
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m gmail labels : gate classe comme policy-check + nom du libellé lié au reçu signé\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m gmail labels : gate transactionnel / reçu signé (Codex #156)\n'
+fi
+
 section "Gateway — lire / copier / téléverser / pièces jointes (fiche 0043)"
 if python3 - <<'PY'
 import base64
