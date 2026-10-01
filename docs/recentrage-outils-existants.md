@@ -63,5 +63,5 @@ boîte vivante. Le « live » reste chez nous.
 
 **Pendant WhatsApp.** Même réflexe côté WhatsApp, mais la conclusion diffère : pas de produit
 aussi fini que msgvault. Le plus proche est un serveur MCP (pont → base locale → recherche).
-Spike dédié :
-[`features/20261001125109014_spike-whatsapp-archive-locale.md`](../features/20261001125109014_spike-whatsapp-archive-locale.md).
+Le spike dédié vit dans son vrai repo, `whatsapp-mcp` :
+`features/20261001125109014_spike-whatsapp-archive-locale.md`.
