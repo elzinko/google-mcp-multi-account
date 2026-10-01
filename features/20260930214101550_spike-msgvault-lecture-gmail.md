@@ -51,8 +51,13 @@ il livre une **décision**.
 - [ ] Son serveur MCP répond dans Claude à au moins **3 requêtes de consultation** réelles
       (recherche par expéditeur, par mot-clé, sur une période).
 - [ ] Décision écrite **go / no-go** « déléguer la lecture à msgvault ? », datée.
+- [ ] **Isolation par conversation préservée** : brancher msgvault ne doit pas contourner la
+      frontière de comptes propre à chaque conversation. Nos outils exigent une session et
+      isolent les droits par conversation ; msgvault est une archive **à plat** de tous les
+      comptes. Si la délégation expose des comptes hors de la conversation autorisée → **no-go**.
 - [ ] Limites notées : fraîcheur (retard archive vs live) et multi-comptes réel.
-- [ ] Si **go** : fiche(s) de suite créée(s) (retirer notre lecture, garder l'écriture).
+- [ ] Si **go** : fiche(s) de suite créée(s) — retirer seulement la **recherche / l'archive
+      historique**, **garder la lecture live** (`gmail_list` / `gmail_get`) et l'écriture.
       Si **no-go** : raison consignée dans [docs/recentrage-outils-existants.md](../docs/recentrage-outils-existants.md).
 
 ## Comment vérifier
