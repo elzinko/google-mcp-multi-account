@@ -6,9 +6,9 @@ priority: P2
 product: google-multi-account
 version:
 epic:
-status: idea
-ready:
-pr:
+status: shipped
+ready: 2026-10-01
+pr: "7d5904e"
 created: 2026-10-01
 ---
 
@@ -75,7 +75,11 @@ Deux directions — **à trancher au grooming** (la seconde touche un dépôt ti
 ## Comment vérifier
 
 ```bash
-# depuis la racine du repo
-bash <regen-backlog.sh> "$PWD" && git diff --quiet features/BACKLOG.md && echo "2e regen = no-op ✓"
-grep -c "❓" features/BACKLOG.md   # doit afficher 0
+# 1) aucun statut hors-schéma (le scan des front-matters doit être vide)
+for f in features/[0-9]*.md features/done/[0-9]*.md; do
+  s=$(sed -n 's/^status:[[:space:]]*//p' "$f" | sed 's/[[:space:]]*#.*//' | head -1)
+  case "$s" in idea|ready|in-progress|shipped|superseded|merged|split) ;; *) echo "$f: $s";; esac
+done
+# 2) regen idempotent : deux passes produisent le MÊME index
+cp features/BACKLOG.md /tmp/b1 && bash <regen-backlog.sh> "$PWD" >/dev/null && diff -q /tmp/b1 features/BACKLOG.md
 ```
