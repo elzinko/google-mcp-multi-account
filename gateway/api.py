@@ -514,17 +514,42 @@ _GMAIL_THREADS_MAX = 100
 _GMAIL_LABELS_MAX = 50
 
 
-def _clean_str_list(x: Optional[list[str]]) -> list[str]:
-    """Liste de chaînes non vides, dédoublonnée, ordre préservé. Tolère un
-    scalaire (une chaîne seule) au bord de l'API."""
+def _clean_str_list(x: Any, field: str, max_len: int) -> list[str]:
+    """Liste de chaînes non vides, dédoublonnée (ordre préservé), VALIDÉE au bord
+    de l'API. Le dispatch MCP ne valide pas l'inputSchema — `maxItems` et les
+    types n'y sont qu'indicatifs —, donc on contrôle ici (revue Codex #156, P2) :
+
+    - borne la longueur BRUTE d'abord : une liste démesurée est rejetée AVANT tout
+      travail (pas de blocage du serveur stdio mono-thread sur une liste géante) ;
+    - refuse tout élément non-chaîne : sinon `str(None)` deviendrait le libellé
+      « None », créé puis appliqué (au lieu d'une erreur d'entrée) ;
+    - déduplique via un set (O(n) — pas de `in list` quadratique).
+
+    Tolère un scalaire (une chaîne seule) au bord de l'API."""
     if x is None:
         return []
     if isinstance(x, str):
         x = [x]
+    if not isinstance(x, list):
+        raise GatewayError(f"{field} doit être une liste de chaînes", code="error")
+    if len(x) > max_len:
+        raise GatewayError(
+            f"{field} : trop d'éléments ({len(x)} > {max_len}) — découper en "
+            f"plusieurs appels",
+            code="error",
+        )
     out: list[str] = []
+    seen: set[str] = set()
     for item in x:
-        s = str(item).strip()
-        if s and s not in out:
+        if not isinstance(item, str):
+            raise GatewayError(
+                f"{field} : chaque élément doit être une chaîne "
+                f"(reçu {type(item).__name__})",
+                code="error",
+            )
+        s = item.strip()
+        if s and s not in seen:
+            seen.add(s)
             out.append(s)
     return out
 
@@ -562,10 +587,11 @@ def gmail_labels_modify(
     validate_alias(alias)
     if not isinstance(create_missing, bool):
         raise GatewayError("create_missing doit être un booléen (true/false)", code="error")
-    adds = _clean_str_list(add_labels)
-    removes = _clean_str_list(remove_labels)
-    msg_ids = _clean_str_list(message_ids)
-    thr_ids = _clean_str_list(thread_ids)
+    # Longueur bornée + éléments validés chaînes dès le bord (cf. _clean_str_list).
+    adds = _clean_str_list(add_labels, "add_labels", _GMAIL_LABELS_MAX)
+    removes = _clean_str_list(remove_labels, "remove_labels", _GMAIL_LABELS_MAX)
+    msg_ids = _clean_str_list(message_ids, "message_ids", _GMAIL_BATCH_MAX)
+    thr_ids = _clean_str_list(thread_ids, "thread_ids", _GMAIL_THREADS_MAX)
 
     if not adds and not removes:
         raise GatewayError(
@@ -581,23 +607,6 @@ def gmail_labels_modify(
         raise GatewayError(
             f"libellé(s) à la fois en pose et en retrait : {', '.join(overlap)} "
             f"— contradictoire",
-            code="error",
-        )
-    if len(msg_ids) > _GMAIL_BATCH_MAX:
-        raise GatewayError(
-            f"trop de message_ids ({len(msg_ids)} > {_GMAIL_BATCH_MAX}) — "
-            f"découper en plusieurs appels",
-            code="error",
-        )
-    if len(thr_ids) > _GMAIL_THREADS_MAX:
-        raise GatewayError(
-            f"trop de thread_ids ({len(thr_ids)} > {_GMAIL_THREADS_MAX}) — "
-            f"chaque thread est un appel distinct ; découper en plusieurs appels",
-            code="error",
-        )
-    if len(adds) > _GMAIL_LABELS_MAX or len(removes) > _GMAIL_LABELS_MAX:
-        raise GatewayError(
-            f"trop de libellés (max {_GMAIL_LABELS_MAX} par liste add/remove)",
             code="error",
         )
     # Garde 1 (AVANT tout appel) : jamais un libellé système, ni en pose ni en

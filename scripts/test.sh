@@ -1007,6 +1007,12 @@ refuse({"remove_labels": ["gc/inexistant"], "message_ids": ["m1"]}, "not_found")
 refuse({"add_labels": ["gc/x"], "thread_ids": ["t%d" % i for i in range(101)]}, "error")
 refuse({"add_labels": ["gc/l%d" % i for i in range(51)], "message_ids": ["m1"]}, "error")
 refuse({"remove_labels": ["gc/l%d" % i for i in range(51)], "message_ids": ["m1"]}, "error")
+# Éléments non-chaînes refusés au bord (le dispatch MCP ne valide pas le schéma,
+# maxItems/types indicatifs) : str(None) ne doit pas devenir le libellé « None »
+# créé puis appliqué (P2 Codex #156).
+refuse({"add_labels": [None], "message_ids": ["m1"]}, "error")
+refuse({"add_labels": ["gc/x"], "message_ids": [123]}, "error")
+refuse({"remove_labels": [{"x": 1}], "message_ids": ["m1"]}, "error")
 
 # 7. Pas de mutation partielle (P1→P2 Codex #156) : validation COMPLÈTE avant
 # toute création. Un add d'un libellé absent + un remove d'un inexistant dans le
