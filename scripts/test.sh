@@ -1185,6 +1185,41 @@ else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m gmail labels : gate transactionnel / reçu signé (Codex #156)\n'
 fi
 
+section "Gateway — drive corbeille : gate transactionnel accordé avec policy-check (fiche 0037)"
+if python3 - <<'PY'
+import gateway.api as api
+
+
+def gate_cat(json_body, method="update", resource="files"):
+    # _classify_operation renvoie (op_class, resource, op_label, service, category)
+    args = ["drive", resource, method, "--json", json_body]
+    return api._classify_operation(args)[4]
+
+
+# Jumeau Drive du garde Gmail (même classe de bug, P2 Codex #156) : un « drive
+# files update {"trashed": true} » est une mise à la corbeille, que policy-check
+# ET l'audit reclassent « delete ». Le gate DOIT suivre, sinon le cap SIGNÉ
+# porterait « update » alors que le broker exige « delete » → un acte pourtant
+# approuvé (Touch ID) + autorisé (delete:true) serait refusé. Gate et
+# vérificateur doivent s'accorder.
+assert gate_cat('{"trashed": true}') == "delete", "trashed:true → delete au gate"
+assert gate_cat('{"trashed": false}') == "update", "trashed:false (restauration) reste update"
+assert gate_cat('{"name": "x"}') == "update", "update ordinaire (renommage) reste update"
+# patch est aussi une méthode d'update Drive → même reclassement dépendant du corps.
+assert gate_cat('{"trashed": true}', method="patch") == "delete", "patch trashed:true → delete"
+assert gate_cat('{"trashed": false}', method="patch") == "update", "patch trashed:false reste update"
+# L'override lit AUSSI --params (comme drive_files_trash_override), pas que --json.
+assert api._classify_operation(
+    ["drive", "files", "update", "--params", '{"fileId": "X", "trashed": true}'])[4] == "delete", \
+    "trashed:true via --params → delete au gate"
+print("ok")
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m drive corbeille : gate classe {trashed:true}→delete comme policy-check, {false} reste update\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m drive corbeille : gate transactionnel désaligné de policy-check (fiche 0037)\n'
+fi
+
 section "Gateway — lire / copier / téléverser / pièces jointes (fiche 0043)"
 if python3 - <<'PY'
 import base64
