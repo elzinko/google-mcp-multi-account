@@ -612,37 +612,31 @@ def gmail_labels_modify(
             raise GatewayError(f"libellé « {name} » sans id exploitable", code="exec")
         return lid
 
+    # Résolution/validation en DEUX temps (revue Codex PR #156, P2) : d'abord
+    # TOUT valider en lecture seule — existence et type utilisateur de chaque
+    # add ET remove, plus create_missing pour les absents —, ENSUITE seulement
+    # créer les libellés manquants. Sinon un add créait un libellé puis un
+    # remove inexistant (ou un add de type système) échouait APRÈS, laissant
+    # une mutation partielle derrière. L'outil ne supprimant jamais un libellé,
+    # on ne peut pas « défaire » une création : la validation en amont EST la
+    # barrière.
     label_ids: dict[str, str] = {}
-    created: list[str] = []
-
-    add_ids: list[str] = []
+    to_create: list[str] = []
     for name in adds:
-        lid = _existing_user_id(name)
+        lid = _existing_user_id(name)  # lève si le nom résout vers un type système
         if lid is None:
             if not create_missing:
                 raise GatewayError(
                     f"libellé « {name} » introuvable et create_missing=false",
                     code="not_found",
                 )
-            made = _run(
-                alias,
-                ["gmail", "users", "labels", "create",
-                 "--params", json.dumps({"userId": "me"}),
-                 "--json", json.dumps({"name": name})],
-                session=session,
-            )
-            lid = str(made.get("id") or "") if isinstance(made, dict) else ""
-            if not lid:
-                raise GatewayError(
-                    f"création du libellé « {name} » sans id renvoyé", code="exec",
-                )
-            created.append(name)
-        label_ids[name] = lid
-        add_ids.append(lid)
+            to_create.append(name)
+        else:
+            label_ids[name] = lid
 
     remove_ids: list[str] = []
     for name in removes:
-        lid = _existing_user_id(name)
+        lid = _existing_user_id(name)  # lève si type système
         if lid is None:
             # Retrait d'un libellé absent = rien à annuler : refus explicite
             # (jamais de création en retrait).
@@ -651,6 +645,26 @@ def gmail_labels_modify(
             )
         label_ids[name] = lid
         remove_ids.append(lid)
+
+    # Tout est validé → créer les libellés manquants (PREMIÈRE mutation).
+    created: list[str] = []
+    for name in to_create:
+        made = _run(
+            alias,
+            ["gmail", "users", "labels", "create",
+             "--params", json.dumps({"userId": "me"}),
+             "--json", json.dumps({"name": name})],
+            session=session,
+        )
+        lid = str(made.get("id") or "") if isinstance(made, dict) else ""
+        if not lid:
+            raise GatewayError(
+                f"création du libellé « {name} » sans id renvoyé", code="exec",
+            )
+        label_ids[name] = lid
+        created.append(name)
+
+    add_ids: list[str] = [label_ids[name] for name in adds]
 
     body_labels: dict[str, Any] = {}
     if add_ids:

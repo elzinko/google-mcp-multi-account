@@ -972,6 +972,31 @@ refuse({"add_labels": ["gc/x"], "remove_labels": ["gc/x"], "message_ids": ["m1"]
 refuse({"add_labels": ["gc/new"], "message_ids": ["m1"], "create_missing": False}, "not_found")
 refuse({"remove_labels": ["gc/inexistant"], "message_ids": ["m1"]}, "not_found")
 
+# 7. Pas de mutation partielle (P1→P2 Codex #156) : validation COMPLÈTE avant
+# toute création. Un add d'un libellé absent + un remove d'un inexistant dans le
+# même appel → refus SANS avoir émis le moindre labels create.
+CALLS.clear()
+try:
+    api.gmail_labels_modify(alias, add_labels=["gc/new"], remove_labels=["gc/inexistant"], message_ids=["m1"])
+    raise SystemExit("add(absent)+remove(inexistant) aurait dû refuser")
+except GatewayError as e:
+    assert e.code == "not_found", e.code
+assert not any(method_of(a) == ("gmail", "users", "labels", "create") for a in CALLS), \
+    f"aucun labels create avant validation complète, or {[method_of(a) for a in CALLS]}"
+assert all(method_of(a) == ("gmail", "users", "labels", "list") for a in CALLS), \
+    f"seul labels list (lecture) est permis à ce stade, or {[method_of(a) for a in CALLS]}"
+
+# Idem avec un add valide-à-créer suivi d'un add de TYPE système : refus avant
+# création (le type ne se voit qu'après labels list, mais avant tout create).
+CALLS.clear()
+try:
+    api.gmail_labels_modify(alias, add_labels=["gc/new", "Facture"], message_ids=["m1"])
+    raise SystemExit("add(créable)+add(type système) aurait dû refuser")
+except GatewayError as e:
+    assert e.code == "error", e.code
+assert not any(method_of(a) == ("gmail", "users", "labels", "create") for a in CALLS), \
+    f"aucun create avant validation du type, or {[method_of(a) for a in CALLS]}"
+
 print("ok")
 PY
 then
