@@ -173,25 +173,30 @@ TOOLS: list[dict[str, Any]] = [
                 "add_labels": {
                     "type": "array",
                     "items": {"type": "string"},
+                    "maxItems": 50,
                     "description": (
                         "Noms de libellés à POSER (créés en libellé utilisateur "
-                        "s'ils manquent et create_missing). Jamais de libellé système."
+                        "s'ils manquent et create_missing). Jamais de libellé système. "
+                        "Max 50."
                     ),
                 },
                 "remove_labels": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Noms de libellés à RETIRER (annulation). Doivent exister.",
+                    "maxItems": 50,
+                    "description": "Noms de libellés à RETIRER (annulation). Doivent exister. Max 50.",
                 },
                 "message_ids": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Ids de messages Gmail à modifier (batchModify, un lot).",
+                    "maxItems": 1000,
+                    "description": "Ids de messages Gmail à modifier (batchModify, un lot). Max 1000.",
                 },
                 "thread_ids": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Ids de threads Gmail à modifier (un modify par thread).",
+                    "maxItems": 100,
+                    "description": "Ids de threads Gmail à modifier (un modify par thread). Max 100.",
                 },
                 "create_missing": {
                     "type": "boolean",

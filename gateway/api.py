@@ -504,8 +504,14 @@ _GMAIL_SYSTEM_LABELS = frozenset({
     "SENT", "DRAFT", "CHAT",
 })
 _GMAIL_SYSTEM_PREFIXES = ("CATEGORY_",)
-# Borne de l'API messages.batchModify (un seul lot d'ids par appel).
+# Bornes défensives sur les listes qui se DÉPLOIENT (chacune → un ou des `_run`,
+# donc un geste transactionnel) : sans elles, une grosse requête MCP
+# monopoliserait le serveur stdio mono-thread et multiplierait les popups
+# (revue Codex #156, P2). messages = 1 seul batchModify (limite d'API 1000) ;
+# threads = un `_run` par thread ; libellés = résolution/création par libellé.
 _GMAIL_BATCH_MAX = 1000
+_GMAIL_THREADS_MAX = 100
+_GMAIL_LABELS_MAX = 50
 
 
 def _clean_str_list(x: Optional[list[str]]) -> list[str]:
@@ -581,6 +587,17 @@ def gmail_labels_modify(
         raise GatewayError(
             f"trop de message_ids ({len(msg_ids)} > {_GMAIL_BATCH_MAX}) — "
             f"découper en plusieurs appels",
+            code="error",
+        )
+    if len(thr_ids) > _GMAIL_THREADS_MAX:
+        raise GatewayError(
+            f"trop de thread_ids ({len(thr_ids)} > {_GMAIL_THREADS_MAX}) — "
+            f"chaque thread est un appel distinct ; découper en plusieurs appels",
+            code="error",
+        )
+    if len(adds) > _GMAIL_LABELS_MAX or len(removes) > _GMAIL_LABELS_MAX:
+        raise GatewayError(
+            f"trop de libellés (max {_GMAIL_LABELS_MAX} par liste add/remove)",
             code="error",
         )
     # Garde 1 (AVANT tout appel) : jamais un libellé système, ni en pose ni en

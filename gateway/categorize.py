@@ -326,20 +326,32 @@ def gmail_labels_override(
         return operation
     body = parse_json_flag(args, "--json")
     classes: set[str] = set()
-    for key in ("addLabelIds", "removeLabelIds"):
-        val = body.get(key)
-        if not isinstance(val, list):
+    # POSE (addLabelIds) : poser TRASH/SPAM est destructif → « delete » ; autre
+    # libellé système → « update » ; libellé utilisateur → « labels ».
+    add = body.get("addLabelIds")
+    for x in add if isinstance(add, list) else []:
+        if not x:
             continue
-        for x in val:
-            if not x:
-                continue
-            lid = str(x).upper()
-            if lid in _GMAIL_DESTRUCTIVE_LABEL_IDS:
-                classes.add("delete")
-            elif lid in _GMAIL_SYSTEM_LABEL_IDS:
-                classes.add("update")
-            else:
-                classes.add("labels")
+        lid = str(x).upper()
+        if lid in _GMAIL_DESTRUCTIVE_LABEL_IDS:
+            classes.add("delete")
+        elif lid in _GMAIL_SYSTEM_LABEL_IDS:
+            classes.add("update")
+        else:
+            classes.add("labels")
+    # RETRAIT (removeLabelIds) : retirer un libellé système est une RESTAURATION
+    # ou un changement de méta (retirer TRASH/SPAM = restaurer, retirer INBOX =
+    # etc.) — jamais destructif → « update » (revue Codex #156, P2). Libellé
+    # utilisateur → « labels ».
+    rem = body.get("removeLabelIds")
+    for x in rem if isinstance(rem, list) else []:
+        if not x:
+            continue
+        lid = str(x).upper()
+        if lid in _GMAIL_SYSTEM_LABEL_IDS:
+            classes.add("update")
+        else:
+            classes.add("labels")
     if not classes:
         return operation
     if len(classes) == 1:

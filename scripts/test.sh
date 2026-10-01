@@ -360,6 +360,14 @@ policy <<'EOF'
            "update": false, "delete": true, "settings": false}}
 EOF
 check 0 "addLabelIds TRASH autorisé sous delete:true (escaladé en delete)"   gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["TRASH"]}'
+# Retirer TRASH/SPAM = RESTAURATION (non destructif) → « update », pas « delete »
+# (P2 Codex #156) : update:true/delete:false autorise la restauration sans ouvrir delete.
+policy <<'EOF'
+{"gmail": {"read": true, "drafts": false, "send": false, "labels": true,
+           "update": true, "delete": false, "settings": false}}
+EOF
+check 0 "removeLabelIds TRASH (restauration) autorisé sous update:true/delete:false" gmail users messages modify --params '{"id":"x"}' --json '{"removeLabelIds":["TRASH"]}'
+check 4 "addLabelIds TRASH (corbeille) refusé sous update:true/delete:false"         gmail users messages modify --params '{"id":"x"}' --json '{"addLabelIds":["TRASH"]}'
 # Payload MIXTE (plusieurs classes dans le même modify) : refusé en bloc, même
 # sous une policy permissive. Un modèle à catégorie unique ne peut exiger toutes
 # les classes ; collapser laisserait labels:false passer via update/delete:true
@@ -994,6 +1002,11 @@ refuse({"message_ids": ["m1"]}, "error")                                    # pa
 refuse({"add_labels": ["gc/x"], "remove_labels": ["gc/x"], "message_ids": ["m1"]}, "error")  # chevauchement
 refuse({"add_labels": ["gc/new"], "message_ids": ["m1"], "create_missing": False}, "not_found")
 refuse({"remove_labels": ["gc/inexistant"], "message_ids": ["m1"]}, "not_found")
+# Bornes des listes qui se déploient (P2 Codex #156) : thread_ids et libellés
+# add/remove plafonnés (sinon fan-out illimité → serveur stdio monopolisé + N gestes).
+refuse({"add_labels": ["gc/x"], "thread_ids": ["t%d" % i for i in range(101)]}, "error")
+refuse({"add_labels": ["gc/l%d" % i for i in range(51)], "message_ids": ["m1"]}, "error")
+refuse({"remove_labels": ["gc/l%d" % i for i in range(51)], "message_ids": ["m1"]}, "error")
 
 # 7. Pas de mutation partielle (P1→P2 Codex #156) : validation COMPLÈTE avant
 # toute création. Un add d'un libellé absent + un remove d'un inexistant dans le
@@ -1126,6 +1139,11 @@ assert gate_cat('{"removeLabelIds":["INBOX"]}') == "update", "INBOX (archive) �
 assert gate_cat('{"addLabelIds":["Label_42"]}') == "labels", "libellé utilisateur → labels"
 assert gate_cat('{"ids":["m"],"addLabelIds":["TRASH"]}', method="batchModify") == "delete"
 assert gate_cat('{"addLabelIds":["Label_42"]}', resource="threads") == "labels"
+# Retrait de TRASH/SPAM = restauration (non destructif) → « update », pas « delete »
+# (P2 Codex #156) : pose et retrait sont distingués.
+assert gate_cat('{"removeLabelIds":["TRASH"]}') == "update", "retrait TRASH = restauration → update"
+assert gate_cat('{"removeLabelIds":["SPAM"]}') == "update", "retrait SPAM → update"
+assert gate_cat('{"addLabelIds":["TRASH"]}') == "delete", "pose TRASH reste delete"
 
 # Le NOM du libellé créé est lié au reçu signé : deux créations distinctes
 # produisent des arguments conséquents DIFFÉRENTS (P2 Codex #156).
