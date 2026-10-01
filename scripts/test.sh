@@ -1188,6 +1188,7 @@ fi
 section "Gateway — drive corbeille : gate transactionnel accordé avec policy-check (fiche 0037)"
 if python3 - <<'PY'
 import gateway.api as api
+from gateway.usage import infer_call
 
 
 def gate_cat(json_body, method="update", resource="files"):
@@ -1212,6 +1213,14 @@ assert gate_cat('{"trashed": false}', method="patch") == "update", "patch trashe
 assert api._classify_operation(
     ["drive", "files", "update", "--params", '{"fileId": "X", "trashed": true}'])[4] == "delete", \
     "trashed:true via --params → delete au gate"
+# Parité gate ↔ audit : _classify_operation (autorisation) et infer_call
+# (gateway.usage, audit) partagent drive_files_trash_override — pour une entrée
+# identique, ils DOIVENT rendre la même catégorie. Garde contre une dérive
+# future d'un seul des deux consommateurs (P2 revue adverse locale).
+for _body in ('{"trashed": true}', '{"trashed": false}', '{"name": "x"}'):
+    _args = ["drive", "files", "update", "--json", _body]
+    assert api._classify_operation(_args)[4] == infer_call(_args)[1], \
+        "gate et audit divergent sur " + _body
 print("ok")
 PY
 then
