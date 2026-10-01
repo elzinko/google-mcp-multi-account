@@ -6,7 +6,7 @@ priority: P3
 product: google-multi-account
 version:
 epic:
-status: in-progress
+status: shipped
 ready: 2026-10-01
 pr: "#159"
 created: 2026-10-01
@@ -131,9 +131,9 @@ PY
 ## Notes
 
 - Lignée directe :
-  - [0037](done/0037-semantique-suppression-en-zone.md) — classer un acte Drive d'après le
+  - [0037](0037-semantique-suppression-en-zone.md) — classer un acte Drive d'après le
     **corps**, pas le seul nom de méthode (Option A, corbeille = delete).
-  - [0086](done/0086-raffinements-audit-migration-capacites-session.md) — aligner la
+  - [0086](0086-raffinements-audit-migration-capacites-session.md) — aligner la
     catégorie entre **autorisation** et **audit** (le triplet journalisé doit nommer la
     capacité qui a réellement autorisé).
   - PR #157 (fiche `20261001121405000`) — jumeau corbeille : câbler
