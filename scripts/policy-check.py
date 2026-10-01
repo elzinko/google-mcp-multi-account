@@ -232,6 +232,33 @@ def _apply_manifest_cap(alias, zones):
     return zones & cap
 
 
+def _drive_files_category(method):
+    """Catégorie d'autorisation d'une méthode « drive files » : « create »,
+    « update » ou « delete » — ou None si la méthode n'est pas une écriture
+    reconnue (l'appelant refuse / replie alors par prudence).
+
+    Source unique partagée par `check_drive` (policy du compte) et
+    `_gate_drive_session` (capacités de session), jadis deux tables `if/elif`
+    dupliquées. Alignée sur `gateway.categorize` : « upload » CRÉE un fichier
+    (il est dans CREATE_METHODS), donc « create » — comme le gate
+    (`_classify_operation`) et l'audit (`infer_call`), pas « update »
+    (fiche 20261001155202000 ; lignée 0037 / 0086 ; jumeau PR #157).
+
+    Volontairement SANS branche « read » : contrairement à `categorize()`, une
+    méthode de lecture non filtrée en amont (ex. « drive files search », hors
+    DRIVE_READ_FILES) reste non classifiable ici → refus, comportement
+    inchangé. Dériver de `categorize()` l'aurait classée « read » et autorisée
+    sous read:true — un desserrage non voulu."""
+    m = norm(method)
+    if m in ("create", "copy", "upload"):
+        return "create"
+    if m in ("delete", "trash", "batchdelete"):
+        return "delete"
+    if m in ("update", "patch", "modify", "untrash"):
+        return "update"
+    return None
+
+
 def check_drive(profile_dir, drive_raw, args, pos):
     drive = normalize_drive(drive_raw)
     if drive is None:
@@ -279,13 +306,8 @@ def check_drive(profile_dir, drive_raw, args, pos):
         check_session_caps(profile_dir, args, "drive", cat)
         return
 
-    if method in ("create", "copy"):
-        cat = "create"
-    elif method in ("delete", "trash", "batchdelete"):
-        cat = "delete"
-    elif method in ("update", "patch", "modify", "untrash", "upload"):
-        cat = "update"
-    else:
+    cat = _drive_files_category(method)
+    if cat is None:
         deny(profile_dir, args, "drive",
              "files method « %s » not classifiable — denied out of caution" % pos[-1])
     # Option A (fiche 0037) : mettre à la corbeille EST une suppression, même quand
@@ -493,14 +515,7 @@ def _gate_drive_session(profile_dir, args, pos):
     if resource in SHARE_RESOURCES:
         check_session_caps(profile_dir, args, "drive", "share")
         return
-    if method in ("create", "copy"):
-        cat = "create"
-    elif method in ("delete", "trash", "batchdelete"):
-        cat = "delete"
-    elif method in ("update", "patch", "modify", "untrash", "upload"):
-        cat = "update"
-    else:
-        cat = "update"
+    cat = _drive_files_category(method) or "update"
     # Même override qu'en tête de `check_drive` (Option A, fiche 0037) : une
     # mise à la corbeille via « files update {"trashed": true} » doit être
     # traitée comme une suppression pour l'intersection de capacités de

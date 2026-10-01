@@ -5685,6 +5685,43 @@ print(session_has_capability(grandchild.session_id, 'alpha', 'drive', 'read'))
   && pass "0086 fix#3 : petit-enfant d'un parent legacy hérite des capacités EFFECTIVES (pas la liste locale brute)" \
   || fail "0086 fix#3 : petit-enfant d'un parent legacy a perdu les capacités héritées ($out_0086_caps)"
 
+section "classif « drive files upload » — create partout (fiche 20261001155202000)"
+
+# Un « drive files upload » CRÉE un fichier (upload ∈ CREATE_METHODS). Le gate
+# (gateway/api.py::_classify_operation) et l'audit (gateway/usage.py::infer_call) le
+# classent donc « create », comme categorize(). policy-check.py le classait « update »
+# via deux tables if/elif dupliquées (check_drive + _gate_drive_session) — désaccord
+# repéré en revue adverse de la PR #157 (le jumeau corbeille). Latent (aucune méthode
+# gws « upload » : c'est un flag --upload sur « create »), on ferme quand même
+# l'incohérence. On vérifie l'accord des TROIS classifieurs, la non-régression des
+# autres catégories (== categorize), et l'absence de desserrage : une lecture hors
+# DRIVE_READ_FILES (« search ») reste non classifiable → refus, pas reclassée « read ».
+out_upload_cat="$(PYTHONPATH="$(pwd)" "$PY" -c "
+import importlib.util, sys
+import gateway.api as api
+from gateway.usage import infer_call
+from gateway.categorize import categorize
+spec = importlib.util.spec_from_file_location('pc', 'scripts/policy-check.py')
+pc = importlib.util.module_from_spec(spec); sys.argv = ['pc']; spec.loader.exec_module(pc)
+def trio(method, extra):
+    args = ['drive', 'files', method] + extra
+    return (api._classify_operation(args)[4], infer_call(args)[1], pc._drive_files_category(method))
+up = trio('upload', ['--json', '{\"parents\":[\"z\"]}'])
+print('upload', 'create' if up == ('create', 'create', 'create') else 'KO:%r' % (up,))
+ok = True
+for m, cat in [('create','create'),('copy','create'),('update','update'),('patch','update'),
+               ('modify','update'),('untrash','update'),('delete','delete'),('trash','delete'),
+               ('batchdelete','delete')]:
+    extra = ['--json','{\"parents\":[\"z\"]}'] if cat == 'create' else ['--params','{\"fileId\":\"f\"}']
+    g, a, p = trio(m, extra)
+    ok = ok and g == a == p == cat == categorize('drive', ['files'], m)
+print('nonreg', 'ok' if ok else 'KO')
+print('search', 'none' if pc._drive_files_category('search') is None else 'KO')
+")"
+[[ "$out_upload_cat" == $'upload create\nnonreg ok\nsearch none' ]] \
+  && pass "classif drive files upload : create au gate, à l'audit ET à policy-check ; autres catégories inchangées ; search jamais desserrée en read" \
+  || fail "classif drive files upload désalignée gate/audit/policy-check ou desserrage ($out_upload_cat)"
+
 section "sandbox remove (fiche 0041)"
 SB_DEP="$TMP/sandbox-remove"
 mkdir -p "$SB_DEP/test-sb"
