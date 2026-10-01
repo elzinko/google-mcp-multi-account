@@ -608,7 +608,13 @@ def gmail_labels_modify(
             session=session,
         )
     except GatewayError as e:
-        if e.code in ("locked", "session", "delegated"):
+        # N'ajouter le conseil gmail.read QUE pour un vrai refus de policy
+        # (broker code="policy"). Tout autre échec de labels.list — creds OAuth
+        # révoquées, timeout Gmail, binaire gws absent (code="exec"), verrou,
+        # session… — remonte TEL QUEL : le réécrire en « activer gmail.read »
+        # masquerait la cause actionnable et enverrait vers une policy peut-être
+        # déjà correcte (revue Codex #156, P2).
+        if e.code != "policy":
             raise
         raise GatewayError(
             "gmail_labels_modify doit lister les libellés pour résoudre leurs "

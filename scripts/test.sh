@@ -1065,30 +1065,35 @@ try:
 except GatewayError as e:
     assert e.code == "exec", e.code
 
-# 12. Dépendance gmail.read explicite (P2 Codex #156) : si labels.list est refusé
-# par la policy, l'erreur nomme la dépendance gmail.read.
-def deny_list(alias, args, timeout=60, **kw):
+# 12. Dépendance gmail.read nommée UNIQUEMENT pour un VRAI refus de policy
+# (broker code="policy") — P2 Codex #156.
+def deny_list_policy(alias, args, timeout=60, **kw):
     if method_of(args) == ("gmail", "users", "labels", "list"):
-        raise GatewayError("read denied by policy", code="exec")
+        raise GatewayError("gmail read denied by policy", code="policy")
     return {}
-api._run = deny_list
+api._run = deny_list_policy
 try:
     api.gmail_labels_modify(alias, add_labels=["gc/x"], message_ids=["m1"])
-    raise SystemExit("un refus de labels.list aurait dû remonter")
+    raise SystemExit("un refus policy de labels.list aurait dû remonter")
 except GatewayError as e:
-    assert "gmail.read" in str(e), str(e)
+    assert e.code == "policy" and "gmail.read" in str(e), (e.code, str(e))
 
-# Un VERROU/session sur labels.list remonte tel quel (pas de hint read).
-def lock_list(alias, args, timeout=60, **kw):
-    if method_of(args) == ("gmail", "users", "labels", "list"):
-        raise GatewayError("profil verrouillé", code="locked")
-    return {}
-api._run = lock_list
-try:
-    api.gmail_labels_modify(alias, add_labels=["gc/x"], message_ids=["m1"])
-    raise SystemExit("un verrou aurait dû remonter")
-except GatewayError as e:
-    assert e.code == "locked", e.code
+# Tout AUTRE échec de labels.list remonte TEL QUEL, sans conseil read trompeur :
+# creds révoquées / timeout / gws absent (code="exec"), verrou, auth broker —
+# sinon on masque la cause actionnable (revue Codex #156, P2).
+for _code, _msg in (("exec", "binaire gws introuvable"), ("locked", "profil verrouillé"),
+                    ("auth", "token broker invalide")):
+    def deny_list(alias, args, timeout=60, _c=_code, _m=_msg, **kw):
+        if method_of(args) == ("gmail", "users", "labels", "list"):
+            raise GatewayError(_m, code=_c)
+        return {}
+    api._run = deny_list
+    try:
+        api.gmail_labels_modify(alias, add_labels=["gc/x"], message_ids=["m1"])
+        raise SystemExit("échec %s de labels.list aurait dû remonter" % _code)
+    except GatewayError as e:
+        assert e.code == _code, (e.code, _code)
+        assert "gmail.read" not in str(e), "cause %s réécrite à tort en conseil read : %s" % (_code, e)
 api._run = fake_run
 
 print("ok")
