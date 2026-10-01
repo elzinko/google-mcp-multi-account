@@ -25,6 +25,7 @@ from .config import (
 from .categorize import (
     categorize,
     consequential_args,
+    drive_files_trash_override,
     gmail_labels_override,
     norm_service,
     operand_resource,
@@ -145,6 +146,13 @@ def _classify_operation(gws_args: list[str]) -> tuple[str, str, str, str, str | 
     # approuvé serait refusé au broker (cap porté ne couvrant pas la vraie
     # catégorie). Le gate et le vérificateur doivent s'accorder.
     category = gmail_labels_override(resources, raw_method, category, gws_args)
+    # Jumeau Drive du garde ci-dessus (fiche 0037) : un « drive files update
+    # {"trashed": true} » est une mise à la corbeille, reclassée « delete » par
+    # policy-check et l'audit. Sans ce garde, le cap SIGNÉ porterait « update »
+    # alors que le broker exige « delete » → acte approuvé + autorisé refusé.
+    # Latent aujourd'hui (aucun tool MCP curaté n'émet `trashed:true`), mais le
+    # gate et le vérificateur doivent s'accorder quoi qu'il arrive.
+    category = drive_files_trash_override(resources, raw_method, category, gws_args)
     resource = operand_resource(service, resources, raw_method, gws_args)
     op_class = "lecture" if category == "read" else "mutation"
     op_label = ":".join([service, *resources, raw_method])
