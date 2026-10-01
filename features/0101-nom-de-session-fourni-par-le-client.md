@@ -6,7 +6,7 @@ priority: P1
 product: google-mcp-multi-account
 version:
 epic: 0082
-status: blocked
+status: idea
 ready:
 pr:
 created: 2026-08-30

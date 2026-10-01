@@ -5,7 +5,7 @@ type: feature        # feature | bug | refactor | chore | epic
 priority: P2         # P0 | P1 | P2 | P3
 version:             # optionnel — jalon ciblé (ex. "V1.1")
 epic:                # optionnel — id de la fiche épic parente
-status: todo         # idea | todo | in-progress | blocked | shipped
+status: idea         # idea | ready | in-progress | shipped | superseded | merged | split
 ready:               # YYYY-MM-DD — posé par le gate `ready <id>` ; vide = non tirable
 pr:                  # ex. "#12" quand une PR existe
 created: 2026-07-20

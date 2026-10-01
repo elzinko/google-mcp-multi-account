@@ -39,7 +39,6 @@
 | [0097](done/0097-composants-transverses.md) | Finir la migration des dialogues et écrans restants vers le design system Cockpit | feature | P1 |  | 0060 | google-mcp-multi-account | ✅ shipped | #133 |
 | [0098](done/0098-micro-routeur-vues.md) | Micro-routeur — formaliser les vues (pages vs modales), un seul registre de poll | refactor | P1 |  | 0060 | google-mcp-multi-account | ✅ shipped | #139 |
 | [0099](done/0099-sessions-pilote-tri-liste-vignettes.md) | Sessions — tranche pilote du design system (cartes régulières + tri + bascule liste/vignettes) | feature | P1 |  | 0060 | google-mcp-multi-account | ✅ shipped | #128 |
-| [0101](0101-nom-de-session-fourni-par-le-client.md) | Nom lisible de session, fourni par le client MCP | feature | P1 |  | 0082 | google-mcp-multi-account | ⛔ blocked |  |
 | [0102](done/0102-journal-page-monitoring-filtres-par-session.md) | Journal en page dédiée — filtres + journal par session (virage monitoring) | feature | P1 |  | 0060 | google-mcp-multi-account | ✅ shipped | #128 |
 | [0104](done/0104-app-shell-responsive-mobile.md) | App shell responsive — navigation et rendu mobile pro (bottom-nav + top-bar) | feature | P1 |  | 0060 | google-mcp-multi-account | ✅ shipped | #128 |
 | [0107](done/0107-vue-compte-droits-sur-place.md) | Vue compte — piloter les droits sur place (remplacer la modale Policy) + nettoyer la liste | feature | P1 |  | 0060 | google-mcp-multi-account | ✅ shipped | #131 |
@@ -80,7 +79,6 @@
 | [0086](done/0086-raffinements-audit-migration-capacites-session.md) | Raffinements audit + migration de la couche capacités de session (suite revue PR #118) | bug | P2 |  | 0082 |  | ✅ shipped | #143 |
 | [0087](done/0087-install-branchement-clients-opt-in.md) | install.sh — brancher les clients LLM en opt-in (pas opt-out) | feature | P2 |  |  |  | ✅ shipped | #123 |
 | [0088](done/0088-install-help-curl-pipe.md) | Aide de install.sh vide sous « curl \| bash » (--help relit $0) | bug | P2 |  |  |  | ✅ shipped | #124 |
-| [0089](0089-choix-profil-navigateur-oauth-add.md) | Choisir le profil navigateur (Chrome/…) à l'ouverture OAuth de `mag add` | feature | P2 |  |  |  | ❓ todo |  |
 | [0091](done/0091-updater-rollback-ergonomique.md) | Updater — rollback ergonomique : commande revert, messages CLI, help enrichi | feature | P2 |  |  |  | ✅ shipped | #135 |
 | [0092](done/0092-bascule-gwsa-mag-path-refresh-terminal.md) | Finaliser la bascule gwsa→mag côté PATH + guider le refresh du terminal | feature | P2 |  |  |  | ✅ shipped | #136 |
 | [0094](done/0094-sessions-page-dediee-reactive.md) | Panneau Sessions LLM — page dédiée réactive et plus lisible (au lieu d'une modale) | feature | P2 |  | 0060 | google-mcp-multi-account | ✅ shipped | #128 |
@@ -94,7 +92,6 @@
 | [20260929235257000](done/20260929235257000_gmail-labels-modify-curate.md) | Outil MCP curaté de pose/retrait de libellé Gmail (label-only, réversible) | feature | P2 |  |  | google-multi-account | ✅ shipped | #156 |
 | [20261001121405000](done/20261001121405000_gate-drive-corbeille-signee-delete.md) | Gate transactionnel Drive — signer la corbeille (trashed:true) en « delete », comme policy-check | bug | P2 |  |  | google-multi-account | ✅ shipped | #157 |
 | [0001](done/0001-elicitation-signee-strongauth-v2.md) | Élicitation signée — faire monter `mag strongauth` de la présence à la signature | feature | P3 |  |  |  | 🗑️ superseded |  |
-| [0090](0090-documenter-statut-oauth-verification.md) | Documenter et outiller le statut OAuth (warning « non vérifiée » + Testing→Production) | feature | P3 |  |  |  | ❓ todo |  |
 | [0093](done/0093-coherence-nommage-mag-produit-mcp.md) | Cohérence de nommage — relier `mag` / google-multi-account / repo sans casser le MCP | feature | P3 |  |  |  | ✅ shipped | #144 |
 | [20261001155202000](done/20261001155202000_aligner-classif-drive-upload-create.md) | Classification « drive files upload » — aligner policy-check sur create, comme le gate et l'audit | bug | P3 |  |  | google-multi-account | ✅ shipped | #159 |
 
@@ -112,10 +109,13 @@
 
 | # | Titre | Type | Prio | Version | Épic | Produit | Statut | PR |
 |---|-------|------|------|---------|------|---------|--------|----|
+| [0101](0101-nom-de-session-fourni-par-le-client.md) | Nom lisible de session, fourni par le client MCP | feature | P1 |  | 0082 | google-mcp-multi-account | 💡 idea |  |
 | [0108](0108-session-demande-sous-ensemble-droits-compte.md) | Session — demander un sous-ensemble des droits du compte (accès fin, vérifiable par session) | feature | P1 |  | 0082 | google-mcp-multi-account | 💡 idea |  |
 | [0035](0035-admin-acces-rapide-et-visu-zones.md) | Accès rapide à l'admin + visualisation des zones (icône barre de menus ?) | feature | P2 |  |  |  | 💡 idea |  |
+| [0089](0089-choix-profil-navigateur-oauth-add.md) | Choisir le profil navigateur (Chrome/…) à l'ouverture OAuth de `mag add` | feature | P2 |  |  |  | 💡 idea |  |
 | [20260922221816747](20260922221816747_popup-swift-deux-boutons-portee.md) | Popup Touch ID à deux boutons « Une fois / Pour la session » (ergonomie du geste) | feature | P2 |  | 0082 | google-multi-account | 💡 idea |  |
 | [20260930214101550](20260930214101550_spike-msgvault-lecture-gmail.md) | Spike — évaluer msgvault comme source de lecture Gmail multi-comptes | chore | P2 |  |  | google-mcp-multi-account | 💡 idea |  |
+| [20261001192704000](20261001192704000_statuts-backlog-hors-schema-regen.md) | Aligner le vocabulaire de statut backlog sur le schéma du regen (todo/blocked rendus « ❓ » + churn de l'index) | bug | P2 |  |  | google-multi-account | 💡 idea |  |
 | [0003](0003-vault-credentials-hors-perimetre-agent.md) | Vault credentials hors périmètre agent (Phase 2.1) | feature | P3 |  |  |  | 💡 idea |  |
 | [0006](0006-harnais-test-manuel-hybride.md) | Harnais hybride pour les tests manuels — script pour la mécanique, LLM pour la glu | feature | P3 |  |  |  | 💡 idea |  |
 | [0018](0018-cross-platform-hors-macos.md) | Cross-platform — faire tourner le projet hors macOS (Linux, Intel) | feature | P3 |  | 0017 |  | 💡 idea |  |
@@ -124,6 +124,7 @@
 | [0034](0034-maj-protocole-test-manuel-drive.md) | Mettre à jour le protocole du test manuel drive-2-comptes (limites périmées + nouvelles phases) | chore | P3 |  |  |  | 💡 idea |  |
 | [0038](0038-creer-dossier-zone-rapidement.md) | Créer un dossier-zone rapidement, geste humain (sans passer par le LLM) | feature | P3 |  | 0017 |  | 💡 idea |  |
 | [0079](0079-modele-soutenabilite-freemium.md) | Modèle de soutenabilité — freemium (cœur libre + options payantes) | feature | P3 |  |  |  | 💡 idea |  |
+| [0090](0090-documenter-statut-oauth-verification.md) | Documenter et outiller le statut OAuth (warning « non vérifiée » + Testing→Production) | feature | P3 |  |  |  | 💡 idea |  |
 | [20260903155243753](20260903155243753_journal-filtre-date.md) | Journal — filtre par date (la dimension manquante) | feature | P3 |  | 0060 | google-mcp-multi-account | 💡 idea |  |
 | [20260903155243879](20260903155243879_mobile-cibles-tactiles-44px.md) | Admin mobile — cibles tactiles à 44 px (barre haute) | bug | P3 |  | 0060 | google-mcp-multi-account | 💡 idea |  |
 | [20260906234210000](20260906234210000_purge-sessions-vides-expiration.md) | Sessions — purger les sessions vides + expiration automatique | feature | P3 |  | 0060 | google-mcp-multi-account | 💡 idea |  |
