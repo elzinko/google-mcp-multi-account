@@ -60,3 +60,8 @@ boîte vivante. Le « live » reste chez nous.
    [`features/20260930214101550_spike-msgvault-lecture-gmail.md`](../features/20260930214101550_spike-msgvault-lecture-gmail.md).
 3. Si on garde la couche : décider comment le serveur est atteint — client Claude direct
    (simple), ou pont HTTP pour une coquille type NanoClaw (transport HTTP à ajouter).
+
+**Pendant WhatsApp.** Même réflexe côté WhatsApp, mais la conclusion diffère : pas de produit
+aussi fini que msgvault. Le plus proche est un serveur MCP (pont → base locale → recherche).
+Spike dédié :
+[`features/20261001125109014_spike-whatsapp-archive-locale.md`](../features/20261001125109014_spike-whatsapp-archive-locale.md).
