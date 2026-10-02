@@ -3,7 +3,7 @@
 **Date** : 2026-09-12
 **Statut** : proposé (raffine ADR-0011 sur 3 points d'implémentation + 1 réglage produit — durée de vie du bail ; feature opt-in, OFF par défaut)
 **Décideurs** : Thomas (mainteneur)
-**Raffine** : [ADR-0011](ADR-0011-consentement-transactionnel.md) · s'appuie sur [ADR-0007](ADR-0007-droits-par-session.md), [ADR-0005](ADR-0005-elicitation-signee-v2.md)
+**Raffine** : [ADR-0011](ADR-0011-consentement-transactionnel-par-session.md) · s'appuie sur [ADR-0007](ADR-0007-droits-par-session.md), [ADR-0005](ADR-0005-elicitation-signee-v2.md)
 
 > **TL;DR** — ADR-0011 a posé le *quoi* du consentement transactionnel (bail de lecture, acte de mutation signé usage-unique, retrait jamais LLM-dépendant). Trois rondes de revue Codex ont montré que le *comment* fuyait par trois trous : le geste réussissait dans la **gateway** mais le **broker** refusait quand même (il recalculait des capacités vides), des écritures de session concurrentes s'écrasaient, et la signature ne liait pas les vrais arguments de l'acte. Cet ADR tranche les trois **en amont** pour qu'une seule implémentation propre remplace les rustines : (1) la capacité consentie **voyage dans l'appel** et devient la source unique côté broker ; (2) **tous** les read-modify-write de session passent par **un seul verrou** ; (3) les arguments conséquents entrent dans le **payload signé** via une **table explicite**, acte non mappé = refus. S'y ajoute un **réglage produit** (Zone 4) : la **durée de vie du bail** devient un mode configurable — **manuel (défaut : un droit, une action)**, fenêtre courte, ou liée à la session — choisi en config/admin, sans jamais desserrer la signature des mutations. *L'outil vérifie, l'humain autorise, le LLM propose.*
 
@@ -197,7 +197,7 @@ Ordre choisi : assainir la base (verrou) **avant** d'y brancher la propagation, 
 
 ## Références
 
-- ADR : [ADR-0011](ADR-0011-consentement-transactionnel.md) (modèle transactionnel — raffiné ici), [ADR-0007](ADR-0007-droits-par-session.md) (intersection fail-closed policy ∩ manifeste ∩ caps), [ADR-0005](ADR-0005-elicitation-signee-v2.md) (payload signé, `consume_nonce`).
+- ADR : [ADR-0011](ADR-0011-consentement-transactionnel-par-session.md) (modèle transactionnel — raffiné ici), [ADR-0007](ADR-0007-droits-par-session.md) (intersection fail-closed policy ∩ manifeste ∩ caps), [ADR-0005](ADR-0005-elicitation-signee-v2.md) (payload signé, `consume_nonce`).
 - Fiche : `features/20260911135931576_consentement-transactionnel.md` (à créer/mettre à jour si absente).
 - Code : `gateway/api.py` (`_run`, `_transactional_gate`, `_classify_operation`), `gateway/broker_server.py` (`handle_exec`, `_require_access`, `check_policy`), `gateway/sessions.py` (verrou, bail, mode de durée de vie), `gateway/config.py` (`env` — lecture de `TRANSACTIONAL_LEASE_MODE`), `gateway/categorize.py` (`operand_resource`, `_OPERAND_PARAM` — modèle de la table zone 3), `scripts/policy-check.py` (`check_session_caps`, `_session_cap_allows`), `scripts/elicitation-sign.swift` (`promptText`), `gateway/elicitation.py` (`prompt_from_payload`, `run_elicitation_gate`).
 - Menace : `docs/threat-model.md`, `SECURITY.md`.
