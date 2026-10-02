@@ -1,5 +1,106 @@
 # Journal des versions
 
+## v1.2.0 — 2026-10-02
+
+### Fonctionnalités
+
+- feat(gateway): intègre gmail_labels_modify au consentement transactionnel (ADR-0014) (#161)
+- feat(gmail): gmail_labels_modify — pose/retrait de libellé curaté (label-only) — 20260929235257000 (#156)
+- feat(deploy): deploy-local.sh --check détecte la dérive config client ↔ current — 20260929172213000 (#155)
+- feat(i18n): angliciser les sorties utilisateur des scripts helper mag — 20260910170000000 (#154)
+- feat(setup_status): annoncer version + couloir aux tools — 0026 POC (#151)
+- feat(gmail): pagination page_token/nextPageToken sur gmail_list — 20260916201419331 (#152)
+- feat: consentement « une fois / pour la session » + mode réglable admin (#150)
+- feat: consentement transactionnel — réimplémentation propre ADR-0012 (opt-in, off) (#149)
+- feat(mcp): élicitation dans la conversation — opt-in, popup sans terminal (#142)
+- feat(admin): relier mag à google-multi-account dans le rail (0093) (#144)
+- feat(admin): socle de rendu sûr html`` échappant par défaut (0096)
+- feat(cli): déprécier gwsa/gma en douceur + guide refresh terminal (0092)
+- feat(updater): rollback ergonomique — mag revert + help (0091)
+- feat(admin): finir la migration Cockpit — dialogues + Setup/Dev (0097)
+- feat(admin): vue compte orientée sessions (0106)
+- feat(admin): piloter les droits d'un compte sur place (0107)
+- feat(admin): refonte complète de l'admin en design system Cockpit (0105) (#128)
+
+### Corrections
+
+- fix(backlog): migrer les statuts hors-schéma (todo/blocked → idea) + aligner le template — 20261001192704000
+- fix(gateway): accorder le gate transactionnel Drive à policy-check sur la corbeille — 20261001121405000 (#157)
+- fix(policy): « drive files upload » classé create, comme le gate et l'audit (#159)
+- fix(updater): durcir rollback + dépréciation gwsa (findings Codex post-merge) (#146)
+- fix(session): raffinements audit + capacités de session (0086) (#143)
+- fix(admin): dialogues fermés cachés + largeur dialogues larges (Codex #133)
+- fix(updater): durcir le rollback à travers le renommage gma→mag (0081)
+
+### Documentation
+
+- docs(retro): purge branches absorbées bloquée par le classifier auto-mode
+- docs(features): ship 20261001214857000 #161 (gmail_labels_modify transactionnel)
+- docs: réparer les liens ADR cassés (mkdocs --strict) (#160)
+- docs(features): ship 20261001192704000 (statuts backlog alignés — fix 7d5904e)
+- docs(backlog): add 20261001192704000 — statuts backlog hors-schéma / churn regen
+- docs(features): ship 20261001155202000 #159 (classif drive files upload alignée sur create)
+- docs(features): ship 20261001121405000 #157 (gate Drive corbeille signée delete)
+- docs: recentrage outils existants + fiche spike msgvault (#158)
+- docs(features): ship 20260929235257000 #156 (gmail_labels_modify — pose/retrait libellé curaté)
+- docs(features): ship 20260929172213000 #155 (deploy-local.sh --check dérive config)
+- docs(features): ship 20260910170000000 #154 (parité anglaise scripts helper)
+- docs(features): ship 0026 #151 (version + couloir via setup_status, POC)
+- docs(features): ship 20260916201419331 #152 (pagination gmail_list)
+- docs(features): ship 0039 #153 (bannir « jeton/token » hors admin)
+- docs(features): add 20260922221816747 popup Swift « une fois / pour la session »
+- docs(features): ship 20260920141424574 #150
+- docs(features): add 20260920141424574 consentement « une fois / pour la session »
+- docs(features): ship 20260911135931576 #149
+- docs(features): add 20260916201419331 gmail-list-pagination-curseur
+- docs(features): rationaliser le backlog (revue 2026-09-11)
+- docs(features): réconcilier 0094 + 0046 (déjà livrés) + capturer sandbox v2
+- docs(features): ship 0093 #144 — cohérence de nommage (mag relié dans l'admin)
+- docs(features): ship 0086 #143 — raffinements audit + capacités session
+- docs(features): ship 0070 #141 — README personas + Contributing
+- docs(readme): usage by persona + Contributing (0070) (#141)
+- docs(features): compléter le ship 0019 — regen BACKLOG + statut shipped (fixup #140)
+- docs(features): ship 0019 #140 + capture fiche de suite (helpers/gateway/scripts)
+- docs(features): ship 0098 #139 + capture idée poll-de-fond (revue Codex)
+- docs(features): capturer S-1 — purge des sessions vides (status suggest)
+- docs(features): ship 0096 #138 (socle de rendu sûr html``)
+- docs(features): compléter la fiche de suivi Codex — ajouter #136 (dépréciation 0092)
+- docs(features): capturer les findings Codex post-merge rollback updater (#134/#135)
+- docs(features): ship 0092 #136 (dépréciation douce gwsa→mag + refresh terminal)
+- docs(features): ship 0091 #135 (updater rollback ergonomique — mag revert)
+- docs(features): ship 0081 #134 (socle updater rollback gma→mag)
+- docs(features): ship 0097 #133 (migration Cockpit dialogues + Setup/Dev)
+- docs(features): ship 0106 #132 (vue compte orientée sessions)
+- docs(features): ship 0107 #131 (vue compte — droits sur place)
+- docs(sessions): archive session 2026-09-04 grooming-backlog-epic-0060
+- docs(features): tri idées final — 0006/0079 P3, 0042 superseded→done, licence MIT
+- docs(features): rafraîchir 0017/0026/0028/0039 (parties déjà livrées)
+- docs(features): tri idées — park 0038 (→0017), 0018 good-first-issue, 0035 condition
+- docs(features): ready 0019 — messages CLI en anglais (décision PO)
+- docs(features): ready 0081/0091/0092 (cluster updater) + plan jalon C
+- docs(features): ready 0086/0070/0093 (grooming autonome, concurrence ezk-pm)
+- docs(features): reconcile épic 0060 — fusion 0097+0100, groom 0098/0106, plan ordonné
+- docs(features): ship 0099/0102/0103/0104 (superseded #128) + résidus journal-date & mobile-44px
+- docs(features): ship 0095 (superseded #128) + ready 0096
+- docs(features): plan — séquencer 0108 après l'épic 0060 (refonte admin) (#130)
+- docs(features): retours PO Cockpit — vue compte 0107 (ready) + accès fin par session 0108 (idea) (#129)
+- docs(features): ship 0105 #128 + regen index (rattrape la série refonte 0094-0106)
+- docs(sessions): archive session 2026-08-21 sprint 0083 (passkey sign_count)
+
+### Autres
+
+- chore(backlog): 0026 — POC version livré (#151), dérive carvée vers 20260929172213000
+- chore(backlog): carve dérive config → deploy-local.sh --check (suite 0026) → ready
+- chore(vocab): bannir « jeton/token » des surfaces humaines hors admin — 0039 (#153)
+- chore(backlog): groom 20260910170000000 (parité anglaise scripts helper) → ready
+- chore(backlog): annuler carve tests-sécu (déjà couvert) + journal run
+- chore(backlog): groom lot autonome → ready (pagination, version, jeton, tests sécu) + bloquer 0101
+- chore(rename): émettre MAG_CLIENT (broker, usage) + doc CLAUDE.md — renommage GWSA_→MAG_
+- chore(backlog): clore l'épic 0060 (11 enfants livrés) + corriger le champ PR du renommage
+- chore(backlog): ship POC in-conversation (#142) + updater (#146) → done/
+- chore(backlog): groom updater findings → ready + reconcile 0001 (#145)
+- refactor(admin): micro-routeur go() + registre de poll par route (0098) (#139)
+
 ## v1.1.0 — 2026-08-29
 
 ### Fonctionnalités
