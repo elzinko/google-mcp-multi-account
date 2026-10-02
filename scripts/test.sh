@@ -8452,6 +8452,209 @@ print('n1', n1, 'n2', n2, 'caps_after', caps_after)
 
 rm -rf "$TX9"
 
+section "ADR-0014 — gmail_labels_modify dans le modèle transactionnel (un acte, un consentement)"
+
+TXA="$(mktemp -d)"; mkdir -p "$TXA/alpha"
+PY="/usr/bin/python3"; [[ -x "$PY" ]] || PY="$(command -v python3)"
+GWSA_ROOT="$TXA" GWSA_ELICITATION_MOCK=1 "$GWSA" elicitation enroll --mock >/dev/null 2>&1
+
+# A14-1) Schéma MCP : grant_scope exposé sur gmail_labels_modify (enum once/session,
+#        défaut once), comme sur les mutations Drive.
+out="$(PYTHONPATH="$(pwd)" "$PY" -c "
+from gateway.mcp_server import TOOLS
+by = {t['name']: t for t in TOOLS}
+gs = by['gmail_labels_modify']['inputSchema']['properties'].get('grant_scope')
+ok = bool(gs) and gs.get('enum') == ['once', 'session'] and gs.get('default') == 'once'
+print('OK' if ok else f'wrong {gs}')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "ADR-0014 : grant_scope au schéma de gmail_labels_modify (enum once/session, défaut once)" \
+  || fail "ADR-0014 : schéma grant_scope de gmail_labels_modify incorrect ($out)"
+
+# A14-2) Dispatch MCP : grant_scope extrait et relayé à api.gmail_labels_modify.
+out="$(PYTHONPATH="$(pwd)" "$PY" -c "
+import gateway.mcp_server as ms
+import gateway.api as api
+captured = {}
+def fn(**kw):
+    captured['gs'] = kw.get('grant_scope')
+    return {'ok': True}
+api.gmail_labels_modify = fn
+ms.DISPATCH['gmail_labels_modify'](alias='alpha', thread_ids=['t1'], add_labels=['gc/x'], session='s', grant_scope='session')
+print('OK' if captured.get('gs') == 'session' else f'wrong {captured}')
+")"
+[[ "$out" == "OK" ]] \
+  && pass "ADR-0014 : dispatch MCP relaie grant_scope à gmail_labels_modify" \
+  || fail "ADR-0014 : dispatch ne relaie pas grant_scope ($out)"
+
+# A14-3) CŒUR (manuel + session) : poser un libellé = UN seul geste (lecture de
+#        résolution comprise) ; un 2e acte dans la session = ZÉRO geste ; la
+#        lecture (labels.list) reçoit un cap read, l'écriture un cap labels ; la
+#        session porte (gmail,labels) mais JAMAIS (gmail,read) — le « pour la
+#        session » couvre la résolution sans grâce read large.
+out="$(GWSA_ROOT="$TXA" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
+  MAG_TRANSACTIONAL_LEASE_MODE=manuel "$PY" -c "
+import gateway.api as api
+from gateway.sessions import create_session, session_has_capability, active_capabilities
+BROKER = []
+def fake_broker(alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None):
+    BROKER.append({'args': list(args), 'cap': consented_cap})
+    if 'labels' in args and 'list' in args:
+        return {'labels': [{'id': 'L_del', 'name': 'gc/to-delete', 'type': 'user'},
+                           {'id': 'L_keep', 'name': 'gc/keep', 'type': 'user'}]}
+    return {}
+api.run_via_broker = fake_broker
+g = {'n': 0}; _og = api.run_elicitation_gate
+def _cg(f):
+    g['n'] += 1
+    return _og(f)
+api.run_elicitation_gate = _cg
+s = create_session(client='a14core')
+out1 = api.gmail_labels_modify('alpha', add_labels=['gc/to-delete'], thread_ids=['t1'], session=s.session_id, grant_scope='session')
+g1 = g['n']
+out2 = api.gmail_labels_modify('alpha', add_labels=['gc/keep'], thread_ids=['t2'], session=s.session_id, grant_scope='session')
+g2 = g['n']
+read_cap = next((c['cap'] for c in BROKER if 'list' in c['args']), None)
+mod_cap = next((c['cap'] for c in BROKER if 'modify' in c['args']), None)
+has_labels = session_has_capability(s.session_id, 'alpha', 'gmail', 'labels', '')
+has_read = session_has_capability(s.session_id, 'alpha', 'gmail', 'read', '')
+caps = sorted((c.service, c.operation, c.resource) for c in active_capabilities(s.session_id, 'alpha', 'gmail'))
+print('g1', g1, 'g2', g2, 'ok', out1['ok'] and out2['ok'],
+      'read_op', (read_cap or {}).get('operation'), 'mod_op', (mod_cap or {}).get('operation'),
+      'has_labels', has_labels, 'has_read', has_read, 'caps', caps)
+")"
+[[ "$out" == *"g1 1"* && "$out" == *"g2 1"* && "$out" == *"ok True"* \
+   && "$out" == *"read_op read"* && "$out" == *"mod_op labels"* \
+   && "$out" == *"has_labels True"* && "$out" == *"has_read False"* \
+   && "$out" == *"caps [('gmail', 'labels', '')]"* ]] \
+  && pass "ADR-0014 : un acte = un geste ; 2e acte sans geste ; read couvert, grâce = (gmail,labels) seule" \
+  || fail "ADR-0014 : single-consent/label-act incorrect ($out)"
+
+# A14-4) Fail-closed : geste REFUSÉ → l'acte lève « locked » et AUCUNE cible
+#        n'est modifiée (le refus tombe au 1er sous-appel, avant toute écriture).
+out="$(GWSA_ROOT="$TXA" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
+  MAG_TRANSACTIONAL_LEASE_MODE=manuel "$PY" -c "
+import gateway.api as api
+from gateway.errors import GatewayError
+from gateway.elicitation import ElicitationError
+from gateway.sessions import create_session
+BROKER = []
+def fake_broker(alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None):
+    BROKER.append(list(args))
+    if 'labels' in args and 'list' in args:
+        return {'labels': [{'id': 'L', 'name': 'gc/x', 'type': 'user'}]}
+    return {}
+api.run_via_broker = fake_broker
+def deny(f):
+    raise ElicitationError('refusé par le test')
+api.run_elicitation_gate = deny
+s = create_session(client='a14deny')
+try:
+    api.gmail_labels_modify('alpha', add_labels=['gc/x'], thread_ids=['t1'], session=s.session_id, grant_scope='session')
+    print('NO_RAISE')
+except GatewayError as e:
+    modified = any('modify' in a or 'batchModify' in a for a in BROKER)
+    print('code', e.code, 'modified', modified)
+")"
+[[ "$out" == *"code locked"* && "$out" == *"modified False"* ]] \
+  && pass "ADR-0014 : geste refusé → acte « locked », aucune cible modifiée (fail-closed)" \
+  || fail "ADR-0014 : refus mal géré ou mutation partielle ($out)"
+
+# A14-5) Mode AUTO : grant_scope=session est normalisé à « once » dans le reçu
+#        signé (honnête) et AUCUNE grâce n'est écrite (mutation par acte).
+out="$(GWSA_ROOT="$TXA" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
+  MAG_TRANSACTIONAL_LEASE_MODE=auto "$PY" -c "
+import gateway.api as api
+from gateway.sessions import create_session, session_has_capability
+def fake_broker(alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None):
+    if 'labels' in args and 'list' in args:
+        return {'labels': [{'id': 'L', 'name': 'gc/x', 'type': 'user'}]}
+    return {}
+api.run_via_broker = fake_broker
+cap = {'scope': None}; _og = api.run_elicitation_gate
+def _cg(f):
+    cap['scope'] = f.get('grant_scope')
+    return _og(f)
+api.run_elicitation_gate = _cg
+s = create_session(client='a14auto')
+api.gmail_labels_modify('alpha', add_labels=['gc/x'], thread_ids=['t1'], session=s.session_id, grant_scope='session')
+has_labels = session_has_capability(s.session_id, 'alpha', 'gmail', 'labels', '')
+print('scope', cap['scope'], 'has_labels', has_labels)
+")"
+[[ "$out" == *"scope once"* && "$out" == *"has_labels False"* ]] \
+  && pass "ADR-0014 : mode auto normalise session→once, aucune grâce (reçu honnête)" \
+  || fail "ADR-0014 : auto n'a pas normalisé la portée / a écrit une grâce ($out)"
+
+# A14-6) Frontière de sécurité : une SOUS-SESSION déléguée n'écrit JAMAIS de grâce
+#        (elle ne peut pas s'auto-élargir) — même avec scope=session, chaque acte
+#        redemande un geste et aucune capacité labels ne se pose sur l'enfant.
+out="$(GWSA_ROOT="$TXA" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
+  MAG_TRANSACTIONAL_LEASE_MODE=manuel "$PY" -c "
+import gateway.api as api
+from gateway.sessions import create_session, create_child_session, session_has_capability
+def fake_broker(alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None):
+    if 'labels' in args and 'list' in args:
+        return {'labels': [{'id': 'L_x', 'name': 'gc/x', 'type': 'user'},
+                           {'id': 'L_y', 'name': 'gc/y', 'type': 'user'}]}
+    return {}
+api.run_via_broker = fake_broker
+g = {'n': 0}; _og = api.run_elicitation_gate
+def _cg(f):
+    g['n'] += 1
+    return _og(f)
+api.run_elicitation_gate = _cg
+root = create_session(client='a14deleg')
+child = create_child_session(root.session_id, client='mcp')
+api.gmail_labels_modify('alpha', add_labels=['gc/x'], thread_ids=['t1'], session=child.session_id, grant_scope='session')
+g1 = g['n']
+api.gmail_labels_modify('alpha', add_labels=['gc/y'], thread_ids=['t2'], session=child.session_id, grant_scope='session')
+g2 = g['n']
+child_has = session_has_capability(child.session_id, 'alpha', 'gmail', 'labels', '')
+print('g1', g1, 'g2', g2, 'child_has', child_has)
+")"
+[[ "$out" == *"g1 1"* && "$out" == *"g2 2"* && "$out" == *"child_has False"* ]] \
+  && pass "ADR-0014 : sous-session déléguée → geste par acte, aucune grâce écrite (pas d'auto-élargissement)" \
+  || fail "ADR-0014 : une sous-session déléguée a écrit/consulté une grâce ($out)"
+
+# A14-7) Tous les types de sous-appels sous UN seul geste : création d'un libellé
+#        absent (labels.create), batchModify messages, ET retrait (remove_labels).
+out="$(GWSA_ROOT="$TXA" PYTHONPATH="$(pwd)" GWSA_ELICITATION_MOCK=1 MAG_TRANSACTIONAL_CONSENT=1 \
+  MAG_TRANSACTIONAL_LEASE_MODE=manuel "$PY" -c "
+import gateway.api as api
+from gateway.sessions import create_session
+BROKER = []
+def fake_broker(alias, args, timeout=60, raw_output=False, session_id='', consented_cap=None, transactional=None):
+    BROKER.append({'args': list(args), 'cap': consented_cap})
+    if 'labels' in args and 'list' in args:
+        return {'labels': [{'id': 'L_keep', 'name': 'gc/keep', 'type': 'user'}]}
+    if 'labels' in args and 'create' in args:
+        return {'id': 'L_new', 'name': 'gc/new', 'type': 'user'}
+    return {}
+api.run_via_broker = fake_broker
+g = {'n': 0}; _og = api.run_elicitation_gate
+def _cg(f):
+    g['n'] += 1
+    return _og(f)
+api.run_elicitation_gate = _cg
+s = create_session(client='a14paths')
+out = api.gmail_labels_modify('alpha', add_labels=['gc/new'], remove_labels=['gc/keep'], message_ids=['m1', 'm2'], session=s.session_id, grant_scope='session')
+created = out['created_labels'] == ['gc/new']
+msgs = out['messages_modified'] == ['m1', 'm2']
+did_create = any('create' in c['args'] for c in BROKER)
+did_batch = any('batchModify' in c['args'] for c in BROKER)
+# chaque cap d'écriture (create / batchModify) est bien 'labels', jamais 'read'
+write_caps = sorted({(c['cap'] or {}).get('operation') for c in BROKER if 'create' in c['args'] or 'batchModify' in c['args']})
+print('g', g['n'], 'ok', out['ok'], 'created', created, 'msgs', msgs,
+      'did_create', did_create, 'did_batch', did_batch, 'write_caps', write_caps)
+")"
+[[ "$out" == *"g 1"* && "$out" == *"ok True"* && "$out" == *"created True"* \
+   && "$out" == *"msgs True"* && "$out" == *"did_create True"* && "$out" == *"did_batch True"* \
+   && "$out" == *"write_caps ['labels']"* ]] \
+  && pass "ADR-0014 : create + batchModify + remove sous UN seul geste (caps labels)" \
+  || fail "ADR-0014 : un chemin create/batchModify/remove a redemandé un geste ou mal catégorisé ($out)"
+
+rm -rf "$TXA"
+
 section "Vocabulaire humain (fiche 0039) — plus de « token/jeton » hors admin"
 # Le mot « jeton » reste légitime en doc technique (SECURITY.md, ADR, design
 # tokens CSS) : ces fichiers sont hors du grep ci-dessous. Sur les surfaces
