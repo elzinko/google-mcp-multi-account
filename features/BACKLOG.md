@@ -115,6 +115,7 @@
 | [0108](0108-session-demande-sous-ensemble-droits-compte.md) | Session — demander un sous-ensemble des droits du compte (accès fin, vérifiable par session) | feature | P1 |  | 0082 | google-mcp-multi-account | 💡 idea |  |
 | [0035](0035-admin-acces-rapide-et-visu-zones.md) | Accès rapide à l'admin + visualisation des zones (icône barre de menus ?) | feature | P2 |  |  |  | 💡 idea |  |
 | [0089](0089-choix-profil-navigateur-oauth-add.md) | Choisir le profil navigateur (Chrome/…) à l'ouverture OAuth de `mag add` | feature | P2 |  |  |  | 💡 idea |  |
+| [20260903114149142](20260903114149142_liste-comptes-actions-globales.md) | Barre d'actions globales au-dessus de la liste des comptes (tout verrouiller / déverrouiller, ± temps) | feature | P2 |  | 0060 | google-mcp-multi-account | 💡 idea |  |
 | [20260922221816747](20260922221816747_popup-swift-deux-boutons-portee.md) | Popup Touch ID à deux boutons « Une fois / Pour la session » (ergonomie du geste) | feature | P2 |  | 0082 | google-multi-account | 💡 idea |  |
 | [20260930214101550](20260930214101550_spike-msgvault-lecture-gmail.md) | Spike — évaluer msgvault comme source de lecture Gmail multi-comptes | chore | P2 |  |  | google-mcp-multi-account | 💡 idea |  |
 | [0003](0003-vault-credentials-hors-perimetre-agent.md) | Vault credentials hors périmètre agent (Phase 2.1) | feature | P3 |  |  |  | 💡 idea |  |
