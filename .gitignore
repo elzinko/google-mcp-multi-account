@@ -37,3 +37,6 @@ VERSION
 # Doc en ligne — build MkDocs, généré par « mkdocs build », jamais committé (fiche 0072).
 _site/
 .vercel/
+
+# note de handoff ezk-archive — éphémère personnel, jamais committée
+.claude/handoff.archive.md
