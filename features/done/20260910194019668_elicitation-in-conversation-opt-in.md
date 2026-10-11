@@ -180,7 +180,7 @@ client lui-même), ou un helper GUI dédié.
 client MCP (Claude Code branché sur cette branche, serveur lancé par l'app) : le tool est exposé
 et appelé, mais le Claude bute **avant le popup**, dès le 1er appel — il n'a **pas de jeton de
 session** à mettre dans le paramètre `session` (requis), et il a été interrompu avant de guider
-vers l'obtention d'un jeton. Or le flux **existe** ([ADR-0007](../docs/adr/ADR-0007-droits-par-session.md),
+vers l'obtention d'un jeton. Or le flux **existe** ([ADR-0007](../docs/adr/ADR-0007-per-session-rights.md),
 Décision 1) : une session naît d'un **geste humain** — `mag session open` (Touch ID) émet un jeton
 signé que l'humain transmet ensuite au LLM ; le client MCP ne le fournit **pas** automatiquement
 (l'option « id de conversation émis par le client » est explicitement **rejetée** dans l'ADR, car

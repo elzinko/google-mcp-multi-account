@@ -53,4 +53,4 @@ pas retarder le merge du cœur — le P0 (intersection Drive fail-open) et le P1
 
 - Suite de la revue Codex de la PR #110 (findings P2). Parent :
   [0076](0076-droits-par-session-phase-a.md) /
-  [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md).
+  [ADR-0007](../docs/adr/ADR-0007-per-session-rights.md).

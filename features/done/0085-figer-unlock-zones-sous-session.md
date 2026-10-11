@@ -57,6 +57,6 @@ grains) — mais **par défaut, l'isolation prime** (cohérence avec l'objectif 
 
 - Révélé par la revue adverse `ezk-reviewer` de la feature 0080 (finding **P1**, hors périmètre
   littéral de 0080 qui ne visait qu'`active_capabilities`). Parent :
-  [0082](0082-droits-par-session.md) / [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md).
+  [0082](0082-droits-par-session.md) / [ADR-0007](../docs/adr/ADR-0007-per-session-rights.md).
 - Fiche sœur de [0080](0080-durcir-capacites-fines-session.md) — même couche session, classe
   « durcissements différés d'une revue ».

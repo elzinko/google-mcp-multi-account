@@ -1,90 +1,90 @@
-# Le modèle de policy — qui a le droit de faire quoi
+# The policy model — who is allowed to do what
 
-Une **policy**, c'est la liste de ce qu'un compte connecté a le droit de faire :
-lire ses mails ? préparer des brouillons ? écrire dans Drive, et où exactement ?
-La règle de base est délibérément prudente — **ce qui n'est pas explicitement
-autorisé est refusé** — et c'est *vous* qui élargissez, jamais l'assistant.
+A **policy** is the list of what a connected account is allowed to do:
+read its emails? prepare drafts? write to Drive, and where exactly?
+The base rule is deliberately cautious — **what is not explicitly
+allowed is denied** — and it is *you* who widens it, never the assistant.
 
-Concrètement, chaque compte porte un petit fichier
-`~/.config/gws-accounts/<alias>/policy.json`, vérifié par
+Concretely, each account carries a small file
+`~/.config/gws-accounts/<alias>/policy.json`, checked by
 [`policy-check.py`](https://github.com/elzinko/google-mcp-multi-account/blob/main/scripts/policy-check.py)
-**avant chaque commande** — aussi bien quand vous tapez `mag …` que quand
-l'assistant passe par le MCP. `mag add` en écrit une prudente d'office : un compte
-tout neuf est donc déjà bridé. Pour l'usage courant, voir
-[Utiliser au quotidien](usage.md).
+**before every command** — whether you type `mag …` or the
+assistant goes through the MCP. `mag add` writes a cautious one by default: a brand-new
+account is therefore already restricted. For everyday use, see
+[Everyday usage](usage.md).
 
-## Default-deny, par service
+## Default-deny, per service
 
-**Un service absent de la policy est refusé** (sauf `auth` / `schema`,
-introspection locale) — y compris en lecture. Un service présent est *fail
-closed* : seule une catégorie explicitement à `true` passe. `mag add` écrit
-une policy prudente automatiquement, si bien qu'un profil frais est restreint
-d'emblée. Conséquence : les services non modélisés par l'admin (chat, meet,
-people, slides, forms, script…) sont refusés par défaut — pas d'action visible
-de l'extérieur qui échappe au contrôle.
+**A service missing from the policy is denied** (except `auth` / `schema`,
+local introspection) — including for reads. A service that is present is *fail
+closed*: only a category explicitly set to `true` passes. `mag add` writes
+a cautious policy automatically, so a fresh profile is restricted
+from the start. Consequence: services the admin does not model (chat, meet,
+people, slides, forms, script…) are denied by default — no action visible
+from the outside escapes control.
 
-- **Drive** — par zones : lecture partout, écriture uniquement sous les dossiers
-  autorisés (sous-dossiers compris — remontée des parents via l'API). Modes
-  hérités : `open`, `readonly`, `restricted`.
-- **Gmail** — catégories `read`, `drafts`, `send`, `labels`, `update`, `delete`,
-  `settings`. Le combo gagnant : *brouillons sans envoi* — le LLM prépare, tu envoies.
-- **Agenda / Keep / autres services modélisés** — `read`, `create`, `update`,
+- **Drive** — by zones: read everywhere, write only under the authorized
+  folders (subfolders included — parents are walked up via the API). Legacy
+  modes: `open`, `readonly`, `restricted`.
+- **Gmail** — categories `read`, `drafts`, `send`, `labels`, `update`, `delete`,
+  `settings`. The winning combo: *drafts without sending* — the LLM prepares, you send.
+- **Calendar / Keep / other modeled services** — `read`, `create`, `update`,
   `delete`, `share`.
 
 ```bash
-mag policy mw allow "LLM"        # Drive : zone PERMANENTE sous le dossier « LLM »
-mag policy mw show               # affiche la policy complète du profil
-mag mw drive files create --json '{"name":"x"}'   # ✗ refusé (pas de parent autorisé)
-mag mw gmail users messages send --json '…'       # ✗ refusé si "send": false
-mag policy mw clear              # Drive repasse en open (autres services inchangés)
+mag policy mw allow "LLM"        # Drive: PERMANENT zone under the "LLM" folder
+mag policy mw show               # shows the profile's full policy
+mag mw drive files create --json '{"name":"x"}'   # ✗ denied (no authorized parent)
+mag mw gmail users messages send --json '…'       # ✗ denied if "send": false
+mag policy mw clear              # Drive goes back to open (other services unchanged)
 ```
 
-## Zones temporaires — le flux d'élicitation Drive
+## Temporary zones — the Drive elicitation flow
 
-Par défaut un profil en `zonesOnly` n'a le droit d'écrire *nulle part*. Quand
-un LLM veut écrire quelque part, il se heurte à un refus qui lui dit quoi
-demander ; c'est **toi** qui accordes, pour une durée limitée (défaut 8 h,
-expiration automatique — donc à re-demander à chaque session de travail) :
+By default a `zonesOnly` profile is allowed to write *nowhere*. When
+an LLM wants to write somewhere, it runs into a refusal that tells it what to
+ask for; it is **you** who grants, for a limited time (default 8 h,
+automatic expiry — so it has to be asked again for each work session):
 
 ```bash
-mag grant coloc "Compta 2026" 4   # écriture sous ce dossier pendant 4 h
-mag grants coloc                  # autorisations temporaires actives
-mag grant coloc revoke <folderId> # révoquer avant l'expiration
+mag grant coloc "Compta 2026" 4   # write under this folder for 4 h
+mag grants coloc                  # active temporary authorizations
+mag grant coloc revoke <folderId> # revoke before expiry
 ```
 
-Chaque refus est journalisé et invite le LLM à *demander* l'élargissement —
-l'élicitation, encore. *Limite assumée : c'est le wrapper qui contrôle, pas
-Google — le seul verrou 100 % côté Google serait le scope `drive.file`.*
+Every refusal is logged and invites the LLM to *ask* for the widening —
+elicitation, again. *Accepted limit: it is the wrapper that enforces, not
+Google — the only 100% Google-side lock would be the `drive.file` scope.*
 
-## Droits par session — le grain fin (ADR-0007)
+## Per-session rights — the fine grain (ADR-0007)
 
-La policy et les zones ci-dessus sont le **plancher du poste**. Par-dessus,
-chaque **conversation** (session LLM) porte ses **propres** droits, signés et
-limités dans le temps — une autre conversation n'en hérite pas. C'est le grain
-le plus fin : par **service × opération × ressource**.
+The policy and zones above are the **machine floor**. On top of that,
+each **conversation** (LLM session) carries its **own** rights, signed and
+time-limited — another conversation does not inherit them. This is the finest
+grain: per **service × operation × resource**.
 
-- L'humain ouvre une session (`mag session open`) — un geste **signé** (Touch ID
-  sous strongauth) qui rend un **jeton** ; l'assistant présente ce jeton à
-  chaque appel (sans jeton : aucun accès aux données, seulement la demande de
-  création).
-- Chaque octroi de capacité est **signé** lui aussi — jamais un élargissement
-  silencieux :
+- The human opens a session (`mag session open`) — a **signed** gesture (Touch ID
+  under strongauth) that returns a **token**; the assistant presents this token on
+  every call (without a token: no access to data, only the creation
+  request).
+- Each capability grant is **signed** too — never a silent
+  widening:
 
 ```bash
-mag session open                                    # crée une session signée → jeton
-mag session grant-capability <jeton> mw gmail read  # cette session : lecture Gmail
-mag session grant-capability <jeton> mw drive create "Compta 2026"  # écriture zonée
-mag session list                                    # sessions actives + leur config
+mag session open                                    # creates a signed session → token
+mag session grant-capability <jeton> mw gmail read  # this session: Gmail read
+mag session grant-capability <jeton> mw drive create "Compta 2026"  # zoned write
+mag session list                                    # active sessions + their config
 ```
 
-- **Droits effectifs = policy compte ∩ manifeste projet ∩ capacités session**
-  (intersection, *fail closed*). Hors dépôt git (pas de manifeste), `policy ∩
-  session` ; mais un manifeste **altéré** referme tout (anti-downgrade).
-- Les **sous-agents** héritent d'un sous-ensemble du parent (jamais plus) et ne
-  peuvent pas s'élargir seuls ; le parent révoque toute sa descendance d'un geste.
+- **Effective rights = account policy ∩ project manifest ∩ session capabilities**
+  (intersection, *fail closed*). Outside a git repo (no manifest), `policy ∩
+  session`; but a **tampered** manifest closes everything (anti-downgrade).
+- **Sub-agents** inherit a subset of the parent's rights (never more) and cannot
+  widen them on their own; the parent revokes its whole descendance in one action.
 
-Détail de conception : [ADR-0007](adr/ADR-0007-droits-par-session.md).
+Design details: [ADR-0007](adr/ADR-0007-per-session-rights.md).
 
-Durcissements de ce modèle déjà tranchés : voir la fiche backlog
+Hardenings of this model that are already settled: see the backlog item
 `features/done/0002-durcir-modele-policy-default-deny.md` (default-deny
-vérifié et testé) et [threat-model.md](threat-model.md).
+verified and tested) and [threat-model.md](threat-model.md).

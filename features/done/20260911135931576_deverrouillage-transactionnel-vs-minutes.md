@@ -28,7 +28,7 @@ la porte pour une heure.
 
 ## Contexte / problème
 
-Le déverrouillage par session (`session_unlock`, [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md),
+Le déverrouillage par session (`session_unlock`, [ADR-0007](../docs/adr/ADR-0007-per-session-rights.md),
 fiche [`0076`](done/0076-droits-par-session-phase-a.md) livrée) prend un paramètre **`minutes`**
 (défaut 60, borné 1–1440). Une fois déverrouillé, le compte reste accessible pour la session
 jusqu'à expiration, **sans re-validation**. C'est le cas aussi du mode « élicitation dans la
@@ -72,7 +72,7 @@ confirme « oui, agis **maintenant** », dans ces droits.
   fenêtre ? (à énoncer noir sur blanc dans l'ADR).
 
 > **Décision d'architecture prise (2026-09-11)** — les questions ci-dessus sont tranchées dans
-> [ADR-0011](../docs/adr/ADR-0011-consentement-transactionnel-par-session.md) : bail de lecture
+> [ADR-0011](../docs/adr/ADR-0011-transactional-consent-per-session.md) : bail de lecture
 > court **auto-refermé** (TTL ~90 s ET budget ~20 ops) + **acte sensible signé à usage unique**
 > (écriture/envoi/partage : Touch ID par acte), `minutes` **déprécié/écrêté**, retrait **jamais**
 > dépendant du LLM.
@@ -112,12 +112,12 @@ l'existant qui marche**.
   LLM). Cette fiche **complète** le modèle de durée sous-jacent.
 - [`0108`](0108-session-demande-sous-ensemble-droits-compte.md) — le *quoi* on accorde
   (sous-ensemble de droits). Ici c'est le *combien de temps / à quelle granularité temporelle*.
-- Épic parent [`0082`](0082-droits-par-session.md) ; socle [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md).
+- Épic parent [`0082`](0082-droits-par-session.md) ; socle [ADR-0007](../docs/adr/ADR-0007-per-session-rights.md).
 
 ## Livré — réimplémentation propre ADR-0012 (2026-09-16)
 
 Après trois rondes de revue Codex sur les PR #147/#148 (fermées), une passe de conception a produit
-l'[ADR-0012](../docs/adr/ADR-0012-consentement-transactionnel-propagation.md) (4 zones). Cette PR livre
+l'[ADR-0012](../docs/adr/ADR-0012-transactional-consent-propagation.md) (4 zones). Cette PR livre
 cette réimplémentation propre en une fois — elle **couvre l'incrément 1 ci-dessous ET la couche modes** :
 
 - **Zone 2** — un seul verrou par session ; tous les read-modify-write sérialisés ; consommation de bail

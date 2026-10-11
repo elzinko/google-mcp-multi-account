@@ -31,7 +31,7 @@ remédiation exactement dans la posture recommandée (profils verrouillés).
 ## Proposition
 
 Trancher par une troisième voie qui garde le résultat de (a) avec un
-mécanisme plus sûr ([ADR-0002](../../docs/adr/ADR-0002-email-metadonnee-hors-verrou.md)) :
+mécanisme plus sûr ([ADR-0002](../../docs/adr/ADR-0002-email-metadata-outside-lock.md)) :
 l'email devient une **métadonnée persistée en clair** (`<profil>/.email`),
 écrite par les gestes humains (`mag add`, backfill par `mag list` et
 l'admin), et lue par toutes les surfaces. La gateway n'exécute **plus jamais
@@ -52,7 +52,7 @@ gws** pour l'obtenir — verrouillé ou non.
 
 ## Notes
 
-- Décision : [ADR-0002](../../docs/adr/ADR-0002-email-metadonnee-hors-verrou.md) ;
+- Décision : [ADR-0002](../../docs/adr/ADR-0002-email-metadata-outside-lock.md) ;
   threat model mis à jour (section « Email = métadonnée d'identité »).
 - La phrase de SECURITY.md (« Seule métadonnée qui reste lisible : l'email »)
   reste vraie telle quelle — seul le mécanisme change.

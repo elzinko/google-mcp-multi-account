@@ -7,7 +7,7 @@ signé par acte. Complète la suite hermétique `./scripts/test.sh` (qui ne touc
 aucun compte réel).
 
 Raffine le test manuel de #149. S'appuie sur
-[ADR-0013](../../../docs/adr/ADR-0013-consentement-une-fois-ou-session.md).
+[ADR-0013](../../../docs/adr/ADR-0013-consent-once-or-session.md).
 
 Prompt de lancement : voir [PROMPT.md](PROMPT.md).
 

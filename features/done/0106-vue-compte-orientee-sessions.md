@@ -22,7 +22,7 @@ sessions utilisent le compte, lesquelles, sous quel nom, et avec quels droits.
 Fait suite aux remarques de Thomas (2026-09-01) sur la refonte Cockpit (PR #128). Ce sont
 des évolutions **fonctionnelles**, distinctes de la refonte visuelle.
 
-Références (chemins locaux) : [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md) + fiche
+Références (chemins locaux) : [ADR-0007](../docs/adr/ADR-0007-per-session-rights.md) + fiche
 [`0076`](done/0076-droits-par-session-phase-a.md) (droits propres par conversation), page
 Sessions [`0094`](0094-sessions-page-dediee-reactive.md), page Journal
 [`0102`](done/0102-journal-page-monitoring-filtres-par-session.md), nom de session

@@ -74,5 +74,5 @@ capacités **effectives** au petit-enfant.
   sont **délibérément exclus** du mapping → `""` → **fail-closed** sous capacité scopée. À revisiter
   ici seulement si un usage réel scopé sur ces méthodes apparaît.
 - Révélé par la revue Codex de la PR #118 (findings P2, répondus en fil et résolus). Parent :
-  [0082](0082-droits-par-session.md) / [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md).
+  [0082](0082-droits-par-session.md) / [ADR-0007](../docs/adr/ADR-0007-per-session-rights.md).
   Fiche sœur de [0080](done/0080-durcir-capacites-fines-session.md) et [0085](done/0085-figer-unlock-zones-sous-session.md).

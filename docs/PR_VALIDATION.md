@@ -1,59 +1,59 @@
-# Convention « Validation » des PRs
+# The PR "Validation" convention
 
-> Référencée par `.github/PULL_REQUEST_TEMPLATE.md` (le template ne porte que le
-> squelette ; le fond vit ici). Issue de `ezk-pr-pilot` / ADR-0009 (mega-city),
-> adaptée à ce repo CLI + admin locale.
+> Referenced by `.github/PULL_REQUEST_TEMPLATE.md` (the template only carries the
+> skeleton; the substance lives here). Derived from `ezk-pr-pilot` / ADR-0009
+> (mega-city), adapted to this CLI + local admin repo.
 
-**Le principe : une PR doit être testable par quelqu'un qui n'a pas le contexte.**
-Pas « testé ✅ », mais *quoi* a été testé, *comment* le rejouer, *quoi* reste,
-et *quel signal observable* dit pass/fail.
+**The principle: a PR must be testable by someone who does not have the context.**
+Not "tested ✅", but *what* was tested, *how* to replay it, *what* remains,
+and *which observable signal* says pass/fail.
 
-## 1. La matrice de modalités
+## 1. The modality matrix
 
-Chaque PR déclare où elle en est sur **chaque** modalité — `✅ fait` (avec la
-méthode), `⏳ reste` (avec le plan), ou `N.A.` (avec la raison) :
+Each PR declares where it stands on **every** modality — `✅ done` (with the
+method), `⏳ remaining` (with the plan), or `N.A.` (with the reason):
 
-| Modalité | Quoi |
+| Modality | What |
 |---|---|
-| **CI** | le pipeline du repo (lien du run) |
-| **Tests unitaires / hermétiques** | `./scripts/test.sh` — nouveaux cas listés |
-| **Admin / UI locale** | `mag admin` + parcours réel + **commandes pour rejouer** |
-| **CLI (`mag`)** | commandes littérales + sortie / code de sortie attendus |
-| **Before / after (UI)** | captures avant/après · ou **N.A.** si aucun changement UI |
-| **Preview de déploiement** | **N.A.** (pas de preview distante — outil local) |
+| **CI** | the repo's pipeline (link to the run) |
+| **Unit / hermetic tests** | `./scripts/test.sh` — new cases listed |
+| **Admin / local UI** | `mag admin` + real walkthrough + **commands to replay** |
+| **CLI (`mag`)** | literal commands + expected output / exit code |
+| **Before / after (UI)** | before/after screenshots · or **N.A.** if no UI change |
+| **Deployment preview** | **N.A.** (no remote preview — local tool) |
 
-## 2. Le bloc « Méthode de test locale » — copy-pastable
+## 2. The "Local test method" block — copy-pastable
 
-Des **commandes littérales**, dans l'ordre, depuis un worktree / clone frais :
-worktree path, `mag admin stop` si besoin, démarrage admin, `mag dev …` le
-cas échéant, URL à ouvrir, gestes UI. Le testeur ne doit **rien déduire**.
+**Literal commands**, in order, from a fresh worktree / clone: worktree path,
+`mag admin stop` if needed, admin startup, `mag dev …` where applicable, URL to open,
+UI actions. The tester must not have to **infer anything**.
 
-### Raccourci worktree / branche en cours
+### Shortcut for the current worktree / branch
 
-Une seule commande déploie le clone courant, redémarre l'admin sur le code
-déployé, et affiche un résumé (id, URL, marqueur `afSearchHits`, process) :
+A single command deploys the current clone, restarts the admin on the deployed code,
+and prints a summary (id, URL, `afSearchHits` marker, process):
 
 ```bash
 cd <worktree-ou-clone>
 ./bin/mag dev test
 ```
 
-Options utiles :
+Useful options:
 
-- `--no-deploy` — réutiliser le dernier déploiement de cette branche+SHA
-- `--isolated` — couloir sans comptes prod (`~/.config/gws-accounts-dev`)
-- `--open` — ouvrir `http://127.0.0.1:4877` dans le navigateur (macOS)
+- `--no-deploy` — reuse the last deployment of this branch+SHA
+- `--isolated` — lane without prod accounts (`~/.config/gws-accounts-dev`)
+- `--open` — open `http://127.0.0.1:4877` in the browser (macOS)
 
-Signal pass/fail minimal : la ligne `PR marker  : yes — PR marker afSearchHits present`
-dans le résumé (sortie CLI en anglais, fiche 0019), et l'admin répond sur l'URL affichée.
+Minimal pass/fail signal: the line `PR marker  : yes — PR marker afSearchHits present`
+in the summary (CLI output in English, backlog item 0019), and the admin responds on
+the printed URL.
 
-## 3. Signaux observables pass/fail
+## 3. Observable pass/fail signals
 
-Chaque critère a son signal : message CLI exact, page admin attendue, entrée
-MCP écrite, ligne de log. « Ça marche » n'est pas un signal.
+Each criterion has its signal: exact CLI message, expected admin page, MCP entry
+written, log line. "It works" is not a signal.
 
 ## 4. Secrets
 
-Ne jamais coller de tokens, de `client_secret.json`, ni de sortie
-`gws auth export` dans le corps de PR. Les chemins
-(`~/.config/gws-accounts/`) se citent ; le contenu non.
+Never paste tokens, `client_secret.json`, or `gws auth export` output into the PR
+body. Paths (`~/.config/gws-accounts/`) may be cited; the content may not.

@@ -22,7 +22,7 @@ contextes où l'agent tourne ailleurs que sur le Mac (Remote Control, Code on th
 cowork, Dispatch), **Mac allumé OU éteint**, **sans serveur allumé en permanence**,
 avec une **sécurité au repos maximale**, et le projet repensé **open source**.
 
-Décision d'architecture : **[ADR-0008](../docs/adr/ADR-0008-acces-mobile-passkey-holder-natif.md)**
+Décision d'architecture : **[ADR-0008](../docs/adr/ADR-0008-mobile-access-passkey-native-holder.md)**
 (accepté le 2026-08-15). Comparateur visuel : `docs/architecture/acces-mobile-comparateur.html`.
 
 ## Proposition

@@ -1,50 +1,50 @@
-# Sous le capot — l'architecture
+# Under the hood — the architecture
 
-Cette page explique **comment le projet est bâti** : quelles pièces existent, qui
-parle à qui, et — surtout — **où se trouvent les garde-fous** qui empêchent
-l'assistant d'agir tout seul. Elle s'adresse à qui veut comprendre ou auditer ; pour
-juste démarrer, allez plutôt à **[Démarrer](demarrer.md)**.
+This page explains **how the project is built**: which pieces exist, who talks to
+whom, and — above all — **where the safeguards are** that stop the assistant from
+acting on its own. It is for anyone who wants to understand or audit the system; to
+just get started, go to **[Getting started](getting-started.md)** instead.
 
-Un seul principe traverse tout ce qui suit :
+One principle runs through everything below:
 
-> **L'outil vérifie, l'humain autorise, le LLM propose.**
-> L'assistant peut *demander* un accès ; il ne peut jamais se l'accorder lui-même.
+> **The tool verifies, the human authorizes, the LLM proposes.**
+> The assistant can *ask* for access; it can never grant it to itself.
 
-## L'idée en une image
+## The idea in one picture
 
-Tout tourne **sur votre machine** — rien n'est hébergé dans un cloud applicatif.
-Votre assistant parle au serveur MCP ; le serveur passe par une **gateway** qui
-vérifie deux choses avant chaque appel à Google : le compte est-il **déverrouillé** ?
-l'action est-elle **autorisée par la policy** ? Vous, l'humain, agissez d'un autre
-côté — la CLI `mag` ou l'interface admin — pour ouvrir ou fermer ces accès. Les deux
-côtés se rejoignent sur le même **état** (verrous, autorisations, policy) sans que
-l'un puisse commander l'autre.
+Everything runs **on your machine** — nothing is hosted in an application cloud.
+Your assistant talks to the MCP server; the server goes through a **gateway** that
+checks two things before every call to Google: is the account **unlocked**? Is the
+action **allowed by the policy**? You, the human, act from the other side — the `mag`
+CLI or the admin interface — to open or close these accesses. The two sides meet on
+the same **state** (locks, grants, policy) without either being able to command the
+other.
 
 ```mermaid
 flowchart TD
-  subgraph clients [Clients LLM]
+  subgraph clients [LLM clients]
     Desktop[Claude_Desktop]
     Cursor[Cursor]
     Code[Claude_Code]
   end
 
-  subgraph entry [Porte d entree]
+  subgraph entry [Entry door]
     MCP[bin_google_mcp]
     GW[gateway_api]
     GMA[bin_gma]
     Admin[admin_4877]
   end
 
-  subgraph controls [Controles]
-    Lock[verrou_profil]
+  subgraph controls [Controls]
+    Lock[profile_lock]
     Pol[policy_check]
-    Grants[zones_Drive_grants]
+    Grants[Drive_zone_grants]
     Strong[strongauth_TouchID]
   end
 
   subgraph exec [Executor_v1]
     GWS[gws_CLI]
-    Creds["credentials.enc_par_alias"]
+    Creds["credentials.enc_per_alias"]
   end
 
   Google[APIs_Google]
@@ -60,219 +60,219 @@ flowchart TD
   GMA --> Lock
   GMA --> Pol
   Pol --> Grants
-  Strong -.->|unlock_grant_humain| GMA
+  Strong -.->|unlock_grant_human| GMA
   GW -->|executor.py| GWS
   GMA --> GWS
   GWS --> Creds
   GWS --> Google
 ```
 
-Les diagrammes de séquence détaillés (lecture de données, connexion de compte,
-réparation d'accès) sont dans [`diagrams/`](https://github.com/elzinko/google-mcp-multi-account/tree/main/diagrams/).
+The detailed sequence diagrams (reading data, connecting an account, repairing
+access) are in [`diagrams/`](https://github.com/elzinko/google-mcp-multi-account/tree/main/diagrams/).
 
-## Où vivent les choses
+## Where things live
 
-Sur le poste, six couches se relaient :
+On the workstation, six layers take turns:
 
-| Couche | Artefact | Rôle |
-|--------|----------|------|
-| Clients LLM | Claude Desktop, Cursor, Claude Code | Appellent le MCP (données) ou le shell (admin) |
-| MCP | [`bin/google-mcp`](https://github.com/elzinko/google-mcp-multi-account/blob/main/bin/google-mcp) → [`gateway/`](https://github.com/elzinko/google-mcp-multi-account/tree/main/gateway/) | La porte d'entrée **recommandée** pour Gmail/Drive |
-| CLI humaine | [`bin/mag`](https://github.com/elzinko/google-mcp-multi-account/blob/main/bin/mag) | Multi-comptes : `add`, `lock`/`unlock`, `grant`, `policy` |
-| Cockpit humain | [`admin/server.js`](https://github.com/elzinko/google-mcp-multi-account/blob/main/admin/server.js) `127.0.0.1:4877` | Interface web locale (jamais exposée hors loopback) |
-| Policy | [`scripts/policy-check.py`](https://github.com/elzinko/google-mcp-multi-account/blob/main/scripts/policy-check.py) | Vérifie « default-deny » avant tout appel à Google |
-| Exécution Google | `gws` + `~/.config/gws-accounts/<alias>/` | Tokens chiffrés + appels API |
+| Layer | Artifact | Role |
+|-------|----------|------|
+| LLM clients | Claude Desktop, Cursor, Claude Code | Call the MCP (data) or the shell (admin) |
+| MCP | [`bin/google-mcp`](https://github.com/elzinko/google-mcp-multi-account/blob/main/bin/google-mcp) → [`gateway/`](https://github.com/elzinko/google-mcp-multi-account/tree/main/gateway/) | The **recommended** entry point for Gmail/Drive |
+| Human CLI | [`bin/mag`](https://github.com/elzinko/google-mcp-multi-account/blob/main/bin/mag) | Multi-account: `add`, `lock`/`unlock`, `grant`, `policy` |
+| Human cockpit | [`admin/server.js`](https://github.com/elzinko/google-mcp-multi-account/blob/main/admin/server.js) `127.0.0.1:4877` | Local web interface (never exposed beyond loopback) |
+| Policy | [`scripts/policy-check.py`](https://github.com/elzinko/google-mcp-multi-account/blob/main/scripts/policy-check.py) | Checks "default-deny" before any call to Google |
+| Google execution | `gws` + `~/.config/gws-accounts/<alias>/` | Encrypted tokens + API calls |
 
-Depuis la Phase 2 A, `gws` n'est plus lancé un peu partout : un **broker** local
+Since Phase 2 A, `gws` is no longer launched all over the place: a local **broker**
 ([`bin/google-broker`](https://github.com/elzinko/google-mcp-multi-account/blob/main/bin/google-broker),
-démarré tout seul, écoute sur `127.0.0.1:4878`) est le **seul** à l'exécuter pour
-accéder aux données. La gateway ne fait plus que lui parler. Les identifiants restent
-sous `~/.config/gws-accounts/` (le vault dédié est prévu — fiche `features/0003-vault-credentials-hors-perimetre-agent.md`).
+started automatically, listening on `127.0.0.1:4878`) is the **only** component that
+runs it to access data. The gateway only talks to the broker. Credentials stay under
+`~/.config/gws-accounts/` (the dedicated vault is planned — backlog item `features/0003-vault-credentials-hors-perimetre-agent.md`).
 
-### Deux noms à ne pas confondre : le dépôt et le connecteur { #noms-depot-connecteur }
+### Two names not to confuse: the repository and the connector { #noms-depot-connecteur }
 
-Vous croiserez deux identifiants très proches. Ce n'est pas une incohérence, c'est la
-convention MCP :
+You will come across two very similar identifiers. This is not an inconsistency; it is
+the MCP convention:
 
-| Nom | Ce qu'il désigne | Où on le voit |
+| Name | What it refers to | Where you see it |
 |-----|------------------|---------------|
-| **`google-mcp-multi-account`** | le **dépôt / projet** (et le nom que le serveur annonce, `mcp_server.py:SERVER_NAME`) | URL GitHub, dossier cloné, binaire `bin/google-mcp`, install `~/.local/share/google-mcp/` |
-| **`google-multi-account`** | le **connecteur installé** — la clé sous `mcpServers` dans la config client | Claude Desktop → Connecteurs, `claude mcp get` |
+| **`google-mcp-multi-account`** | the **repository / project** (and the name the server announces, `mcp_server.py:SERVER_NAME`) | GitHub URL, cloned folder, `bin/google-mcp` binary, `~/.local/share/google-mcp/` install |
+| **`google-multi-account`** | the **installed connector** — the key under `mcpServers` in the client config | Claude Desktop → Connectors, `claude mcp get` |
 
-Le dépôt porte `mcp` (découvrable, il s'auto-décrit) ; le connecteur est plus court
-car il vit déjà sous `mcpServers` — y répéter « mcp » serait redondant. Même schéma
-partout : `github/github-mcp-server` → connecteur `github` ; le paquet
-`mcp-server-git` → connecteur `git`. La CLI, elle, s'appelle **`mag`**.
+The repository carries `mcp` (discoverable, self-describing); the connector is shorter
+because it already lives under `mcpServers` — repeating "mcp" there would be
+redundant. Same pattern everywhere: `github/github-mcp-server` → connector `github`;
+the `mcp-server-git` package → connector `git`. The CLI, for its part, is called **`mag`**.
 
-## Les composants, un par un
+## The components, one by one
 
-### La gateway (`gateway/`)
+### The gateway (`gateway/`)
 
-C'est le cœur : elle reçoit les appels du serveur MCP et n'en laisse passer aucun
-sans contrôle.
+This is the core: it receives calls from the MCP server and lets none of them through
+without a check.
 
-| Module | Responsabilité |
+| Module | Responsibility |
 |--------|----------------|
-| `api.py` | Le contrat public : `profiles_list`, `gmail_*`, `drive_*`, `access_request` |
-| `profiles.py` | Alias, verrous, listage des profils |
-| `executor.py` | Client RPC vers le broker (plus aucun appel `gws` ici) |
-| `broker_server.py` | Le daemon `127.0.0.1:4878` — verrou + policy + journal + `gws` |
-| `default_policy.py` | La policy « prudente » écrite à `mag add` |
-| `mcp_server.py` | L'adaptateur MCP stdio (JSON-RPC, **stdlib seule**) |
+| `api.py` | The public contract: `profiles_list`, `gmail_*`, `drive_*`, `access_request` |
+| `profiles.py` | Aliases, locks, profile listing |
+| `executor.py` | RPC client to the broker (no more `gws` calls here) |
+| `broker_server.py` | The `127.0.0.1:4878` daemon — lock + policy + audit log + `gws` |
+| `default_policy.py` | The "cautious" policy written at `mag add` |
+| `mcp_server.py` | The MCP stdio adapter (JSON-RPC, **stdlib only**) |
 | `errors.py` | `GatewayError` (`locked`, `policy`, `alias`, …) |
 
-Concrètement, un appel comme `gmail_list` traverse cinq étapes : on **valide l'alias**,
-on **refuse si le profil est verrouillé** (avec un message d'élicitation), on passe la
-commande au **policy-check**, on **journalise**, puis seulement on exécute. Et
-`access_request` ne déverrouille ni n'accorde jamais rien : il **renvoie la commande
-exacte** que l'humain devra lancer (`mag unlock`, `mag grant`).
+Concretely, a call like `gmail_list` goes through five steps: it **validates the
+alias**, **refuses if the profile is locked** (with an elicitation message), passes the
+command to the **policy-check**, **logs it**, and only then executes. And
+`access_request` never unlocks or grants anything: it **returns the exact command**
+that the human will have to run (`mag unlock`, `mag grant`).
 
-### Les tools MCP exposés
+### The exposed MCP tools
 
-Volontairement peu nombreux et sans surprise — pas de tool générique « lance n'importe
-quelle commande ». Chacun lit ou écrit précisément :
+Deliberately few and unsurprising — there is no generic "run any command" tool. Each
+one reads or writes something precise:
 
-| Tool | Effet | Envoi mail ? |
-|------|-------|--------------|
-| `profiles_list` | Liste alias / verrou / policy | — |
-| `gmail_list` / `gmail_get` | Lecture | Non |
-| `gmail_draft_create` | Brouillon | Non (aucun tool `send`) |
-| `gmail_attachment_get` | Lecture — PJ écrite dans `.downloads` ([ADR-0006](adr/ADR-0006-fichiers-recus-repertoire-dedie.md)) | — |
-| `drive_list` / `drive_get` | Lecture, propriétaire compris | — |
-| `drive_read` | Contenu en texte (Doc → markdown, Sheet → CSV) | — |
-| `drive_create` / `drive_update` | Création / modification sous zone autorisée ([ADR-0003](adr/ADR-0003-contenu-drive-via-depot-broker.md)) | — |
-| `drive_copy` / `drive_upload` | Copie native / téléversement, sous zone | — |
-| `drive_permissions_*` | Partage lecture/écriture (policy `share`) | — |
-| `access_request` | Renvoie une commande à faire exécuter par l'humain | — |
+| Tool | Effect | Sends mail? |
+|------|--------|-------------|
+| `profiles_list` | Lists aliases / lock / policy | — |
+| `gmail_list` / `gmail_get` | Read | No |
+| `gmail_draft_create` | Draft | No (no `send` tool) |
+| `gmail_attachment_get` | Read — attachment written to `.downloads` ([ADR-0006](adr/ADR-0006-received-files-dedicated-directory.md)) | — |
+| `drive_list` / `drive_get` | Read, including the owner | — |
+| `drive_read` | Content as text (Doc → markdown, Sheet → CSV) | — |
+| `drive_create` / `drive_update` | Create / modify under an authorized zone ([ADR-0003](adr/ADR-0003-drive-content-via-broker-deposit.md)) | — |
+| `drive_copy` / `drive_upload` | Native copy / upload, under a zone | — |
+| `drive_permissions_*` | Read/write sharing (`share` policy) | — |
+| `access_request` | Returns a command for the human to run | — |
 
-### La CLI `mag`
+### The `mag` CLI
 
-Le poste de pilotage humain. Elle isole chaque compte dans son propre répertoire
-(`~/.config/gws-accounts/<alias>/`), écrit une policy prudente à la connexion, et
-expose les contrôles humains (`lock`, `unlock`, `grant`, `policy`). Avant tout appel à
-`gws`, elle vérifie le verrou puis la policy. Ses interpréteurs sont en chemin
-**absolu** (`/usr/bin/python3`, `/usr/bin/swift`) — un faux `python3` en tête de PATH
-ne peut donc pas désactiver la policy en douce.
+The human control station. It isolates each account in its own directory
+(`~/.config/gws-accounts/<alias>/`), writes a cautious policy at connection time, and
+exposes the human controls (`lock`, `unlock`, `grant`, `policy`). Before any call to
+`gws`, it checks the lock and then the policy. Its interpreters use **absolute**
+paths (`/usr/bin/python3`, `/usr/bin/swift`) — so a fake `python3` at the front of
+PATH cannot quietly disable the policy.
 
-### La policy (`policy-check.py`)
+### The policy (`policy-check.py`)
 
-Quand un `policy.json` existe, la règle est **« default-deny »** :
+When a `policy.json` exists, the rule is **"default-deny"**:
 
-| Règle | Comportement |
-|-------|----------------|
-| Service **non déclaré** | **Refus** (ex. `chat`, `meet`) |
-| Service déclaré | Fail closed par catégorie (`read`, `send`, `create`, …) |
-| Drive `zonesOnly` | Écriture seulement sous les dossiers autorisés ∪ grants temporaires |
-| JSON corrompu | Refus (fail closed) |
+| Rule | Behavior |
+|------|----------------|
+| **Undeclared** service | **Refused** (e.g. `chat`, `meet`) |
+| Declared service | Fail closed by category (`read`, `send`, `create`, …) |
+| Drive `zonesOnly` | Writes only under authorized folders ∪ temporary grants |
+| Corrupted JSON | Refused (fail closed) |
 
-Le préréglage par défaut est délibérément prudent (`gateway/default_policy.py`) :
-Drive sans zone d'écriture, Gmail en lecture + brouillons **sans envoi**, le reste
-essentiellement en lecture.
+The default preset is deliberately cautious (`gateway/default_policy.py`): Drive with
+no write zone, Gmail with read + drafts **without sending**, everything else
+essentially read-only.
 
-### Les droits par session (`sessions.py`)
+### Per-session rights (`sessions.py`)
 
-Au-dessus de la policy (le plancher du poste), chaque **conversation** porte ses
-**propres** droits, signés et éphémères ([ADR-0007](adr/ADR-0007-droits-par-session.md)).
-L'identité d'une session n'est pas la connexion MCP mais un **jeton** que l'humain
-crée d'un geste signé (`mag session open`) et que l'assistant présente **à chaque
-appel** — deux conversations d'une même connexion restent donc isolées.
+On top of the policy (the workstation's floor), each **conversation** carries its
+**own** rights, signed and short-lived ([ADR-0007](adr/ADR-0007-per-session-rights.md)).
+A session's identity is not the MCP connection but a **token** that the human creates
+with a signed action (`mag session open`) and that the assistant presents **on every
+call** — so two conversations on the same connection stay isolated.
 
-| Aspect | Comportement |
-|--------|--------------|
-| **Grain** | Capacités par **service × opération × ressource** (ressource optionnelle : zone Drive, label Gmail…) |
-| **Octroi** | `mag session unlock\|grant\|grant-capability` — **toujours signé** (jamais d'élargissement silencieux) |
-| **Effectif** | policy compte ∩ manifeste projet ∩ capacités session (∩, *fail closed* ; anti-downgrade si manifeste altéré) |
-| **Cycle de vie** | TTL + révocation explicite ; la déconnexion MCP ne purge **rien** ; registre `.sessions/<jeton>.json` |
-| **Sous-agents** | Héritage ⊆ parent, pas d'élargissement autonome, révocation en cascade |
-| **Bootstrap** | Sans jeton : aucun accès données, seulement la demande de création (`mag session open`) |
+| Aspect | Behavior |
+|--------|----------|
+| **Granularity** | Capabilities per **service × operation × resource** (resource optional: Drive zone, Gmail label…) |
+| **Granting** | `mag session unlock\|grant\|grant-capability` — **always signed** (never a silent widening) |
+| **Effective** | account policy ∩ project manifest ∩ session capabilities (∩, *fail closed*; anti-downgrade if the manifest is tampered with) |
+| **Lifecycle** | TTL + explicit revocation; MCP disconnection purges **nothing**; registry `.sessions/<token>.json` |
+| **Sub-agents** | Inheritance ⊆ parent, no autonomous widening, cascading revocation |
+| **Bootstrap** | Without a token: no data access, only the creation request (`mag session open`) |
 
-### L'interface admin
+### The admin interface
 
-Une petite UI web locale, pensée pour rester inoffensive : elle n'écoute **que** sur
-`127.0.0.1:4877`, exige un en-tête `X-GWSA-Admin` et vérifie l'`Origin` (anti-CSRF),
-n'agit que via `execFile(mag)` (jamais un shell), et n'a pas d'authentification
-applicative — la confiance, c'est « on est sur la machine locale ».
+A small local web UI, designed to stay harmless: it listens **only** on
+`127.0.0.1:4877`, requires an `X-GWSA-Admin` header and checks the `Origin`
+(anti-CSRF), acts only through `execFile(mag)` (never a shell), and has no
+application-level authentication — the trust is "we are on the local machine".
 
-### Où sont les secrets
+### Where the secrets are
 
-| Élément | Emplacement |
+| Item | Location |
 |---------|-------------|
-| Tokens OAuth chiffrés | `~/.config/gws-accounts/<alias>/credentials.enc` |
-| Clé maître | Trousseau macOS (`gws-cli`), via `gws` |
-| `client_secret.json` | `~/.config/gws-accounts/` (hors dépôt) |
-| Policy / grants / verrou | Fichiers dans le dossier du profil |
-| Journal | `~/.config/gws-accounts/usage.jsonl` |
+| Encrypted OAuth tokens | `~/.config/gws-accounts/<alias>/credentials.enc` |
+| Master key | macOS Keychain (`gws-cli`), via `gws` |
+| `client_secret.json` | `~/.config/gws-accounts/` (outside the repository) |
+| Policy / grants / lock | Files in the profile folder |
+| Audit log | `~/.config/gws-accounts/usage.jsonl` |
 
-## Ce que chaque garde-fou protège — et sa limite
+## What each safeguard protects — and its limit
 
-Le tableau est volontairement honnête sur la dernière colonne : chaque contrôle a une
-condition qui le contourne.
+The table is deliberately honest in its last column: every control has a condition
+that bypasses it.
 
-| Contrôle | Où | Contre quoi | Contournable si… |
+| Control | Where | Against what | Bypassable if… |
 |----------|-----|-------------|------------------|
-| Policy default-deny | `policy-check.py` | Envoi, services non listés, écritures hors zone | L'agent appelle `gws` **hors** `mag`/gateway |
-| Zones Drive + grants | policy + `session-grants.json` | Écriture hors dossiers autorisés | Idem, `gws` nu |
-| Droits par session | `sessions.py` + broker | Fuite de droits entre conversations ; élargissement non signé | L'agent appelle `gws` **hors** gateway (coopératif jusqu'au vault) |
-| Verrou profil | `.locked` / `.unlock-until` | Accès sans votre feu vert | Édition des fichiers, ou `gws` nu |
-| Tools MCP sans `send` | `mcp_server.py` | Envoi de mail via le MCP | Un autre client / le shell |
-| `access_request` non exécutant | `api.py` | Auto-déverrouillage par le LLM | L'humain (ou un agent) exécute la commande |
-| Touch ID (strongauth) | `touchid.swift` | Unlock/grant sans présence physique | PATH falsifié : **non** (swift absolu) ; fichiers verrou éditables : oui |
-| Admin loopback + anti-CSRF | `admin/server.js` | Un site web distant | Un processus **local** malveillant |
-| Journal `usage.jsonl` | 3 chemins d'écriture | Audit coopératif | `GWSA_CLIENT` est falsifiable |
+| Default-deny policy | `policy-check.py` | Sending, unlisted services, writes outside zones | The agent calls `gws` **outside** `mag`/the gateway |
+| Drive zones + grants | policy + `session-grants.json` | Writes outside authorized folders | Same, bare `gws` |
+| Per-session rights | `sessions.py` + broker | Rights leaking between conversations; unsigned widening | The agent calls `gws` **outside** the gateway (cooperative until the vault) |
+| Profile lock | `.locked` / `.unlock-until` | Access without your go-ahead | Editing the files, or bare `gws` |
+| MCP tools without `send` | `mcp_server.py` | Sending mail via the MCP | Another client / the shell |
+| Non-executing `access_request` | `api.py` | Self-unlocking by the LLM | The human (or an agent) runs the command |
+| Touch ID (strongauth) | `touchid.swift` | Unlock/grant without physical presence | Forged PATH: **no** (absolute swift); editable lock files: yes |
+| Loopback admin + anti-CSRF | `admin/server.js` | A remote website | A malicious **local** process |
+| `usage.jsonl` audit log | 3 write paths | Cooperative audit | `GWSA_CLIENT` can be forged |
 
-**En clair (Phase 1) :** c'est la **discipline d'un agent coopératif** (MCP + policy +
-verrou), pas une prison. Ce n'est **pas** une isolation contre un agent qui aurait un
-shell libre et accès aux fichiers d'identifiants — c'est dit noir sur blanc dans le
-**[modèle de menace](threat-model.md)**.
+**In plain terms (Phase 1):** this is the **discipline of a cooperative agent** (MCP +
+policy + lock), not a prison. It is **not** isolation against an agent that has a free
+shell and access to the credential files — this is stated in black and white in the
+**[threat model](threat-model.md)**.
 
-## Les trois chemins à connaître
+## The three paths to know
 
-**Le chemin supporté** (les données passent par là) :
-
-```text
-LLM  →  tools MCP  →  gateway  →  policy + verrou  →  broker (gws)  →  Google
-```
-
-**Le chemin humain** (vous ouvrez/fermez les accès) :
+**The supported path** (data goes through here):
 
 ```text
-Humain  →  admin OU mag unlock|grant|policy  →  (Touch ID ?)  →  fichiers du profil
+LLM  →  MCP tools  →  gateway  →  policy + lock  →  broker (gws)  →  Google
 ```
 
-**Le chemin à bloquer** côté permissions de l'agent :
+**The human path** (you open/close accesses):
+
+```text
+Human  →  admin OR mag unlock|grant|policy  →  (Touch ID?)  →  profile files
+```
+
+**The path to block** on the agent's permissions side:
 
 ```text
 LLM  →  shell  →  GOOGLE_WORKSPACE_CLI_CONFIG_DIR=… gws …
 ```
 
-La parade : refuser à l'agent, dans ses permissions shell, l'appel `gws` nu et
-l'édition de `~/.config/gws-accounts/` — les données ne passent **que** par le MCP.
+The countermeasure: deny the agent, in its shell permissions, bare `gws` calls and
+edits to `~/.config/gws-accounts/` — data goes through the MCP **only**.
 
-## Où en est le produit
+## Where the product stands
 
-| Phase | État | Contenu |
+| Phase | State | Content |
 |-------|------|---------|
-| **1** | **Déployée** | MCP + gateway + default-deny + docs |
-| **2 A** | **Déployée** | Broker loopback : `gws` uniquement dans le broker |
-| **Droits/session** | **En cours** — [ADR-0007](adr/ADR-0007-droits-par-session.md) | Jeton signé porté par appel, capacités fines par conversation, isolation, audit |
-| **2.1** | Prévue — fiche `features/0003-vault-credentials-hors-perimetre-agent.md` | Vault des identifiants hors de portée de l'agent |
-| **3** | Idée — fiche `features/0001-elicitation-signee-strongauth-v2.md` | Élicitation signée par la Secure Enclave |
+| **1** | **Deployed** | MCP + gateway + default-deny + docs |
+| **2 A** | **Deployed** | Loopback broker: `gws` only inside the broker |
+| **Rights/session** | **In progress** — [ADR-0007](adr/ADR-0007-per-session-rights.md) | Signed token carried per call, fine-grained capabilities per conversation, isolation, audit |
+| **2.1** | Planned — backlog item `features/0003-vault-credentials-hors-perimetre-agent.md` | Credentials vault out of the agent's reach |
+| **3** | Idea — backlog item `features/0001-elicitation-signee-strongauth-v2.md` | Elicitation signed by the Secure Enclave |
 
-## Pour aller vite
+## To go fast
 
-Les fichiers qui comptent, et de quoi vérifier que tout va bien :
+The files that matter, and how to check that everything is fine:
 
 ```text
-bin/google-mcp          # entrée MCP stdio
-bin/google-broker       # daemon (exécute gws)
-bin/mag                 # la CLI multi-comptes
+bin/google-mcp          # MCP stdio entry
+bin/google-broker       # daemon (runs gws)
+bin/mag                 # the multi-account CLI
 gateway/                # API + MCP + executor + broker
-scripts/policy-check.py # application de la policy
+scripts/policy-check.py # policy enforcement
 admin/server.js         # UI 127.0.0.1:4877
 ```
 
 ```bash
-./scripts/test.sh                 # policy + gateway + smoke MCP (hermétique)
-mag list                          # vos comptes
-mag policy vous@gmail.com show    # la policy active d'un compte
+./scripts/test.sh                 # policy + gateway + MCP smoke (hermetic)
+mag list                          # your accounts
+mag policy vous@gmail.com show    # an account's active policy
 ```

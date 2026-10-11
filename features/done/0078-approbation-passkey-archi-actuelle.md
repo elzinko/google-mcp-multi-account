@@ -50,7 +50,7 @@ Périmètre **phase 1** (délibérément étroit) :
 
 ## Notes
 
-- Découle de [ADR-0008](../docs/adr/ADR-0008-acces-mobile-passkey-holder-natif.md), Suites § phase 1.
+- Découle de [ADR-0008](../docs/adr/ADR-0008-mobile-access-passkey-native-holder.md), Suites § phase 1.
 - Réutilise l'élicitation signée [[0001]] / ADR-0005 (payload + nonce + reçu) — ne pas réinventer.
 - **Articulation #108** : cette approbation par passkey **est** le « consentement distant » de la
   **phase B** de l'axe *droits par session* (ADR-0007 / PR #108). Même socle (ADR-0005) — à concevoir

@@ -189,8 +189,8 @@ else
   echo "  Brancher un client (« mag » est sur le PATH) :"
   echo "    • Claude Desktop : mag wire desktop"
   echo "    • Claude Code    : mag wire code      (les deux d'un coup : mag wire all)"
-  echo "    • Cursor         : à la main — voir docs/configurer-client.md"
-  echo "  Détail des 3 clients : docs/configurer-client.md"
+  echo "    • Cursor         : à la main — voir docs/connect-client.md"
+  echo "  Détail des 3 clients : docs/connect-client.md"
   echo "  Ou brancher pendant l'install : relance avec ${B}--wire${N} (ou ${B}GWSA_WIRE=1${N})."
 fi
 
