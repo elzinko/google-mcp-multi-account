@@ -249,23 +249,43 @@ if [[ "$MODE" == "delete" ]]; then
       || { echo "Annulé — rien supprimé."; exit 0; }
   fi
 
+  # On ne nettoie l'état local QUE si le projet est confirmé supprimé (ou
+  # absent pour le compte PROPRIÉTAIRE). Un « describe » qui échoue peut venir
+  # d'un mauvais compte actif — effacer l'id laisserait un projet orphelin.
+  wipe_local=1
   if [[ -n "${PROJECT_ID:-}" ]]; then
-    if have_gcloud; then
-      if gcloud projects describe "$PROJECT_ID" >/dev/null 2>&1; then
+    if ! have_gcloud; then
+      warn "gcloud absent — projet $PROJECT_ID NON supprimé côté GCP."
+      warn "Supprime-le en console puis relance pour nettoyer l'état local."
+      wipe_local=0
+    else
+      acct="$(active_account)"
+      if [[ -z "$acct" ]]; then
+        warn "aucun compte gcloud actif — projet $PROJECT_ID NON supprimé."
+        warn "Connecte-toi (gcloud auth login) avec le compte PROPRIÉTAIRE puis relance."
+        wipe_local=0
+      elif gcloud projects describe "$PROJECT_ID" >/dev/null 2>&1; then
         gcloud projects delete "$PROJECT_ID" --quiet \
           && ok "projet GCP supprimé : $PROJECT_ID" \
-          || die "échec de la suppression du projet (droits ? compte actif ?)."
+          || die "échec de la suppression du projet (droits ? compte propriétaire ?) — état local conservé."
       else
-        warn "projet $PROJECT_ID introuvable côté GCP (déjà supprimé ?) — on nettoie l'état local."
+        warn "projet $PROJECT_ID introuvable pour le compte actif « $acct »."
+        warn "Soit déjà supprimé, soit ce n'est pas le compte PROPRIÉTAIRE du projet."
+        if [[ -n "$CONFIRM_YES" ]]; then
+          warn "--yes : nettoyage de l'état local quand même (tu perds l'id $PROJECT_ID)."
+        elif ! confirm "Nettoyer quand même l'état local (perte de l'id $PROJECT_ID) ?"; then
+          wipe_local=0
+        fi
       fi
-    else
-      warn "gcloud absent — projet $PROJECT_ID NON supprimé côté GCP."
-      warn "Supprime-le à la main (console) puis relance pour nettoyer l'état local."
     fi
   fi
 
-  rm -f "$SECRET_DEST" && ok "client_secret.json supprimé" || true
-  rm -f "$STATE_FILE"  && ok "état local supprimé ($STATE_FILE)" || true
+  if [[ "$wipe_local" == 1 ]]; then
+    rm -f "$SECRET_DEST" && ok "client_secret.json supprimé" || true
+    rm -f "$STATE_FILE"  && ok "état local supprimé ($STATE_FILE)" || true
+  else
+    warn "état local conservé : $STATE_FILE (projet non confirmé supprimé)."
+  fi
 
   step "Terminé"
   echo "Pour reprovisionner : ${B}./scripts/provision-gcp.sh${N}"

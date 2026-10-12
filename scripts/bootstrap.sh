@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # bootstrap.sh — installe les outils ET provisionne GCP en un seul geste (macOS).
 #
-# Pour une machine neuve (ou quelqu'un qui démarre de zéro). Enchaîne :
+# Pour une machine neuve. À LANCER DEPUIS UN CLONE du dépôt (git clone … puis
+# ./scripts/bootstrap.sh) — PAS en « curl | bash » comme install.sh : ce script
+# lit ses scripts frères via son propre chemin. Enchaîne :
 #   1. Xcode Command Line Tools (Swift → Touch ID / Secure Enclave)
 #   2. serveur MCP « mag » sur le PATH (via install.sh, release figée)
 #   3. provisioning GCP (scripts/provision-gcp.sh — installe gcloud tout seul)
@@ -35,6 +37,7 @@ bootstrap.sh — installe les outils et provisionne GCP en un geste (macOS).
 
   ./scripts/bootstrap.sh [args provision-gcp.sh…]
 
+À lancer depuis un clone du dépôt (pas en curl | bash).
 Enchaîne : Xcode CLT → serveur MCP « mag » → provisioning GCP.
 Les arguments sont passés à provision-gcp.sh (ex. --confirm-account moi@gmail.com).
 Ensuite, dans un nouveau terminal : « mag add <alias> » pour connecter tes comptes.
@@ -52,8 +55,11 @@ if xcode-select -p >/dev/null 2>&1; then
 else
   warn "absents — ouverture de l'installateur système…"
   xcode-select --install 2>/dev/null || true
-  echo "→ Termine l'installation dans la fenêtre qui s'ouvre, puis RELANCE ce script."
-  xcode-select -p >/dev/null 2>&1 || die "Xcode CLT requis — relance une fois l'installation finie."
+  if [[ -t 0 ]]; then
+    echo "→ Termine l'installation dans la fenêtre qui s'ouvre (quelques minutes)."
+    read -r -p "   Appuie sur Entrée une fois l'installation finie… " _ || true
+  fi
+  xcode-select -p >/dev/null 2>&1 || die "Xcode CLT toujours absents — relance ce script une fois l'installation terminée."
 fi
 
 # ── 2. Serveur MCP (« mag » sur le PATH) ─────────────────────────
@@ -71,5 +77,5 @@ fi
 # provision-gcp.sh installe gcloud lui-même (étape 1/7) ; inutile de le faire ici.
 step "3/3 · Provisioning GCP"
 PROVISION="$REPO_ROOT/scripts/provision-gcp.sh"
-[[ -x "$PROVISION" ]] || die "provision-gcp.sh introuvable ($PROVISION)."
+[[ -x "$PROVISION" ]] || die "provision-gcp.sh introuvable ($PROVISION) — lance bootstrap depuis un clone du dépôt, pas en curl | bash."
 exec "$PROVISION" "$@"
