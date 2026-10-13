@@ -6,9 +6,9 @@ priority: P0
 product: google-mcp-multi-account
 version:
 epic: 0017
-status: ready
+status: shipped
 ready:
-pr:
+pr: "local (302efa4)"
 created: 2026-10-13
 ---
 
@@ -29,7 +29,7 @@ parité **CLI ⊇ admin** : tout ce que fait l'admin doit se faire sous `mag`. L
 déjà ce script (`/api/setup`, `/api/sync-iam`) ; le CLI, lui, ne l'expose pas encore.
 
 Cadrage et décision d'architecture : voir
-[Onboarding piloté par le CLI mag — parité CLI ⊇ admin](20261013215354286_onboarding-pilote-cli-mag-parite-admin.md).
+[Onboarding piloté par le CLI mag — parité CLI ⊇ admin](../20261013215354286_onboarding-pilote-cli-mag-parite-admin.md).
 Décision 1 retenue : alias mince, pas un wrapper qui réécrit la logique (le moteur marche,
 on ne le forke pas).
 
