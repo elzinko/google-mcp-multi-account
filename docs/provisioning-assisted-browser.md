@@ -69,8 +69,14 @@ the browser · **[HUMAN]** = a human gesture the LLM only prompts for.
 5. **[LLM]** **Consent screen / Branding.** If the CLI could not create it by API
    (normal on personal accounts), open
    `https://console.cloud.google.com/auth/overview?project=<PROJECT_ID>` and
-   complete it: app name, user support email (the owner), Audience **External**,
-   developer contact email (the owner). No logo is required for a Test app.
+   complete the Branding page: app name, user support email (the owner), Audience
+   **External**, developer contact email (the owner).
+   **To be able to publish later (step 7), also fill on the Branding page:** the
+   **App domain** fields — application homepage, privacy policy and terms URLs
+   (for an open-source tool, the public repo URL works for all three) — and add
+   an **authorized domain** (e.g. `github.com`). These are *not* flagged as
+   required in the UI, but **publishing to Production needs them**.
+   **Do NOT add a logo:** a logo forces app verification in Production.
 6. **[LLM]** **OAuth Desktop client.** Open
    `https://console.cloud.google.com/auth/clients/create?project=<PROJECT_ID>` →
    application type **Desktop app** → name `gws-cli` → **Create**. In the dialog,
@@ -82,20 +88,27 @@ the browser · **[HUMAN]** = a human gesture the LLM only prompts for.
 7. **[LLM]** **Publish to Production.** Open
    `https://console.cloud.google.com/auth/audience?project=<PROJECT_ID>` →
    **Publish app** → **Confirm**. This removes the 7-day token expiry of Testing
-   mode. Publishing is reversible (you can return to Testing).
+   mode. The app stays **unverified** (personal use): each account clicks through
+   a one-time "Google hasn't verified this app" warning at sign-in. Publishing is
+   reversible (you can return to Testing). If **Publish app** is greyed out, the
+   Branding App-domain fields or the authorized domain are missing — see step 5.
 8. **[HUMAN]** Back in the terminal, confirm the publish so the CLI records it,
-   then connect accounts: `mag add <alias>`.
+   then connect accounts: `mag add <alias> <email>` (the email is required when
+   Touch ID / strongauth is on).
 
 ## Gotchas learned on real runs
 
-- **"Publish app" is greyed out right after setup.** The button needs the
-  Branding page complete *and* a few minutes of **propagation** ("settings can
-  take five minutes to a few hours", per Google). If Branding is complete (its
-  **Save** button is disabled = nothing pending) but Publish is still disabled,
-  it is propagation, not a missing field — wait a few minutes and retry. **No
-  logo is needed.**
-- **"Create OAuth client" says 'configure the consent screen first' even though
-  you just did.** Same propagation lag — retry after a moment.
+- **"Publish app" is greyed out, pointing you to the Branding page — even though
+  Branding looks complete.** The real cause is **not** propagation (a long red
+  herring on the first real run): the **App domain** fields (homepage, privacy,
+  terms URLs) and an **authorized domain** are missing. Fill them on the Branding
+  page (the repo URL for the three links, `github.com` as the authorized domain)
+  and Save — the button enables. Re-saving Branding *without* those fields does
+  **not** help.
+- **A logo triggers verification in Production.** Leave the logo empty, or remove
+  it before publishing, to stay unverified for personal use.
+- **"Create OAuth client" says 'configure the consent screen first' right after
+  you created it.** This one *is* a short propagation lag — retry after a moment.
 - **Account mismatch** (the golden rule) is the #1 blocker. Always verify.
 
 ## Hard limits — what the LLM never does
