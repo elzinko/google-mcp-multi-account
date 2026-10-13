@@ -86,6 +86,50 @@ Increments proposés (à groomer/splitter en fiches filles) :
 
 La version du code est déjà affichée dans l'admin ; la garder visible dans l'assistant.
 
+## Décisions de structure (avis architecte — 2026-10-14)
+
+Trois décisions tranchées pour cadrer le découpage. Principe au-dessus de tout : **une
+seule source d'état, un seul moteur, deux façades**.
+
+**1. `mag provision` = alias mince, pas un wrapper qui réécrit.** Le script
+`provision-gcp.sh` marche déjà, testé et idempotent. `mag provision` l'**exécute**, il ne
+réabsorbe pas sa logique. On gagne le bon nom d'usage (`mag`) sans forker un moteur qui
+tourne. L'admin shelle déjà ce script ; le CLI fait pareil. Coût : un chemin de script
+subsiste, mais comme détail interne appelé par `mag`.
+
+**2. La machine d'état vit dans `setup_status`, le script reste l'exécuteur.** « Où j'en
+suis, quoi ensuite » est déjà calculé par `setup_status` (projet, publication,
+`client_secret`, IAM par compte, `next_actions`). On l'étend en une **liste d'étapes
+ordonnées** (état + action par étape). Les deux façades la **rendent** : `mag provision` en
+checklist terminal, l'admin en JSON. `setup_status` reste **en lecture seule** — il décrit et
+propose, il n'exécute pas. Les mutations restent au script et aux gestes humains (console,
+Touch ID). On évite de dupliquer la logique d'étapes en bash ET en JS.
+
+**3. « Admin = façade » devient une règle + un test de parité, pas un vœu.** Règle : un
+endpoint de l'admin ne fait que **shell une commande `mag`** (ou lire `setup_status`), jamais
+de logique d'onboarding propre dans `server.js`. Garde-fou : un **test de parité** énumère
+les actions déclenchables depuis l'admin et vérifie que chacune a son équivalent `mag`. Le
+contrat partagé = le JSON de `setup_status` (lectures) + l'ensemble des sous-commandes `mag`
+(écritures). Sans ce test, la parité reste une intention ; avec, elle est vérifiable.
+
+Conséquence pour le découpage : le 1er enfant à tirer est **`mag provision` en alias** (petit,
+livrable seul) ; le 2e, **étendre `setup_status`** en étapes ordonnées rendues par les deux
+faces ; le 3e, le **test de parité** qui ferme l'épic.
+
+## Périmètre — le plus petit morceau d'abord
+
+Le POC livrable seul, qui rend l'onboarding réel sous `mag` sans rien casser :
+**`mag provision` en alias** du script existant. `provision-gcp.sh` guide déjà les étapes
+(login, projet, APIs, consentement, client OAuth, publication) ; l'exposer sous
+`mag provision` suffit à ce qu'un nouvel arrivant fasse tout depuis `mag`, sans connaître le
+script. Petit, réversible, testable seul. C'est la fiche fille n°1.
+
+Viennent après, séparément (fiches filles n°2 et n°3) :
+
+- **`setup_status` en étapes ordonnées** (« étape 3/6, voici la suivante »), rendues en
+  checklist terminal et en JSON pour l'admin.
+- **Test de parité** admin ↔ CLI, qui ferme l'épic.
+
 ## Critères d'acceptation
 
 - [ ] Le modèle « phase A / phase B » est documenté là où l'utilisateur démarre (README /
