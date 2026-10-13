@@ -387,6 +387,49 @@ profile_email_cached() { # profile_email_cached <dir> — .email SANS repli gws 
   return 0
 }
 
+# ── Pli « un seul geste » : accorder le rôle IAM dans la foulée de `mag add` ──
+# Quand l'humain connecte ses AUTRES comptes, son gcloud actif est DÉJÀ le
+# propriétaire du projet OAuth. Si la sonde voit le 403 « quota project » ET que
+# ce compte actif est owner/editor, on PROPOSE d'accorder serviceUsageConsumer
+# sur place — une confirmation explicite en terminal, zéro aller-retour.
+#
+# Doctrine (CLAUDE.md) : l'octroi IAM reste un geste HUMAIN. Garde-fous :
+#   • jamais sans TTY → le LLM appelle mag en pipe (pas de terminal), il ne peut
+#     donc jamais déclencher l'octroi : il reçoit la commande à proposer, comme
+#     avant. (Pas de flag non interactif, qui rouvrirait cette porte.)
+#   • jamais si le compte actif n'est PAS owner/editor du projet.
+#   • jamais sans confirmation explicite.
+# Hors de ces conditions, on retombe sur l'impression de la commande (inchangé).
+_iam_is_tty()     { [[ -t 0 ]]; }
+_iam_have_gcloud(){ command -v gcloud >/dev/null 2>&1; }
+_iam_confirm()    { local r; read -r -p "$1 [o/N] " r; [[ "$r" =~ ^[oOyY] ]]; }
+
+iam_grant_in_add() { # iam_grant_in_add <email> <remediation-text> → 0 si accordé, 1 sinon
+  local email="$1" rem="$2" project active members role="roles/serviceusage.serviceUsageConsumer"
+  _iam_is_tty || return 1          # pas de terminal (LLM, pipe, CI) → jamais d'octroi
+  _iam_have_gcloud || return 1
+  # Projet = celui du 403 lui-même (extrait du message de remédiation), pas une
+  # supposition : iam-check.py le tient de l'erreur Google.
+  project="$(printf '%s\n' "$rem" | sed -n 's/.*add-iam-policy-binding \([a-z][-a-z0-9]*\) .*/\1/p' | head -1)"
+  [[ -n "$project" ]] || return 1
+  active="$(gcloud auth list --filter=status:ACTIVE --format='value(account)' 2>/dev/null | head -1 | tr 'A-Z' 'a-z')"
+  [[ -n "$active" ]] || return 1
+  members="$(gcloud projects get-iam-policy "$project" --flatten='bindings[].members' \
+      --filter='bindings.role=roles/owner OR bindings.role=roles/editor' \
+      --format='value(bindings.members)' 2>/dev/null | sed 's/^user://' | tr 'A-Z' 'a-z')"
+  printf '%s\n' "$members" | grep -qxF "$active" || return 1   # compte actif pas owner/editor → on n'accorde pas
+  echo
+  echo "$SELF: le compte gcloud actif ($active) est propriétaire du projet « $project »."
+  _iam_confirm "Accorder le rôle serviceUsageConsumer à $email maintenant ?" || return 1
+  if gcloud projects add-iam-policy-binding "$project" \
+       --member="user:$email" --role="$role" --condition=None --quiet >/dev/null 2>&1; then
+    echo "✓ IAM role granted to $email on $project (propagation ~2 min)."
+    return 0
+  fi
+  echo "$SELF: ⚠ IAM grant failed — run it by hand:" >&2
+  return 1
+}
+
 cmd_add() { # cmd_add <alias> [email-attendu] [options gws auth login]
   local alias="$1"; shift
   check_alias "$alias"
@@ -434,13 +477,17 @@ PYEOF
   fi
   # Sonde API read-only : détecter tôt le 403 « quota project » (compte sans
   # rôle IAM serviceUsageConsumer sur le projet de l'app OAuth). Sans ça, le
-  # profil paraît « connecté » mais échouera au 1er vrai appel. On propose la
-  # commande gcloud — on ne l'exécute jamais (geste admin humain, cf. §7 setup).
+  # profil paraît « connecté » mais échouera au 1er vrai appel.
+  # Si l'humain est au terminal et que son gcloud actif est propriétaire du
+  # projet, on propose d'accorder le rôle sur place (iam_grant_in_add, « un seul
+  # geste »). Sinon on imprime la commande — on ne l'exécute jamais nous-mêmes.
   if [[ -n "$email" ]]; then
     local probe rem
     probe="$(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws drive files list --params '{"pageSize":1}' 2>&1 || true)"
     rem="$(printf '%s' "$probe" | "$SYS_PYTHON" "$REPO_DIR/scripts/iam-check.py" detect "$email" 2>/dev/null || true)"
-    [[ -n "$rem" ]] && { echo; echo "$rem" >&2; }
+    if [[ -n "$rem" ]]; then
+      iam_grant_in_add "$email" "$rem" || { echo; echo "$rem" >&2; }
+    fi
   fi
   echo "✓ Profile \"$alias\" connected${email:+ — $email}. Test: $SELF $alias auth status"
   REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
