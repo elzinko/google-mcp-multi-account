@@ -2199,6 +2199,17 @@ else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m octroi IAM NON gardé par le TTY (le LLM pourrait accorder)\n'
 fi
 
+# mag provision — alias du provisioning sous le CLI (parité CLI ⊇ admin, fiche
+# 20261013215354286). On vérifie que `mag provision` ROUTE vers le moteur
+# scripts/provision-gcp.sh (alias mince, pas une logique dupliquée).
+section "mag provision — provisioning sous le CLI (parité CLI ⊇ admin)"
+prov_out="$("$GWSA" provision --help 2>&1)"; prov_rc=$?
+if [[ "$prov_rc" == 0 ]] && echo "$prov_out" | grep -q "provision-gcp.sh"; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m mag provision route vers scripts/provision-gcp.sh\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m mag provision ne route pas vers le script (rc=%s)\n' "$prov_rc"
+fi
+
 # --- 6. Branchement Claude Desktop — scripts/install-claude-desktop.sh -------
 #
 # Hermétique : jamais le vrai ~/Library/.../claude_desktop_config.json — tout se

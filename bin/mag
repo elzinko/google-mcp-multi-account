@@ -12,6 +12,7 @@
 # credentials.enc, decrypted by the same master key — no conflict.
 #
 # Usage:
+#   mag provision [status|sync-iam …]                Set up the OAuth project (phase A, guided)
 #   mag add <alias> [expected-email] [login options]  Create a profile and connect an account
 #                                                   (email required if strongauth is on)
 #   mag list                                         List profiles and their state
@@ -1185,6 +1186,18 @@ cmd_couloir() { # alias déprécié → sandbox
   cmd_sandbox "$@"
 }
 
+cmd_provision() { # mag provision [status|sync-iam …] — monter le projet OAuth (phase A)
+  # Parité CLI ⊇ admin (fiche 20261013215354286) : l'onboarding se pilote sous `mag`.
+  # Alias MINCE — le moteur reste scripts/provision-gcp.sh (idempotent, testé), que
+  # l'admin shelle déjà. On passe tous les arguments tels quels :
+  #   mag provision                    flow guidé complet (phase A)
+  #   mag provision status [--json]    état des lieux (lecture seule)
+  #   mag provision sync-iam [--yes]   accorder le rôle IAM manquant aux comptes connectés
+  local script="$REPO_DIR/scripts/provision-gcp.sh"
+  [[ -f "$script" ]] || die "provisioning script introuvable ($script)"
+  exec bash "$script" "$@"
+}
+
 cmd_admin() { # mag admin [stop] — interface web locale, port GWSA_ADMIN_PORT (défaut 4877)
   local port="${GWSA_ADMIN_PORT:-4877}"
   local action="${1:-start}" pidf="$GWSA_ROOT/.admin-$port.pid" log="$GWSA_ROOT/admin-$port.log"
@@ -2083,6 +2096,7 @@ main() {
   [[ $# -ge 1 ]] || { usage; exit 3; }
   case "$1" in
     -h|--help|help) usage ;;
+    provision) shift; cmd_provision "$@" ;;
     add)    shift; [[ $# -ge 1 ]] || die "usage: $SELF add <alias> [expected-email] [gws auth login options]"; cmd_add "$@" ;;
     list)   shift; [[ $# -eq 0 ]] || die "\"$SELF list\" takes no argument (got: $*)"; cmd_list ;;
     lock)   shift; [[ $# -eq 1 ]] || die "usage: $SELF lock <alias>"; cmd_lock "$@" ;;
