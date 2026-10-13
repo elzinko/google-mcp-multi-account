@@ -1195,7 +1195,9 @@ cmd_provision() { # mag provision [status|sync-iam …] — monter le projet OAu
   #   mag provision sync-iam [--yes]   accorder le rôle IAM manquant aux comptes connectés
   local script="$REPO_DIR/scripts/provision-gcp.sh"
   [[ -f "$script" ]] || die "provisioning script introuvable ($script)"
-  exec bash "$script" "$@"
+  # Le script affiche ce nom dans son aide et ses hints (parité CLI : « mag
+  # provision … », pas le chemin du script). Via le wrapper = "<self> provision".
+  MAG_PROVISION_AS="$SELF provision" exec bash "$script" "$@"
 }
 
 cmd_admin() { # mag admin [stop] — interface web locale, port GWSA_ADMIN_PORT (défaut 4877)

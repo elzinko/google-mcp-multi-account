@@ -30,6 +30,10 @@ STATE_FILE="$GWSA_ROOT/provision.env"
 SECRET_DEST="$GWSA_ROOT/client_secret.json"
 APP_NAME="gws CLI perso"
 APIS="gmail.googleapis.com drive.googleapis.com calendar-json.googleapis.com docs.googleapis.com sheets.googleapis.com slides.googleapis.com tasks.googleapis.com people.googleapis.com"
+# Nom d'usage affiché dans l'aide et les hints. Appelé via le wrapper
+# (`mag provision`), celui-ci exporte MAG_PROVISION_AS="mag provision" ; lancé en
+# direct, on retombe sur le chemin du script. Parité CLI (fiche 20261013215354286).
+SELFCMD="${MAG_PROVISION_AS:-./scripts/provision-gcp.sh}"
 
 # ── affichage ────────────────────────────────────────────────────
 if [[ -t 1 ]]; then
@@ -65,7 +69,7 @@ while [[ $# -gt 0 ]]; do
     --yes|-y) CONFIRM_YES=1 ;;
     --confirm-account) shift; CONFIRM_ACCOUNT="${1:-}" ;;
     --confirm-account=*) CONFIRM_ACCOUNT="${1#*=}" ;;
-    -h|--help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//' | sed "s|\./scripts/provision-gcp\.sh|$SELFCMD|g"; exit 0 ;;
     *) die "argument inconnu : $1 (voir --help)" ;;
   esac
   shift
@@ -177,7 +181,7 @@ if [[ "$MODE" == "status" ]]; then
       done <<< "$acct_tsv"
       [[ -n "$any_profile" ]] || echo "  (aucun compte connecté — mag add <alias>)"
       [[ "$locked_cnt" -gt 0 ]] && echo "  ($locked_cnt profil(s) verrouillé(s) — l'email reste lu depuis .email, l'accès IAM est quand même vérifié)"
-      [[ "$missing" -gt 0 ]] && echo && echo "→ Tout accorder d'un coup : ${B}./scripts/provision-gcp.sh sync-iam${N}"
+      [[ "$missing" -gt 0 ]] && echo && echo "→ Tout accorder d'un coup : ${B}${SELFCMD} sync-iam${N}"
       [[ "$no_email" -gt 0 ]] && warn "$no_email profil(s) sans email exploitable — ignoré(s) par sync-iam tant que .email n'est pas renseigné (mag list)."
     fi
   fi
@@ -193,7 +197,7 @@ if [[ "$MODE" == "sync-iam" ]]; then
   have_gcloud || die "gcloud requis."
   ACCOUNT="$(active_account)"; [[ -n "$ACCOUNT" ]] || die "aucun compte gcloud actif (gcloud auth login)."
   PROJECT_ID=""; load_state
-  [[ -n "${PROJECT_ID:-}" ]] || die "aucun projet provisionné ($STATE_FILE absent) — lance d'abord ./scripts/provision-gcp.sh"
+  [[ -n "${PROJECT_ID:-}" ]] || die "aucun projet provisionné ($STATE_FILE absent) — lance d'abord ${SELFCMD}"
   echo "   Projet : $PROJECT_ID · propriétaire actif : $ACCOUNT"
   # Mutation IAM = même barrière physique que unlock/grant.
   require_strong_auth "autoriser sync-iam — accorder le rôle IAM sur « $PROJECT_ID »"
