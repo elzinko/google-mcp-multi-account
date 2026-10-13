@@ -151,10 +151,18 @@ Viennent après, séparément (fiches filles n°2 et n°3) :
 - `mag provision` relançable sans effet de bord (idempotent), comme `provision-gcp.sh`
   aujourd'hui.
 
+## Avancement (2026-10-14)
+
+- Fille n°1 — [mag provision](done/20261013221421833_mag-provision-alias-cli.md) : **livrée**
+  (local). Le provisioning se pilote sous `mag`.
+- Fille n°2 — [setup_status en étapes ordonnées](20261013221927791_setup-status-etapes-ordonnees.md) : idée.
+- Fille n°3 — [test de parité admin ↔ CLI](20261013221927937_test-parite-admin-cli.md) : idée (ferme l'épic).
+- Maquette du process : `docs/mockups/onboarding-cli.html`.
+
 ## Notes
 
-- Cette fiche est un **cadrage** (idea). La groomer déclenchera le split en fiches filles
-  (increments 1–3). Enfant de l'épic [0017](0017-generaliser-autres-utilisateurs.md).
+- Cette fiche est un **cadrage** (idea). Les increments sont découpés en 3 fiches filles
+  (voir Avancement). Enfant de l'épic [0017](0017-generaliser-autres-utilisateurs.md).
 - Priorité **P0** (décision PO, 2026-10-14) : l'installation / onboarding est prioritaire.
 - Garde-fou doctrine à conserver dans tout increment : l'octroi IAM et les gestes console
   restent **humains**. Le LLM voit et propose, il n'exécute jamais gcloud / console / Touch ID.
