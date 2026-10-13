@@ -2,7 +2,7 @@
 id: "20261013215354286"
 title: "Onboarding piloté par le CLI mag — parité CLI ⊇ admin"
 type: feature
-priority: P2
+priority: P0
 product: google-mcp-multi-account
 version:
 epic: 0017
@@ -111,6 +111,6 @@ La version du code est déjà affichée dans l'admin ; la garder visible dans l'
 
 - Cette fiche est un **cadrage** (idea). La groomer déclenchera le split en fiches filles
   (increments 1–3). Enfant de l'épic [0017](0017-generaliser-autres-utilisateurs.md).
-- Priorité P2 par défaut (alignée sur l'épic parent) — à confirmer par le PO.
+- Priorité **P0** (décision PO, 2026-10-14) : l'installation / onboarding est prioritaire.
 - Garde-fou doctrine à conserver dans tout increment : l'octroi IAM et les gestes console
   restent **humains**. Le LLM voit et propose, il n'exécute jamais gcloud / console / Touch ID.
