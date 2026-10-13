@@ -113,6 +113,17 @@ iam_members_with_access() { # <project> → emails (minuscules) ayant owner|edit
 }
 
 profile_email_of() { # <profile-dir> → email du compte connecté (vide sinon)
+  # Lire d'abord la métadonnée .email (plaintext, ADR-0002) : elle est lisible
+  # même quand le profil est VERROUILLÉ. Lancer « gws auth status » sur un profil
+  # verrouillé échoue → email vide → profil faussement « unknown » et SAUTÉ par
+  # sync-iam (qui affichait alors « 0 accordé » comme un faux succès ; 2026-10-13).
+  local cached
+  if [[ -s "$1/.email" ]]; then
+    cached="$(head -1 "$1/.email")"
+    if [[ "$cached" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]+$ ]]; then
+      printf '%s\n' "$cached"; return 0
+    fi
+  fi
   GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$1" gws auth status 2>/dev/null \
     | grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]+' | head -1 || true
 }
