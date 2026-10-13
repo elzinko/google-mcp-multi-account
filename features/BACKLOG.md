@@ -10,6 +10,7 @@
 | [0023](done/0023-versionner-deployer-mcp-local.md) | Versionner et déployer le MCP en local, découplé du code source de travail | feature | P0 |  |  |  | ✅ shipped | #25 |
 | [0095](done/0095-design-system-fondations-tokens.md) | Design system — fondations (tokens d'échelles + carte unifiée) | feature | P0 |  | 0060 | google-mcp-multi-account | ✅ shipped | #128 |
 | [0096](done/0096-socle-rendu-sur-html-echappant.md) | Socle de rendu sûr — fonction html`` échappant par défaut + filet de tests node | feature | P0 |  | 0060 | google-mcp-multi-account | ✅ shipped | #138 |
+| [20261013221421833](20261013221421833_mag-provision-alias-cli.md) | mag provision — monter le projet OAuth depuis le CLI (phase A) | feature | P0 |  | 0017 | google-mcp-multi-account | 🔵 ready |  |
 | [0004](done/0004-broker-daemon-phase-2a.md) | Broker daemon local Phase 2 A — gws derrière socket loopback | feature | P1 |  |  |  | ✅ shipped | 12114ac |
 | [0005](done/0005-onboarding-comptes-iam-elicitation.md) | Onboarding des comptes — chaîne complète élicitée (IAM compris), drift visible | feature | P1 |  |  |  | ✅ shipped | #5 |
 | [0012](done/0012-admin-bouton-reparation-iam.md) | Panneau « Santé du setup » + bouton « Réparer l'accès IAM » dans l'admin | feature | P1 |  |  |  | ✅ shipped | #14 |
