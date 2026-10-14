@@ -56,6 +56,16 @@ confirm() { # confirm <question> — vrai si oui
 
 wait_enter() { is_tty && read -r -p "→ Appuie sur Entrée quand c'est fait… " _ || true; }
 
+# La page console s'ouvre dans le profil par défaut du navigateur. Si plusieurs
+# comptes Google y sont connectés, Google peut atterrir sur le MAUVAIS (mauvais
+# projet, accès refusé). On prévient d'ouvrir avec le profil du compte
+# PROPRIÉTAIRE du projet (celui qui provisionne). Fiche 20261014…
+browser_profile_warn() {
+  warn "Ouvre la page avec un profil navigateur connecté à ${B}${ACCOUNT:-ton compte propriétaire du projet}${N}."
+  echo "   (Plusieurs comptes Google dans le navigateur → le mauvais peut être choisi. Au besoin :"
+  echo "    copie l'URL dans une fenêtre où ${ACCOUNT:-ce compte} est le compte actif.)"
+}
+
 # ── arguments ────────────────────────────────────────────────────
 MODE="run"
 CONFIRM_ACCOUNT=""
@@ -373,6 +383,7 @@ if [[ -z "$consent_ok" ]]; then
   warn "création par API impossible (classique sur compte perso) → passage en mode guidé."
   echo "   Dans la page qui s'ouvre : ${B}Get started${N} → App name « $APP_NAME »,"
   echo "   ton email, Audience ${B}External${N}, email de contact → Create."
+  browser_profile_warn
   open "https://console.cloud.google.com/auth/overview?project=$PROJECT_ID" 2>/dev/null || true
   wait_enter
 fi
@@ -385,6 +396,7 @@ else
   echo "   Dans la page qui s'ouvre : ${B}Create client${N} → type ${B}Desktop app${N}"
   echo "   → nom « gws-cli » → Create → bouton ${B}Download JSON${N}."
   echo "   Je surveille ~/Downloads et je range le fichier automatiquement…"
+  browser_profile_warn
   open "https://console.cloud.google.com/auth/clients/create?project=$PROJECT_ID" 2>/dev/null || true
   mkdir -p "$GWSA_ROOT"
   start_ts="$(date +%s)"
@@ -419,6 +431,7 @@ else
   echo "   Dans la page qui s'ouvre : bouton ${B}Publish app${N} → Confirm."
   echo "   (App « non vérifiée » : normal pour un usage perso — chaque compte"
   echo "    acceptera l'avertissement une fois à la connexion.)"
+  browser_profile_warn
   open "https://console.cloud.google.com/auth/audience?project=$PROJECT_ID" 2>/dev/null || true
   wait_enter
   # Pas d'API publique pour lire le statut de publication → on l'enregistre
