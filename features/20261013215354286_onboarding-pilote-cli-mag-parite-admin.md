@@ -155,8 +155,12 @@ Viennent après, séparément (fiches filles n°2 et n°3) :
 
 - Fille n°1 — [mag provision](done/20261013221421833_mag-provision-alias-cli.md) : **livrée**
   (local). Le provisioning se pilote sous `mag`.
-- Fille n°2 — [setup_status en étapes ordonnées](done/20261013221927791_setup-status-etapes-ordonnees.md) : idée.
-- Fille n°3 — [test de parité admin ↔ CLI](done/20261013221927937_test-parite-admin-cli.md) : idée (ferme l'épic).
+- Fille n°2 — [setup_status en étapes ordonnées](done/20261013221927791_setup-status-etapes-ordonnees.md) : **livrée** (local). Parcours rendu dans les 2 faces (terminal + admin).
+- Fille n°3 — [test de parité admin ↔ CLI](done/20261013221927937_test-parite-admin-cli.md) : **livrée** (local) — a comblé le manque `mag lock --all`. **Ferme l'épic.**
+
+Les 3 increments sont livrés. L'épic onboarding (côté CLI) est complet : provisioning sous
+`mag`, parcours « où j'en suis » rendu à l'identique dans le terminal et l'admin, parité
+garantie par un test.
 - Maquette du process : `docs/mockups/onboarding-cli.html`.
 
 ## Notes
