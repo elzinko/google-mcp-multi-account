@@ -130,6 +130,22 @@ for a in setup_status()["accounts"]:
 PY
 }
 
+# Parseurs qui lisent un JSON setup_status DÉJÀ calculé (sur stdin) — pour ne
+# calculer l'état (et son appel gcloud) qu'UNE fois par `status`, puis en tirer
+# le parcours d'étapes ET les comptes. Le parcours est la source unique rendue
+# aussi par l'admin (fiche 20261013221927791).
+steps_from_json() {     # stdin=JSON → « state<TAB>phase<TAB>title<TAB>action »
+  "${PYRUN[@]}" -c 'import json,sys
+for s in json.load(sys.stdin).get("steps", []):
+    print("\t".join([s["state"], s["phase"], s["title"], s.get("action") or ""]))'
+}
+accounts_from_json() {  # stdin=JSON → même format que accounts_tsv
+  "${PYRUN[@]}" -c 'import json,sys
+for a in json.load(sys.stdin).get("accounts", []):
+    print("\t".join([a["alias"], a.get("email") or "", a.get("iam") or "unknown",
+        "1" if a.get("locked") else "0", "1" if a.get("connected") else "0"]))'
+}
+
 # ── status (lecture seule) ───────────────────────────────────────
 if [[ "$MODE" == "status" ]]; then
   # Vue machine : même état, en JSON (contrat du tool MCP setup_status).
@@ -152,13 +168,33 @@ if [[ "$MODE" == "status" ]]; then
   [[ -n "${PUBLISHED:-}" ]] && ok "app publiée en Production (enregistré le $PUBLISHED — tokens durables)" \
     || warn "app non publiée d'après l'état local (tokens 7 j) — relancer le flow : l'étape 7 permet de publier et de l'enregistrer"
 
+  # État agrégé calculé UNE fois (un seul appel gcloud via setup_status) : sert
+  # au parcours d'étapes ET à la section IAM ci-dessous.
+  setup_json="$("${PYRUN[@]}" -m gateway.setup_status 2>/dev/null || true)"
+
+  # Parcours d'onboarding — la MÊME liste d'étapes que l'admin rend (source
+  # unique setup_status, fiche 20261013221927791). « » » = étape courante,
+  # « ✓ » faite, « ○ » à faire.
+  if [[ -n "$setup_json" ]]; then
+    step "Parcours d'onboarding"
+    while IFS=$'\t' read -r st phase title action; do
+      [[ -n "$st" ]] || continue
+      case "$st" in
+        done) ok "$title" ;;
+        now)  echo "  ${Y}»${N} ${B}${title}${N}${action:+  → ${B}${action}${N}}" ;;
+        *)    echo "  ${Y}○${N} ${title}${action:+  → ${action}}" ;;
+      esac
+    done < <(printf '%s' "$setup_json" | steps_from_json)
+  fi
+
   # Dérive IAM : quels comptes connectés n'ont pas le rôle serviceUsageConsumer
   # sur le projet (sinon 403 « quota project » silencieux au 1er appel — §7).
   if [[ -n "${PROJECT_ID:-}" ]] && have_gcloud && [[ -n "${acct:-}" ]]; then
     step "Comptes connectés & accès au projet (rôle IAM)"
-    if ! acct_tsv="$(accounts_tsv 2>/dev/null)"; then
+    if [[ -z "$setup_json" ]]; then
       warn "état IAM non vérifiable (gateway Python indisponible) — relance plus tard."
     else
+      acct_tsv="$(printf '%s' "$setup_json" | accounts_from_json)"
       any_profile=""; missing=0; locked_cnt=0; no_email=0
       while IFS=$'\t' read -r alias_name pemail iam locked connected; do
         [[ -n "$alias_name" ]] || continue

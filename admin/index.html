@@ -2594,6 +2594,20 @@ async function renderSetup() {
   const head = '<p class="ck-caption">Projet <b>GCP</b> (OAuth) : <span class="mono">' + esc(s.project_id || "?") +
     "</span> · " + (s.published ? "app publiée" : "app non publiée") +
     ' — ce n\'est <b>pas</b> la version MCP (voir bandeau / Développement).</p>';
+  // Parcours d'onboarding : la MÊME liste d'étapes que le terminal (mag provision),
+  // rendue depuis le même setup_status.steps (fiche 20261013221927791). L'admin
+  // n'invente aucune étape — il rend ce que le CLI calcule (parité CLI ⊇ admin).
+  const STEP_ICON = { done: "✓", now: "»", todo: "○" };
+  const STEP_CLS = { done: "ck-badge--ok", now: "ck-badge--warn", todo: "ck-badge--neutral" };
+  const stepsHtml = (s.steps && s.steps.length)
+    ? '<p class="ck-caption" style="margin:12px 0 6px"><b>Parcours d\'onboarding</b></p>' +
+      s.steps.map(function (st) {
+        const act = st.action ? ' <span class="mono" style="opacity:.7">→ ' + esc(st.action) + "</span>" : "";
+        const label = st.state === "now" ? "<b>" + esc(st.title) + "</b>" : esc(st.title);
+        return '<div class="zone"><span class="ck-badge ' + (STEP_CLS[st.state] || "ck-badge--neutral") +
+          '">' + STEP_ICON[st.state] + "</span> " + label + act + "</div>";
+      }).join("")
+    : "";
   let action;
   if (stillMissing.length) {
     action = '<div class="mtop" style="justify-content:flex-start">' +
@@ -2613,7 +2627,9 @@ async function renderSetup() {
     action = callout("info", "Accès IAM non vérifiable ici (gcloud non connecté). En terminal : " +
       '<span class="mono">./scripts/provision-gcp.sh status</span>.');
   }
-  $("setupBody").innerHTML = head + (rows || '<p class="ck-caption">Aucun compte connecté.</p>') + action;
+  $("setupBody").innerHTML = head + stepsHtml +
+    '<p class="ck-caption" style="margin:12px 0 6px"><b>Comptes &amp; accès (IAM)</b></p>' +
+    (rows || '<p class="ck-caption">Aucun compte connecté.</p>') + action;
 }
 async function doSyncIam() {
   const btn = $("syncBtn");

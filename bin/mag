@@ -16,7 +16,7 @@
 #   mag add <alias> [expected-email] [login options]  Create a profile and connect an account
 #                                                   (email required if strongauth is on)
 #   mag list                                         List profiles and their state
-#   mag lock <alias>                                 Lock a profile (access on request)
+#   mag lock <alias>|--all                           Lock a profile (or all) — access on request
 #   mag unlock <alias> [minutes]                     Temporarily unlock (default 60 min)
 #   mag policy <alias> [show|mode <m>|allow <folder>|zone-add <folder>|zone-remove <id>|revoke <id>|clear]
 #                                                     PERMANENT Drive write zones
@@ -527,6 +527,23 @@ cmd_list() {
 }
 
 cmd_lock() {
+  # mag lock --all : verrouiller TOUS les profils d'un coup — équivalent CLI du
+  # bouton « Tout verrouiller » de l'admin (parité CLI ⊇ admin, fiche
+  # 20261013221927937). Verrouiller est une opération SÛRE (elle restreint
+  # l'accès) : pas d'auth forte requise, comme le lock unitaire. Seul unlock exige
+  # le geste humain.
+  if [[ "${1:-}" == "--all" ]]; then
+    local d alias_name n=0
+    for d in "$GWSA_ROOT"/*/; do
+      [[ -d "$d" ]] || continue   # le glob */ exclut déjà .vault/.runtime (dotfiles)
+      alias_name="$(basename "$d")"
+      touch "$d/.locked"; rm -f "$d/.unlock-until"
+      n=$((n + 1))
+      echo "🔒 \"$alias_name\" locked"
+    done
+    echo "🔒 $n profile(s) locked — access on request only ($SELF unlock <alias> [minutes])"
+    return 0
+  fi
   local alias; alias="$(resolve_alias "$1")" || exit; check_alias "$alias"
   local dir; dir="$(profile_dir "$alias")"
   [[ -d "$dir" ]] || die "unknown profile \"$alias\""
@@ -2101,7 +2118,7 @@ main() {
     provision) shift; cmd_provision "$@" ;;
     add)    shift; [[ $# -ge 1 ]] || die "usage: $SELF add <alias> [expected-email] [gws auth login options]"; cmd_add "$@" ;;
     list)   shift; [[ $# -eq 0 ]] || die "\"$SELF list\" takes no argument (got: $*)"; cmd_list ;;
-    lock)   shift; [[ $# -eq 1 ]] || die "usage: $SELF lock <alias>"; cmd_lock "$@" ;;
+    lock)   shift; [[ $# -eq 1 ]] || die "usage: $SELF lock <alias>|--all"; cmd_lock "$@" ;;
     unlock) shift; [[ $# -ge 1 && $# -le 2 ]] || die "usage: $SELF unlock <alias> [minutes|off]"; cmd_unlock "$@" ;;
     policy) shift; [[ $# -ge 1 ]] || die "usage: $SELF policy <alias> [show|mode|allow|zone-add|zone-remove|revoke|clear]"; cmd_policy "$@" ;;
     grant)  shift; [[ $# -ge 1 ]] || die "usage: $SELF grant <alias> <folder> [hours]"; cmd_grant "$@" ;;

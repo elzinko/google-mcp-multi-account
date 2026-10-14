@@ -738,6 +738,43 @@ else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m setup_status : profil verrouillé garde son email\n'
 fi
 
+# setup_status — le PARCOURS d'étapes ordonnées (fiche 20261013221927791). Source
+# unique rendue par les deux faces (terminal `mag provision` + admin). Racine
+# isolée pour ne pas polluer les profils des autres tests.
+SROOT_STEPS="$(mktemp -d)"
+if GWSA_ROOT="$SROOT_STEPS" python3 - <<'PY'
+import os
+from pathlib import Path
+from gateway.setup_status import setup_status
+
+root = Path(os.environ["GWSA_ROOT"])
+(root / "provision.env").write_text('PROJECT_ID="demo-proj"\nPUBLISHED="2026-10-14"\n', encoding="utf-8")
+(root / "client_secret.json").write_text("{}", encoding="utf-8")
+alias = "acc1"; d = root / alias; d.mkdir(parents=True, exist_ok=True)
+(d / ".email").write_text("a@b.com\n", encoding="utf-8")
+v = root / ".vault" / alias; v.mkdir(parents=True, exist_ok=True)
+(v / "credentials.enc").write_text("x")
+
+steps = setup_status()["steps"]
+order = [s["key"] for s in steps]
+assert order == ["project", "oauth_client", "publish", "connect", "iam"], order
+by = {s["key"]: s for s in steps}
+for k in ("project", "oauth_client", "publish", "connect"):
+    assert by[k]["state"] == "done", (k, by[k])
+# Sans gcloud, l'IAM n'est pas vérifiable → 1re étape non terminée = « now ».
+assert by["iam"]["state"] == "now", by["iam"]
+assert by["iam"]["action"], "une étape non-done doit proposer une action"
+# Exactement une étape « now » (le curseur), jamais deux.
+assert sum(1 for s in steps if s["state"] == "now") == 1, steps
+print("ok")
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m setup_status : parcours ordonné (états done/now/todo, un seul curseur)\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m setup_status : parcours ordonné\n'
+fi
+rm -rf "$SROOT_STEPS"
+
 # MCP tools/list smoke (stdio JSON-RPC, une requête)
 MCP_OUT="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | python3 -m gateway 2>/dev/null | head -1)"
 if echo "$MCP_OUT" | python3 -c 'import json,sys; r=json.load(sys.stdin); names=[t["name"] for t in r["result"]["tools"]]; assert "gmail_list" in names and "gmail_draft_create" in names and "setup_status" in names; assert not any(t["name"]=="gmail_send" for t in r["result"]["tools"]); ar=[t for t in r["result"]["tools"] if t["name"]=="access_request"][0]; assert "add_account" in ar["inputSchema"]["properties"]["kind"]["enum"]; assert "project_grant" in ar["inputSchema"]["properties"]["kind"]["enum"]; dc=[t for t in r["result"]["tools"] if t["name"]=="drive_create"][0]; assert "content" in dc["inputSchema"]["properties"] and "text/markdown" in dc["inputSchema"]["properties"]["content_type"]["enum"]; assert all(n in names for n in ("drive_read","drive_copy","drive_upload","gmail_attachment_get","drive_update","drive_permissions_list","drive_permissions_create","drive_permissions_delete")); pc=[t for t in r["result"]["tools"] if t["name"]=="drive_permissions_create"][0]; assert "transfer_ownership" not in pc["inputSchema"]["properties"] and "owner" not in pc["inputSchema"]["properties"]["role"]["enum"]; assert "gmail_labels_modify" in names; lm=[t for t in r["result"]["tools"] if t["name"]=="gmail_labels_modify"][0]; assert all(k in lm["inputSchema"]["properties"] for k in ("add_labels","remove_labels","message_ids","thread_ids","create_missing")); assert not any(t["name"] in ("gmail_send","gmail_trash","gmail_delete","gmail_labels_delete") for t in r["result"]["tools"])'; then
@@ -2208,6 +2245,47 @@ if [[ "$prov_rc" == 0 ]] && echo "$prov_out" | grep -q "provision-gcp.sh"; then
   PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m mag provision route vers scripts/provision-gcp.sh\n'
 else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m mag provision ne route pas vers le script (rc=%s)\n' "$prov_rc"
+fi
+
+# Parité admin ↔ CLI (fiche 20261013221927937) : chaque ACTION déclenchable
+# depuis l'admin web a son équivalent `mag` — et cette commande existe vraiment.
+# Garde-fou mécanique du principe « l'admin n'est qu'une façade » (CLI ⊇ admin).
+# bash 3.2 : pas de tableau associatif, on mappe par un case.
+section "Parité admin ↔ CLI — chaque action admin a son équivalent mag"
+mag_for_endpoint() { # endpoint admin → sous-commande mag de tête (vide = non couvert)
+  case "$1" in
+    /api/setup)         echo "provision" ;;   # GET  → mag provision status
+    /api/add)           echo "add" ;;         # POST → mag add
+    /api/sync-iam)      echo "provision" ;;   # POST → mag provision sync-iam
+    /api/lockall)       echo "lock" ;;        # POST → mag lock --all
+    /api/dev)           echo "dev" ;;         # POST → mag dev …
+    /api/transactional) echo "transactional" ;;
+    *)                  echo "" ;;
+  esac
+}
+parity_ok=1; parity_msg=""
+# 1) tout endpoint POST (action) de l'admin est mappé ET sa commande mag existe.
+post_eps="$(grep -oE 'method === "POST" && p === "/api/[a-z-]+"' admin/server.js \
+  | sed -E 's#.*"(/api/[a-z-]+)".*#\1#' | sort -u)"
+while IFS= read -r ep; do
+  [[ -n "$ep" ]] || continue
+  cmd="$(mag_for_endpoint "$ep")"
+  if [[ -z "$cmd" ]]; then
+    parity_ok=0; parity_msg="$parity_msg · $ep sans équivalent mag"; continue
+  fi
+  grep -qE "^[[:space:]]+${cmd}\)" bin/mag \
+    || { parity_ok=0; parity_msg="$parity_msg · « mag $cmd » absent du dispatch"; }
+done <<< "$post_eps"
+# 2) le provisioning (cœur de la parité) est bien mappé dans les deux sens.
+[[ -n "$(mag_for_endpoint /api/setup)" && -n "$(mag_for_endpoint /api/sync-iam)" ]] \
+  || { parity_ok=0; parity_msg="$parity_msg · provisioning non mappé"; }
+# 3) non-vacuité : un endpoint inconnu DOIT être vu comme non couvert.
+[[ -z "$(mag_for_endpoint /api/bogus)" ]] \
+  || { parity_ok=0; parity_msg="$parity_msg · détecteur vacue"; }
+if [[ "$parity_ok" == 1 ]]; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m chaque action de l'\''admin a son équivalent mag (existant)\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m parité admin↔CLI rompue%s\n' "$parity_msg"
 fi
 
 # --- 6. Branchement Claude Desktop — scripts/install-claude-desktop.sh -------
