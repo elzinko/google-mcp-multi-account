@@ -48,6 +48,7 @@
 | [20260920141424574](done/20260920141424574_consentement-une-fois-ou-session.md) | Consentement « une fois / pour la session » + mode réglable depuis l'admin (raffinement transactionnel) | feature | P1 |  | 0082 | google-multi-account | ✅ shipped | #150 |
 | [20260929153720000](20260929153720000_tests-securite-default-policy-anti-dns-rebinding.md) | Combler deux trous de tests sécurité — invariants DEFAULT_POLICY + admin anti-DNS-rebinding | bug | P1 |  |  | google-multi-account | 🗑️ superseded |  |
 | [20261001214857000](done/20261001214857000_gmail-labels-modify-transactionnel.md) | gmail_labels_modify dans le modèle de session transactionnel — un seul consentement « pour la session » pour poser/retirer un libellé | feature | P1 |  |  | google-mcp-multi-account | ✅ shipped | #161 |
+| [20261013221927791](20261013221927791_setup-status-etapes-ordonnees.md) | setup_status en étapes ordonnées — rendu checklist terminal + admin | feature | P1 |  | 0017 | google-mcp-multi-account | 🔵 ready |  |
 | [0002](done/0002-durcir-modele-policy-default-deny.md) | Durcir le modèle de policy — décisions « default-deny » soulevées par l'audit | feature | P2 |  |  |  | ✅ shipped | #12 |
 | [0007](done/0007-provisioning-idempotent-declaratif.md) | Provisioning GCP idempotent/déclaratif — durcir provision-gcp.sh ou passer à Terraform | feature | P2 |  |  |  | ✅ shipped | #10 |
 | [0008](done/0008-connexion-dynamique-compte-elicitation.md) | Connexion dynamique d'un nouveau compte via élicitation forte (access_request kind=add_account) | feature | P2 |  |  |  | ✅ shipped | #7 |
@@ -94,6 +95,7 @@
 | [20260929235257000](done/20260929235257000_gmail-labels-modify-curate.md) | Outil MCP curaté de pose/retrait de libellé Gmail (label-only, réversible) | feature | P2 |  |  | google-multi-account | ✅ shipped | #156 |
 | [20261001121405000](done/20261001121405000_gate-drive-corbeille-signee-delete.md) | Gate transactionnel Drive — signer la corbeille (trashed:true) en « delete », comme policy-check | bug | P2 |  |  | google-multi-account | ✅ shipped | #157 |
 | [20261001192704000](done/20261001192704000_statuts-backlog-hors-schema-regen.md) | Aligner le vocabulaire de statut backlog sur le schéma du regen (todo/blocked rendus « ❓ » + churn de l'index) | bug | P2 |  |  | google-multi-account | ✅ shipped | 7d5904e |
+| [20261013221927937](20261013221927937_test-parite-admin-cli.md) | Test de parité admin ↔ CLI — l'admin n'expose rien que mag ne sache faire | chore | P2 |  | 0017 | google-mcp-multi-account | 🔵 ready |  |
 | [0001](done/0001-elicitation-signee-strongauth-v2.md) | Élicitation signée — faire monter `mag strongauth` de la présence à la signature | feature | P3 |  |  |  | 🗑️ superseded |  |
 | [0093](done/0093-coherence-nommage-mag-produit-mcp.md) | Cohérence de nommage — relier `mag` / google-multi-account / repo sans casser le MCP | feature | P3 |  |  |  | ✅ shipped | #144 |
 | [20261001155202000](done/20261001155202000_aligner-classif-drive-upload-create.md) | Classification « drive files upload » — aligner policy-check sur create, comme le gate et l'audit | bug | P3 |  |  | google-multi-account | ✅ shipped | #159 |
@@ -115,7 +117,6 @@
 | [20261013215354286](20261013215354286_onboarding-pilote-cli-mag-parite-admin.md) | Onboarding piloté par le CLI mag — parité CLI ⊇ admin | feature | P0 |  | 0017 | google-mcp-multi-account | 💡 idea |  |
 | [0101](0101-nom-de-session-fourni-par-le-client.md) | Nom lisible de session, fourni par le client MCP | feature | P1 |  | 0082 | google-mcp-multi-account | 💡 idea |  |
 | [0108](0108-session-demande-sous-ensemble-droits-compte.md) | Session — demander un sous-ensemble des droits du compte (accès fin, vérifiable par session) | feature | P1 |  | 0082 | google-mcp-multi-account | 💡 idea |  |
-| [20261013221927791](20261013221927791_setup-status-etapes-ordonnees.md) | setup_status en étapes ordonnées — rendu checklist terminal + admin | feature | P1 |  | 0017 | google-mcp-multi-account | 💡 idea |  |
 | [0035](0035-admin-acces-rapide-et-visu-zones.md) | Accès rapide à l'admin + visualisation des zones (icône barre de menus ?) | feature | P2 |  |  |  | 💡 idea |  |
 | [0089](0089-choix-profil-navigateur-oauth-add.md) | Choisir le profil navigateur (Chrome/…) à l'ouverture OAuth de `mag add` | feature | P2 |  |  |  | 💡 idea |  |
 | [20260903114149142](20260903114149142_liste-comptes-actions-globales.md) | Barre d'actions globales au-dessus de la liste des comptes (tout verrouiller / déverrouiller, ± temps) | feature | P2 |  | 0060 | google-mcp-multi-account | 💡 idea |  |
@@ -123,7 +124,6 @@
 | [20260930214101550](20260930214101550_spike-msgvault-lecture-gmail.md) | Spike — évaluer msgvault comme source de lecture Gmail multi-comptes | chore | P2 |  |  | google-mcp-multi-account | 💡 idea |  |
 | [20261003012132100](20261003012132100_popup-in-conversation-nomme-produit.md) | Le consentement en conversation nomme le composant (« swift-frontend ») au lieu du produit | bug | P2 |  | 0082 | google-multi-account | 💡 idea |  |
 | [20261003012133200](20261003012133200_unlock-in-conversation-par-acte-et-reverrou.md) | Consentement Gmail en conversation — accord par acte par défaut (au lieu de 60 min) + re-verrouillage | feature | P2 |  | 0082 | google-multi-account | 💡 idea |  |
-| [20261013221927937](20261013221927937_test-parite-admin-cli.md) | Test de parité admin ↔ CLI — l'admin n'expose rien que mag ne sache faire | chore | P2 |  | 0017 | google-mcp-multi-account | 💡 idea |  |
 | [0003](0003-vault-credentials-hors-perimetre-agent.md) | Vault credentials hors périmètre agent (Phase 2.1) | feature | P3 |  |  |  | 💡 idea |  |
 | [0006](0006-harnais-test-manuel-hybride.md) | Harnais hybride pour les tests manuels — script pour la mécanique, LLM pour la glu | feature | P3 |  |  |  | 💡 idea |  |
 | [0018](0018-cross-platform-hors-macos.md) | Cross-platform — faire tourner le projet hors macOS (Linux, Intel) | feature | P3 |  | 0017 |  | 💡 idea |  |

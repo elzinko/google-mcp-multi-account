@@ -6,7 +6,7 @@ priority: P2
 product: google-mcp-multi-account
 version:
 epic: 0017
-status: idea
+status: ready
 ready:
 pr:
 created: 2026-10-13
@@ -37,10 +37,10 @@ Rien ne l'empêche aujourd'hui de dériver. Un test mécanique le garde.
 
 ## Critères d'acceptation
 
-- [ ] Une table `endpoint admin → commande mag` existe (source unique).
-- [ ] Le test échoue si un endpoint d'action n'a pas d'équivalent `mag`.
-- [ ] Le test échoue si une commande `mag` citée n'existe pas.
-- [ ] Intégré à `./scripts/test.sh` (hermétique, sans réseau).
+- [x] Une table `endpoint admin → commande mag` existe (source unique, dans le test).
+- [x] Le test échoue si un endpoint d'action n'a pas d'équivalent `mag`.
+- [x] Le test échoue si une commande `mag` citée n'existe pas.
+- [x] Intégré à `./scripts/test.sh` (hermétique, sans réseau).
 
 ## Comment vérifier
 
@@ -53,3 +53,6 @@ Rien ne l'empêche aujourd'hui de dériver. Un test mécanique le garde.
 
 - Ferme l'épic onboarding une fois `mag provision` (livré) et les étapes ordonnées en place.
 - Garde-fou mécanique, pas un simple commentaire : c'est ce qui rend la parité durable.
+- **Le test a révélé un vrai manque** : « Tout verrouiller » de l'admin (`/api/lockall`)
+  n'avait pas d'équivalent CLI → ajout de `mag lock --all`. La parité est maintenant
+  *vraie*, pas seulement testée — c'est le but du garde-fou.

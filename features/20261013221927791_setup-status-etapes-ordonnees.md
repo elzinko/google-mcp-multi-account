@@ -6,7 +6,7 @@ priority: P1
 product: google-mcp-multi-account
 version:
 epic: 0017
-status: idea
+status: ready
 ready:
 pr:
 created: 2026-10-13
@@ -43,11 +43,11 @@ décision 2 (la machine d'état vit dans `setup_status`, le script reste l'exéc
 
 ## Critères d'acceptation
 
-- [ ] `setup_status` expose `steps` ordonné (clé, titre, état, action) pour les phases A et B.
-- [ ] `mag provision status` rend la checklist dans le terminal.
-- [ ] L'admin rend les mêmes étapes depuis le même JSON (aucun calcul d'étapes côté JS).
-- [ ] `setup_status` reste lecture seule (aucune mutation).
-- [ ] Tests : l'ordre et les états des étapes sont vérifiés sur un `GWSA_ROOT` de fixture.
+- [x] `setup_status` expose `steps` ordonné (clé, titre, état, action) pour les phases A et B.
+- [x] `mag provision status` rend la checklist dans le terminal.
+- [x] L'admin rend les mêmes étapes depuis le même JSON (aucun calcul d'étapes côté JS).
+- [x] `setup_status` reste lecture seule (aucune mutation).
+- [x] Tests : l'ordre et les états des étapes sont vérifiés sur un `GWSA_ROOT` de fixture.
 
 ## Comment vérifier
 
