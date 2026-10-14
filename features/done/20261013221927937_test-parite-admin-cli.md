@@ -6,9 +6,9 @@ priority: P2
 product: google-mcp-multi-account
 version:
 epic: 0017
-status: ready
+status: shipped
 ready:
-pr:
+pr: "local (0ca160a)"
 created: 2026-10-13
 ---
 
@@ -23,7 +23,7 @@ test qui énumère les actions déclenchables depuis l'admin web et vérifie que
 
 L'admin (`admin/server.js`) appelle déjà le provisioning via `/api/setup` (status) et
 `/api/sync-iam`. La règle d'architecture (décision 3 du
-[cadrage](20261013215354286_onboarding-pilote-cli-mag-parite-admin.md)) : un endpoint admin
+[cadrage](../20261013215354286_onboarding-pilote-cli-mag-parite-admin.md)) : un endpoint admin
 ne fait que **shell une commande `mag`** (ou lire `setup_status`), jamais de logique propre.
 Rien ne l'empêche aujourd'hui de dériver. Un test mécanique le garde.
 

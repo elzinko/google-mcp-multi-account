@@ -6,9 +6,9 @@ priority: P1
 product: google-mcp-multi-account
 version:
 epic: 0017
-status: ready
+status: shipped
 ready:
-pr:
+pr: "local (0ca160a)"
 created: 2026-10-13
 ---
 
@@ -19,7 +19,7 @@ Aujourd'hui `setup_status` dit l'état (projet, publication, IAM) et propose des
 émettre une **liste d'étapes ordonnées** avec, par étape, son statut (fait / en cours / à
 faire) et son action. Les deux faces la **rendent** : `mag provision` en checklist dans le
 terminal, l'admin en JSON. Increment n°2 de l'épic, après
-[mag provision](done/20261013221421833_mag-provision-alias-cli.md).
+[mag provision](20261013221421833_mag-provision-alias-cli.md).
 
 ## Contexte / Problème
 
@@ -29,7 +29,7 @@ arrivant ne voit pas d'un coup d'œil *où il en est* dans le fil (phase A : con
 client OAuth, publication). La maquette (`docs/mockups/onboarding-cli.html`) montre la cible :
 une checklist ordonnée, identique au terminal et dans l'admin.
 
-Cadrage : [Onboarding piloté par le CLI mag](20261013215354286_onboarding-pilote-cli-mag-parite-admin.md),
+Cadrage : [Onboarding piloté par le CLI mag](../20261013215354286_onboarding-pilote-cli-mag-parite-admin.md),
 décision 2 (la machine d'état vit dans `setup_status`, le script reste l'exécuteur).
 
 ## Proposition
@@ -59,5 +59,5 @@ mag provision status --json     # contient un tableau "steps" ordonné
 
 ## Notes
 
-- Dépend de [mag provision](done/20261013221421833_mag-provision-alias-cli.md) (livré).
+- Dépend de [mag provision](20261013221421833_mag-provision-alias-cli.md) (livré).
 - La cible visuelle est la maquette `docs/mockups/onboarding-cli.html`.

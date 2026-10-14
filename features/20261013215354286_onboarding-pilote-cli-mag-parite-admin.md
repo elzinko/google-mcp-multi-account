@@ -155,8 +155,8 @@ Viennent après, séparément (fiches filles n°2 et n°3) :
 
 - Fille n°1 — [mag provision](done/20261013221421833_mag-provision-alias-cli.md) : **livrée**
   (local). Le provisioning se pilote sous `mag`.
-- Fille n°2 — [setup_status en étapes ordonnées](20261013221927791_setup-status-etapes-ordonnees.md) : idée.
-- Fille n°3 — [test de parité admin ↔ CLI](20261013221927937_test-parite-admin-cli.md) : idée (ferme l'épic).
+- Fille n°2 — [setup_status en étapes ordonnées](done/20261013221927791_setup-status-etapes-ordonnees.md) : idée.
+- Fille n°3 — [test de parité admin ↔ CLI](done/20261013221927937_test-parite-admin-cli.md) : idée (ferme l'épic).
 - Maquette du process : `docs/mockups/onboarding-cli.html`.
 
 ## Notes
