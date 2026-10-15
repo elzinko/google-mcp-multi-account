@@ -12,10 +12,11 @@
 # credentials.enc, decrypted by the same master key — no conflict.
 #
 # Usage:
+#   mag provision [status|sync-iam …]                Set up the OAuth project (phase A, guided)
 #   mag add <alias> [expected-email] [login options]  Create a profile and connect an account
 #                                                   (email required if strongauth is on)
 #   mag list                                         List profiles and their state
-#   mag lock <alias>                                 Lock a profile (access on request)
+#   mag lock <alias>|--all                           Lock a profile (or all) — access on request
 #   mag unlock <alias> [minutes]                     Temporarily unlock (default 60 min)
 #   mag policy <alias> [show|mode <m>|allow <folder>|zone-add <folder>|zone-remove <id>|revoke <id>|clear]
 #                                                     PERMANENT Drive write zones
@@ -387,6 +388,51 @@ profile_email_cached() { # profile_email_cached <dir> — .email SANS repli gws 
   return 0
 }
 
+# ── Pli « un seul geste » : accorder le rôle IAM dans la foulée de `mag add` ──
+# Quand l'humain connecte ses AUTRES comptes, son gcloud actif est DÉJÀ le
+# propriétaire du projet OAuth. Si la sonde voit le 403 « quota project » ET que
+# ce compte actif est owner/editor, on PROPOSE d'accorder serviceUsageConsumer
+# sur place — une confirmation explicite en terminal, zéro aller-retour.
+#
+# Doctrine (CLAUDE.md) : l'octroi IAM reste un geste HUMAIN. Garde-fous :
+#   • jamais sans TTY → le LLM appelle mag en pipe (pas de terminal), il ne peut
+#     donc jamais déclencher l'octroi : il reçoit la commande à proposer, comme
+#     avant. (Pas de flag non interactif, qui rouvrirait cette porte.)
+#   • jamais si le compte actif n'est PAS owner/editor du projet.
+#   • jamais sans confirmation explicite.
+# Hors de ces conditions, on retombe sur l'impression de la commande (inchangé).
+_iam_is_tty()     { [[ -t 0 ]]; }
+_iam_have_gcloud(){ command -v gcloud >/dev/null 2>&1; }
+_iam_confirm()    { local r; read -r -p "$1 [o/N] " r; [[ "$r" =~ ^[oOyY] ]]; }
+
+iam_grant_in_add() { # iam_grant_in_add <email> <remediation-text> → 0 si accordé, 1 sinon
+  local email="$1" rem="$2" project active members role="roles/serviceusage.serviceUsageConsumer"
+  _iam_is_tty || return 1          # pas de terminal (LLM, pipe, CI) → jamais d'octroi
+  _iam_have_gcloud || return 1
+  # Projet = celui du 403 lui-même (extrait du message de remédiation), pas une
+  # supposition : iam-check.py le tient de l'erreur Google.
+  project="$(printf '%s\n' "$rem" | sed -n 's/.*add-iam-policy-binding \([a-z][-a-z0-9]*\) .*/\1/p' | head -1)"
+  [[ -n "$project" ]] || return 1
+  active="$(gcloud auth list --filter=status:ACTIVE --format='value(account)' 2>/dev/null | head -1 | tr 'A-Z' 'a-z')"
+  [[ -n "$active" ]] || return 1
+  members="$(gcloud projects get-iam-policy "$project" --flatten='bindings[].members' \
+      --filter='bindings.role=roles/owner OR bindings.role=roles/editor' \
+      --format='value(bindings.members)' 2>/dev/null | sed 's/^user://' | tr 'A-Z' 'a-z')"
+  printf '%s\n' "$members" | grep -qxF "$active" || return 1   # compte actif pas owner/editor → on n'accorde pas
+  echo
+  echo "$SELF: $email can't use the project « $project » yet — its Google calls would fail (403 error)."
+  echo "   You're signed in to gcloud as the project owner ($active), so you can grant access now."
+  echo "   (Technical detail: this adds the \"serviceUsageConsumer\" role on the project.)"
+  _iam_confirm "Grant project access to $email now?" || return 1
+  if gcloud projects add-iam-policy-binding "$project" \
+       --member="user:$email" --role="$role" --condition=None --quiet >/dev/null 2>&1; then
+    echo "✓ Project access granted to $email — its Google calls work now (propagation ~2 min)."
+    return 0
+  fi
+  echo "$SELF: ⚠ IAM grant failed — run it by hand:" >&2
+  return 1
+}
+
 cmd_add() { # cmd_add <alias> [email-attendu] [options gws auth login]
   local alias="$1"; shift
   check_alias "$alias"
@@ -409,12 +455,31 @@ cmd_add() { # cmd_add <alias> [email-attendu] [options gws auth login]
   mkdir -p "$dir"
   cp "$MASTER_SECRET" "$dir/client_secret.json"
   chmod 600 "$dir/client_secret.json"  # forcer 0600, même si le master a hérité d'un 0644 (cf. Codex #83)
-  echo "→ Connecting profile \"$alias\"${expected:+ (expected account: $expected)}: choose the right Google account in the browser…"
-  if [[ $# -eq 0 ]]; then
-    GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws auth login --scopes "$DEFAULT_SCOPES"
-  else
-    GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws auth login "$@"
-  fi
+  echo "→ Connecting profile \"$alias\"${expected:+ (expected account: $expected)}: the Google sign-in page opens in your browser."
+  echo "   ⚠ Sign in with ${expected:-the account you are connecting}. If several Google accounts are"
+  echo "     signed in, pick the right one (a browser profile tied to that account avoids a wrong pick)."
+  echo "   (If the page doesn't open on its own, open the URL printed below.)"
+  # gws n'ouvre pas le navigateur : il IMPRIME l'URL OAuth. On la lit à la volée,
+  # on la ré-affiche telle quelle, et on OUVRE la 1re URL d'autorisation
+  # (fiche 20261014…). pipefail (actif en tête) + « true » final du consommateur :
+  # l'exit du pipeline reste celui de gws (EOF du while ne le masque pas).
+  {
+    if [[ $# -eq 0 ]]; then
+      GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws auth login --scopes "$DEFAULT_SCOPES"
+    else
+      GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws auth login "$@"
+    fi
+  } 2>&1 | {
+    _opened=""
+    while IFS= read -r _line; do
+      printf '%s\n' "$_line"
+      if [[ -z "$_opened" ]]; then
+        _url="$(printf '%s' "$_line" | grep -oE 'https://accounts\.google\.com/o/oauth2/[^[:space:]]+' || true)"
+        [[ -n "$_url" ]] && { open "$_url" >/dev/null 2>&1 && _opened=1 || true; }
+      fi
+    done
+    true
+  }
   rm -f "$dir/.email"   # l'alias a pu changer de compte : forcer une lecture fraîche
   local email; email="$(profile_email "$dir")"
   if [[ -n "$expected" && -n "$email" && "$email" != "$expected" ]]; then
@@ -434,13 +499,17 @@ PYEOF
   fi
   # Sonde API read-only : détecter tôt le 403 « quota project » (compte sans
   # rôle IAM serviceUsageConsumer sur le projet de l'app OAuth). Sans ça, le
-  # profil paraît « connecté » mais échouera au 1er vrai appel. On propose la
-  # commande gcloud — on ne l'exécute jamais (geste admin humain, cf. §7 setup).
+  # profil paraît « connecté » mais échouera au 1er vrai appel.
+  # Si l'humain est au terminal et que son gcloud actif est propriétaire du
+  # projet, on propose d'accorder le rôle sur place (iam_grant_in_add, « un seul
+  # geste »). Sinon on imprime la commande — on ne l'exécute jamais nous-mêmes.
   if [[ -n "$email" ]]; then
     local probe rem
     probe="$(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws drive files list --params '{"pageSize":1}' 2>&1 || true)"
     rem="$(printf '%s' "$probe" | "$SYS_PYTHON" "$REPO_DIR/scripts/iam-check.py" detect "$email" 2>/dev/null || true)"
-    [[ -n "$rem" ]] && { echo; echo "$rem" >&2; }
+    if [[ -n "$rem" ]]; then
+      iam_grant_in_add "$email" "$rem" || { echo; echo "$rem" >&2; }
+    fi
   fi
   echo "✓ Profile \"$alias\" connected${email:+ — $email}. Test: $SELF $alias auth status"
   REPO_DIR="$REPO_DIR" "$SYS_PYTHON" -c "
@@ -479,6 +548,23 @@ cmd_list() {
 }
 
 cmd_lock() {
+  # mag lock --all : verrouiller TOUS les profils d'un coup — équivalent CLI du
+  # bouton « Tout verrouiller » de l'admin (parité CLI ⊇ admin, fiche
+  # 20261013221927937). Verrouiller est une opération SÛRE (elle restreint
+  # l'accès) : pas d'auth forte requise, comme le lock unitaire. Seul unlock exige
+  # le geste humain.
+  if [[ "${1:-}" == "--all" ]]; then
+    local d alias_name n=0
+    for d in "$GWSA_ROOT"/*/; do
+      [[ -d "$d" ]] || continue   # le glob */ exclut déjà .vault/.runtime (dotfiles)
+      alias_name="$(basename "$d")"
+      touch "$d/.locked"; rm -f "$d/.unlock-until"
+      n=$((n + 1))
+      echo "🔒 \"$alias_name\" locked"
+    done
+    echo "🔒 $n profile(s) locked — access on request only ($SELF unlock <alias> [minutes])"
+    return 0
+  fi
   local alias; alias="$(resolve_alias "$1")" || exit; check_alias "$alias"
   local dir; dir="$(profile_dir "$alias")"
   [[ -d "$dir" ]] || die "unknown profile \"$alias\""
@@ -1136,6 +1222,20 @@ cmd_sandbox() { # mag sandbox deploy|list|status|remove|wire — sandboxes tempo
 cmd_couloir() { # alias déprécié → sandbox
   echo "⚠ \"$SELF couloir\" is deprecated — use \"$SELF sandbox\" instead." >&2
   cmd_sandbox "$@"
+}
+
+cmd_provision() { # mag provision [status|sync-iam …] — monter le projet OAuth (phase A)
+  # Parité CLI ⊇ admin (fiche 20261013215354286) : l'onboarding se pilote sous `mag`.
+  # Alias MINCE — le moteur reste scripts/provision-gcp.sh (idempotent, testé), que
+  # l'admin shelle déjà. On passe tous les arguments tels quels :
+  #   mag provision                    flow guidé complet (phase A)
+  #   mag provision status [--json]    état des lieux (lecture seule)
+  #   mag provision sync-iam [--yes]   accorder le rôle IAM manquant aux comptes connectés
+  local script="$REPO_DIR/scripts/provision-gcp.sh"
+  [[ -f "$script" ]] || die "provisioning script introuvable ($script)"
+  # Le script affiche ce nom dans son aide et ses hints (parité CLI : « mag
+  # provision … », pas le chemin du script). Via le wrapper = "<self> provision".
+  MAG_PROVISION_AS="$SELF provision" exec bash "$script" "$@"
 }
 
 cmd_admin() { # mag admin [stop] — interface web locale, port GWSA_ADMIN_PORT (défaut 4877)
@@ -2036,9 +2136,10 @@ main() {
   [[ $# -ge 1 ]] || { usage; exit 3; }
   case "$1" in
     -h|--help|help) usage ;;
+    provision) shift; cmd_provision "$@" ;;
     add)    shift; [[ $# -ge 1 ]] || die "usage: $SELF add <alias> [expected-email] [gws auth login options]"; cmd_add "$@" ;;
     list)   shift; [[ $# -eq 0 ]] || die "\"$SELF list\" takes no argument (got: $*)"; cmd_list ;;
-    lock)   shift; [[ $# -eq 1 ]] || die "usage: $SELF lock <alias>"; cmd_lock "$@" ;;
+    lock)   shift; [[ $# -eq 1 ]] || die "usage: $SELF lock <alias>|--all"; cmd_lock "$@" ;;
     unlock) shift; [[ $# -ge 1 && $# -le 2 ]] || die "usage: $SELF unlock <alias> [minutes|off]"; cmd_unlock "$@" ;;
     policy) shift; [[ $# -ge 1 ]] || die "usage: $SELF policy <alias> [show|mode|allow|zone-add|zone-remove|revoke|clear]"; cmd_policy "$@" ;;
     grant)  shift; [[ $# -ge 1 ]] || die "usage: $SELF grant <alias> <folder> [hours]"; cmd_grant "$@" ;;
