@@ -455,14 +455,31 @@ cmd_add() { # cmd_add <alias> [email-attendu] [options gws auth login]
   mkdir -p "$dir"
   cp "$MASTER_SECRET" "$dir/client_secret.json"
   chmod 600 "$dir/client_secret.json"  # forcer 0600, même si le master a hérité d'un 0644 (cf. Codex #83)
-  echo "→ Connecting profile \"$alias\"${expected:+ (expected account: $expected)}: a browser opens for Google sign-in."
-  echo "   ⚠ Sign in with ${expected:-the account you are connecting}. If your browser has several Google"
-  echo "     accounts, pick the right one (a browser profile tied to that account avoids a wrong pick)."
-  if [[ $# -eq 0 ]]; then
-    GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws auth login --scopes "$DEFAULT_SCOPES"
-  else
-    GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws auth login "$@"
-  fi
+  echo "→ Connecting profile \"$alias\"${expected:+ (expected account: $expected)}: the Google sign-in page opens in your browser."
+  echo "   ⚠ Sign in with ${expected:-the account you are connecting}. If several Google accounts are"
+  echo "     signed in, pick the right one (a browser profile tied to that account avoids a wrong pick)."
+  echo "   (If the page doesn't open on its own, open the URL printed below.)"
+  # gws n'ouvre pas le navigateur : il IMPRIME l'URL OAuth. On la lit à la volée,
+  # on la ré-affiche telle quelle, et on OUVRE la 1re URL d'autorisation
+  # (fiche 20261014…). pipefail (actif en tête) + « true » final du consommateur :
+  # l'exit du pipeline reste celui de gws (EOF du while ne le masque pas).
+  {
+    if [[ $# -eq 0 ]]; then
+      GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws auth login --scopes "$DEFAULT_SCOPES"
+    else
+      GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$dir" gws auth login "$@"
+    fi
+  } 2>&1 | {
+    _opened=""
+    while IFS= read -r _line; do
+      printf '%s\n' "$_line"
+      if [[ -z "$_opened" ]]; then
+        _url="$(printf '%s' "$_line" | grep -oE 'https://accounts\.google\.com/o/oauth2/[^[:space:]]+' || true)"
+        [[ -n "$_url" ]] && { open "$_url" >/dev/null 2>&1 && _opened=1 || true; }
+      fi
+    done
+    true
+  }
   rm -f "$dir/.email"   # l'alias a pu changer de compte : forcer une lecture fraîche
   local email; email="$(profile_email "$dir")"
   if [[ -n "$expected" && -n "$email" && "$email" != "$expected" ]]; then
