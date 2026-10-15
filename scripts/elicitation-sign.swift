@@ -223,7 +223,7 @@ func promptText(from obj: [String: Any]) -> String {
     if action.hasPrefix("transactional_mutation") || action.hasPrefix("transactional_read:") {
         let parts = action.split(separator: ":", maxSplits: 1)
         let op = parts.count > 1 ? String(parts[1]) : "acte sensible"
-        var base = "mag : autoriser « \(op) » sur \(who)"
+        var base = "autoriser « \(op) » sur \(who)"
         if !target.isEmpty { base += " — \(target)" }
         let detail = renderBoundArgs(obj)
         if !detail.isEmpty { base += " [\(detail)]" }
@@ -238,28 +238,28 @@ func promptText(from obj: [String: Any]) -> String {
         return base
     }
     if action == "transactional_read_lease" {
-        return "mag : ouvrir un bail de lecture court sur \(who)"
+        return "ouvrir un bail de lecture court sur \(who)"
     }
     switch action {
     case "session_unlock":
-        return "mag : déverrouiller \(who) pour la session \(sid) (\(minutes) min)"
+        return "déverrouiller \(who) pour la session \(sid) (\(minutes) min)"
     case "unlock":
-        if target == "off" { return "mag : retirer le verrou permanent sur \(who)" }
-        return "mag : déverrouiller \(who) (\(minutes > 0 ? String(minutes) : target) min, poste entier)"
+        if target == "off" { return "retirer le verrou permanent sur \(who)" }
+        return "déverrouiller \(who) (\(minutes > 0 ? String(minutes) : target) min, poste entier)"
     case "session_grant":
-        return "mag : zone session \(sid) — « \(target) » (\(acct), \(hours) h)"
+        return "ouvrir une zone Drive « \(target) » pour la session \(sid) (\(acct), \(hours) h)"
     case "grant":
-        return "mag : autoriser l'écriture Drive « \(target) » (\(acct), \(hours) h)"
+        return "autoriser l'écriture Drive « \(target) » (\(acct), \(hours) h)"
     case "project_sign":
-        return "mag : signer le manifeste projet (.gwsa/)"
+        return "signer le manifeste projet (.gwsa/)"
     case "add_account":
-        return "mag : connecter le compte Google « \(alias) » (\(target))"
+        return "connecter le compte Google « \(alias) » (\(target))"
     case "revoke_descendants":
-        return "mag : révoquer les sous-sessions de \(sid.isEmpty ? target : sid)"
+        return "révoquer les sous-sessions de \(sid.isEmpty ? target : sid)"
     case "strongauth_off":
-        return "mag : désactiver l'authentification forte"
+        return "désactiver l'authentification forte"
     default:
-        return "mag : \(action) — \(alias) \(target)"
+        return "\(action) — \(alias) \(target)"
     }
 }
 
