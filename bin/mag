@@ -420,11 +420,13 @@ iam_grant_in_add() { # iam_grant_in_add <email> <remediation-text> → 0 si acco
       --format='value(bindings.members)' 2>/dev/null | sed 's/^user://' | tr 'A-Z' 'a-z')"
   printf '%s\n' "$members" | grep -qxF "$active" || return 1   # compte actif pas owner/editor → on n'accorde pas
   echo
-  echo "$SELF: le compte gcloud actif ($active) est propriétaire du projet « $project »."
-  _iam_confirm "Accorder le rôle serviceUsageConsumer à $email maintenant ?" || return 1
+  echo "$SELF: $email can't use the project « $project » yet — its Google calls would fail (403 error)."
+  echo "   You're signed in to gcloud as the project owner ($active), so you can grant access now."
+  echo "   (Technical detail: this adds the \"serviceUsageConsumer\" role on the project.)"
+  _iam_confirm "Grant project access to $email now?" || return 1
   if gcloud projects add-iam-policy-binding "$project" \
        --member="user:$email" --role="$role" --condition=None --quiet >/dev/null 2>&1; then
-    echo "✓ IAM role granted to $email on $project (propagation ~2 min)."
+    echo "✓ Project access granted to $email — its Google calls work now (propagation ~2 min)."
     return 0
   fi
   echo "$SELF: ⚠ IAM grant failed — run it by hand:" >&2
