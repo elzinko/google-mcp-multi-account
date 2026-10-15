@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Onboarding google-mcp — piloté par mag</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#15181d; --muted:#6b7280; --line:#e5e7eb;
+    --accent:#4f46e5; --accent-soft:#eef2ff; --done:#059669; --done-soft:#ecfdf5;
+    --now:#d97706; --now-soft:#fffbeb; --todo:#9ca3af; --term-bg:#0f1420; --term-ink:#d7dde8;
+    --radius:14px; --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --bg:#0b0e14; --panel:#141922; --ink:#e7ebf0; --muted:#9aa4b2; --line:#232a36;
+      --accent:#818cf8; --accent-soft:#1c1f3a; --done:#34d399; --done-soft:#0e241e;
+      --now:#fbbf24; --now-soft:#2a2211; --todo:#5b6676; --term-bg:#070a10; --term-ink:#cdd6e4;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    line-height:1.5;-webkit-font-smoothing:antialiased;padding:28px 16px 56px}
+  .wrap{max-width:760px;margin:0 auto}
+  header{margin-bottom:22px}
+  .kicker{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--accent)}
+  h1{font-size:26px;margin:.25em 0 .35em;letter-spacing:-.01em}
+  .lede{color:var(--muted);font-size:15px;max-width:60ch;margin:0}
+  .lede code{font-family:var(--mono);font-size:.92em;background:var(--accent-soft);
+    color:var(--accent);padding:.1em .4em;border-radius:6px}
+
+  .faces{display:inline-flex;gap:4px;background:var(--panel);border:1px solid var(--line);
+    border-radius:999px;padding:4px;margin:20px 0 6px}
+  .faces button{border:0;background:transparent;color:var(--muted);font:inherit;
+    font-weight:600;font-size:13.5px;padding:7px 15px;border-radius:999px;cursor:pointer;
+    display:flex;align-items:center;gap:7px;transition:.15s}
+  .faces button[aria-selected="true"]{background:var(--accent);color:#fff}
+  .faces .dot{width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.7}
+  .parity{font-size:12.5px;color:var(--muted);margin:2px 0 18px;display:flex;
+    align-items:center;gap:7px}
+  .parity b{color:var(--ink);font-weight:600}
+
+  .phase{font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--muted);
+    text-transform:uppercase;margin:22px 0 10px;display:flex;align-items:center;gap:10px}
+  .phase span{flex:0 0 auto}
+  .phase::after{content:"";flex:1;height:1px;background:var(--line)}
+
+  /* ---- Admin face : cartes ---- */
+  .steps{display:flex;flex-direction:column;gap:9px}
+  .step{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px 16px;display:grid;grid-template-columns:26px 1fr auto;gap:13px;
+    align-items:start;cursor:pointer;transition:.15s;position:relative}
+  .step:hover{border-color:var(--accent)}
+  .step[data-state="now"]{border-color:var(--now);box-shadow:0 0 0 3px var(--now-soft)}
+  .ico{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;
+    font-size:14px;font-weight:700;margin-top:1px}
+  .ico.done{background:var(--done-soft);color:var(--done)}
+  .ico.now{background:var(--now-soft);color:var(--now)}
+  .ico.todo{background:transparent;color:var(--todo);border:1.5px dashed var(--line)}
+  .s-title{font-weight:600;font-size:15px}
+  .s-sub{color:var(--muted);font-size:13.5px;margin-top:2px}
+  .s-detail{color:var(--muted);font-size:13px;margin-top:9px;padding-top:9px;
+    border-top:1px dashed var(--line);display:none}
+  .step.open .s-detail{display:block}
+  .who{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
+  .who.toi{background:var(--now-soft);color:var(--now)}
+  .who.ai{background:var(--accent-soft);color:var(--accent)}
+  .cmd{font-family:var(--mono);font-size:12.5px;background:var(--bg);border:1px solid var(--line);
+    color:var(--ink);padding:3px 8px;border-radius:7px;display:inline-block;margin-top:8px}
+  .link{color:var(--accent);font-weight:600;text-decoration:none;font-size:13px}
+
+  /* ---- Terminal face ---- */
+  .terminal{background:var(--term-bg);border-radius:var(--radius);padding:18px 18px 20px;
+    font-family:var(--mono);font-size:13px;color:var(--term-ink);line-height:1.75;
+    border:1px solid #000;box-shadow:0 10px 30px rgba(0,0,0,.18);overflow-x:auto}
+  .terminal .bar{display:flex;gap:7px;margin:-2px 0 14px}
+  .terminal .bar i{width:11px;height:11px;border-radius:50%;background:#3a4252;display:block}
+  .terminal .bar i:first-child{background:#ff5f57}.terminal .bar i:nth-child(2){background:#febc2e}
+  .terminal .bar i:nth-child(3){background:#28c840}
+  .prompt{color:#7fdca4}.prompt .sym{color:#6b7bd6}
+  .tline{white-space:pre-wrap}
+  .t-done{color:#34d399}.t-now{color:#fbbf24}.t-todo{color:#6b7280}
+  .t-cmd{color:#cdd6e4}.t-dim{color:#8792a6}
+  .t-head{color:#8792a6;margin:12px 0 4px;text-transform:uppercase;font-size:11px;letter-spacing:.06em}
+  .hidden{display:none}
+
+  footer{margin-top:26px;padding:16px 18px;background:var(--panel);border:1px solid var(--line);
+    border-radius:var(--radius);font-size:13px;color:var(--muted);display:flex;gap:12px;align-items:flex-start}
+  footer b{color:var(--ink)}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:12px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend .k{width:10px;height:10px;border-radius:50%}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">google-mcp · maquette de process</div>
+    <h1>Un seul fil d'onboarding, piloté par <code>mag</code></h1>
+    <p class="lede">Tout se pilote depuis le terminal avec <code>mag</code>. L'admin web
+      montre <b>exactement le même état</b> — c'est une façade, pas un deuxième chemin.
+      Deux phases : monter l'accès une fois, puis connecter chaque compte.</p>
+
+    <div class="faces" role="tablist" aria-label="Façade">
+      <button role="tab" aria-selected="true" id="tab-term" onclick="face('term')">
+        <span class="dot"></span>Terminal · mag</button>
+      <button role="tab" aria-selected="false" id="tab-admin" onclick="face('admin')">
+        <span class="dot"></span>Admin · web</button>
+    </div>
+    <div class="parity">↔ <span><b>Même source d'état</b> (<code style="font-family:var(--mono)">setup_status</code>), rendue deux fois.</span></div>
+  </header>
+
+  <!-- ADMIN FACE -->
+  <main id="face-admin" class="hidden">
+    <div class="phase"><span>Phase A · mettre en place l'accès (une fois)</span></div>
+    <div class="steps" id="adminA"></div>
+    <div class="phase"><span>Phase B · connecter un compte (par email)</span></div>
+    <div class="steps" id="adminB"></div>
+    <div class="legend">
+      <span><span class="k" style="background:var(--done)"></span>fait</span>
+      <span><span class="k" style="background:var(--now)"></span>en cours</span>
+      <span><span class="k" style="background:var(--todo)"></span>à faire</span>
+      <span><span class="who toi" style="padding:1px 7px">toi</span>geste humain</span>
+      <span><span class="who ai" style="padding:1px 7px">assistant</span>visible, proposé</span>
+    </div>
+  </main>
+
+  <!-- TERMINAL FACE -->
+  <main id="face-term">
+    <div class="terminal" id="term"></div>
+  </main>
+
+  <footer>
+    <span style="font-size:18px;line-height:1">🧭</span>
+    <div>
+      <b>Pourquoi ça tient.</b> Le terminal fait tout ; l'admin ne fait que rendre le même
+      état et appeler les mêmes commandes <code style="font-family:var(--mono)">mag</code>.
+      Les étapes « console » et Touch&nbsp;ID restent des gestes humains : l'assistant les
+      <b>voit et propose</b>, il ne les exécute jamais.
+    </div>
+  </footer>
+</div>
+
+<script>
+// Une seule source de données → deux rendus (c'est tout le propos de la maquette).
+const STEPS = {
+  A:[
+    {s:"done",t:"Compte Google actif",sub:"gcloud connecté, compte propriétaire vérifié",who:"toi",cmd:"mag provision"},
+    {s:"done",t:"Projet OAuth",sub:"conteneur GCP créé (0 €, rien de déployé)"},
+    {s:"done",t:"APIs Workspace",sub:"Gmail, Drive, Calendar, Docs, Sheets, Tasks… activées"},
+    {s:"now",t:"Écran de consentement",sub:"à créer dans la console Google",who:"toi",link:"Ouvrir la console →"},
+    {s:"todo",t:"Client OAuth (Desktop)",sub:"API fermée par Google — seul pas 100 % manuel",who:"toi",detail:"mag ouvre la bonne page et range tout seul le JSON téléchargé depuis ~/Downloads.",link:"Ouvrir la console →"},
+    {s:"todo",t:"Publier l'app",sub:"tokens durables au lieu d'expirer à 7 jours",who:"toi",link:"Ouvrir la console →"}
+  ],
+  B:[
+    {s:"todo",t:"Connecter un compte",sub:"OAuth navigateur, un alias par compte",who:"toi",cmd:"mag add perso perso@gmail.com"},
+    {s:"todo",t:"Accès au projet (rôle IAM)",sub:"« un seul geste » : proposé dans la foulée du mag add",who:"ai",detail:"Si ton gcloud actif est propriétaire, mag propose d'accorder le rôle sur place — tu confirmes, c'est fait. Sinon il affiche la commande.",cmd:"Accorder le rôle à perso@… ? [o/N]"}
+  ]
+};
+const ICO={done:"✓",now:"●",todo:""};
+
+function cardHTML(st){
+  const who = st.who ? `<span class="who ${st.who==='toi'?'toi':'ai'}">${st.who}</span>` : "";
+  let extra="";
+  if(st.cmd) extra+=`<div class="cmd">${st.cmd.replace(/</g,'&lt;')}</div>`;
+  if(st.link) extra+=`<div style="margin-top:8px"><a class="link" href="#" onclick="return false">${st.link}</a></div>`;
+  const detail = st.detail ? `<div class="s-detail">${st.detail}${extra}</div>`
+                           : (extra?`<div class="s-detail">${extra}</div>`:"");
+  return `<div class="step" data-state="${st.s}" onclick="this.classList.toggle('open')">
+      <div class="ico ${st.s}">${ICO[st.s]}</div>
+      <div><div class="s-title">${st.t}</div><div class="s-sub">${st.sub}</div>${detail}</div>
+      <div>${who}</div>
+    </div>`;
+}
+document.getElementById("adminA").innerHTML = STEPS.A.map(cardHTML).join("");
+document.getElementById("adminB").innerHTML = STEPS.B.map(cardHTML).join("");
+
+function termLines(list){
+  return list.map(st=>{
+    const mark = st.s==="done"?'<span class="t-done">[✓]</span>'
+              : st.s==="now" ?'<span class="t-now">[»]</span>'
+                             :'<span class="t-todo">[ ]</span>';
+    const cls = st.s==="todo"?"t-dim":"";
+    let line=`${mark} <span class="${cls}">${st.t}</span>`;
+    let sub = st.cmd?`<span class="t-cmd">${st.cmd.replace(/</g,'&lt;')}</span>`
+            : st.link?`<span class="t-dim">↗ console.cloud.google.com</span>`
+            : `<span class="t-dim">${st.sub}</span>`;
+    return `<div class="tline">${line}</div><div class="tline" style="padding-left:20px">${sub}</div>`;
+  }).join("");
+}
+document.getElementById("term").innerHTML =
+  `<div class="bar"><i></i><i></i><i></i></div>`+
+  `<div class="tline prompt"><span class="sym">~/google-mcp ❯</span> mag provision</div>`+
+  `<div class="t-head">Phase A — mettre en place l'accès</div>`+ termLines(STEPS.A)+
+  `<div class="t-head">Phase B — connecter un compte</div>`+ termLines(STEPS.B)+
+  `<div class="tline" style="margin-top:12px"><span class="t-now">»</span> <span class="t-dim">étape 4/6 — crée l'écran de consentement, puis relance</span> <span class="t-cmd">mag provision</span></div>`;
+
+function face(f){
+  const term=f==="term";
+  document.getElementById("face-term").classList.toggle("hidden",!term);
+  document.getElementById("face-admin").classList.toggle("hidden",term);
+  document.getElementById("tab-term").setAttribute("aria-selected",term);
+  document.getElementById("tab-admin").setAttribute("aria-selected",!term);
+}
+</script>
+</body>
+</html>
