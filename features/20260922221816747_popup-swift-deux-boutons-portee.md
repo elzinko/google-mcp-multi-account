@@ -58,7 +58,7 @@ Test manuel (vrais comptes) : écrire dans un dossier, choisir **« Pour la sess
 
 ## Notes
 
-- Suite directe d'[ADR-0013](../docs/adr/ADR-0013-consentement-une-fois-ou-session.md) — le
+- Suite directe d'[ADR-0013](../docs/adr/ADR-0013-consent-once-or-session.md) — le
   « reste différé assumé » y est nommé. Épic 0082.
 - Touche surtout `scripts/elicitation-sign.swift` (UI native + retour du choix) et le flux de
   signature `gateway/elicitation.py` (le choix humain doit entrer dans le payload signé).

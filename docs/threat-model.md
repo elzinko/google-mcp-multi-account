@@ -1,141 +1,141 @@
-# Sécurité — le modèle de menace
+# Security — the threat model
 
-Cette page dit **honnêtement** ce que le projet protège, et ce qu'il ne protège
-*pas*. Pas de promesse marketing : un outil qui touche à vos mails mérite d'être
-clair là-dessus. Le détail des composants est dans [l'architecture](architecture.md).
+This page says **honestly** what the project protects, and what it does *not*
+protect. No marketing promises: a tool that touches your emails deserves to be
+clear about this. Component details are in [the architecture](architecture.md).
 
-## En clair, d'abord
+## In plain terms, first
 
-Le but : laisser un assistant IA accéder à **plusieurs comptes Google**, en local,
-**sans lui faire confiance par défaut**. Ce que ça garantit — et ce que ça ne
-garantit pas :
+The goal: let an AI assistant access **several Google accounts**, locally,
+**without trusting it by default**. What that guarantees — and what it does not
+guarantee:
 
-- ✅ **Protégé.** Un assistant *coopératif* (qui passe par l'outil) ne peut pas
-  envoyer un mail, écrire hors des dossiers que vous avez ouverts, toucher un compte
-  verrouillé, ni s'accorder un accès tout seul. Un compte neuf est en lecture +
-  brouillons, **zéro envoi**.
-- ⚠️ **Pas protégé.** Un assistant qui a un **shell libre** sur votre machine peut
-  contourner tout ça en appelant l'outil Google directement (détaillé plus bas, dans
-  « ce qui n'est *pas* garanti »). L'élicitation discipline le *comportement* ; elle
-  ne retire pas la *capacité* tant que les identifiants sont lisibles sur le disque.
-  La parade : restreindre le shell de l'agent (voir la mitigation) ; le vault qui
-  ferme cette brèche est prévu (Phase 2.1).
+- ✅ **Protected.** A *cooperative* assistant (one that goes through the tool) cannot
+  send an email, write outside the folders you have opened, touch a locked
+  account, or grant itself access. A new account is read + drafts,
+  **zero sending**.
+- ⚠️ **Not protected.** An assistant with a **free shell** on your machine can
+  bypass all of this by calling the Google tool directly (detailed below, under
+  "what is *not* guaranteed"). Elicitation disciplines *behavior*; it
+  does not remove the *capability* as long as credentials are readable on disk.
+  The countermeasure: restrict the agent's shell (see the mitigation); the vault that
+  closes this gap is planned (Phase 2.1).
 
-**En résumé : très solide pour un agent coopératif, mais pas une prison contre un
-agent adverse ayant accès au disque.** Le reste de la page détaille chaque garantie,
-phase par phase.
+**In short: very solid against a cooperative agent, but not a prison against an
+adversarial agent with disk access.** The rest of the page details each guarantee,
+phase by phase.
 
-## Surfaces de confiance
+## Trust surfaces
 
-| Composant | Rôle | Confiance |
-|-----------|------|-----------|
-| Humain | unlock, grant, policy, OAuth | Racine de confiance |
-| Admin `127.0.0.1:4877` | Cockpit | Processus local ; pas d’auth app |
-| `bin/mag` + `scripts/policy-check.py` | Garde-fous CLI | Appliqués si on passe par eux |
-| `gateway/` + `bin/google-mcp` | Porte d’entrée MCP | Même policy/lock ; tools curatés (pas de send) |
-| `gws` + `~/.config/gws-accounts/` | Tokens + appels Google | **Capacité réelle** d’accès aux données |
+| Component | Role | Trust |
+|-----------|------|-------|
+| Human | unlock, grant, policy, OAuth | Root of trust |
+| Admin `127.0.0.1:4877` | Cockpit | Local process; no app auth |
+| `bin/mag` + `scripts/policy-check.py` | CLI guardrails | Applied if you go through them |
+| `gateway/` + `bin/google-mcp` | MCP entry point | Same policy/lock; curated tools (no send) |
+| `gws` + `~/.config/gws-accounts/` | Tokens + Google calls | **Real capability** to access data |
 
-## Phase 1 (actuelle) — ce qui est garanti
+## Phase 1 (current) — what is guaranteed
 
-- Profil créé via `mag add` → **policy prudente** (Drive zones vides, Gmail sans envoi, services non listés refusés).
-- Service absent de `policy.json` → **default-deny** (sauf `auth` / `schema`).
-- Profil verrouillé → refus via `mag` **et** via MCP.
-- Tools MCP : Gmail lecture + brouillons + pièce jointe (→ `.downloads`), Drive lecture (métadonnées + contenu) + create/copy/upload + **update** (remplacement de contenu, fichiers non-natifs seulement) **sous zones** ; **partage** lecture/écriture (`drive_permissions_create/list/delete`) — jamais de partage **public** (`type` fixé à `user`) ; **pas** d’envoi Gmail, de suppression définitive, ni de **transfert de propriété** (retiré — PR dédiée non prête).
-- ⚠ **Partage** (`drive_permissions_*`) n’est gardé que par la policy `drive.share:true` (flag **persistant**), **pas** par les zones ni par un grant de session : une fois `share` activé, l’agent peut partager tout fichier possédé vers tout email (jamais public — `type=user`). **Durcissement à trancher** (revue sécurité F2) : grant de session pour partager.
-- `access_request` propose unlock/grant **sans les exécuter**.
-- Touch ID (`mag strongauth`) : présence physique pour unlock/grant (chemins absolus `/usr/bin/swift` + `/usr/bin/swiftc` + scripts repo — jamais via le PATH).
-- **Droits par session** ([ADR-0007](https://github.com/elzinko/google-mcp-multi-account/blob/main/docs/adr/ADR-0007-droits-par-session.md)) : chaque conversation porte un **jeton** signé ; ses capacités (service × opération × ressource) sont **isolées** des autres sessions et **signées à chaque octroi** ; droits effectifs = policy ∩ manifeste projet ∩ capacités session ; un manifeste projet **altéré** referme tout (anti-downgrade). Cycle de vie TTL / révocation (la déconnexion MCP ne purge rien). Reste **coopératif** tant que le vault n'est pas là.
+- Profile created via `mag add` → **cautious policy** (Drive zones empty, Gmail without sending, unlisted services denied).
+- Service missing from `policy.json` → **default-deny** (except `auth` / `schema`).
+- Locked profile → refused via `mag` **and** via MCP.
+- MCP tools: Gmail read + drafts + attachment (→ `.downloads`), Drive read (metadata + content) + create/copy/upload + **update** (content replacement, non-native files only) **under zones**; **sharing** read/write (`drive_permissions_create/list/delete`) — never **public** sharing (`type` fixed to `user`); **no** Gmail sending, permanent deletion, or **ownership transfer** (removed — dedicated PR not ready).
+- ⚠ **Sharing** (`drive_permissions_*`) is only guarded by the `drive.share:true` policy (a **persistent** flag), **not** by zones or by a session grant: once `share` is enabled, the agent can share any file it owns to any email (never public — `type=user`). **Hardening to be decided** (security review F2): a session grant to share.
+- `access_request` proposes unlock/grant **without running them**.
+- Touch ID (`mag strongauth`): physical presence for unlock/grant (absolute paths `/usr/bin/swift` + `/usr/bin/swiftc` + repo scripts — never via PATH).
+- **Per-session rights** ([ADR-0007](https://github.com/elzinko/google-mcp-multi-account/blob/main/docs/adr/ADR-0007-per-session-rights.md)): each conversation carries a signed **token**; its capabilities (service × operation × resource) are **isolated** from other sessions and **signed at each grant**; effective rights = policy ∩ project manifest ∩ session capabilities; a **tampered** project manifest closes everything (anti-downgrade). TTL / revocation lifecycle (an MCP disconnect purges nothing). Remains **cooperative** until the vault is in place.
 
-## Phase 1 — ce qui n’est **pas** garanti
+## Phase 1 — what is **not** guaranteed
 
-Un agent avec **shell libre** et accès filesystem peut encore :
+An agent with a **free shell** and filesystem access can still run:
 
 ```bash
 GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.config/gws-accounts/<alias> gws …
 ```
 
-et contourner lock, policy, journal et MCP. L’élicitation contrôle le **comportement
-coopératif** ; elle ne retire pas la **capacité** tant que les credentials sont
-utilisables par `gws` hors gateway.
+and bypass lock, policy, audit log, and MCP. Elicitation controls **cooperative
+behavior**; it does not remove the **capability** as long as the credentials are
+usable by `gws` outside the gateway.
 
-**Mitigation recommandée** (clients avec shell : Claude Code, Cursor Agent) :
+**Recommended mitigation** (clients with a shell: Claude Code, Cursor Agent):
 
-- Chemin supporté pour les données Google = **MCP uniquement** (`bin/google-mcp`).
-- Restreindre / refuser dans les permissions bash : `gws`, `GOOGLE_WORKSPACE_CLI_CONFIG_DIR=…`,
-  lecture/écriture de `~/.config/gws-accounts/`.
-- Ne pas mettre `gws` dans le PATH de l’agent si possible ; l’humain garde `mag` pour l’admin.
+- Supported path for Google data = **MCP only** (`bin/google-mcp`).
+- Restrict / deny in bash permissions: `gws`, `GOOGLE_WORKSPACE_CLI_CONFIG_DIR=…`,
+  read/write of `~/.config/gws-accounts/`.
+- Do not put `gws` in the agent's PATH if possible; the human keeps `mag` for admin.
 
-## Phase 2 A (actuelle) — broker loopback
+## Phase 2 A (current) — loopback broker
 
 - MCP → gateway → **broker** (`127.0.0.1:4878`, token `~/.config/gws-accounts/.broker-token`) → `gws`.
-- Auto-start du broker au premier tool MCP si besoin (`bin/google-broker`).
-- Le broker re-applique lock + policy avant `gws`.
+- The broker auto-starts on the first MCP tool call if needed (`bin/google-broker`).
+- The broker re-applies lock + policy before `gws`.
 
-## Phase 2 A — ce qui n’est **pas** encore garanti
+## Phase 2 A — what is **not yet** guaranteed
 
-Les credentials restent dans `~/.config/gws-accounts/`. Un agent avec shell libre
-peut toujours appeler `gws` directement. Mitigation : restreindre le shell ;
-évolution = vault (`features/0003-vault-credentials-hors-perimetre-agent.md`).
+Credentials remain in `~/.config/gws-accounts/`. An agent with a free shell
+can still call `gws` directly. Mitigation: restrict the shell;
+next step = vault (`features/0003-vault-credentials-hors-perimetre-agent.md`).
 
-## Email = métadonnée d'identité (hors verrou)
+## Email = identity metadata (outside the lock)
 
-L'email d'un profil reste lisible même verrouillé — c'est la **seule**
-métadonnée exposée (diagnostic IAM de `setup_status`, SECURITY.md). Depuis
-[ADR-0002](adr/ADR-0002-email-metadonnee-hors-verrou.md), il vient d'un
-fichier `.email` écrit au geste humain `mag add` (backfill : `mag list`,
-admin) — **jamais** d'une exécution `gws`. Invariant testé : verrou ⇒ zéro
-exécution gws ; aucun `GOOGLE_WORKSPACE_CLI_CONFIG_DIR` dans `gateway/`
-hors `broker_server.py`.
+A profile's email stays readable even when locked — it is the **only**
+metadata exposed (IAM diagnostic of `setup_status`, SECURITY.md). Since
+[ADR-0002](adr/ADR-0002-email-metadata-outside-lock.md), it comes from an
+`.email` file written by the human `mag add` gesture (backfill: `mag list`,
+admin) — **never** from a `gws` execution. Tested invariant: lock ⇒ zero
+gws execution; no `GOOGLE_WORKSPACE_CLI_CONFIG_DIR` in `gateway/`
+outside `broker_server.py`.
 
-## Contenu déposé sur Drive (répertoire de dépôt)
+## Content deposited on Drive (deposit directory)
 
-`drive_create(content=…)` matérialise le texte dans
-`~/.config/gws-accounts/.uploads/` (0700) le temps d'un appel `gws --upload` :
-c'est la seule façon de passer un média à `gws`, qui refuse par ailleurs tout
-chemin hors de son répertoire courant ([ADR-0003](adr/ADR-0003-contenu-drive-via-depot-broker.md)).
-Fichier en 0600, effacé en `finally` (succès comme échec) — exposition
-comparable à `usage.jsonl`, qui journalise déjà les arguments des commandes.
-Effet de bord favorable : `gws` s'exécute désormais **depuis ce répertoire**,
-donc son bac à sable fichiers n'est plus le dépôt git. Les zones Drive
-s'appliquent inchangées : `parents` reste dans `--json`, seul endroit que
-`policy-check.py` lit pour valider la destination.
+`drive_create(content=…)` materializes the text in
+`~/.config/gws-accounts/.uploads/` (0700) for the duration of one `gws --upload` call:
+this is the only way to pass media to `gws`, which otherwise refuses any
+path outside its working directory ([ADR-0003](adr/ADR-0003-drive-content-via-broker-deposit.md)).
+File in 0600, deleted in `finally` (on success and on failure) — exposure
+comparable to `usage.jsonl`, which already logs command arguments.
+Favorable side effect: `gws` now runs **from this directory**,
+so its file sandbox is no longer the git repo. Drive zones
+apply unchanged: `parents` stays in `--json`, the only place
+`policy-check.py` reads to validate the destination.
 
-## Fichiers reçus (répertoire de téléchargement)
+## Received files (download directory)
 
-`gmail_attachment_get` matérialise une pièce jointe — **contenu tiers**,
-potentiellement hostile — dans `~/.config/gws-accounts/.downloads/` (0700),
-seule destination possible ([ADR-0006](adr/ADR-0006-fichiers-recus-repertoire-dedie.md)).
-Le tool n'accepte **aucun chemin de destination** : seulement un `filename`
-indicatif, réduit à un nom de base assaini (jamais un séparateur, jamais caché,
-jamais vide). Écriture en `O_CREAT|O_EXCL` (0600), suffixe numérique si le nom
-existe déjà — **jamais d'écrasement**. Symétrie avec le sens montant :
-`drive_upload` refuse de lire sous `GWSA_ROOT` (tokens, credentials, policies),
-à l'exception de `.downloads` (re-téléverser une PJ reçue). Le chemin final est
-renvoyé à l'appelant, qui décide ensuite d'un éventuel `cp` — hors gateway.
+`gmail_attachment_get` materializes an attachment — **third-party content**,
+potentially hostile — in `~/.config/gws-accounts/.downloads/` (0700),
+the only possible destination ([ADR-0006](adr/ADR-0006-received-files-dedicated-directory.md)).
+The tool accepts **no destination path**: only an indicative `filename`,
+reduced to a sanitized base name (never a separator, never hidden,
+never empty). Written with `O_CREAT|O_EXCL` (0600), numeric suffix if the name
+already exists — **never overwriting**. Symmetry with the upload direction:
+`drive_upload` refuses to read under `GWSA_ROOT` (tokens, credentials, policies),
+except for `.downloads` (re-uploading a received attachment). The final path is
+returned to the caller, who then decides on a possible `cp` — outside the gateway.
 
-Côté montant, la **source** de `drive_upload` est restreinte à une **liste
-blanche** (`.downloads` + les dossiers déclarés dans `<GWSA_ROOT>/.upload-roots`
-ou `GWSA_UPLOAD_ROOTS`), pas au disque entier : le LLM ne peut pas lire un
-chemin arbitraire (ex. `~/.ssh/id_rsa`) et l'exfiltrer vers une zone active —
-défaut-deny, l'humain seul ouvre les dossiers lisibles (le fichier `.upload-roots`
-n'est pas écrivable par un tool) —
-[ADR-0006](adr/ADR-0006-fichiers-recus-repertoire-dedie.md).
+On the upload side, the **source** of `drive_upload` is restricted to an **allowlist**
+(`.downloads` + the folders declared in `<GWSA_ROOT>/.upload-roots`
+or `GWSA_UPLOAD_ROOTS`), not the whole disk: the LLM cannot read an arbitrary
+path (e.g. `~/.ssh/id_rsa`) and exfiltrate it to an active zone —
+default-deny, only the human opens the readable folders (the `.upload-roots` file
+is not writable by a tool) —
+[ADR-0006](adr/ADR-0006-received-files-dedicated-directory.md).
 
-## Phase 2.1 (prévue) — vault
+## Phase 2.1 (planned) — vault
 
-Credentials hors lecture agent ; seule la socket broker reste utile.
+Credentials out of the agent's read reach; only the broker socket remains useful.
 
-## Phase 1 — profils legacy
+## Phase 1 — legacy profiles
 
-Un profil **sans** `policy.json` (créé avant ce durcissement) reste non filtré
-par le checker tant que tu n’en poses pas une. Pour basculer : préréglage
-« prudent » dans l’admin, ou recopier `gateway/default_policy.py`.
+A profile **without** `policy.json` (created before this hardening) stays unfiltered
+by the checker until you set one. To switch: "cautious" preset
+in the admin, or copy `gateway/default_policy.py`.
 
-## Journal d’audit
+## Audit log
 
-`~/.config/gws-accounts/usage.jsonl` — appels autorisés (`decision:ok`), refus
-de policy et refus de verrou (`decision:refus`, `reason:locked`), sur les trois
-chemins (`mag`, broker, fail-fast gateway). Champ `client` via `GWSA_CLIENT`
-(`mcp`, `claude-code`, `cli`, …). Les appels **réussis** portent en plus le
-`session_id` et le service / opération / ressource (attribution par session).
-Spoofable (`GWSA_CLIENT`) : utile pour le debug, pas une identité forte.
+`~/.config/gws-accounts/usage.jsonl` — allowed calls (`decision:ok`), policy
+refusals and lock refusals (`decision:refus`, `reason:locked`), on all three
+paths (`mag`, broker, gateway fail-fast). `client` field via `GWSA_CLIENT`
+(`mcp`, `claude-code`, `cli`, …). **Successful** calls additionally carry the
+`session_id` and the service / operation / resource (per-session attribution).
+Spoofable (`GWSA_CLIENT`): useful for debugging, not a strong identity.

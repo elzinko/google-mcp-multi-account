@@ -1,81 +1,81 @@
-# Installer & mettre à jour le serveur MCP
+# Install & update the MCP server
 
-Le binaire [`bin/google-mcp`](https://github.com/elzinko/google-mcp-multi-account/blob/main/bin/google-mcp) expose un serveur MCP **stdio**
-(JSON-RPC, une ligne = un message). Il ne parle à Google que via la
-[gateway](https://github.com/elzinko/google-mcp-multi-account/tree/main/gateway/) (policy + verrous + executor v1 → `gws`).
+The [`bin/google-mcp`](https://github.com/elzinko/google-mcp-multi-account/blob/main/bin/google-mcp) binary exposes an MCP **stdio** server
+(JSON-RPC, one line = one message). It talks to Google only through the
+[gateway](https://github.com/elzinko/google-mcp-multi-account/tree/main/gateway/) (policy + locks + v1 executor → `gws`).
 
-Prérequis : la CLI [`gws`](https://github.com/googleworkspace/cli) installée
-(`brew install googleworkspace-cli`) et Python 3. (Pas besoin d'avoir déjà connecté
-un compte : le tool `setup_status` guide l'initialisation depuis le client LLM.)
+Prerequisites: the [`gws`](https://github.com/googleworkspace/cli) CLI installed
+(`brew install googleworkspace-cli`) and Python 3. (No need to have connected
+an account already: the `setup_status` tool guides initialization from the LLM client.)
 
-## Installer sans cloner (curl)
+## Install without cloning (curl)
 
-Pour **utiliser** le serveur (pas le développer), pas besoin de cloner le dépôt :
+To **use** the server (not develop it), there is no need to clone the repository:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/elzinko/google-mcp-multi-account/main/install.sh | bash
 ```
 
-Ça télécharge la dernière version publiée, la fige dans
-`~/.local/share/google-mcp/` et met `mag` sur le PATH. **Aucun client LLM n'est
-branché par défaut** : l'install imprime le geste (`mag wire …`, voir [plus bas](#brancher-un-client-llm)) ;
-ajoute `--wire` (ou `GWSA_WIRE=1`) pour brancher pendant l'install.
-Reste le setup Google (OAuth/GCP), un **préalable** affiché à la fin — voir
-[Prérequis — OAuth / Google Cloud](setup-oauth.md).
+This downloads the latest published version, pins it in
+`~/.local/share/google-mcp/` and puts `mag` on the PATH. **No LLM client is
+wired by default**: the install prints the action (`mag wire …`, see [below](#brancher-un-client-llm));
+add `--wire` (or `GWSA_WIRE=1`) to wire during the install.
+What remains is the Google setup (OAuth/GCP), a **prerequisite** printed at the end — see
+[Prerequisite — OAuth / Google Cloud](setup-oauth.md).
 
-Mettre à jour plus tard, **toujours sans clone** :
+Update later, **still without cloning**:
 
 ```bash
-mag update            # dernière version publiée · --to v0.1.0 pour un retour arrière
+mag update            # latest published version · --to v0.1.0 to roll back
 ```
 
-`mag update` lit la dernière version sur GitHub et bascule `current` dessus. Le
-clone git n'est nécessaire que pour **contribuer** (fiche 0020).
+`mag update` reads the latest version on GitHub and switches `current` to it. The
+git clone is only needed to **contribute** (backlog item 0020).
 
-## Brancher un client LLM
+## Connect an LLM client { #brancher-un-client-llm }
 
-Une fois installé, relie ton assistant en une commande :
+Once installed, link your assistant with one command:
 
 ```bash
 mag wire desktop      # Claude Desktop
-mag wire code         # Claude Code (le CLI « claude »)
-mag wire all          # les deux — « --print » pour un dry-run
+mag wire code         # Claude Code (the "claude" CLI)
+mag wire all          # both — "--print" for a dry run
 ```
 
-Détail par client (Claude Desktop, Claude Code, **Cursor**), config manuelle et
-retrait d'une entrée → **[Configurer un client LLM](configurer-client.md)**.
+Per-client details (Claude Desktop, Claude Code, **Cursor**), manual config and
+removing an entry → **[Connect an LLM client](connect-client.md)**.
 
-## Les tools exposés, par groupe
+## Exposed tools, by group
 
-| Groupe | Tool | Ce que ça fait |
+| Group | Tool | What it does |
 |---|---|---|
-| Découverte | `profiles_list` | Liste les profils (alias, email, verrou, policy) — toujours commencer là |
-| Diagnostic | `setup_status` | État du setup (projet, publication, IAM par compte) + `next_actions` : commandes à proposer pour compléter/réparer (lecture seule). Guide l'onboarding, même sans shell (Desktop) |
-| Gmail — lecture | `gmail_list` · `gmail_get` | Recherche puis lit les messages d'un compte |
-| Gmail — pièce jointe | `gmail_attachment_get` | Télécharge une PJ dans le répertoire local dédié `.downloads` — jamais un chemin arbitraire, jamais d'écrasement ([ADR-0006](adr/ADR-0006-fichiers-recus-repertoire-dedie.md)) |
-| Gmail — brouillon | `gmail_draft_create` | Prépare un brouillon ; **aucun tool n'envoie de mail** |
-| Drive — lecture | `drive_list` · `drive_get` · `drive_read` | Liste / inspecte fichiers et dossiers (`webViewLink` compris) et **qui les possède** (`owner`, `owned_by_me`) ; `drive_read` lit le **contenu** en texte (Doc → markdown, Sheet → CSV, fichiers texte tels quels — pas les binaires) |
-| Drive — écriture zonée | `drive_create` · `drive_update` · `drive_copy` · `drive_upload` | Sous un parent autorisé (policy zones + grants) : crée / **modifie**, **copie** nativement, ou **téléverse** un fichier local ([ADR-0003](adr/ADR-0003-contenu-drive-via-depot-broker.md)) |
-| Drive — partage | `drive_permissions_list` · `drive_permissions_create` · `drive_permissions_delete` | Liste, accorde (reader/commenter/writer) ou révoque des partages (policy `share:true` requise) ; **transfert de propriété hors périmètre** (PR dédiée non prête) |
-| Élicitation | `access_request` | kind=`unlock` \| `grant` \| `add_account` : renvoie **la commande à faire exécuter par l'humain** — n'exécute jamais rien |
+| Discovery | `profiles_list` | Lists the profiles (alias, email, lock, policy) — always start here |
+| Diagnostics | `setup_status` | Setup state (project, publication, IAM per account) + `next_actions`: commands to propose to complete/repair (read-only). Guides onboarding, even without a shell (Desktop) |
+| Gmail — read | `gmail_list` · `gmail_get` | Searches then reads an account's messages |
+| Gmail — attachment | `gmail_attachment_get` | Downloads an attachment into the dedicated local `.downloads` directory — never an arbitrary path, never overwriting ([ADR-0006](adr/ADR-0006-received-files-dedicated-directory.md)) |
+| Gmail — draft | `gmail_draft_create` | Prepares a draft; **no tool sends mail** |
+| Drive — read | `drive_list` · `drive_get` · `drive_read` | Lists / inspects files and folders (`webViewLink` included) and **who owns them** (`owner`, `owned_by_me`); `drive_read` reads the **content** as text (Doc → markdown, Sheet → CSV, text files as-is — not binaries) |
+| Drive — zoned write | `drive_create` · `drive_update` · `drive_copy` · `drive_upload` | Under an authorized parent (zone policy + grants): creates / **modifies**, natively **copies**, or **uploads** a local file ([ADR-0003](adr/ADR-0003-drive-content-via-broker-deposit.md)) |
+| Drive — sharing | `drive_permissions_list` · `drive_permissions_create` · `drive_permissions_delete` | Lists, grants (reader/commenter/writer) or revokes shares (policy `share:true` required); **ownership transfer out of scope** (dedicated PR not ready) |
+| Elicitation | `access_request` | kind=`unlock` \| `grant` \| `add_account`: returns **the command for the human to run** — never executes anything |
 
-**Policy admin ≠ surface MCP.** Cocher une case dans l'admin autorise les
-méthodes API correspondantes via `mag` ; le MCP en expose un sous-ensemble.
-Depuis la fiche `features/done/0043-lire-copier-televerser-drive-et-pj-gmail.md`
-et ce lot (update + partage), lecture de contenu, copie, téléversement,
-modification et partage y sont. Le **transfert de propriété** est hors périmètre
-(PR dédiée non prête). Calendar / Keep peuvent encore figurer dans la policy sans
-tool MCP (élargissement : fiche
-`features/0021-couverture-mcp-elargie.md`)). Et par design, **aucun
-tool** n'envoie de mail, ne supprime, ni ne transfère de propriété.
+**Admin policy ≠ MCP surface.** Ticking a box in the admin authorizes the matching
+API methods through `mag`; the MCP exposes a subset of them.
+Since backlog item `features/done/0043-lire-copier-televerser-drive-et-pj-gmail.md`
+and this batch (update + sharing), content reading, copying, uploading,
+modifying and sharing are in. **Ownership transfer** is out of scope
+(dedicated PR not ready). Calendar / Keep may still appear in the policy without an
+MCP tool (broader coverage: backlog item
+`features/0021-couverture-mcp-elargie.md`). And by design, **no
+tool** sends mail, deletes, or transfers ownership.
 
-Chaque appel traverse la gateway (verrou + policy default-deny) puis le
-broker loopback, et tout est journalisé (`GWSA_CLIENT`). Un refus n'est
-jamais une impasse : il embarque l'élicitation à proposer — voir les
-[diagrammes de séquence](https://github.com/elzinko/google-mcp-multi-account/tree/main/diagrams/) (lecture, connexion de compte,
-réparation IAM).
+Every call goes through the gateway (lock + default-deny policy) then the
+loopback broker, and everything is logged (`GWSA_CLIENT`). A refusal is
+never a dead end: it carries the elicitation to propose — see the
+[sequence diagrams](https://github.com/elzinko/google-mcp-multi-account/tree/main/diagrams/) (reading, account connection,
+IAM repair).
 
-## Smoke test manuel (sans client)
+## Manual smoke test (no client)
 
 ```bash
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}' \
@@ -83,131 +83,131 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol
   | ./bin/google-mcp
 ```
 
-## Développer sans casser le MCP que tu utilises
+## Develop without breaking the MCP you use
 
-Par défaut, le serveur branché dans Claude Desktop exécute **le clone**, en direct.
-Modifier le code change donc l'outil pendant que tu t'en sers — et du code non
-validé garde l'accès aux vrais comptes. Pour séparer les deux :
+By default, the server wired into Claude Desktop runs **the clone**, live.
+Changing the code therefore changes the tool while you are using it — and
+unvalidated code keeps access to the real accounts. To separate the two:
 
-**1 · Publier une version** — le numéro se calcule tout seul :
+**1 · Publish a version** — the number is computed automatically:
 
 ```bash
 ./scripts/release.sh
 ```
 
-Le niveau vient des conventional commits depuis le dernier tag : un `feat` →
-minor, un `BREAKING CHANGE` (ou `type!:`) → major, sinon patch. Passe
-`patch`, `minor` ou `major` pour forcer, `--print` pour voir sans rien écrire.
+The level comes from conventional commits since the last tag: a `feat` →
+minor, a `BREAKING CHANGE` (or `type!:`) → major, otherwise patch. Pass
+`patch`, `minor` or `major` to force, `--print` to see without writing anything.
 
-Le script refuse de publier dans le flou : arbre sale, branche autre que
-`main`, retard sur `origin/main`, tag déjà posé, aucun commit depuis la
-dernière version, ou tests rouges. Au vert il écrit `CHANGELOG.md`, commite,
-pose un tag annoté et pousse les deux.
+The script refuses to publish in the dark: dirty tree, branch other than
+`main`, behind `origin/main`, tag already set, no commit since the
+last version, or red tests. When green it writes `CHANGELOG.md`, commits,
+sets an annotated tag and pushes both.
 
-**2 · Installer cette version sur ce poste** — une commande, comme un produit :
+**2 · Install that version on this machine** — one command, like a product:
 
 ```bash
 ./scripts/update.sh
 ```
 
-Elle prend la dernière version publiée, l'installe à côté de l'ancienne dans
-`~/.local/share/google-mcp/<tag>/`, bascule `current`, recycle le broker, et
-ne touche à la config de Claude Desktop que si l'entrée manque ou pointe
-ailleurs. Relancée sans rien de neuf, elle dit « déjà à jour » et s'arrête.
+It takes the latest published version, installs it next to the old one in
+`~/.local/share/google-mcp/<tag>/`, switches `current`, recycles the broker, and
+only touches the Claude Desktop config if the entry is missing or points
+elsewhere. Rerun with nothing new, it says "already up to date" and stops.
 
-| Option | Effet |
+| Option | Effect |
 |---|---|
-| `--check` | dit installé / disponible, n'écrit rien |
-| `--to v0.1.0` | installe une version précise (retour arrière) |
-| `--force` | réinstalle même si c'est déjà la version courante |
+| `--check` | says installed / available, writes nothing |
+| `--to v0.1.0` | installs a specific version (rollback) |
+| `--force` | reinstalls even if it is already the current version |
 
-Il reste un geste manuel, incompressible : **redémarrer Claude Desktop**. Le
-serveur MCP est lancé par l'application, il ne se recharge pas tout seul.
+One manual action remains, unavoidable: **restart Claude Desktop**. The
+MCP server is launched by the application, it does not reload by itself.
 
-Les deux commandes sont aussi des verbes de `mag`, qui est dans ton PATH :
-`mag update` et `mag release`. Depuis la copie installée, `mag release`
-retrouve le clone source tout seul (fichier `.source`).
+Both commands are also `mag` verbs, and `mag` is on your PATH:
+`mag update` and `mag release`. From the installed copy, `mag release`
+finds the source clone on its own (`.source` file).
 
-Pour un cas particulier, les briques restent accessibles :
-`deploy-local.sh --tag v0.1.0` installe une version sans passer par `update`,
-et `install-claude-desktop.sh` branche une entrée à la main.
+For special cases, the building blocks remain available:
+`deploy-local.sh --tag v0.1.0` installs a version without going through `update`,
+and `install-claude-desktop.sh` wires an entry by hand.
 
-**3 · Travailler dans le clone**, sur son propre couloir :
+**3 · Work in the clone**, in its own lane:
 
-| | Stable (en service) | Développement |
+| | Stable (in service) | Development |
 |---|---|---|
-| Code | `~/.local/share/google-mcp/current/` | ton clone |
+| Code | `~/.local/share/google-mcp/current/` | your clone |
 | `GWSA_ROOT` | `~/.config/gws-accounts` | `~/.config/gws-accounts-dev` |
-| `GWSA_BROKER_PORT` | `4878` (défaut) | `4880` |
+| `GWSA_BROKER_PORT` | `4878` (default) | `4880` |
 
 ```bash
 export GWSA_ROOT="$HOME/.config/gws-accounts-dev" GWSA_BROKER_PORT=4880
 ```
 
-(4879 est réservé à la suite de tests — d'où 4880 pour le développement.)
+(4879 is reserved for the test suite — hence 4880 for development.)
 
-**Le port distinct n'est pas cosmétique** : le broker ne se relance pas s'il en
-existe déjà un qui répond. Sans ports séparés, le premier démarré exécute *tout*,
-pour les deux couloirs — tu croirais tester tes modifications alors que tu
-exécutes l'ancien code.
+**The distinct port is not cosmetic**: the broker does not restart if one
+already exists and responds. Without separate ports, the first one started runs *everything*,
+for both lanes — you would think you are testing your changes while you are
+running the old code.
 
-Vérifier qui est qui : le serveur annonce sa version dans `initialize`. La copie
-déployée annonce son tag, le clone annonce `dev`.
+Check which is which: the server announces its version in `initialize`. The deployed
+copy announces its tag, the clone announces `dev`.
 
 ```bash
-./scripts/deploy-local.sh --list        # versions déployées (* = courante)
+./scripts/deploy-local.sh --list        # deployed versions (* = current)
 ./scripts/deploy-local.sh --rollback v0.1.0
-mag broker status                      # sur le couloir courant
+mag broker status                      # on the current lane
 ```
 
-`mag broker status|stop` ne pilote que le broker de **son** port : le pidfile
-s'appelle `.broker-<port>.pid`, le jeton `.broker-<port>-token`.
+`mag broker status|stop` only drives the broker of **its own** port: the pidfile
+is named `.broker-<port>.pid`, the token `.broker-<port>-token`.
 
-## Brancher deux versions en même temps
+## Wire two versions at the same time
 
-Utile pour essayer une version sans perdre celle qui marche. Chaque entrée a
-besoin de son propre nom **et** de son propre port :
+Useful to try a version without losing the one that works. Each entry needs
+its own name **and** its own port:
 
 ```bash
 ~/.local/share/google-mcp/v0.1.0/scripts/install-claude-desktop.sh \
   --name google-multi-account-v0.1.0 --port 4881
 ```
 
-Pour une **branche / PR jetable** (sans toucher `current` ni l'entrée stable
-`google-multi-account` @ 4878) : `mag sandbox deploy --wire` (ou
-`mag sandbox wire` après coup). Unwire sélectif :
-`mag sandbox wire --remove desktop` (répertoire conservé) ;
-nucléaire : `mag sandbox remove <id>`. Détail : `mag sandbox --help` et fiche
+For a throwaway **branch / PR** (without touching `current` or the stable
+`google-multi-account` entry @ 4878): `mag sandbox deploy --wire` (or
+`mag sandbox wire` afterwards). Selective unwire:
+`mag sandbox wire --remove desktop` (directory kept);
+nuclear option: `mag sandbox remove <id>`. Details: `mag sandbox --help` and backlog item
 `features/0046-sandbox-deploy-cli.md`.
 
-Trois règles, sinon le nom de l'entrée ment sur la version qui répond :
+Three rules, otherwise the entry name lies about which version answers:
 
-- **Un port par entrée.** L'installeur écrit `GWSA_BROKER_PORT` dans la config,
-  et refuse deux binaires différents sur un même port.
-- **Viser le dossier de version, jamais `current`.** `current` suit le symlink :
-  une entrée épinglée dessus changerait au déploiement suivant.
-- **Garder le même `GWSA_ROOT`.** Les comptes sont partagés : pas de
-  reconnexion pour essayer une version.
+- **One port per entry.** The installer writes `GWSA_BROKER_PORT` into the config,
+  and refuses two different binaries on the same port.
+- **Target the version directory, never `current`.** `current` follows the symlink:
+  an entry pinned to it would change at the next deployment.
+- **Keep the same `GWSA_ROOT`.** Accounts are shared: no
+  reconnection to try a version.
 
-Rappel : le serveur MCP et le broker sont deux process. Le serveur construit les
-commandes, le broker les exécute et applique verrous, policy et zones. Deux
-versions sur un même port se partagent le premier broker démarré — le résultat
-ne correspond alors à aucune des deux.
+Reminder: the MCP server and the broker are two processes. The server builds the
+commands, the broker runs them and applies locks, policy and zones. Two
+versions on the same port share the first broker started — the result
+then matches neither of them.
 
-Le couloir de développement part sans comptes : `mag dev deploy --isolated`
-crée `~/.config/gws-accounts-dev` et y copie `client_secret.json` depuis la
-prod (l'app OAuth seulement — pas les tokens). Il reste à connecter au moins
-un compte de test (`GWSA_ROOT=… mag add <alias>`) — geste humain, une fois.
-C'est le prix de l'isolation : ton code en chantier ne voit pas tes vrais
-comptes.
+The development lane starts with no accounts: `mag dev deploy --isolated`
+creates `~/.config/gws-accounts-dev` and copies `client_secret.json` there from
+prod (the OAuth app only — not the tokens). You still need to connect at least
+one test account (`GWSA_ROOT=… mag add <alias>`) — human action, once.
+That is the price of isolation: your work-in-progress code does not see your real
+accounts.
 
-Pour valider une PR depuis un worktree : `./bin/mag dev test` déploie la
-branche courante, redémarre l'admin sur le code déployé et affiche un résumé
-(id, URL, marqueur `afSearchHits`). Voir [PR_VALIDATION.md](PR_VALIDATION.md).
+To validate a PR from a worktree: `./bin/mag dev test` deploys the
+current branch, restarts the admin on the deployed code and prints a summary
+(id, URL, `afSearchHits` marker). See [PR_VALIDATION.md](PR_VALIDATION.md).
 
-## Limites v1
+## v1 limits
 
-- Pas d’outil d’envoi Gmail (brouillons seulement).
-- Pas de Calendar/Docs/Sheets en tools MCP (même gateway, plus tard).
-- Pas de broker de tokens : un shell libre peut encore contourner — mitigations
-  dans [threat-model.md](threat-model.md).
+- No Gmail send tool (drafts only).
+- No Calendar/Docs/Sheets as MCP tools (same gateway, later).
+- No token broker: a free shell can still bypass — mitigations
+  in [threat-model.md](threat-model.md).

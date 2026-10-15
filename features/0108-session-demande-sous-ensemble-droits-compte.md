@@ -21,7 +21,7 @@ choisi **parmi ce que le compte permet en général**. On peut alors vérifier, 
 session**, exactement à quoi chacune a touché.
 
 La **primitive existe** : le backend sait accorder un droit fin par session
-(`session_grant_capability`, service × opération × ressource, signé — [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md), fiche [`0076`](done/0076-droits-par-session-phase-a.md) livrée). Mais **elle ne suffit pas** : aujourd'hui, franchir la
+(`session_grant_capability`, service × opération × ressource, signé — [ADR-0007](../docs/adr/ADR-0007-per-session-rights.md), fiche [`0076`](done/0076-droits-par-session-phase-a.md) livrée). Mais **elle ne suffit pas** : aujourd'hui, franchir la
 porte d'un compte verrouillé **force** un accès **complet** (joker `*`), pas un sous-ensemble. Il
 manque donc **deux choses** : un **changement de modèle** (séparer « franchir le verrou » de « tout
 ouvrir ») **et** le parcours qui demande, accorde et montre le sous-ensemble.

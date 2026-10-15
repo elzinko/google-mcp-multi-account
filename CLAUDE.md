@@ -50,6 +50,17 @@ mag strongauth status # Touch ID exigé pour unlock/grant ?
 ./scripts/test.sh # tests automatiques hermétiques (sans comptes réels)
 ```
 
+**Provisioning assisté (navigateur).** Sur une demande type « provisionne mon
+GCP » / « configure le projet pour moi », suivre
+[`docs/provisioning-assisted-browser.md`](docs/provisioning-assisted-browser.md) :
+le LLM pilote la console GCP au navigateur et ne s'arrête qu'aux **gestes
+humains** (avoir un compte Google, `gcloud auth login`, confirmation du compte
+propriétaire). **Règle d'or** : vérifier que le compte actif `gcloud` == le
+compte de la console navigateur, et le **faire confirmer** (élicitation) avant de
+créer quoi que ce soit — un mauvais compte actif oriente vers un projet
+orphelin. Les identifiants et `client_secret.json` : jamais lus ni saisis par le
+LLM.
+
 **Tests manuels** (comptes réels, guidés) : sur une demande type « lance un
 test manuel », lire `tests/manuels/README.md` — chaque test y stocke son
 prompt (`PROMPT.md`) et son protocole (`PROTOCOLE.md`) ; le dérouler phase

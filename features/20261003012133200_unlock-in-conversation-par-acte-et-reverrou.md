@@ -64,7 +64,7 @@ de fermeture : le profil est re-verrouillé tout de suite.
 ## Notes
 
 Lié à l'épic 0082 et à :
-[ADR-0013 — consentement une fois / session](../docs/adr/ADR-0013-consentement-une-fois-ou-session.md)
+[ADR-0013 — consentement une fois / session](../docs/adr/ADR-0013-consent-once-or-session.md)
 [Popup Touch ID à deux boutons « Une fois / Pour la session »](20260922221816747_popup-swift-deux-boutons-portee.md)
 
 Découvert en testant gmail-cleanerz (session 2026-10-03). Le déverrouillage 60 min n'atteint

@@ -84,7 +84,7 @@ Hors périmètre, par design : suppression, transfert de propriété,
 ## Notes
 
 - ADR-0003 (contenu via dépôt broker) réutilisé pour l'upload ;
-  [ADR-0006](../docs/adr/ADR-0006-fichiers-recus-repertoire-dedie.md) pour
+  [ADR-0006](../docs/adr/ADR-0006-received-files-dedicated-directory.md) pour
   le sens descendant (fichiers reçus).
 - Clôt le volet B de [[0041]] ; élargissement à d'autres services : [[0021]].
 - `attachment_id` se trouve dans `gmail_get` → `payload.parts[].body.attachmentId`.

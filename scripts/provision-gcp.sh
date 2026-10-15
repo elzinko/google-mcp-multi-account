@@ -16,7 +16,13 @@
 #   ./scripts/provision-gcp.sh                             # flow complet (interactif)
 #   ./scripts/provision-gcp.sh status                      # état des lieux (lecture seule)
 #   ./scripts/provision-gcp.sh sync-iam [--yes]            # accorde le rôle IAM aux comptes connectés qui manquent
+#   ./scripts/provision-gcp.sh delete [--yes]              # supprime le projet GCP + l'état local (destructif)
 #   ./scripts/provision-gcp.sh --confirm-account moi@gmail.com   # mode non interactif
+#
+# Supprimer (delete) : efface le projet GCP (gcloud projects delete, restaurable
+# ~30 j côté console) + client_secret.json + provision.env. Les profils mag et
+# leurs tokens ne sont PAS touchés (mag remove <alias> pour ça), mais ils
+# cesseront de fonctionner — ils dépendent de ce client OAuth.
 #
 # Idempotent : relançable sans risque, chaque étape détecte l'existant
 # (double exécution = zéro mutation, y compris sync-iam et la publication).
@@ -75,11 +81,12 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     status) MODE="status" ;;
     sync-iam) MODE="sync-iam" ;;
+    delete|teardown) MODE="delete" ;;
     --json) JSON_OUT=1 ;;
     --yes|-y) CONFIRM_YES=1 ;;
     --confirm-account) shift; CONFIRM_ACCOUNT="${1:-}" ;;
     --confirm-account=*) CONFIRM_ACCOUNT="${1#*=}" ;;
-    -h|--help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//' | sed "s|\./scripts/provision-gcp\.sh|$SELFCMD|g"; exit 0 ;;
+    -h|--help) sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//' | sed "s|\./scripts/provision-gcp\.sh|$SELFCMD|g"; exit 0 ;;
     *) die "argument inconnu : $1 (voir --help)" ;;
   esac
   shift
@@ -296,6 +303,74 @@ if [[ "$MODE" == "sync-iam" ]]; then
   exit 0
 fi
 
+# ── delete : supprime le projet GCP + l'état local (destructif) ──
+if [[ "$MODE" == "delete" ]]; then
+  step "Suppression du provisioning GCP"
+  PROJECT_ID=""; load_state
+
+  echo "Vont être supprimés :"
+  if [[ -n "${PROJECT_ID:-}" ]]; then
+    echo "   • projet GCP : ${B}$PROJECT_ID${N}  (gcloud projects delete — restaurable ~30 j)"
+  else
+    warn "aucun projet dans l'état local ($STATE_FILE) — rien à supprimer côté GCP."
+  fi
+  [[ -f "$SECRET_DEST" ]] && echo "   • $SECRET_DEST" || true
+  [[ -f "$STATE_FILE"  ]] && echo "   • $STATE_FILE"  || true
+  echo
+  warn "Tes comptes connectés cesseront de fonctionner : ils dépendent de ce client OAuth."
+  echo "   (les profils mag et leurs tokens ne sont PAS touchés ici — fais « mag remove <alias> »"
+  echo "    séparément si tu veux aussi les retirer.)"
+  echo
+
+  if [[ -z "$CONFIRM_YES" ]]; then
+    is_tty || die "suppression destructive en session non interactive : relance avec --yes."
+    confirm "Confirmer la suppression du projet « ${PROJECT_ID:-<aucun>} » et de l'état local ?" \
+      || { echo "Annulé — rien supprimé."; exit 0; }
+  fi
+
+  # On ne nettoie l'état local QUE si le projet est confirmé supprimé (ou
+  # absent pour le compte PROPRIÉTAIRE). Un « describe » qui échoue peut venir
+  # d'un mauvais compte actif — effacer l'id laisserait un projet orphelin.
+  wipe_local=1
+  if [[ -n "${PROJECT_ID:-}" ]]; then
+    if ! have_gcloud; then
+      warn "gcloud absent — projet $PROJECT_ID NON supprimé côté GCP."
+      warn "Supprime-le en console puis relance pour nettoyer l'état local."
+      wipe_local=0
+    else
+      acct="$(active_account)"
+      if [[ -z "$acct" ]]; then
+        warn "aucun compte gcloud actif — projet $PROJECT_ID NON supprimé."
+        warn "Connecte-toi (gcloud auth login) avec le compte PROPRIÉTAIRE puis relance."
+        wipe_local=0
+      elif gcloud projects describe "$PROJECT_ID" >/dev/null 2>&1; then
+        gcloud projects delete "$PROJECT_ID" --quiet \
+          && ok "projet GCP supprimé : $PROJECT_ID" \
+          || die "échec de la suppression du projet (droits ? compte propriétaire ?) — état local conservé."
+      else
+        warn "projet $PROJECT_ID introuvable pour le compte actif « $acct »."
+        warn "Soit déjà supprimé, soit ce n'est pas le compte PROPRIÉTAIRE du projet."
+        if [[ -n "$CONFIRM_YES" ]]; then
+          warn "--yes : nettoyage de l'état local quand même (tu perds l'id $PROJECT_ID)."
+        elif ! confirm "Nettoyer quand même l'état local (perte de l'id $PROJECT_ID) ?"; then
+          wipe_local=0
+        fi
+      fi
+    fi
+  fi
+
+  if [[ "$wipe_local" == 1 ]]; then
+    rm -f "$SECRET_DEST" && ok "client_secret.json supprimé" || true
+    rm -f "$STATE_FILE"  && ok "état local supprimé ($STATE_FILE)" || true
+  else
+    warn "état local conservé : $STATE_FILE (projet non confirmé supprimé)."
+  fi
+
+  step "Terminé"
+  echo "Pour reprovisionner : ${B}./scripts/provision-gcp.sh${N}"
+  exit 0
+fi
+
 # ── 1. gcloud ────────────────────────────────────────────────────
 step "1/7 · gcloud CLI"
 if ! have_gcloud; then
@@ -450,6 +525,6 @@ ok "projet : $PROJECT_ID (propriétaire : $ACCOUNT)"
 ok "état persisté : $STATE_FILE"
 echo
 echo "${B}Prochaine étape — connecter tes comptes :${N}"
-echo "   mag add perso     # navigateur → choisir le compte → accepter"
-echo "   mag add <alias>   # répéter pour chaque compte"
-echo "   mag list"
+echo "   mag add <alias> <email>   # ex. : mag add perso toi@gmail.com  (email requis si Touch ID activé)"
+echo "   #   répéter pour chaque compte ; au navigateur, accepter une fois l'écran « non vérifiée »"
+echo "   mag list                  # vérifier l'état des comptes"
