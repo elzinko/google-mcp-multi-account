@@ -61,7 +61,7 @@ d'où la question « c'est quoi le bon nom du projet ? ».
 
 - **Garder** `google-multi-account` comme nom de serveur (descriptif, stable, breaking à renommer).
 - **Garder** `mag` comme CLI (court, pour taper).
-- **Option 1 : FAITE** — carte des noms livrée dans #142 (`docs/configurer-client.md`, § « Noms des variables »).
+- **Option 1 : FAITE** — carte des noms livrée dans #142 (`docs/connect-client.md`, § « Noms des variables »).
 - **Option 4a : EN COURS** — variables `GWSA_` → `MAG_` (fiche `20260912000249823`, #142, compat bi-nom).
 - Envisager l'**option 2** (repo) si la cohérence de branding compte.
 - **Réserver l'option 3** (serveur) à une vraie refonte, avec migration + rollback planifiés.
@@ -69,7 +69,7 @@ d'où la question « c'est quoi le bon nom du projet ? ».
 ## Critères d'acceptation (esquisse — à compléter au grooming)
 
 - [x] Une **carte des noms** documentée (mag / google-multi-account / repo / variables d'env) — qui est
-  quoi, vu par qui. **FAITE** (#142, `docs/configurer-client.md`).
+  quoi, vu par qui. **FAITE** (#142, `docs/connect-client.md`).
 - [ ] Décision tranchée sur chaque option (1 à 4) : faite / rejetée / différée, avec la raison.
 - [ ] Si un renommage est retenu : plan de **migration** (alias/compat) + **rollback** explicite,
   et liste des points d'impact (clients, scripts, docs, tokens).

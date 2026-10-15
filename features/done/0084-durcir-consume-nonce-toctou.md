@@ -71,8 +71,8 @@ partagée**, un seul verrou couvre les deux chemins (Touch ID + passkey).
 - **Fiche sœur** de [0083](0083-durcir-approbation-passkey-distante.md) (TOCTOU `sign_count`) : **même
   classe**, **même correctif** (verrou inter-process + rechargement frais). Les deux se traitent d'un
   seul geste de verrouillage si tirées ensemble.
-- Colonne anti-rejeu partagée : [ADR-0005](../docs/adr/ADR-0005-elicitation-signee-v2.md) (élicitation
-  signée) / [ADR-0009](../docs/adr/ADR-0009-approbation-passkey-distante.md) (§ « une seule colonne
+- Colonne anti-rejeu partagée : [ADR-0005](../docs/adr/ADR-0005-signed-elicitation-v2.md) (élicitation
+  signée) / [ADR-0009](../docs/adr/ADR-0009-remote-passkey-approval.md) (§ « une seule colonne
   anti-rejeu »). Recoupe [0001](0001-elicitation-signee-strongauth-v2.md) (élicitation signée).
 - Découle de la revue Codex de la PR #115 (finding P2 répondu en fil).
 

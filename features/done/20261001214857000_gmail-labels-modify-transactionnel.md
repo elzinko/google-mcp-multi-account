@@ -66,7 +66,7 @@ chaque sous-appel séparément, un seul « poser un libellé » demanderait plus
 
 ## Proposition
 
-Décision d'architecture détaillée : [ADR-0014](../docs/adr/ADR-0014-gmail-labels-modify-transactionnel.md).
+Décision d'architecture détaillée : [ADR-0014](../docs/adr/ADR-0014-gmail-labels-modify-transactional.md).
 
 1. **Exposer `grant_scope`** sur `gmail_labels_modify`, comme sur les mutations Drive :
    paramètre dans l'inputSchema (`_GRANT_SCOPE_PROPERTY`), extrait au dispatch, ajouté à la

@@ -1197,13 +1197,13 @@ cmd_wire() { # mag wire <desktop|code|all> [--print] — brancher ce serveur MCP
       echo "usage: $SELF wire <desktop|code|all> [--print]"
       echo "  Wires this MCP server into Claude Desktop / Claude Code (path resolved"
       echo "  automatically, entry merged without overwriting your other MCP servers). \"--print\" = dry-run."
-      echo "  Cursor: manual config for now — see docs/configurer-client.md (Cursor tab)."
+      echo "  Cursor: manual config for now — see docs/connect-client.md (Cursor tab)."
       echo "  Remove: Claude Code → \"claude mcp remove google-multi-account\";"
       echo "           Desktop / Cursor → remove the \"google-multi-account\" entry from the client's"
       echo "           config JSON (the admin deliberately protects the stable entry)." ;;
     desktop) [[ -x "$desk" ]] || die "Desktop script not found ($desk)"; "$desk" "$@" ;;
     code)    [[ -x "$code" ]] || die "Claude Code script not found ($code)"; "$code" "$@" ;;
-    cursor)  die "Cursor: manual config for now — see docs/configurer-client.md (Cursor tab)." ;;
+    cursor)  die "Cursor: manual config for now — see docs/connect-client.md (Cursor tab)." ;;
     all)
       local rc=0
       [[ -x "$desk" ]] && { "$desk" "$@" || { rc=1; echo "$SELF: Desktop — failed (see above)" >&2; }; }

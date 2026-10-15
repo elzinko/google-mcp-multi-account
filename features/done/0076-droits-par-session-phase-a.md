@@ -24,7 +24,7 @@ code existe (`gateway/sessions.py`, registre `.sessions/`, `mag session …`) ma
 - le registre `.sessions/` **fuit** (pas de purge) et `last_seen_at` est **figé**
   (TTL d'inactivité mort) — constaté sur 7 sessions du poste le 14/08.
 
-Décision d'architecture : [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md).
+Décision d'architecture : [ADR-0007](../docs/adr/ADR-0007-per-session-rights.md).
 
 ## Proposition (Phase A — desktop seul)
 
@@ -72,7 +72,7 @@ distant desktop↔Android, hôte Android pour desktop éteint.
 ## Notes
 
 - Parent / état des lieux : [0045](0045-capacites-projet-signees.md).
-- Élicitation signée réutilisée : [ADR-0005](../docs/adr/ADR-0005-elicitation-signee-v2.md)
+- Élicitation signée réutilisée : [ADR-0005](../docs/adr/ADR-0005-signed-elicitation-v2.md)
   / fiche [0001](0001-elicitation-signee-strongauth-v2.md).
 - Phases suivantes (**mobile**) : consentement distant + hôte Android relèvent de l'axe
   **accès mobile souverain** (ADR-0008 / épic 0077, PR #109), pas de cette fiche — hôte

@@ -1,70 +1,70 @@
-# Utilisation au quotidien
+# Everyday usage
 
-Détails d'usage de `mag`, du verrou « accès sur demande » et de
-l'authentification forte. Interface d'admin web (page séparée) :
-[admin.md](admin.md). Vue d'ensemble : [README](https://github.com/elzinko/google-mcp-multi-account/blob/main/README.md).
-Modèle de policy (qui a le droit de quoi) : [policies.md](policies.md).
+Usage details for `mag`, the "access on demand" lock, and strong
+authentication. Web admin interface (separate page):
+[admin.md](admin.md). Overview: [README](https://github.com/elzinko/google-mcp-multi-account/blob/main/README.md).
+Policy model (who is allowed to do what): [policies.md](policies.md).
 
-## En ligne de commande (`mag`)
+## On the command line (`mag`)
 
-**Aide en ligne** : `mag help` liste les sous-commandes. Certains dispatchers
-imbriqués détaillent leurs options avec `--help` (ex. `mag sandbox --help`).
+**Built-in help**: `mag help` lists the subcommands. Some nested dispatchers
+detail their options with `--help` (e.g. `mag sandbox --help`).
 
-Le wrapper isole chaque compte via `GOOGLE_WORKSPACE_CLI_CONFIG_DIR`. On désigne
-un compte par son **adresse email** (le plus clair) et on appelle
-`mag <email> <commande gws…>` (jamais `gws` nu) :
+The wrapper isolates each account via `GOOGLE_WORKSPACE_CLI_CONFIG_DIR`. You refer to
+an account by its **email address** (the clearest way) and call
+`mag <email> <gws command…>` (never a bare `gws`):
 
 ```bash
 mag vous@gmail.com gmail users messages list --params '{"userId":"me","maxResults":5}'
 mag vous@gmail.com drive files list --params '{"pageSize":10}'
-mag vous@gmail.com calendar +agenda --today    # agenda du jour
-mag vous@gmail.com auth status                 # état de la connexion
+mag vous@gmail.com calendar +agenda --today    # today's agenda
+mag vous@gmail.com auth status                 # connection status
 ```
 
-> **Alias = raccourci optionnel.** Si l'email est long à taper, nomme le compte
-> à la connexion (`mag add perso vous@gmail.com`) puis utilise l'alias court
-> (`mag perso …`) partout où un email est accepté.
+> **Alias = optional shortcut.** If the email is long to type, name the account
+> when you connect it (`mag add perso vous@gmail.com`) and then use the short alias
+> (`mag perso …`) wherever an email is accepted.
 
-Pour les données (Gmail/Drive), préférer les **tools MCP** (voir
-[mcp-setup.md](mcp-setup.md)). Le shell `mag` reste pour l'admin humain et
-les cas non couverts par le MCP.
+For data (Gmail/Drive), prefer the **MCP tools** (see
+[mcp-setup.md](mcp-setup.md)). The `mag` shell remains for the human admin and
+for cases the MCP does not cover.
 
-## Connexion sur demande (élicitation)
+## Connection on demand (elicitation)
 
-Un profil peut être **verrouillé** : il reste connecté (connexion en place) mais
-refuse toute commande tant que tu ne l'as pas déverrouillé explicitement —
-le LLM qui se heurte au verrou doit te le demander.
+A profile can be **locked**: it stays connected (connection in place) but
+refuses every command until you explicitly unlock it —
+an LLM that runs into the lock must ask you for access.
 
 ```bash
-mag lock vous@gmail.com        # accès sur demande uniquement
-mag vous@gmail.com gmail …     # ✗ profil verrouillé 🔒 → le LLM doit demander
-mag unlock vous@gmail.com 30   # déverrouillé 30 min, reverrouillage automatique
+mag lock vous@gmail.com        # access on demand only
+mag vous@gmail.com gmail …     # ✗ profile locked 🔒 → the LLM must ask
+mag unlock vous@gmail.com 30   # unlocked for 30 min, automatic re-lock
 ```
 
-[.claude/settings.json](https://github.com/elzinko/google-mcp-multi-account/blob/main/.claude/settings.json) ajoute une seconde barrière,
-native Claude Code : les commandes sur les profils sensibles (et `mag unlock`)
-déclenchent une demande de permission explicite.
+[.claude/settings.json](https://github.com/elzinko/google-mcp-multi-account/blob/main/.claude/settings.json) adds a second barrier,
+native to Claude Code: commands on sensitive profiles (and `mag unlock`)
+trigger an explicit permission request.
 
-Séquence illustrée : [diagrams/lecture-donnees-elicitee](https://github.com/elzinko/google-mcp-multi-account/tree/main/diagrams/lecture-donnees-elicitee/).
+Illustrated sequence: [diagrams/lecture-donnees-elicitee](https://github.com/elzinko/google-mcp-multi-account/tree/main/diagrams/lecture-donnees-elicitee/).
 
-## Authentification forte (Touch ID) — optionnelle
+## Strong authentication (Touch ID) — optional
 
 ```bash
-mag strongauth on      # unlock et grant exigeront Touch ID / Apple Watch
-mag strongauth status  #   (ou mot de passe de session macOS en secours)
-mag strongauth off     # désactivation (elle-même protégée par Touch ID)
+mag strongauth on      # unlock and grant will require Touch ID / Apple Watch
+mag strongauth status  #   (or the macOS session password as a fallback)
+mag strongauth off     # turn off (itself protected by Touch ID)
 ```
 
-Une fois activée, chaque déverrouillage de profil et chaque autorisation de
-zone Drive déclenche la boîte de dialogue biométrique système
-([scripts/touchid.swift](https://github.com/elzinko/google-mcp-multi-account/blob/main/scripts/touchid.swift), framework LocalAuthentication
-d'Apple, 100 % local). L'approbation d'élicitation ne peut alors plus venir
-que d'un humain physiquement présent devant le Mac — un LLM (ou un script)
-ne peut pas la simuler. Elle s'applique aussi à `mag add` (connexion d'un
-nouveau compte).
+Once enabled, every profile unlock and every Drive zone authorization
+triggers the system biometric dialog
+([scripts/touchid.swift](https://github.com/elzinko/google-mcp-multi-account/blob/main/scripts/touchid.swift), Apple's LocalAuthentication
+framework, 100% local). Elicitation approval can then only come from a human
+physically present at the Mac — an LLM (or a script)
+cannot simulate it. It also applies to `mag add` (connecting a
+new account).
 
-## Depuis Claude Code
+## From Claude Code
 
-Ouvrir une session dans ce repo : les skills `.claude/skills/gws-*` et les
-consignes [CLAUDE.md](https://github.com/elzinko/google-mcp-multi-account/blob/main/CLAUDE.md) sont chargés automatiquement. Demander en
-langage naturel, par ex. « liste mes 5 derniers mails du compte perso ».
+Open a session in this repo: the `.claude/skills/gws-*` skills and the
+[CLAUDE.md](https://github.com/elzinko/google-mcp-multi-account/blob/main/CLAUDE.md) instructions are loaded automatically. Ask in
+natural language, e.g. "list my 5 latest emails from the perso account".

@@ -53,7 +53,7 @@ D'où : **compat obligatoire**, jamais un find-replace sec.
   pour tout ce qu'un humain ou un client MCP peut poser. ✅ *(commit e76b996)*
 - **Lot 4** — émission `MAG_` : installeurs Claude Desktop/Code + `mag wire` écrivent `MAG_`
   dans les configs clients ; une entrée legacy `GWSA_` est **migrée** au prochain passage
-  (backup). Doc « carte des noms » dans `configurer-client.md`. ✅
+  (backup). Doc « carte des noms » dans `connect-client.md`. ✅
 - **Lot 5** (plus tard) — retrait du repli `GWSA_`.
 
 ### Reporté volontairement (à faire dans une passe dédiée, non bloquant)

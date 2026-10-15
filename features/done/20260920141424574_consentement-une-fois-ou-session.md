@@ -102,5 +102,5 @@ vérifier l'effet. Rouvrir le lendemain → la session a expiré (TTL réglable)
   Claude Code (Auto / Manuel / …).
 - Décision partage tranchée sur reco (partage = toujours par acte) — rouvrir si Thomas veut
   l'inverse.
-- Raffine [ADR-0012](../docs/adr/ADR-0012-consentement-transactionnel-propagation.md)
+- Raffine [ADR-0012](../docs/adr/ADR-0012-transactional-consent-propagation.md)
   (Zone 4) ; le champ read_leases et les capacités de session existent déjà.

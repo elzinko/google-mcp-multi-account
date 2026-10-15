@@ -1,32 +1,32 @@
-# Sécurité GitHub — ce qui est activé / ce qui reste manuel
+# GitHub security — what is enabled / what remains manual
 
-Source de vérité live : [Security settings](https://github.com/elzinko/google-mcp-multi-account/settings/security_analysis)
-et l’onglet [Security](https://github.com/elzinko/google-mcp-multi-account/security).
+Live source of truth: [Security settings](https://github.com/elzinko/google-mcp-multi-account/settings/security_analysis)
+and the [Security](https://github.com/elzinko/google-mcp-multi-account/security) tab.
 
-## Fait via API / fichiers
+## Done via API / files
 
-| Mesure | Où | Statut |
+| Measure | Where | Status |
 |---|---|---|
-| **Dependabot alerts** | Settings → Code security | Activé |
-| **Dependabot security updates** | idem | Activé |
-| **Private vulnerability reporting** | idem | Activé (aligné avec `SECURITY.md`) |
-| **Secret scanning** | idem | Activé (repo public) |
-| **Push protection** (secrets) | idem | Activé |
-| **CodeQL default setup** | Code scanning | Activé via API (`state: configured`) — Python / JS-TS / Actions |
-| **`dependabot.yml`** | `.github/dependabot.yml` | Ecosystème `github-actions` (hebdo) |
+| **Dependabot alerts** | Settings → Code security | Enabled |
+| **Dependabot security updates** | same | Enabled |
+| **Private vulnerability reporting** | same | Enabled (aligned with `SECURITY.md`) |
+| **Secret scanning** | same | Enabled (public repo) |
+| **Push protection** (secrets) | same | Enabled |
+| **CodeQL default setup** | Code scanning | Enabled via API (`state: configured`) — Python / JS-TS / Actions |
+| **`dependabot.yml`** | `.github/dependabot.yml` | `github-actions` ecosystem (weekly) |
 
-## Reste manuel (owner UI) ou non applicable
+## Remains manual (owner UI) or not applicable
 
-| Mesure | Pourquoi |
+| Measure | Why |
 |---|---|
-| **Secret scanning — non-provider patterns** | PATCH API accepté mais statut reste `disabled` — cocher dans Settings → Code security si l’option apparaît. |
-| **Secret scanning — validity checks** | Idem. |
-| **pip / npm Dependabot** | Aucun `package.json` / `requirements.txt` (stdlib + mermaid vendorisé). Ajouter une entrée dans `dependabot.yml` le jour où un manifeste apparaît. |
-| **Branch protection + required checks** | Optionnel : Settings → Branches (exiger CI + CodeQL sur `main`). |
-| **Workflow CodeQL avancé** | Non ajouté — default setup suffit ; un `.github/workflows/codeql.yml` ferait doublon. |
+| **Secret scanning — non-provider patterns** | API PATCH accepted but status stays `disabled` — tick it in Settings → Code security if the option appears. |
+| **Secret scanning — validity checks** | Same. |
+| **pip / npm Dependabot** | No `package.json` / `requirements.txt` (stdlib + vendored mermaid). Add an entry to `dependabot.yml` the day a manifest appears. |
+| **Branch protection + required checks** | Optional: Settings → Branches (require CI + CodeQL on `main`). |
+| **Advanced CodeQL workflow** | Not added — the default setup is enough; a `.github/workflows/codeql.yml` would duplicate it. |
 
-## Rappels produit (hors GitHub)
+## Product reminders (outside GitHub)
 
-Voir [`SECURITY.md`](https://github.com/elzinko/google-mcp-multi-account/blob/main/SECURITY.md) et [`threat-model.md`](threat-model.md) :
-policy default-deny, strongauth / Touch ID, élicitation, broker, journal — ce n’est
-pas remplacé par Dependabot / CodeQL.
+See [`SECURITY.md`](https://github.com/elzinko/google-mcp-multi-account/blob/main/SECURITY.md) and [`threat-model.md`](threat-model.md):
+default-deny policy, strongauth / Touch ID, elicitation, broker, audit log — none of
+this is replaced by Dependabot / CodeQL.

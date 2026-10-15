@@ -23,7 +23,7 @@ Le verrou couvre aussi le **ré-enregistrement** d'un téléphone (pour éviter 
 ## Contexte / Problème
 
 Le POC d'approbation par passkey distante ([0078](done/0078-approbation-passkey-archi-actuelle.md),
-PR #113, [ADR-0009](../docs/adr/ADR-0009-approbation-passkey-distante.md)) livre « le téléphone
+PR #113, [ADR-0009](../docs/adr/ADR-0009-remote-passkey-approval.md)) livre « le téléphone
 signe, le Mac vérifie et exécute — sinon rien ». Il reste **un durcissement non bloquant** (finding
 P2 de la revue Codex, répondu en fil) : une course **TOCTOU inter-process** sur le compteur
 anti-clonage `sign_count`.
@@ -95,7 +95,7 @@ le **fichier** (tous les writers : vérification *et* enrôlement), pas sur un c
 
 - Suite des revues Codex des PR #113 **et** #115 (findings P2, répondus en fil). Parent :
   [0078](done/0078-approbation-passkey-archi-actuelle.md) /
-  [ADR-0009](../docs/adr/ADR-0009-approbation-passkey-distante.md) — dont les *Conséquences*
+  [ADR-0009](../docs/adr/ADR-0009-remote-passkey-approval.md) — dont les *Conséquences*
   soulignent déjà que `sign_count` doit être strictement croissant **et persisté à chaque
   vérification**, sinon une passkey clonée passerait (c'est le point durci ici).
 - **Fiche sœur** de [0080](0080-durcir-capacites-fines-session.md) (« durcir … suite revue Codex #110 »

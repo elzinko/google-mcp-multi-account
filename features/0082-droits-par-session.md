@@ -39,7 +39,7 @@ au `regen` (ADR-0017 : `epic:` doit pointer un `type: epic`). Cet épic fournit
 l'**ombrelle unique**, sans rien changer au code déjà livré.
 
 Décision d'architecture fondatrice :
-**[ADR-0007](../docs/adr/ADR-0007-droits-par-session.md)** — identité par geste de
+**[ADR-0007](../docs/adr/ADR-0007-per-session-rights.md)** — identité par geste de
 consentement signé, jeton porté dans l'appel, cycle de vie découplé de la connexion MCP.
 
 ## Proposition

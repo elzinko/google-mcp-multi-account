@@ -28,7 +28,7 @@ Fait suite aux retours de Thomas du 2026-09-03 sur la refonte Cockpit (PR #128).
 > **Rappel du modèle — à ne pas confondre.** La policy, c'est le **plafond** d'un compte : ce
 > qui est *permis au maximum*. Elle n'ouvre aucune donnée toute seule. Chaque session doit
 > ensuite **demander** son accès par un geste humain signé (élicitation,
-> [ADR-0007](../docs/adr/ADR-0007-droits-par-session.md)). Éditer la policy sur la page du
+> [ADR-0007](../docs/adr/ADR-0007-per-session-rights.md)). Éditer la policy sur la page du
 > compte = régler ce plafond. Ça reste un **geste admin**, pas un octroi de session.
 
 ## Contexte / problème
