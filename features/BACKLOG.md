@@ -124,6 +124,7 @@
 | [20260930214101550](20260930214101550_spike-msgvault-lecture-gmail.md) | Spike — évaluer msgvault comme source de lecture Gmail multi-comptes | chore | P2 |  |  | google-mcp-multi-account | 💡 idea |  |
 | [20261003012132100](20261003012132100_popup-in-conversation-nomme-produit.md) | Le consentement en conversation nomme le composant (« swift-frontend ») au lieu du produit | bug | P2 |  | 0082 | google-multi-account | 💡 idea |  |
 | [20261003012133200](20261003012133200_unlock-in-conversation-par-acte-et-reverrou.md) | Consentement Gmail en conversation — accord par acte par défaut (au lieu de 60 min) + re-verrouillage | feature | P2 |  | 0082 | google-multi-account | 💡 idea |  |
+| [20261013102010760](20261013102010760_provisioning-gcp-assiste-navigateur-llm.md) | Provisioning GCP assisté par navigateur, piloté par le LLM (un geste, pauses humaines explicites) | feature | P2 |  |  |  | 💡 idea |  |
 | [0003](0003-vault-credentials-hors-perimetre-agent.md) | Vault credentials hors périmètre agent (Phase 2.1) | feature | P3 |  |  |  | 💡 idea |  |
 | [0006](0006-harnais-test-manuel-hybride.md) | Harnais hybride pour les tests manuels — script pour la mécanique, LLM pour la glu | feature | P3 |  |  |  | 💡 idea |  |
 | [0018](0018-cross-platform-hors-macos.md) | Cross-platform — faire tourner le projet hors macOS (Linux, Intel) | feature | P3 |  | 0017 |  | 💡 idea |  |
