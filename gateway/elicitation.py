@@ -168,33 +168,33 @@ def prompt_from_payload(payload: dict[str, Any]) -> str:
     who = f"« {alias} » ({email})" if email else f"« {alias} »"
     acct = f"{alias} · {email}" if email else alias
     if action == "session_unlock":
-        return f"mag : déverrouiller {who} pour la session {sid} ({minutes} min)"
+        return f"déverrouiller {who} pour la session {sid} ({minutes} min)"
     if action == "unlock":
         if target == "off":
-            return f"mag : retirer le verrou permanent sur {who}"
-        return f"mag : déverrouiller {who} ({minutes or target} min, poste entier)"
+            return f"retirer le verrou permanent sur {who}"
+        return f"déverrouiller {who} ({minutes or target} min, poste entier)"
     if action == "session_grant":
-        return f"mag : zone session {sid} — « {target} » ({acct}, {hours} h)"
+        return f"ouvrir une zone Drive « {target} » pour la session {sid} ({acct}, {hours} h)"
     if action == "session_grant_capability":
-        return f"mag : capacité session {sid} — « {target} » ({acct}, {hours} h)"
+        return f"ouvrir une capacité « {target} » pour la session {sid} ({acct}, {hours} h)"
     if action == "grant":
-        return f"mag : autoriser l'écriture Drive « {target} » ({acct}, {hours} h)"
+        return f"autoriser l'écriture Drive « {target} » ({acct}, {hours} h)"
     if action == "project_sign":
-        return f"mag : signer le manifeste projet (.gwsa/)"
+        return f"signer le manifeste projet (.gwsa/)"
     if action == "add_account":
-        return f"mag : connecter le compte Google « {alias} » ({target})"
+        return f"connecter le compte Google « {alias} » ({target})"
     if action == "revoke_descendants":
-        return f"mag : révoquer les sous-sessions de {sid or target}"
+        return f"révoquer les sous-sessions de {sid or target}"
     if action == "strongauth_off":
-        return "mag : désactiver l'authentification forte"
+        return "désactiver l'authentification forte"
     if action == "session_open":
-        return "mag : ouvrir une session pour cette conversation"
+        return "ouvrir une session pour cette conversation"
     # Consentement transactionnel (ADR-0011/0012) : nommer le compte (email =
     # vérité terrain, Codex #147 P2), l'acte EXACT (op concrète, P1) et ses
     # arguments conséquents (bound_args, Zone 3) — qui reçoit quoi.
     if action.startswith("transactional_mutation") or action.startswith("transactional_read:"):
         op = action.split(":", 1)[1] if ":" in action else "acte sensible"
-        base = f"mag : autoriser « {op} » sur {who}"
+        base = f"autoriser « {op} » sur {who}"
         if target:
             base += f" — {target}"
         detail = _render_bound_args(bound)
@@ -209,8 +209,8 @@ def prompt_from_payload(payload: dict[str, Any]) -> str:
             base += f" (portée : {scope_label})"
         return base
     if action == "transactional_read_lease":
-        return f"mag : ouvrir un bail de lecture court sur {who}"
-    return f"mag : {action} — {alias} {target}".strip()
+        return f"ouvrir un bail de lecture court sur {who}"
+    return f"{action} — {alias} {target}".strip()
 
 
 def build_payload(
