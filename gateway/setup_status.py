@@ -67,6 +67,47 @@ def _iam_authorized_emails(project: str) -> Optional[set[str]]:
     }
 
 
+def _onboarding_steps(
+    project: str, published: str, client_secret: bool,
+    accounts: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Le parcours d'onboarding en étapes ordonnées — source unique, rendue par
+    les deux faces (terminal `mag provision` + admin, fiche 20261013221927791).
+
+    Lecture seule : chaque étape décrit son état (done|now|todo) et propose une
+    action, elle n'exécute rien. « now » = la PREMIÈRE étape non terminée ; les
+    suivantes restent « todo ». Les gestes console / Touch ID restent humains.
+    """
+    connected = [a for a in accounts if a.get("connected")]
+    all_iam_ok = bool(connected) and all(a.get("iam") == "ok" for a in connected)
+    milestones = [
+        ("project", "A", "Projet OAuth", bool(project), "mag provision"),
+        ("oauth_client", "A", "Client OAuth (Desktop)", client_secret,
+         "mag provision  (console : créer le client Desktop)"),
+        ("publish", "A", "App publiée (tokens durables)", bool(published),
+         "mag provision  (console : publier)"),
+        ("connect", "B", "Compte connecté", bool(connected),
+         "mag add <alias> <email>"),
+        ("iam", "B", "Accès projet (rôle IAM)", all_iam_ok,
+         "mag provision sync-iam"),
+    ]
+    steps: list[dict[str, Any]] = []
+    now_taken = False
+    for key, phase, title, done, action in milestones:
+        if done:
+            state = "done"
+        elif not now_taken:
+            state = "now"
+            now_taken = True
+        else:
+            state = "todo"
+        steps.append({
+            "key": key, "phase": phase, "title": title,
+            "state": state, "action": None if done else action,
+        })
+    return steps
+
+
 def setup_status() -> dict[str, Any]:
     root = gwsa_root()
     state = _read_provision_env()
@@ -132,6 +173,7 @@ def setup_status() -> dict[str, Any]:
         "client_secret": client_secret,
         "iam_checked": authorized is not None,
         "accounts": accounts,
+        "steps": _onboarding_steps(project, published, client_secret, accounts),
         "next_actions": next_actions,
         "note": (
             "Lecture seule. Les commandes de next_actions sont à faire exécuter par "

@@ -691,6 +691,90 @@ else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m gateway lock (refus journalisé) + access_request\n'
 fi
 
+# setup_status : un profil VERROUILLÉ garde son email (.email) et reste dans la
+# liste — c'est l'invariant sur lequel provision-gcp.sh (status + sync-iam)
+# s'appuie désormais. L'ancien chemin bash lisait l'email via « gws auth status »,
+# qui échoue sur un profil verrouillé → compte silencieusement sauté, puis
+# « 0 accordé » affiché comme un faux succès (fiche 20261013…).
+if python3 - <<'PY'
+import os
+from pathlib import Path
+from gateway.setup_status import setup_status
+
+root = Path(os.environ["GWSA_ROOT"])
+alias = "lockedprof"
+d = root / alias
+d.mkdir(parents=True, exist_ok=True)
+(d / ".email").write_text("verrouille@gmail.com\n", encoding="utf-8")
+(d / ".locked").write_text("")          # verrouillé, sans fenêtre d'unlock
+try:
+    (d / ".unlock-until").unlink()
+except FileNotFoundError:
+    pass
+# connecté = credentials.enc présent (ici dans le vault, layout courant).
+vault = root / ".vault" / alias
+vault.mkdir(parents=True, exist_ok=True)
+(vault / "credentials.enc").write_text("x")
+
+accounts = {a["alias"]: a for a in setup_status()["accounts"]}
+a = accounts.get(alias)
+assert a is not None, "profil verrouillé absent de setup_status (régression : il serait sauté)"
+assert a["email"] == "verrouille@gmail.com", a          # email lu MÊME verrouillé
+assert a["locked"] is True and a["connected"] is True, a
+# Email présent ⇒ jamais classé « unknown » pour cause d'email introuvable :
+# l'IAM est « missing » quand un projet/gcloud est joignable, « unknown »
+# seulement faute de projet (cas hermétique), jamais faute d'email.
+assert a["iam"] in ("ok", "missing", "unknown"), a
+# Un profil verrouillé AVEC email ne déclenche PAS l'action « mag list » (qui
+# ne vise que les profils connectés SANS .email).
+na = setup_status()["next_actions"]
+assert not any("mag list" in x for x in na), na
+assert any(f"mag unlock {alias}" in x for x in na), na
+print("ok")
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m setup_status : profil verrouillé garde son email (jamais sauté)\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m setup_status : profil verrouillé garde son email\n'
+fi
+
+# setup_status — le PARCOURS d'étapes ordonnées (fiche 20261013221927791). Source
+# unique rendue par les deux faces (terminal `mag provision` + admin). Racine
+# isolée pour ne pas polluer les profils des autres tests.
+SROOT_STEPS="$(mktemp -d)"
+if GWSA_ROOT="$SROOT_STEPS" python3 - <<'PY'
+import os
+from pathlib import Path
+from gateway.setup_status import setup_status
+
+root = Path(os.environ["GWSA_ROOT"])
+(root / "provision.env").write_text('PROJECT_ID="demo-proj"\nPUBLISHED="2026-10-14"\n', encoding="utf-8")
+(root / "client_secret.json").write_text("{}", encoding="utf-8")
+alias = "acc1"; d = root / alias; d.mkdir(parents=True, exist_ok=True)
+(d / ".email").write_text("a@b.com\n", encoding="utf-8")
+v = root / ".vault" / alias; v.mkdir(parents=True, exist_ok=True)
+(v / "credentials.enc").write_text("x")
+
+steps = setup_status()["steps"]
+order = [s["key"] for s in steps]
+assert order == ["project", "oauth_client", "publish", "connect", "iam"], order
+by = {s["key"]: s for s in steps}
+for k in ("project", "oauth_client", "publish", "connect"):
+    assert by[k]["state"] == "done", (k, by[k])
+# Sans gcloud, l'IAM n'est pas vérifiable → 1re étape non terminée = « now ».
+assert by["iam"]["state"] == "now", by["iam"]
+assert by["iam"]["action"], "une étape non-done doit proposer une action"
+# Exactement une étape « now » (le curseur), jamais deux.
+assert sum(1 for s in steps if s["state"] == "now") == 1, steps
+print("ok")
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m setup_status : parcours ordonné (états done/now/todo, un seul curseur)\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m setup_status : parcours ordonné\n'
+fi
+rm -rf "$SROOT_STEPS"
+
 # MCP tools/list smoke (stdio JSON-RPC, une requête)
 MCP_OUT="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | python3 -m gateway 2>/dev/null | head -1)"
 if echo "$MCP_OUT" | python3 -c 'import json,sys; r=json.load(sys.stdin); names=[t["name"] for t in r["result"]["tools"]]; assert "gmail_list" in names and "gmail_draft_create" in names and "setup_status" in names; assert not any(t["name"]=="gmail_send" for t in r["result"]["tools"]); ar=[t for t in r["result"]["tools"] if t["name"]=="access_request"][0]; assert "add_account" in ar["inputSchema"]["properties"]["kind"]["enum"]; assert "project_grant" in ar["inputSchema"]["properties"]["kind"]["enum"]; dc=[t for t in r["result"]["tools"] if t["name"]=="drive_create"][0]; assert "content" in dc["inputSchema"]["properties"] and "text/markdown" in dc["inputSchema"]["properties"]["content_type"]["enum"]; assert all(n in names for n in ("drive_read","drive_copy","drive_upload","gmail_attachment_get","drive_update","drive_permissions_list","drive_permissions_create","drive_permissions_delete")); pc=[t for t in r["result"]["tools"] if t["name"]=="drive_permissions_create"][0]; assert "transfer_ownership" not in pc["inputSchema"]["properties"] and "owner" not in pc["inputSchema"]["properties"]["role"]["enum"]; assert "gmail_labels_modify" in names; lm=[t for t in r["result"]["tools"] if t["name"]=="gmail_labels_modify"][0]; assert all(k in lm["inputSchema"]["properties"] for k in ("add_labels","remove_labels","message_ids","thread_ids","create_missing")); assert not any(t["name"] in ("gmail_send","gmail_trash","gmail_delete","gmail_labels_delete") for t in r["result"]["tools"])'; then
@@ -2120,6 +2204,88 @@ if [[ $? == 2 ]]; then
   PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m usage invalide → rc=2\n'
 else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m usage invalide devrait donner rc=2\n'
+fi
+
+# mag add — pli « un seul geste » (iam_grant_in_add) : GARDE-FOU doctrine.
+# L'octroi IAM est un geste humain. Le LLM appelle mag en pipe (pas de TTY) :
+# iam_grant_in_add DOIT alors refuser l'octroi (return 1) et ne jamais appeler
+# add-iam-policy-binding — même si gcloud dirait « owner » et réussirait. On
+# exerce la vraie fonction, extraite de bin/mag, avec un gcloud stubbé.
+section "mag add — octroi IAM « un seul geste » (jamais sans TTY)"
+if (
+  SELF=mag
+  # Stub gcloud : owner + binding réussi SI on l'appelait (on ne doit PAS).
+  gcloud() {
+    case "$1 $2" in
+      "auth list")                    echo owner@example.com ;;
+      "projects get-iam-policy")      echo "user:owner@example.com" ;;
+      "projects add-iam-policy-binding") echo "BINDING-CALLED" >&2; return 0 ;;
+    esac
+  }
+  eval "$(sed -n '/^_iam_is_tty()/,/^}/p' bin/mag)"
+  rem="    gcloud projects add-iam-policy-binding gws-multi-802ec6 --member=user:x@y.z --role=roles/serviceusage.serviceUsageConsumer"
+  # stdin fermé = non-TTY (exactement le cas LLM/CI).
+  if iam_grant_in_add "x@y.z" "$rem" </dev/null 2>"$TMP/grant.err"; then
+    exit 1   # a accordé sans TTY → régression doctrine
+  fi
+  grep -q BINDING-CALLED "$TMP/grant.err" && exit 1   # a appelé le binding → régression
+  exit 0
+); then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m octroi IAM refusé sans TTY (LLM ne peut jamais accorder)\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m octroi IAM NON gardé par le TTY (le LLM pourrait accorder)\n'
+fi
+
+# mag provision — alias du provisioning sous le CLI (parité CLI ⊇ admin, fiche
+# 20261013215354286). On vérifie que `mag provision` ROUTE vers le moteur
+# scripts/provision-gcp.sh (alias mince, pas une logique dupliquée).
+section "mag provision — provisioning sous le CLI (parité CLI ⊇ admin)"
+prov_out="$("$GWSA" provision --help 2>&1)"; prov_rc=$?
+if [[ "$prov_rc" == 0 ]] && echo "$prov_out" | grep -q "provision-gcp.sh"; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m mag provision route vers scripts/provision-gcp.sh\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m mag provision ne route pas vers le script (rc=%s)\n' "$prov_rc"
+fi
+
+# Parité admin ↔ CLI (fiche 20261013221927937) : chaque ACTION déclenchable
+# depuis l'admin web a son équivalent `mag` — et cette commande existe vraiment.
+# Garde-fou mécanique du principe « l'admin n'est qu'une façade » (CLI ⊇ admin).
+# bash 3.2 : pas de tableau associatif, on mappe par un case.
+section "Parité admin ↔ CLI — chaque action admin a son équivalent mag"
+mag_for_endpoint() { # endpoint admin → sous-commande mag de tête (vide = non couvert)
+  case "$1" in
+    /api/setup)         echo "provision" ;;   # GET  → mag provision status
+    /api/add)           echo "add" ;;         # POST → mag add
+    /api/sync-iam)      echo "provision" ;;   # POST → mag provision sync-iam
+    /api/lockall)       echo "lock" ;;        # POST → mag lock --all
+    /api/dev)           echo "dev" ;;         # POST → mag dev …
+    /api/transactional) echo "transactional" ;;
+    *)                  echo "" ;;
+  esac
+}
+parity_ok=1; parity_msg=""
+# 1) tout endpoint POST (action) de l'admin est mappé ET sa commande mag existe.
+post_eps="$(grep -oE 'method === "POST" && p === "/api/[a-z-]+"' admin/server.js \
+  | sed -E 's#.*"(/api/[a-z-]+)".*#\1#' | sort -u)"
+while IFS= read -r ep; do
+  [[ -n "$ep" ]] || continue
+  cmd="$(mag_for_endpoint "$ep")"
+  if [[ -z "$cmd" ]]; then
+    parity_ok=0; parity_msg="$parity_msg · $ep sans équivalent mag"; continue
+  fi
+  grep -qE "^[[:space:]]+${cmd}\)" bin/mag \
+    || { parity_ok=0; parity_msg="$parity_msg · « mag $cmd » absent du dispatch"; }
+done <<< "$post_eps"
+# 2) le provisioning (cœur de la parité) est bien mappé dans les deux sens.
+[[ -n "$(mag_for_endpoint /api/setup)" && -n "$(mag_for_endpoint /api/sync-iam)" ]] \
+  || { parity_ok=0; parity_msg="$parity_msg · provisioning non mappé"; }
+# 3) non-vacuité : un endpoint inconnu DOIT être vu comme non couvert.
+[[ -z "$(mag_for_endpoint /api/bogus)" ]] \
+  || { parity_ok=0; parity_msg="$parity_msg · détecteur vacue"; }
+if [[ "$parity_ok" == 1 ]]; then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m chaque action de l'\''admin a son équivalent mag (existant)\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m parité admin↔CLI rompue%s\n' "$parity_msg"
 fi
 
 # --- 6. Branchement Claude Desktop — scripts/install-claude-desktop.sh -------
