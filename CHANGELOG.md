@@ -1,5 +1,26 @@
 # Journal des versions
 
+## v1.3.0 — 2026-10-15
+
+### Fonctionnalités
+
+- feat(docs): runbook de provisioning assisté par navigateur (piloté LLM) (#166)
+- feat(provision): commande delete + bootstrap machine neuve (#164)
+- feat: onboarding CLI mag provision + sync-iam (base v1.3.0) (#168)
+
+### Documentation
+
+- docs(features): add 20261013102010760 provisioning-gcp-assiste-navigateur-llm (#165)
+- docs: traduire la doc publiée en anglais et renommer les fichiers (#163)
+- docs: ajouter PRIVACY.md et TERMS.md (usage perso, local, MIT as-is) (#167)
+- docs(backlog): regénérer l'index après réconciliation (#162 + fiches in-conversation)
+- docs(backlog): 2 fiches consentement in-conversation (nommage produit ; accord par acte + re-verrou)
+- docs(features): récupérer la fiche orpheline 20260903114149142 (#162)
+
+### Autres
+
+- chore: ignorer .claude/handoff.archive.md (handoff éphémère ezk-archive)
+
 ## v1.2.0 — 2026-10-02
 
 ### Fonctionnalités
