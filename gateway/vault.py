@@ -74,12 +74,20 @@ def migrate_alias(alias: str) -> bool:
     dst = credentials_path(alias)
     vdir = vault_dir(alias)
     prof = profile_dir(alias)
+    # Le client OAuth du profil est la source de vérité : `mag add` y recopie le
+    # master courant. La copie du coffre (CONFIG_DIR réel de gws) doit la SUIVRE,
+    # pas seulement exister — sinon, après un changement de projet GCP, le coffre
+    # garde le client de l'ancien projet (supprimé) à côté d'un jeton neuf, et
+    # Google répond « projet supprimé » à chaque appel.
     for name in ("client_secret.json",):
         extra = prof / name
-        if extra.is_file() and not (vdir / name).is_file():
-            shutil.copy2(str(extra), str(vdir / name))
+        copy = vdir / name
+        if extra.is_file() and (
+            not copy.is_file() or extra.read_bytes() != copy.read_bytes()
+        ):
+            shutil.copy2(str(extra), str(copy))
             try:
-                os.chmod(vdir / name, 0o600)
+                os.chmod(copy, 0o600)
             except OSError:
                 pass
     if not src.is_file():
