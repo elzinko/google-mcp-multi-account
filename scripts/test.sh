@@ -6399,6 +6399,18 @@ else
   fail "touchid : elicitation.py n'utilise pas le binaire nommé (dialogue swift-frontend)"
 fi
 
+# Fiche 20261003012132100 : le serveur MCP lève les popups in-conversation SANS
+# passer par `bin/mag`, donc la compilation du binaire nommé doit vivre AUSSI
+# côté gateway (ensure_sign_bin). Sans elle, hors terminal `mag`, repli sur
+# `swift` → le dialogue Touch ID réaffiche « swift-frontend ».
+if grep -q 'def ensure_sign_bin' gateway/elicitation.py \
+  && grep -qE 'ensure_sign_bin\(\)' gateway/elicitation.py \
+  && grep -q 'SYS_SWIFTC' gateway/elicitation.py; then
+  pass "touchid : la gateway compile le binaire nommé (popups MCP in-conversation)"
+else
+  fail "touchid : ensure_sign_bin absent de la gateway (popups MCP → swift-frontend)"
+fi
+
 # Sous strongauth, add sans email doit refuser avant Touch ID (fiche 0032 / review #50)
 printf '{"installed":{"client_id":"hermetic-test","client_secret":"not-a-real-secret"}}\n' \
   > "$GWSA_ROOT/client_secret.json"
