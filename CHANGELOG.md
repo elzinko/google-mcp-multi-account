@@ -1,5 +1,11 @@
 # Journal des versions
 
+## v1.3.1 — 2026-10-16
+
+### Corrections
+
+- fix(elicitation): popup session_open vide + client OAuth périmé dans le coffre (#169)
+
 ## v1.3.0 — 2026-10-15
 
 ### Fonctionnalités
