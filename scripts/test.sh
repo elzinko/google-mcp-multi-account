@@ -6454,9 +6454,15 @@ if binp.exists():
     binp.unlink()
 os.environ["MAG_SYS_SWIFTC"] = str(tmp / "no-swiftc-here")
 results.append(("swiftc-injoignable->None", e.ensure_sign_bin() is None))
-cmd = e._sign_helper_cmd()
-results.append(("repli->swift",
-                cmd[0].endswith("swift") and cmd[-1].endswith(e.SIGN_HELPER_NAME)))
+# _sign_helper_cmd doit se degrader, jamais renvoyer le binaire nomme :
+# soit la commande swift + script quand swift est present, soit une
+# ElicitationError claire quand swift est absent (ex CI Linux, fail-closed).
+try:
+    cmd = e._sign_helper_cmd()
+    degraded = cmd[0].endswith("swift") and cmd[-1].endswith(e.SIGN_HELPER_NAME)
+except e.ElicitationError:
+    degraded = True
+results.append(("repli-degrade", degraded))
 
 shutil.rmtree(tmp, ignore_errors=True)
 bad = [name for name, ok in results if not ok]
