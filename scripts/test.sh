@@ -4341,6 +4341,22 @@ Path('$SESS_ROOT/beta/credentials.enc').write_text('fresh')
 assert migrate_alias('beta')
 assert Path('$SESS_ROOT/.vault/beta/credentials.enc').read_text() == 'fresh'
 assert not Path('$SESS_ROOT/beta/credentials.enc').exists()
+# re-add après changement de projet GCP : la copie client_secret.json du coffre
+# SUIT celle du profil (avant : copiée une seule fois, puis figée sur l'ancien
+# projet, supprimé → « projet supprimé » avec un jeton pourtant neuf)
+Path('$SESS_ROOT/beta/client_secret.json').write_text('{"project_id":"old"}')
+assert gws_config_dir('beta').name == 'beta'
+assert Path('$SESS_ROOT/.vault/beta/client_secret.json').read_text() == '{"project_id":"old"}'
+Path('$SESS_ROOT/beta/client_secret.json').write_text('{"project_id":"new"}')
+Path('$SESS_ROOT/beta/credentials.enc').write_text('fresh2')
+assert migrate_alias('beta')
+assert Path('$SESS_ROOT/.vault/beta/client_secret.json').read_text() == '{"project_id":"new"}'
+assert Path('$SESS_ROOT/.vault/beta/credentials.enc').read_text() == 'fresh2'
+# même sans nouveau jeton, un simple appel broker (gws_config_dir) resynchronise
+Path('$SESS_ROOT/beta/client_secret.json').write_text('{"project_id":"newer"}')
+assert gws_config_dir('beta').name == 'beta'
+assert Path('$SESS_ROOT/.vault/beta/client_secret.json').read_text() == '{"project_id":"newer"}'
+assert (Path('$SESS_ROOT/.vault/beta/client_secret.json').stat().st_mode & 0o777) == 0o600
 # list_profiles voit le vault
 profs = {p['alias']: p for p in list_profiles()}
 assert profs['beta']['connected'] is True
@@ -8090,11 +8106,25 @@ cases = [
     build_payload('transactional_read:gmail:users:messages:list', alias='perso', email='perso@gmail.com'),
     build_payload('transactional_read_lease', alias='perso', email='perso@gmail.com'),
     build_payload('session_unlock', alias='perso', email='perso@gmail.com', session_id='S1', minutes=30),
+    # Toutes les actions nommées côté Python doivent avoir leur cas côté Swift :
+    # un cas manquant retombe sur « <action> — <alias> <cible> » (popup vide,
+    # vu sur session_open le 2026-10-16). Le garde ci-dessous le refuse.
+    build_payload('session_open'),
+    build_payload('session_grant', alias='perso', email='perso@gmail.com', target='F1', session_id='S1', hours=8),
+    build_payload('session_grant_capability', alias='perso', email='perso@gmail.com', target='gmail:labels', session_id='S1', hours=8),
+    build_payload('grant', alias='perso', email='perso@gmail.com', target='F1', hours=8),
+    build_payload('unlock', alias='perso', email='perso@gmail.com', minutes=30),
+    build_payload('unlock', alias='perso', email='perso@gmail.com', target='off'),
+    build_payload('add_account', alias='perso', target='perso@gmail.com'),
+    build_payload('revoke_descendants', session_id='S1'),
+    build_payload('project_sign'),
+    build_payload('strongauth_off'),
 ]
 bad = 0
 for p in cases:
     sw = subprocess.run([BIN, 'prompt', json.dumps(p)], capture_output=True, text=True).stdout.rstrip('\n')
-    if sw != prompt_from_payload(p):
+    py = prompt_from_payload(p)
+    if sw != py or sw.startswith(p['action']) or py.startswith(p['action']):
         bad += 1
 print('OK' if bad == 0 else f'DIFF:{bad}')
 PYEOF

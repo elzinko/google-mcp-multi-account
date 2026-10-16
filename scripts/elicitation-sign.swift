@@ -248,6 +248,8 @@ func promptText(from obj: [String: Any]) -> String {
         return "déverrouiller \(who) (\(minutes > 0 ? String(minutes) : target) min, poste entier)"
     case "session_grant":
         return "ouvrir une zone Drive « \(target) » pour la session \(sid) (\(acct), \(hours) h)"
+    case "session_grant_capability":
+        return "ouvrir une capacité « \(target) » pour la session \(sid) (\(acct), \(hours) h)"
     case "grant":
         return "autoriser l'écriture Drive « \(target) » (\(acct), \(hours) h)"
     case "project_sign":
@@ -258,7 +260,14 @@ func promptText(from obj: [String: Any]) -> String {
         return "révoquer les sous-sessions de \(sid.isEmpty ? target : sid)"
     case "strongauth_off":
         return "désactiver l'authentification forte"
+    case "session_open":
+        // La session n'existe pas encore au moment du consentement (créée
+        // après Touch ID) : aucun identifiant à afficher, le texte le dit.
+        return "ouvrir une session pour cette conversation"
     default:
+        // Repli technique UNIQUEMENT pour une action inconnue : chaque action
+        // émise par la gateway doit avoir son cas ci-dessus (parité testée
+        // dans scripts/test.sh, « prompt Touch ID identique Python↔Swift »).
         return "\(action) — \(alias) \(target)"
     }
 }
