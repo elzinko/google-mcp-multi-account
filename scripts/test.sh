@@ -6411,6 +6411,64 @@ else
   fail "touchid : ensure_sign_bin absent de la gateway (popups MCP → swift-frontend)"
 fi
 
+# Fiche 20261003012132100 — test de COMPORTEMENT de ensure_sign_bin (au-delà du
+# grep ci-dessus) : recompile si absent/périmé, et retombe proprement (None →
+# `swift`) si swiftc est injoignable. Exécuté dans un REPO temporaire (REPO_DIR /
+# SIGN_BUILD_DIR patchés) pour ne jamais toucher bin/.build du dépôt.
+ESB_PY="/usr/bin/python3"; [[ -x "$ESB_PY" ]] || ESB_PY="$(command -v python3)"
+esb_out="$(PYTHONPATH="$(pwd)" "$ESB_PY" - <<'PYEOF'
+import os, shutil, tempfile
+from pathlib import Path
+import gateway.elicitation as e
+
+# Un SIGN_BIN d'override hérité fausserait le cas « repli » — l'isoler.
+os.environ.pop("MAG_SIGN_BIN", None)
+os.environ.pop("GWSA_SIGN_BIN", None)
+
+real_src = e.REPO_DIR / "scripts" / e.SIGN_HELPER_NAME
+tmp = Path(tempfile.mkdtemp())
+(tmp / "scripts").mkdir()
+(tmp / "bin" / ".build").mkdir(parents=True)
+shutil.copy2(real_src, tmp / "scripts" / e.SIGN_HELPER_NAME)
+# Rediriger la gateway vers le repo jetable (constantes module lues dynamiquement).
+e.REPO_DIR = tmp
+e.SIGN_BUILD_DIR = tmp / "bin" / ".build"
+binp = e.SIGN_BUILD_DIR / e.PRODUCT_SLUG
+
+results = []
+if os.access("/usr/bin/swiftc", os.X_OK):
+    # A — binaire absent → compile et renvoie le chemin nommé, exécutable.
+    r = e.ensure_sign_bin()
+    results.append(("absent->compile",
+                    r == binp and binp.is_file() and os.access(binp, os.X_OK)))
+    # B — binaire plus vieux que la source → recompile (mtime réécrite).
+    os.utime(binp, (0, 0))
+    r = e.ensure_sign_bin()
+    results.append(("perime->recompile", r == binp and binp.stat().st_mtime > 0))
+else:
+    results.append(("swiftc-absent-skip-A-B", True))
+
+# C — swiftc injoignable + binaire absent → None, et _sign_helper_cmd retombe
+#     sur `swift <script>` (dégradé, jamais une exception).
+if binp.exists():
+    binp.unlink()
+os.environ["MAG_SYS_SWIFTC"] = str(tmp / "no-swiftc-here")
+results.append(("swiftc-injoignable->None", e.ensure_sign_bin() is None))
+cmd = e._sign_helper_cmd()
+results.append(("repli->swift",
+                cmd[0].endswith("swift") and cmd[-1].endswith(e.SIGN_HELPER_NAME)))
+
+shutil.rmtree(tmp, ignore_errors=True)
+bad = [name for name, ok in results if not ok]
+print("OK" if not bad else "FAIL:" + ",".join(bad))
+PYEOF
+)"
+if [[ "$esb_out" == "OK" ]]; then
+  pass "touchid : ensure_sign_bin recompile (absent/périmé) et retombe sur swift si swiftc injoignable"
+else
+  fail "touchid : comportement ensure_sign_bin inattendu ($esb_out)"
+fi
+
 # Sous strongauth, add sans email doit refuser avant Touch ID (fiche 0032 / review #50)
 printf '{"installed":{"client_id":"hermetic-test","client_secret":"not-a-real-secret"}}\n' \
   > "$GWSA_ROOT/client_secret.json"
