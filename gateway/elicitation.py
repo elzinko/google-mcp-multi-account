@@ -346,48 +346,69 @@ def ensure_sign_bin() -> Path | None:
     Recompile si le binaire manque, n'est pas exécutable, ou est plus ancien que
     le source Swift. Best-effort et jamais bloquant : si swiftc est absent ou la
     compilation échoue, renvoie None et l'appelant retombe sur `swift <script>`
-    (popup dégradé « swift-frontend », cf. fiche 0044). Écriture atomique
-    (fichier temporaire + rename) pour ne jamais exposer un binaire tronqué.
+    (popup dégradé « swift-frontend », cf. fiche 0044).
+
+    Concurrence : la compilation est sérialisée par un verrou fichier inter-process
+    (même idiome que consume_nonce), car `_sign_helper_cmd` est appelable en
+    parallèle — plusieurs chemins de signature MCP, ou un `mag` en terminal au même
+    instant. Sans ce verrou, deux swiftc écriraient le même binaire et pourraient
+    en exposer un tronqué. Sous le verrou : double vérification de fraîcheur (ne
+    pas recompiler ce qu'un autre process vient de produire), temp unique par
+    process, puis rename atomique.
     """
     src = REPO_DIR / "scripts" / SIGN_HELPER_NAME
     binp = _sign_bin_path()
-    try:
-        if (
-            binp.is_file()
-            and os.access(binp, os.X_OK)
-            and binp.stat().st_mtime >= src.stat().st_mtime
-        ):
-            return binp
-    except OSError:
-        pass
+
+    def _fresh() -> bool:
+        try:
+            return (
+                binp.is_file()
+                and os.access(binp, os.X_OK)
+                and binp.stat().st_mtime >= src.stat().st_mtime
+            )
+        except OSError:
+            return False
+
+    if _fresh():
+        return binp
     # Chemin absolu uniquement (jamais `command -v` : PATH hostile), aligné bin/mag.
     swiftc = env("SYS_SWIFTC", "/usr/bin/swiftc")
     if not (swiftc and os.path.isfile(swiftc) and os.access(swiftc, os.X_OK)):
         return None
     if not src.is_file():
         return None
-    tmp = binp.with_name(binp.name + ".tmp")
     try:
         SIGN_BUILD_DIR.mkdir(parents=True, exist_ok=True)
-        proc = subprocess.run(
-            [swiftc, "-o", str(tmp), str(src)],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        if proc.returncode != 0 or not tmp.is_file():
-            return None
-        os.chmod(tmp, 0o700)
-        tmp.replace(binp)
-        return binp
-    except (OSError, subprocess.SubprocessError):
+    except OSError:
         return None
-    finally:
-        try:
-            if tmp.exists():
-                tmp.unlink()
-        except OSError:
-            pass
+    try:
+        with file_lock(SIGN_BUILD_DIR / ".sign-build.lock"):
+            # Un autre process a pu compiler pendant qu'on attendait le verrou.
+            if _fresh():
+                return binp
+            tmp = binp.with_name(f"{binp.name}.{os.getpid()}.tmp")
+            try:
+                proc = subprocess.run(
+                    [swiftc, "-o", str(tmp), str(src)],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                if proc.returncode != 0 or not tmp.is_file():
+                    return None
+                os.chmod(tmp, 0o700)
+                tmp.replace(binp)
+                return binp
+            except (OSError, subprocess.SubprocessError):
+                return None
+            finally:
+                try:
+                    if tmp.exists():
+                        tmp.unlink()
+                except OSError:
+                    pass
+    except OSError:
+        return None
 
 
 def _sign_helper_cmd() -> list[str]:
