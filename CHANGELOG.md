@@ -1,5 +1,17 @@
 # Journal des versions
 
+## v1.3.2 — 2026-10-17
+
+### Corrections
+
+- fix(elicitation): popups MCP in-conversation nomment le produit (plus « swift-frontend ») (#170)
+
+### Documentation
+
+- docs(features): complète le ship 20261003012132100 (statut, pr, index)
+- docs(features): ship 20261003012132100 #170
+- docs(backlog): ship 20261016104149898 popup session_open + client OAuth coffre (#169, v1.3.1)
+
 ## v1.3.1 — 2026-10-16
 
 ### Corrections
