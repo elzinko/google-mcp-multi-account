@@ -35,6 +35,12 @@ P256_SIG_PREFIX = "p256:"
 # nom (« google-multi-account ») dans le dialogue Touch ID au lieu de
 # « swift-frontend » (cf. fiche 0032, étendue ici au chemin d'élicitation signée).
 # Artefact de build isolé (gitignoré) : recompilable, non déployé.
+#
+# La compilation vit AUSSI ici (ensure_sign_bin), pas seulement dans le wrapper
+# `bin/mag` : le serveur MCP lève les popups in-conversation sans passer par
+# `mag`, donc sans cette compilation il retombait sur `swift` → « swift-frontend »
+# (fiche 20261003012132100). La porter dans la gateway nomme le produit quel que
+# soit l'appelant, sans dupliquer PRODUCT_SLUG.
 SIGN_HELPER_NAME = "elicitation-sign.swift"
 SIGN_BUILD_DIR = REPO_DIR / "bin" / ".build"
 
@@ -323,19 +329,105 @@ def verify_mock(payload: dict[str, Any], signature: str) -> bool:
     return hmac.compare_digest(got, expected)
 
 
+def _sign_bin_path() -> Path:
+    """Chemin du binaire de signature nommé d'après PRODUCT_SLUG (source unique)."""
+    return SIGN_BUILD_DIR / PRODUCT_SLUG
+
+
+def ensure_sign_bin() -> Path | None:
+    """Compile le helper Swift en binaire nommé « PRODUCT_SLUG », si besoin.
+
+    Même mécanisme que `bin/mag` (fonction ensure_sign_bin), porté côté gateway :
+    le serveur MCP déclenche les popups in-conversation sans passer par le
+    wrapper `mag`, donc sans cette compilation il retombait sur `swift <script>`
+    et le dialogue Touch ID s'intitulait « swift-frontend » (fiche
+    20261003012132100). Le nom reste PRODUCT_SLUG — aucune chaîne dupliquée.
+
+    Recompile si le binaire manque, n'est pas exécutable, ou est plus ancien que
+    le source Swift. Best-effort et jamais bloquant : si swiftc est absent ou la
+    compilation échoue, renvoie None et l'appelant retombe sur `swift <script>`
+    (popup dégradé « swift-frontend », cf. fiche 0044).
+
+    Concurrence : la compilation est sérialisée par un verrou fichier inter-process
+    (même idiome que consume_nonce), car `_sign_helper_cmd` est appelable en
+    parallèle — plusieurs chemins de signature MCP, ou un `mag` en terminal au même
+    instant. Sans ce verrou, deux swiftc écriraient le même binaire et pourraient
+    en exposer un tronqué. Sous le verrou : double vérification de fraîcheur (ne
+    pas recompiler ce qu'un autre process vient de produire), temp unique par
+    process, puis rename atomique.
+    """
+    src = REPO_DIR / "scripts" / SIGN_HELPER_NAME
+    binp = _sign_bin_path()
+
+    def _fresh() -> bool:
+        try:
+            return (
+                binp.is_file()
+                and os.access(binp, os.X_OK)
+                and binp.stat().st_mtime >= src.stat().st_mtime
+            )
+        except OSError:
+            return False
+
+    if _fresh():
+        return binp
+    # Chemin absolu uniquement (jamais `command -v` : PATH hostile), aligné bin/mag.
+    swiftc = env("SYS_SWIFTC", "/usr/bin/swiftc")
+    if not (swiftc and os.path.isfile(swiftc) and os.access(swiftc, os.X_OK)):
+        return None
+    if not src.is_file():
+        return None
+    try:
+        SIGN_BUILD_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return None
+    try:
+        with file_lock(SIGN_BUILD_DIR / ".sign-build.lock"):
+            # Un autre process a pu compiler pendant qu'on attendait le verrou.
+            if _fresh():
+                return binp
+            tmp = binp.with_name(f"{binp.name}.{os.getpid()}.tmp")
+            try:
+                proc = subprocess.run(
+                    [swiftc, "-o", str(tmp), str(src)],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                if proc.returncode != 0 or not tmp.is_file():
+                    return None
+                os.chmod(tmp, 0o700)
+                tmp.replace(binp)
+                return binp
+            except (OSError, subprocess.SubprocessError):
+                return None
+            finally:
+                try:
+                    if tmp.exists():
+                        tmp.unlink()
+                except OSError:
+                    pass
+    except OSError:
+        return None
+
+
 def _sign_helper_cmd() -> list[str]:
     """Préfixe de commande du helper d'élicitation signée.
 
     Préfère le binaire produit compilé (dialogue Touch ID nommé d'après
-    PRODUCT_SLUG, cf. fiche 0032) s'il est présent et exécutable ; à défaut,
-    `swift <script>` (dialogue système « swift-frontend »). MAG_SIGN_BIN suit le
-    même modèle de confiance que MAG_SYS_SWIFT : fixé par le wrapper, chemin dur
-    (REPO_DIR) par défaut. Les anciens GWSA_SIGN_BIN / GWSA_SYS_SWIFT restent lus
-    en repli (helper env()).
+    PRODUCT_SLUG, cf. fiche 0032) ; le compile à la volée au besoin
+    (ensure_sign_bin) pour que TOUT appelant le nomme, serveur MCP compris
+    (fiche 20261003012132100). À défaut seulement, `swift <script>` (dialogue
+    système « swift-frontend »). MAG_SIGN_BIN, fixé par le wrapper, reste
+    prioritaire et suit le même modèle de confiance que MAG_SYS_SWIFT ; les
+    anciens GWSA_SIGN_BIN / GWSA_SYS_SWIFT restent lus en repli (helper env()).
     """
-    binp = env("SIGN_BIN") or str(SIGN_BUILD_DIR / PRODUCT_SLUG)
-    if binp and os.access(binp, os.X_OK):
-        return [binp]
+    override = env("SIGN_BIN")
+    if override and os.access(override, os.X_OK):
+        return [override]
+    binp = ensure_sign_bin() or _sign_bin_path()
+    if os.access(binp, os.X_OK):
+        return [str(binp)]
     swift = env("SYS_SWIFT", "/usr/bin/swift")
     script = REPO_DIR / "scripts" / SIGN_HELPER_NAME
     if not Path(swift).is_file():
