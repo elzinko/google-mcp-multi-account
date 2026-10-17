@@ -6,9 +6,9 @@ priority: P2
 product: google-multi-account
 version:
 epic: 0082
-status: idea
+status: shipped
 ready:
-pr:
+pr: "#170"
 created: 2026-10-03
 ---
 
@@ -68,6 +68,6 @@ d'élicitation in-conversation côté `gateway/`.
 Prior art : PR #74 (dialogue strongauth nomme le produit), fiches 0043 / 0044.
 
 Fiche sœur (même popup Swift, épic 0082) :
-[Popup Touch ID à deux boutons « Une fois / Pour la session »](20260922221816747_popup-swift-deux-boutons-portee.md)
+[Popup Touch ID à deux boutons « Une fois / Pour la session »](../20260922221816747_popup-swift-deux-boutons-portee.md)
 
 Découvert en testant gmail-cleanerz (session 2026-10-03).
