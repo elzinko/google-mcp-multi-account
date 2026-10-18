@@ -115,6 +115,7 @@
 | [20261013215354286](20261013215354286_onboarding-pilote-cli-mag-parite-admin.md) | Onboarding piloté par le CLI mag — parité CLI ⊇ admin | feature | P0 |  | google-mcp-multi-account | 💡 idea |  |
 | [0101](0101-nom-de-session-fourni-par-le-client.md) | Nom lisible de session, fourni par le client MCP | feature | P1 |  | google-mcp-multi-account | 💡 idea |  |
 | [0108](0108-session-demande-sous-ensemble-droits-compte.md) | Session — demander un sous-ensemble des droits du compte (accès fin, vérifiable par session) | feature | P1 |  | google-mcp-multi-account | 💡 idea |  |
+| [20261018141856581](20261018141856581_modes-consentement-et-sessions-par-projet.md) | Modes de consentement choisis par session (auto / auto-par-service / manuel) + sessions regroupées par projet | feature | P1 |  | google-mcp-multi-account | 💡 idea |  |
 | [0035](0035-admin-acces-rapide-et-visu-zones.md) | Accès rapide à l'admin + visualisation des zones (icône barre de menus ?) | feature | P2 |  |  | 💡 idea |  |
 | [0089](0089-choix-profil-navigateur-oauth-add.md) | Choisir le profil navigateur (Chrome/…) à l'ouverture OAuth de `mag add` | feature | P2 |  |  | 💡 idea |  |
 | [20260903114149142](20260903114149142_liste-comptes-actions-globales.md) | Barre d'actions globales au-dessus de la liste des comptes (tout verrouiller / déverrouiller, ± temps) | feature | P2 |  | google-mcp-multi-account | 💡 idea |  |
