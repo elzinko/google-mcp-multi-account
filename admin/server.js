@@ -12,7 +12,7 @@ const path = require("path");
 const os = require("os");
 const { execFile, execFileSync, spawn } = require("child_process");
 
-const PORT = Number.parseInt(process.env.GWSA_ADMIN_PORT || "4877", 10);
+const PORT = Number.parseInt(process.env.MAG_ADMIN_PORT || process.env.GWSA_ADMIN_PORT || "4877", 10);
 const HOST = "127.0.0.1";
 const REPO = path.resolve(__dirname, "..");
 const GWSA = path.join(REPO, "bin", "mag");
@@ -21,7 +21,7 @@ const GWSA = path.join(REPO, "bin", "mag");
 // garde le lecteur admin sur la MÊME racine que les écritures (qui spawnent `mag`,
 // lequel hérite MAG_ROOT) — sinon un refresh montre un état périmé (Codex #150).
 const ROOT = process.env.MAG_ROOT || process.env.GWSA_ROOT || path.join(os.homedir(), ".config", "gws-accounts");
-const DEPLOY_ROOT = process.env.GWSA_DEPLOY_ROOT || path.join(os.homedir(), ".local", "share", "google-mcp");
+const DEPLOY_ROOT = process.env.MAG_DEPLOY_ROOT || process.env.GWSA_DEPLOY_ROOT || path.join(os.homedir(), ".local", "share", "google-mcp");
 const STABLE_ADMIN_PORT = 4877;
 const STABLE_BROKER_PORT = 4878;
 
@@ -81,11 +81,10 @@ function portListening(port) {
 
 function mcpConfigPaths() {
   const home = os.homedir();
-  if (process.env.GWSA_DESKTOP_CONFIG || process.env.GWSA_CURSOR_CONFIG) {
-    return [
-      process.env.GWSA_DESKTOP_CONFIG,
-      process.env.GWSA_CURSOR_CONFIG,
-    ].filter(Boolean);
+  const desktopCfg = process.env.MAG_DESKTOP_CONFIG || process.env.GWSA_DESKTOP_CONFIG;
+  const cursorCfg = process.env.MAG_CURSOR_CONFIG || process.env.GWSA_CURSOR_CONFIG;
+  if (desktopCfg || cursorCfg) {
+    return [desktopCfg, cursorCfg].filter(Boolean);
   }
   if (process.platform === "darwin") {
     return [
@@ -142,7 +141,7 @@ function removeMcpClientEntry(name, configPath, { force = false } = {}) {
   const entry = {
     name,
     binary: cmd,
-    broker_port: Number.parseInt((srv.env || {}).GWSA_BROKER_PORT || "4878", 10),
+    broker_port: Number.parseInt((srv.env || {}).MAG_BROKER_PORT || (srv.env || {}).GWSA_BROKER_PORT || "4878", 10),
   };
   if (isProtectedMcpClient(entry) && !force) {
     return {
@@ -167,7 +166,7 @@ function scanMcpClients() {
       const cmd = String(srv.command || "");
       if (path.basename(cmd) !== "google-mcp") continue;
       const env = srv.env || {};
-      const brokerPort = Number.parseInt(env.GWSA_BROKER_PORT || "4878", 10);
+      const brokerPort = Number.parseInt(env.MAG_BROKER_PORT || env.GWSA_BROKER_PORT || "4878", 10);
       const rootGuess = cmd.endsWith("/bin/google-mcp")
         ? cmd.slice(0, -"/bin/google-mcp".length) : "";
       const entry = {
@@ -186,7 +185,7 @@ function scanMcpClients() {
 }
 
 function detectDraftPr(branch) {
-  const envPr = process.env.GWSA_DRAFT_PR || process.env.GWSA_PR;
+  const envPr = process.env.MAG_DRAFT_PR || process.env.MAG_PR || process.env.GWSA_DRAFT_PR || process.env.GWSA_PR;
   if (envPr && /^\d+$/.test(envPr)) return Number(envPr);
   if (!branch || branch === "HEAD" || branch === "main" || branch === "master") return null;
   try {
@@ -261,7 +260,7 @@ async function buildMeta() {
   const version = serverVersion();
   const brokerPort = mf && mf.broker_port != null
     ? Number(mf.broker_port)
-    : Number.parseInt(process.env.GWSA_BROKER_PORT || String(STABLE_BROKER_PORT), 10);
+    : Number.parseInt(process.env.MAG_BROKER_PORT || process.env.GWSA_BROKER_PORT || String(STABLE_BROKER_PORT), 10);
   const sandboxId = (mf && mf.id) || null;
   const kind = sandboxId
     ? "sandbox"

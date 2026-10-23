@@ -6797,9 +6797,10 @@ target = os.environ["DEVCORR_TARGET"]
 entry = json.load(open(cfg, encoding="utf-8"))["mcpServers"][name]
 assert entry["command"] == os.path.join(target, "bin", "google-mcp"), entry
 env = entry["env"]
-assert env["GWSA_CLIENT"] == "claude-desktop", env
-assert env["GWSA_ROOT"] == iso, env
-assert env["GWSA_BROKER_PORT"].isdigit(), env
+# Émission MAG_ (renommage GWSA_→MAG_, fiche 20260912000249823).
+assert env["MAG_CLIENT"] == "claude-desktop", env
+assert env["MAG_ROOT"] == iso, env
+assert env["MAG_BROKER_PORT"].isdigit(), env
 PY
 then
   pass "dev use --claude-desktop --apply : JSON MCP correct (config temporaire)"

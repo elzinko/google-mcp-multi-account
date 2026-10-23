@@ -1305,7 +1305,7 @@ cmd_admin() { # mag admin [stop] — interface web locale, port GWSA_ADMIN_PORT 
         die "port $port is already taken by another program — lsof -i :$port"
       else
         mkdir -p "$GWSA_ROOT"
-        GWSA_ADMIN_PORT="$port" nohup node "$REPO_DIR/admin/server.js" >> "$log" 2>&1 &
+        MAG_ADMIN_PORT="$port" MAG_ROOT="$GWSA_ROOT" nohup node "$REPO_DIR/admin/server.js" >> "$log" 2>&1 &
         echo $! > "$pidf"
         # Ne pas se fier au seul pid : un EADDRINUSE tue le process après le
         # sleep, laissant un pidfile fantôme et une UI « Failed to fetch ».
@@ -1451,7 +1451,7 @@ def ports_from(path):
         if os.path.basename(cmd) != "google-mcp":
             continue
         env = srv.get("env") or {}
-        p = env.get("GWSA_BROKER_PORT")
+        p = env.get("MAG_BROKER_PORT") or env.get("GWSA_BROKER_PORT")
         if p:
             print(p)
 
@@ -1694,8 +1694,8 @@ def scan_file(label, path):
             continue
         found = True
         env = srv.get("env") or {}
-        port = env.get("GWSA_BROKER_PORT", "4878")
-        client = env.get("GWSA_CLIENT", "?")
+        port = env.get("MAG_BROKER_PORT") or env.get("GWSA_BROKER_PORT", "4878")
+        client = env.get("MAG_CLIENT") or env.get("GWSA_CLIENT", "?")
         ver = resolve_version(cmd)
         print(f"  {label}")
         print(f"    {path}")
@@ -1802,9 +1802,9 @@ cmd_dev_use() {
     "$server_name": {
       "command": "$mcp",
       "env": {
-        "GWSA_CLIENT": "$client",
-        "GWSA_BROKER_PORT": "$port",
-        "GWSA_ROOT": "$groot"
+        "MAG_CLIENT": "$client",
+        "MAG_BROKER_PORT": "$port",
+        "MAG_ROOT": "$groot"
       }
     }
   }
@@ -1821,8 +1821,8 @@ EOF
     return 0
   fi
 
-  MCP_BIN="$mcp" SERVER_NAME="$server_name" GWSA_CLIENT="$client" \
-    BROKER_PORT="$port" GWSA_ROOT_CFG="$groot" CONFIG_PATH="$cfg" \
+  MCP_BIN="$mcp" SERVER_NAME="$server_name" MAG_CLIENT="$client" \
+    BROKER_PORT="$port" MAG_ROOT_CFG="$groot" CONFIG_PATH="$cfg" \
     "$SYS_PYTHON" - <<'PYEOF'
 import json, os, sys, tempfile, time
 
@@ -1832,9 +1832,9 @@ port = os.environ["BROKER_PORT"]
 entry = {
     "command": os.environ["MCP_BIN"],
     "env": {
-        "GWSA_CLIENT": os.environ["GWSA_CLIENT"],
-        "GWSA_BROKER_PORT": port,
-        "GWSA_ROOT": os.environ["GWSA_ROOT_CFG"],
+        "MAG_CLIENT": os.environ["MAG_CLIENT"],
+        "MAG_BROKER_PORT": port,
+        "MAG_ROOT": os.environ["MAG_ROOT_CFG"],
     },
 }
 data = {}
@@ -1924,15 +1924,15 @@ EOF
   admin_url="http://127.0.0.1:${admin_port}"
 
   echo "→ Restarting admin (port $admin_port, deployed code)"
-  GWSA_ADMIN_PORT="$admin_port" GWSA_ROOT="$groot" "$gwsa_bin" admin stop
+  MAG_ADMIN_PORT="$admin_port" MAG_ROOT="$groot" "$gwsa_bin" admin stop
   if command -v lsof >/dev/null 2>&1; then
     lsof -ti "tcp:$admin_port" -sTCP:LISTEN 2>/dev/null | xargs kill 2>/dev/null || true
     sleep 0.2
   fi
   if [[ -n "$open_browser" ]]; then
-    GWSA_ADMIN_PORT="$admin_port" GWSA_ROOT="$groot" "$gwsa_bin" admin
+    MAG_ADMIN_PORT="$admin_port" MAG_ROOT="$groot" "$gwsa_bin" admin
   else
-    GWSA_ADMIN_NO_OPEN=1 GWSA_ADMIN_PORT="$admin_port" GWSA_ROOT="$groot" "$gwsa_bin" admin
+    MAG_ADMIN_NO_OPEN=1 MAG_ADMIN_PORT="$admin_port" MAG_ROOT="$groot" "$gwsa_bin" admin
   fi
 
   local admin_pid admin_ps marker_ok marker_msg curl_out attempt
