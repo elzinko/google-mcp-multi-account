@@ -4,6 +4,24 @@ Projet : accès **multi-comptes** Google (Gmail, Drive, Calendar, Docs, Sheets,
 Tasks) depuis des agents LLM, via le serveur MCP local (`bin/google-mcp` →
 `gateway/`) et le wrapper `bin/mag` (admin / élicitation).
 
+## Flux de travail — local d'abord
+
+**En clair.** Ce projet se pilote **en local**. Pas de PR GitHub, pas d'attente de
+CI, pas de revue Codex comme étapes obligatoires. La revue de code se fait en local
+avec l'agent `ezk-reviewer`, et c'est elle qui fait foi.
+
+- **Revue = `ezk-reviewer` en local.** Son GO est le plancher : aucun merge sans son GO.
+- **Pas de `gh pr create`.** On ne crée pas de PR GitHub pour avancer. Le travail vit
+  sur une branche locale ; le « merge » est une intégration locale dans `main`.
+- **GitHub = sauvegarde optionnelle.** `git push` reste permis pour sauvegarder ou
+  partager le code, jamais requis pour terminer une tâche. Ne pas attendre la CI.
+- **Une PR GitHub explicitement demandée** reste possible, mais c'est une exception
+  ponctuelle, pas le défaut.
+
+Décision du 2026-10-26 (Thomas) : « revue locale, remote optionnel ». Ce projet
+n'utilise pas le système « forge » de vectorz ; c'est une convention de travail,
+documentée ici.
+
 ## Règles
 
 1. **Préférer le MCP** pour lire/écrire des données (tools `profiles_list`,
