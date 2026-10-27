@@ -5,9 +5,9 @@ type: chore
 priority: P3
 version:
 epic:
-status: idea
+status: shipped
 ready:
-pr:
+pr: "local (8e533a6)"
 created: 2026-07-26
 ---
 
