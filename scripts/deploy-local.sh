@@ -12,6 +12,7 @@
 #   ./scripts/deploy-local.sh --tag v0.2.0   # deploys THIS tag, regardless of HEAD
 #   ./scripts/deploy-local.sh --print        # dry-run: says what it would do, writes nothing
 #   ./scripts/deploy-local.sh --list         # deployed versions (* = current)
+#   ./scripts/deploy-local.sh --prune [n]    # keep the n most recent versions + current (default 3)
 #   ./scripts/deploy-local.sh --rollback X   # switches current back to version X
 #   ./scripts/deploy-local.sh --github v0.2.0 # …from the GitHub tarball, no clone (fiche 0020)
 #   ./scripts/deploy-local.sh --check        # compares the client's wired binary to current
@@ -93,6 +94,7 @@ SOURCE_TYPE="git"   # git (git archive du clone) | github (tarball d'un tag, san
 GH_TAG=""
 CHECK_CONFIG=""
 CHECK_NAME="google-multi-account"
+PRUNE_KEEP=""       # --prune [n] : nombre de versions à garder (défaut 3, cf. le bloc --prune)
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --print|--dry-run) DRY=1 ;;
@@ -101,6 +103,8 @@ while [[ $# -gt 0 ]]; do
     --github) shift; GH_TAG="${1:-}"; SOURCE_TYPE="github" ;;
     --github=*) GH_TAG="${1#*=}"; SOURCE_TYPE="github" ;;
     --list) MODE="list" ;;
+    --prune) MODE="prune"; if [[ "${2:-}" =~ ^[0-9]+$ ]]; then PRUNE_KEEP="$2"; shift; fi ;;
+    --prune=*) MODE="prune"; PRUNE_KEEP="${1#*=}" ;;
     --rollback) shift; ROLLBACK_TO="${1:-}"; MODE="rollback" ;;
     --rollback=*) ROLLBACK_TO="${1#*=}"; MODE="rollback" ;;
     --check) MODE="check" ;;
@@ -108,7 +112,7 @@ while [[ $# -gt 0 ]]; do
     --config=*) CHECK_CONFIG="${1#*=}" ;;
     --name) shift; CHECK_NAME="${1:-}" ;;
     --name=*) CHECK_NAME="${1#*=}" ;;
-    -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "unknown argument « $1 » (see --help)" ;;
   esac
   # `|| break` : un flag à valeur en dernière position (« --github »/« --tag »/
@@ -157,6 +161,76 @@ if [[ "$MODE" == "list" ]]; then
     if [[ "$v" == "$cur" ]]; then echo "* $v"; else echo "  $v"; fi
   done
   [[ -n "$found" ]] || die "no version deployed in $DEPLOY_ROOT"
+  exit 0
+fi
+
+# ── --prune ──────────────────────────────────────────────────────
+# Ménage : garde les N versions les PLUS RÉCENTES (mtime du dossier = date de
+# dépôt) + « current » (jamais celle en service) + la cible de « previous »
+# (sinon « mag revert » casserait, fiche 0091). Supprime le reste. --print =
+# dry-run (n'écrit rien). N par défaut : 3 — le rollback a besoin d'un
+# historique court, pas de tout l'historique (fiche 0028).
+if [[ "$MODE" == "prune" ]]; then
+  N="${PRUNE_KEEP:-3}"
+  [[ "$N" =~ ^[0-9]+$ && "$N" -ge 1 ]] \
+    || die "usage: --prune [n]  (n = versions à garder, entier ≥ 1 ; défaut 3)"
+  [[ -d "$DEPLOY_ROOT" ]] || die "no deployment in $DEPLOY_ROOT"
+
+  cur="$(current_version)"
+  prev=""
+  [[ -L "$PREVIOUS_LINK" ]] && prev="$(basename "$(readlink "$PREVIOUS_LINK")")"
+
+  # mtime portable : GNU (stat -c) d'abord, BSD/macOS (stat -f) en repli.
+  _mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0; }
+
+  # Versions déployées, la plus récente d'abord. Les liens réservés
+  # « current »/« previous » sont des symlinks, pas des versions : exclus. Le
+  # glob */ n'attrape pas les .tmp-* d'un dépôt interrompu (ils commencent par un point).
+  ordered="$(
+    for d in "$DEPLOY_ROOT"/*/; do
+      [[ -d "$d" ]] || continue
+      b="$(basename "$d")"
+      [[ "$b" == current || "$b" == previous ]] && continue
+      printf '%s\t%s\n' "$(_mtime "$d")" "$b"
+    done | sort -rn | cut -f2-
+  )"
+  [[ -n "$ordered" ]] || die "no version deployed in $DEPLOY_ROOT"
+
+  if [[ -n "$DRY" ]]; then step "Prune (dry-run)"; else step "Prune"; fi
+  echo "garde jusqu'à $N version(s) récente(s) + current${prev:+ + previous}"
+  echo
+
+  count=0; kept=0; removed=0
+  while IFS= read -r v; do
+    [[ -n "$v" ]] || continue
+    # Garde-fou : un nom de version est un tag (jamais de slash) — on ne rm que ça.
+    [[ "$v" =~ ^[A-Za-z0-9._-]+$ ]] || { warn "nom suspect ignoré : $v"; continue; }
+    count=$((count + 1))
+    reason=""
+    [[ "$count" -le "$N" ]] && reason="recent"
+    [[ "$v" == "$cur" ]] && reason="current"
+    [[ -n "$prev" && "$v" == "$prev" ]] && reason="previous"
+    if [[ -n "$reason" ]]; then
+      ok "garde   $v  ($reason)"
+      kept=$((kept + 1))
+    elif [[ -n "$DRY" ]]; then
+      warn "supprimerait  $v"
+      removed=$((removed + 1))
+    else
+      rm -rf "${DEPLOY_ROOT:?}/$v"
+      echo "  supprimé $v"
+      removed=$((removed + 1))
+    fi
+  done <<EOF
+$ordered
+EOF
+
+  echo
+  if [[ -n "$DRY" ]]; then
+    ok "dry-run : $kept gardée(s), $removed à supprimer (rien écrit)"
+  else
+    ok "$kept gardée(s), $removed supprimée(s)"
+  fi
   exit 0
 fi
 

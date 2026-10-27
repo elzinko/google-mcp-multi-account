@@ -2758,6 +2758,66 @@ out_rb_prev="$(GWSA_DEPLOY_ROOT="$DEP" "$DEPLOY" --rollback previous 2>&1)"; rc=
   && pass "--rollback previous refusé : la vraie cible de « previous » n'a pas été perdue" \
   || fail "--rollback previous : la cible de « previous » a été écrasée malgré le refus"
 
+section "deploy-local.sh --prune — ménage des versions, current/previous protégés (fiche 0028)"
+
+# Banc déterministe : des dossiers-versions aux mtimes FIXÉS (touch -t), pour que
+# « la plus récente » ne dépende pas du hasard de l'horloge (les vrais déploiements
+# se suivent à la seconde, mtime à égalité). --prune lit des dossiers + symlinks,
+# pas le git — on peut donc fabriquer la scène à la main.
+PRU="$TMP/deploy-prune"
+mkdir -p "$PRU/v2.0.0" "$PRU/v2.1.0" "$PRU/v2.2.0" "$PRU/v2.3.0"
+touch -t 202601010000 "$PRU/v2.0.0"   # la plus ANCIENNE
+touch -t 202602010000 "$PRU/v2.1.0"
+touch -t 202603010000 "$PRU/v2.2.0"
+touch -t 202604010000 "$PRU/v2.3.0"   # la plus RÉCENTE
+ln -sfn "$PRU/v2.0.0" "$PRU/current"   # current = la plus ancienne → teste « jamais celle en service »
+ln -sfn "$PRU/v2.1.0" "$PRU/previous"  # previous = au milieu → teste la protection de « mag revert »
+
+GWSA_DEPLOY_ROOT="$PRU" "$DEPLOY" --prune 0 >/dev/null 2>&1; rc=$?
+[[ "$rc" -ne 0 ]] \
+  && pass "--prune 0 : refusé (n doit être un entier ≥ 1)" \
+  || fail "--prune 0 : accepté à tort (rc=$rc)"
+
+GWSA_DEPLOY_ROOT="$PRU" "$DEPLOY" --prune 1 --print >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && -d "$PRU/v2.1.0" && -d "$PRU/v2.2.0" && -d "$PRU/v2.3.0" ]] \
+  && pass "--prune --print : dry-run ne supprime rien" \
+  || fail "--prune --print : le dry-run a supprimé (rc=$rc)"
+
+# Réel, n=1 : garde la plus récente (v2.3.0) + current (v2.0.0) + previous (v2.1.0) ;
+# supprime le seul non-protégé (v2.2.0).
+GWSA_DEPLOY_ROOT="$PRU" "$DEPLOY" --prune 1 >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && ! -d "$PRU/v2.2.0" && -d "$PRU/v2.3.0" ]] \
+  && pass "--prune 1 : garde la plus récente, supprime l'ancienne non protégée" \
+  || fail "--prune 1 : mauvais ménage (rc=$rc, reste=$(ls "$PRU" 2>/dev/null | tr '\n' ' '))"
+
+[[ -d "$PRU/v2.0.0" && "$(basename "$(readlink "$PRU/current" 2>/dev/null)" 2>/dev/null)" == "v2.0.0" ]] \
+  && pass "--prune : current (la plus ancienne) jamais supprimée" \
+  || fail "--prune : current perdue ou déplacée"
+
+[[ -d "$PRU/v2.1.0" && "$(basename "$(readlink "$PRU/previous" 2>/dev/null)" 2>/dev/null)" == "v2.1.0" ]] \
+  && pass "--prune : la cible de « previous » préservée (« mag revert » intact)" \
+  || fail "--prune : la cible de « previous » supprimée à tort"
+
+# Défaut n=3 (--prune sans argument) + forme --prune=N (scène neuve de 5 versions).
+PRU2="$TMP/deploy-prune2"
+mkdir -p "$PRU2/v3.0.0" "$PRU2/v3.1.0" "$PRU2/v3.2.0" "$PRU2/v3.3.0" "$PRU2/v3.4.0"
+touch -t 202601010000 "$PRU2/v3.0.0"
+touch -t 202602010000 "$PRU2/v3.1.0"
+touch -t 202603010000 "$PRU2/v3.2.0"
+touch -t 202604010000 "$PRU2/v3.3.0"
+touch -t 202605010000 "$PRU2/v3.4.0"   # la plus récente
+ln -sfn "$PRU2/v3.4.0" "$PRU2/current"
+
+GWSA_DEPLOY_ROOT="$PRU2" "$DEPLOY" --prune >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && -d "$PRU2/v3.2.0" && -d "$PRU2/v3.3.0" && -d "$PRU2/v3.4.0" && ! -d "$PRU2/v3.0.0" && ! -d "$PRU2/v3.1.0" ]] \
+  && pass "--prune sans argument : défaut 3 (garde les 3 plus récentes)" \
+  || fail "--prune défaut 3 (rc=$rc, reste=$(ls "$PRU2" 2>/dev/null | tr '\n' ' '))"
+
+GWSA_DEPLOY_ROOT="$PRU2" "$DEPLOY" --prune=1 >/dev/null 2>&1; rc=$?
+[[ "$rc" -eq 0 && -d "$PRU2/v3.4.0" && ! -d "$PRU2/v3.2.0" && ! -d "$PRU2/v3.3.0" ]] \
+  && pass "--prune=N (forme avec =) : garde la plus récente" \
+  || fail "--prune=N (rc=$rc, reste=$(ls "$PRU2" 2>/dev/null | tr '\n' ' '))"
+
 section "deploy-local.sh --check — détecter la dérive config client ↔ déploiement (fiche 20260929172213000)"
 
 # À ce stade $DEP/current pointe v1.0.0 (rollback plus haut). On simule une
