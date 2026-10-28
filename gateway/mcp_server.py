@@ -548,6 +548,61 @@ TOOLS: list[dict[str, Any]] = [
             "additionalProperties": False,
         },
     },
+    {
+        "name": "calendar_calendars_list",
+        "description": (
+            "Liste les agendas du compte alias (lecture). Sert à découvrir l'id "
+            "d'un agenda à passer à calendar_events_list. N'écrit rien, ne crée "
+            "aucun agenda."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "alias": {"type": "string", "description": "Profil mag (ex. perso)"},
+                "max_results": {"type": "integer", "description": "1–250", "default": 50},
+                "page_token": {
+                    "type": "string",
+                    "description": "Jeton de page suivante (nextPageToken du résultat précédent)",
+                },
+                "session": _SESSION_PROPERTY,
+            },
+            "required": ["alias", "session"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "calendar_events_list",
+        "description": (
+            "Liste les événements d'un agenda (lecture). calendar_id par défaut "
+            "« primary » ; par défaut les événements À VENIR, triés par date de "
+            "début. N'écrit rien — ne crée ni ne modifie ni ne supprime d'événement."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "alias": {"type": "string", "description": "Profil mag (ex. perso)"},
+                "calendar_id": {
+                    "type": "string",
+                    "description": "Id d'agenda (défaut primary ; voir calendar_calendars_list)",
+                    "default": "primary",
+                },
+                "query": {"type": "string", "description": "Filtre plein-texte (q)", "default": ""},
+                "max_results": {"type": "integer", "description": "1–250", "default": 25},
+                "time_min": {
+                    "type": "string",
+                    "description": "Borne basse RFC 3339 (défaut : maintenant → événements à venir)",
+                },
+                "time_max": {"type": "string", "description": "Borne haute RFC 3339 (optionnelle)"},
+                "page_token": {
+                    "type": "string",
+                    "description": "Jeton de page suivante (nextPageToken du résultat précédent)",
+                },
+                "session": _SESSION_PROPERTY,
+            },
+            "required": ["alias", "session"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 # Tool masqué par défaut — n'apparaît dans tools/list que si le réglage opt-in
@@ -752,6 +807,22 @@ DISPATCH: dict[str, Callable] = {
         alias=kw["alias"],
         file_id=kw["file_id"],
         permission_id=kw["permission_id"],
+        session=kw.get("session") or "",
+    ),
+    "calendar_calendars_list": lambda **kw: api.calendar_calendars_list(
+        alias=kw["alias"],
+        max_results=int(kw.get("max_results") or 50),
+        page_token=kw.get("page_token") or "",
+        session=kw.get("session") or "",
+    ),
+    "calendar_events_list": lambda **kw: api.calendar_events_list(
+        alias=kw["alias"],
+        calendar_id=kw.get("calendar_id") or "primary",
+        query=kw.get("query") or "",
+        max_results=int(kw.get("max_results") or 25),
+        time_min=kw.get("time_min") or "",
+        time_max=kw.get("time_max") or "",
+        page_token=kw.get("page_token") or "",
         session=kw.get("session") or "",
     ),
     "access_request": lambda **kw: api.access_request(

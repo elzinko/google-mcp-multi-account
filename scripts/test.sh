@@ -947,6 +947,99 @@ else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m arguments gws construits (fiche 0024)\n'
 fi
 
+section "Gateway — Calendar lecture : tools calendar_* exposés et routés (fiche 20261028120332000)"
+if python3 - <<'PY'
+import json
+
+import gateway.api as api
+import gateway.mcp_server as mcp
+from gateway.categorize import categorize, norm_service
+
+CALLS = []
+
+
+def fake_run(alias, args, timeout=60, **kw):
+    """Remplace l'aller-retour broker : on inspecte la commande gws et la session."""
+    CALLS.append((args, kw))
+    return {"stub": True}
+
+
+api._run = fake_run
+
+
+def flags(args):
+    return {a: args[i + 1] for i, a in enumerate(args) if a.startswith("--")}
+
+
+alias = "testprof"
+sid = "deadbeefdeadbeef"
+
+# 1. calendar_calendars_list → gws calendar calendarList list ; session portée ; structure.
+out = api.calendar_calendars_list(alias, session=sid)
+args, kw = CALLS[-1]
+assert args[:3] == ["calendar", "calendarList", "list"], args
+assert kw.get("session") == sid, kw
+assert out == {"ok": True, "alias": alias, "result": {"stub": True}}, out
+
+# 2. calendar_events_list → gws calendar events list ; calendarId défaut "primary" dans --params ;
+#    événements À VENIR (timeMin posé) + développés + triés par début.
+out = api.calendar_events_list(alias, session=sid)
+args, kw = CALLS[-1]
+assert args[:3] == ["calendar", "events", "list"], args
+params = json.loads(flags(args)["--params"])
+assert params["calendarId"] == "primary", params
+assert params.get("singleEvents") is True and params.get("orderBy") == "startTime", params
+assert params.get("timeMin"), "timeMin par défaut (événements à venir) manquant"
+assert kw.get("session") == sid, kw
+assert out["ok"] is True and out["alias"] == alias, out
+
+# 3. calendar_id explicite honoré + requête q transmise.
+api.calendar_events_list(
+    alias, calendar_id="work@group.calendar.google.com", query="standup", session=sid
+)
+args, _ = CALLS[-1]
+params = json.loads(flags(args)["--params"])
+assert params["calendarId"] == "work@group.calendar.google.com", params
+assert params["q"] == "standup", params
+
+# 3bis. time_max SEUL (fenêtre passée) : aucun timeMin=now imposé, sinon now > timeMax
+#       rendrait une liste vide / un 400. Le défaut « maintenant » ne s'applique que
+#       lorsque l'appelant n'a borné ni le début ni la fin.
+api.calendar_events_list(alias, time_max="2020-01-01T00:00:00Z", session=sid)
+params = json.loads(flags(CALLS[-1][0])["--params"])
+assert "timeMin" not in params, params
+assert params["timeMax"] == "2020-01-01T00:00:00Z", params
+
+# 4. Les deux ops restent classées "read" par le gate — aucune écriture déguisée.
+for resource, method in (("calendarList", "list"), ("events", "list")):
+    cat = categorize(norm_service("calendar"), [resource], method)
+    assert cat == "read", (resource, method, cat)
+
+# 5. Les deux tools sont EXPOSÉS (tools/list) et routés par DISPATCH.
+names = {t["name"] for t in mcp.TOOLS}
+assert {"calendar_calendars_list", "calendar_events_list"} <= names, sorted(names)
+assert "calendar_calendars_list" in mcp.DISPATCH, sorted(mcp.DISPATCH)
+assert "calendar_events_list" in mcp.DISPATCH, sorted(mcp.DISPATCH)
+
+# 6. Le dispatch route réellement vers l'api (défauts fournis par le lambda).
+CALLS.clear()
+mcp.DISPATCH["calendar_events_list"](alias=alias, session=sid)
+args, kw = CALLS[-1]
+assert args[:3] == ["calendar", "events", "list"] and kw.get("session") == sid, (args, kw)
+
+# 7. Tranche LECTURE SEULE : aucun tool d'écriture Calendar exposé.
+writes = {n for n in names if n.startswith("calendar_")
+          and any(v in n for v in ("insert", "create", "update", "delete", "import", "move"))}
+assert not writes, writes
+
+print("ok")
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m Calendar lecture — calendar_calendars_list + calendar_events_list exposés et routés\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m Calendar lecture (fiche 20261028120332000)\n'
+fi
+
 section "Gateway — gmail_labels_modify : pose/retrait curaté, jamais destructif (fiche 20260929235257000)"
 if python3 - <<'PY'
 import json

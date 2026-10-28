@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import datetime as _dt
 import hashlib
 import json
 import mimetypes
@@ -554,6 +555,87 @@ def gmail_get(
     data = _run(
         alias,
         ["gmail", "users", "messages", "get", "--params", json.dumps(params)],
+        session=session,
+    )
+    return {"ok": True, "alias": alias, "result": data}
+
+
+def _now_rfc3339() -> str:
+    """Horodatage RFC 3339 en UTC (suffixe Z) — borne basse « maintenant »
+    pour lister les événements À VENIR par défaut."""
+    now = _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0)
+    return now.isoformat().replace("+00:00", "Z")
+
+
+def calendar_calendars_list(
+    alias: str,
+    max_results: int = 50,
+    page_token: str = "",
+    session: str = "",
+) -> dict[str, Any]:
+    """Liste les agendas du compte (calendarList.list) — LECTURE SEULE.
+
+    Sert à découvrir l'`id` d'un agenda, à passer ensuite à calendar_events_list.
+    Passe par le point unique `_run` : la policy `calendar.read` l'autorise, la
+    catégorie reste `read`. Aucune écriture, aucune création d'agenda."""
+    validate_alias(alias)
+    max_results = max(1, min(int(max_results), 250))
+    params: dict[str, Any] = {"maxResults": max_results}
+    if page_token:
+        params["pageToken"] = page_token
+    data = _run(
+        alias,
+        ["calendar", "calendarList", "list", "--params", json.dumps(params)],
+        session=session,
+    )
+    return {"ok": True, "alias": alias, "result": data}
+
+
+def calendar_events_list(
+    alias: str,
+    calendar_id: str = "primary",
+    query: str = "",
+    max_results: int = 25,
+    time_min: str = "",
+    time_max: str = "",
+    page_token: str = "",
+    session: str = "",
+) -> dict[str, Any]:
+    """Liste les événements d'un agenda (events.list) — LECTURE SEULE.
+
+    Par défaut : les événements À VENIR (`timeMin` = maintenant, UTC), développés
+    en occurrences simples (`singleEvents`) et triés par date de début
+    (`orderBy=startTime`, qui EXIGE `singleEvents`). `calendar_id` vaut `primary`
+    par défaut ; son id précis vient de calendar_calendars_list. Aucune écriture."""
+    validate_alias(alias)
+    cal = (calendar_id or "primary").strip() or "primary"
+    max_results = max(1, min(int(max_results), 250))
+    params: dict[str, Any] = {
+        "calendarId": cal,
+        "maxResults": max_results,
+        "singleEvents": True,
+        "orderBy": "startTime",
+    }
+    tmin = time_min.strip()
+    tmax = time_max.strip()
+    # Borne basse « maintenant » par défaut (événements À VENIR), mais SEULEMENT
+    # si l'appelant n'a pas lui-même borné la fenêtre. Un time_max seul (fenêtre
+    # passée) ne doit pas se retrouver sous un timeMin=now : now > timeMax rendrait
+    # une liste vide (ou un 400). On ne pose donc le défaut que sans time_min ET
+    # sans time_max.
+    if tmin:
+        params["timeMin"] = tmin
+    elif not tmax:
+        params["timeMin"] = _now_rfc3339()
+    if tmax:
+        params["timeMax"] = tmax
+    if query:
+        params["q"] = query
+    if page_token:
+        params["pageToken"] = page_token
+    data = _run(
+        alias,
+        ["calendar", "events", "list", "--params", json.dumps(params)],
         session=session,
     )
     return {"ok": True, "alias": alias, "result": data}
