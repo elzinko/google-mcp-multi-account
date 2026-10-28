@@ -4171,6 +4171,13 @@ if [[ "$admin_ready" -eq 1 ]]; then
     && pass "admin POST /api/transactional/mode : rejette un mode invalide (fail-closed)" \
     || fail "admin POST mode invalide (code=$code_mode_bad)"
 
+  tx_mode_aps="$(curl -sf -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
+    -X POST -d '{"mode":"auto-par-service"}' "http://127.0.0.1:$ADMIN_PORT/api/transactional/mode")"
+  mode_file_aps="$(cat "$SESS_ROOT/.transactional-lease-mode" 2>/dev/null || true)"
+  [[ "$tx_mode_aps" == *'"ok":true'* && "$mode_file_aps" == "auto-par-service" ]] \
+    && pass "admin POST /api/transactional/mode {mode:auto-par-service} : bascule via mag (fiche 20261028101608608)" \
+    || fail "admin POST mode auto-par-service ($tx_mode_aps mode_file=$mode_file_aps)"
+
   tx_settings="$(curl -sf -H 'X-GWSA-Admin: 1' -H 'Content-Type: application/json' \
     -X POST -d '{"session_ttl_sec":3600,"read_lease_ttl_sec":120,"read_lease_budget":5}' \
     "http://127.0.0.1:$ADMIN_PORT/api/transactional/settings")"
@@ -4542,6 +4549,61 @@ GWSA_ROOT="$ELIC_ROOT" GWSA_SESSION_ID="$sid_e" GWSA_ELICITATION_MOCK=1 \
   "$GWSA" session unlock "$sid_e" alpha 15 >/dev/null 2>&1 \
   && pass "elicitation : mag session unlock avec strongauth+mock" \
   || fail "elicitation : mag session unlock strongauth"
+
+section "mode de consentement « auto par service » (fiche 20261028101608608)"
+APS_ROOT="$TMP/mag-aps"
+mkdir -p "$APS_ROOT/alpha"
+GWSA_ROOT="$APS_ROOT" "$PY" "$(pwd)/scripts/elicitation-cli.py" enroll --mock >/dev/null 2>&1 \
+  && pass "auto-par-service : enroll mock" \
+  || fail "auto-par-service : enroll mock"
+
+# Un geste par service×catégorie, puis libre pour la session ; nouveau service
+# redemande ; partage toujours signé ; grâce isolée par session. L'anti-geste est
+# prouvé en patchant run_elicitation_gate pour lever si un geste est demandé à tort.
+aps_ok="$(GWSA_ROOT="$APS_ROOT" GWSA_TRANSACTIONAL_CONSENT=1 GWSA_TRANSACTIONAL_LEASE_MODE=auto-par-service "$PY" -c "
+from unittest.mock import patch
+from gateway.sessions import create_session, session_has_capability
+from gateway import api
+sid = create_session(client='t').session_id
+def boom(*a, **k):
+    raise AssertionError('geste demandé à tort')
+GR=['gmail','messages','list']; GR2=['gmail','threads','list']
+DR=['drive','files','list']; SH=['drive','permissions','create','FID','--role','reader','--type','anyone']
+assert not session_has_capability(sid,'alpha','gmail','read',''), 'départ propre'
+api._transactional_gate('alpha', GR, sid)
+assert session_has_capability(sid,'alpha','gmail','read',''), 'grâce gmail:read posée au 1er accès'
+with patch.object(api,'run_elicitation_gate',side_effect=boom):
+    api._transactional_gate('alpha', GR2, sid)
+raised=False
+try:
+    with patch.object(api,'run_elicitation_gate',side_effect=boom):
+        api._transactional_gate('alpha', DR, sid)
+except AssertionError:
+    raised=True
+assert raised, 'nouveau service doit redemander un geste'
+api._transactional_gate('alpha', SH, sid)
+assert not session_has_capability(sid,'alpha','drive','share',''), 'le partage ne pose jamais de grâce'
+raised2=False
+try:
+    with patch.object(api,'run_elicitation_gate',side_effect=boom):
+        api._transactional_gate('alpha', SH, sid)
+except AssertionError:
+    raised2=True
+assert raised2, 'un 2e partage doit redemander un geste'
+sid2 = create_session(client='t').session_id
+assert not session_has_capability(sid2,'alpha','gmail','read',''), 'grâce isolée par session'
+# curation de libellés (acte threadé, ADR-0014) en aps : 1er acte → geste + grâce
+# account-scoped (gmail,labels,'') ; 2e acte → libre (ferme le trou P2 de la revue)
+sid3 = create_session(client='t').session_id
+api._transactional_gate('alpha', ['gmail','labels','list'], sid3, act={})
+assert session_has_capability(sid3,'alpha','gmail','labels',''), 'grâce labels posée au 1er acte'
+with patch.object(api,'run_elicitation_gate',side_effect=boom):
+    api._transactional_gate('alpha', ['gmail','labels','create','Foo'], sid3, act={})
+print('ok')
+")"
+[[ "$aps_ok" == "ok" ]] \
+  && pass "auto-par-service : 1er geste par service, 2e libre, nouveau service redemande, partage toujours signé, isolation" \
+  || fail "auto-par-service : comportement du gate ($aps_ok)"
 
 section "élicitation dans la conversation — opt-in (session_unlock_in_conversation)"
 INCONV_ROOT="$TMP/mag-inconv"

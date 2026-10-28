@@ -556,7 +556,7 @@ function listSessions() {
 // racine que `mag transactional …`, donc lecture et écriture alignées ; mêmes
 // défauts que `mag transactional status`, sans sous-process pour un simple GET).
 // Les écritures passent TOUJOURS par `mag transactional …` (source de vérité).
-const TX_MODES = ["manuel", "auto"];
+const TX_MODES = ["manuel", "auto", "auto-par-service"];
 const TX_DEFAULTS = {
   session_ttl_sec: 28800,
   read_lease_ttl_sec: 90,
@@ -787,7 +787,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && p === "/api/transactional/mode") {
       const b = await readBody(req);
       const mode = String(b.mode || "");
-      if (!TX_MODES.includes(mode)) return send(res, 400, { error: "mode invalide (manuel|auto)" });
+      if (!TX_MODES.includes(mode)) return send(res, 400, { error: "mode invalide (manuel|auto|auto-par-service)" });
       const r = await mag(["transactional", "mode", mode]);
       return send(res, r.code ? 500 : 200, { ok: !r.code, out: (r.stdout + r.stderr).trim() });
     }

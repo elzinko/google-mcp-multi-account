@@ -107,6 +107,12 @@ triées par dernière utilisation, et la **config de chaque session**.
 
 ## Notes
 
+- **Mise à jour — 2026-10-28 (grooming).** La brique **« auto par service »** (§A, le mode
+  du milieu) est carvée en fiche fille **tirable** : elle ne dépend **pas** de l'identité
+  portée par le client, donc elle est construisible aujourd'hui. Les parties « par session »
+  et « par projet » (§C, §D, §E) restent **bloquées** sur la même limite externe — le MCP ne
+  transmet pas d'identité de conversation —, donc affichables mais **non enforçables**. Voir
+  la mise à jour datée de [`0108`](0108-session-demande-sous-ensemble-droits-compte.md).
 - Vient de la session du 2026-10-18 (Thomas), à partir du menu de modes de Claude Code
   (Auto / Manuel).
 - **Taille** : dépasse largement 6 critères et 2 surfaces (serveur, admin, modèle de

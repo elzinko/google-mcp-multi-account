@@ -42,7 +42,7 @@ DEFAULT_READ_LEASE_BUDGET = 20
 # ``session`` est retiré — la portée « pour la session » devient un choix PAR
 # ACTE (grâce, cf. `session_grant_capability_session_lived`), plus un mode
 # global de durée de bail.
-LEASE_MODES = ("auto", "manuel")
+LEASE_MODES = ("auto", "manuel", "auto-par-service")
 
 
 def transactional_flag_path() -> Path:
@@ -69,6 +69,12 @@ def transactional_lease_mode() -> str:
     - ``auto`` (ex-``fenetre``) : les LECTURES sont groupées sous un bail
       (fenêtre TTL ET budget, au premier atteint) — confort, opt-in explicite.
       Les écritures restent signées par acte, sans grâce session (Décision 5).
+    - ``auto-par-service`` (fiche 20261028101608608) : un geste la première fois
+      qu'une session touche un service×catégorie (Gmail lecture, Drive écriture,
+      …) ; ensuite, les appels de ce MÊME service×catégorie passent sans
+      redemander, pour la session. Grâce automatique et à l'échelle du
+      service×catégorie (ressource vide), bornée par policy ∩ manifeste, jamais
+      le joker. Le partage reste exclu (toujours signé). Entre manuel et auto.
 
     Lu via MAG_/GWSA_TRANSACTIONAL_LEASE_MODE, puis le marqueur fichier
     ``.transactional-lease-mode`` (posé par l'admin). Compat des valeurs

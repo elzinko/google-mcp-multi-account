@@ -25,7 +25,7 @@
 #   mag grants <alias> [clear]                       List/clear temporary authorizations
 #   mag strongauth on|off|status                     Require signed elicitation for unlock & grant
 #   mag elicitation enroll|status                    Enroll biometric key / status
-#   mag transactional status|on|off|mode manuel|auto Transactional consent + lease mode (ADR-0013)
+#   mag transactional status|on|off|mode manuel|auto|auto-par-service Transactional consent + lease mode (ADR-0013)
 #   mag admin [stop]                                 Start/stop the web interface (127.0.0.1:4877)
 #   mag broker [status|stop]                         Status/stop the broker for this GWSA_ROOT
 #   mag dev deploy [--isolated]                      Deploy the current clone as a temporary dev version
@@ -1080,13 +1080,13 @@ cmd_transactional() { # mag transactional status|on|off|mode|durées — consent
     off) rm -f "$GWSA_ROOT/.transactional-consent"; echo "Transactional consent disabled." ;;
     mode)
       case "${1:-}" in
-        manuel|auto)
+        manuel|auto|auto-par-service)
           mkdir -p "$GWSA_ROOT" && chmod 700 "$GWSA_ROOT" 2>/dev/null || true
           printf '%s' "$1" > "$GWSA_ROOT/.transactional-lease-mode"
           echo "✓ Lease mode: $1"
           ;;
         "") [[ -f "$GWSA_ROOT/.transactional-lease-mode" ]] && { cat "$GWSA_ROOT/.transactional-lease-mode"; echo; } || echo "manuel (default)" ;;
-        *) die "usage: $SELF transactional mode manuel|auto" ;;
+        *) die "usage: $SELF transactional mode manuel|auto|auto-par-service" ;;
       esac
       ;;
     session-ttl)       _tx_set_int ".session-ttl-sec"     "${1:-}" "session-ttl" ;;
@@ -1107,7 +1107,7 @@ print('session TTL (s):', session_ttl_sec())
 print('auto lease window (s):', read_lease_ttl_sec(), '/ budget:', read_lease_budget())
 "
       ;;
-    *) die "usage: $SELF transactional status|on|off|mode manuel|auto|session-ttl <s>|read-lease-ttl <s>|read-lease-budget <n>" ;;
+    *) die "usage: $SELF transactional status|on|off|mode manuel|auto|auto-par-service|session-ttl <s>|read-lease-ttl <s>|read-lease-budget <n>" ;;
   esac
 }
 

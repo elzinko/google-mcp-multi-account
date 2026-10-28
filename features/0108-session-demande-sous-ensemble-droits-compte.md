@@ -33,6 +33,29 @@ ouvrir ») **et** le parcours qui demande, accorde et montre le sous-ensemble.
 > « accès complet » (joker `*`), donc le sous-ensemble fin exige un **changement de modèle** (cf.
 > Contexte). D'où le statut `idea`.
 
+> **Mise à jour — 2026-10-28 (constat de session, vérifié dans le code).** Les deux points
+> durs sont levés, et **aucun n'attend une décision de Thomas** :
+>
+> 1. **Identité par conversation : la réponse est NON, et c'est un fait externe.** Le
+>    protocole MCP ne transmet pas d'identifiant de conversation. Claude Desktop partage
+>    une seule connexion pour tous ses chats. Il n'y a **rien à décider côté produit** —
+>    c'est une limite du protocole, pas un arbitrage. L'identité de session continue de
+>    passer par le jeton remis à la main (`mag session open`).
+> 2. **Le changement de modèle est déjà livré.** Le consentement transactionnel
+>    (ADR-0011/0012/0013, PRs #149/#150/#161) a **séparé** « franchir le verrou » de
+>    « recevoir le joker `*` ». En transactionnel, un profil verrouillé ne bloque plus la
+>    session ; la capacité consentie **portée par l'appel** est la seule source de droits,
+>    bornée par policy ∩ manifeste, **sans** joker. C'est exactement le point 2 ci-dessous.
+>    Vérifié : `gateway/api.py::_run` route par `_transactional_gate` (geste par acte), et
+>    `gateway/broker_server.py` force `session_full_access=False` en transactionnel.
+>
+> **Conséquence.** Le point 2 de cette fiche est **superseded** par le modèle
+> transactionnel. Le reste — demander et afficher un sous-ensemble **par session** — dépend
+> de l'identité portée par le client, donc reste **non enforçable** (affichage seulement).
+> La valeur P1 encore construisible migre vers le **mode « auto par service »**, fiche fille
+> carvée de [`20261018141856581`](20261018141856581_modes-consentement-et-sessions-par-projet.md),
+> qui ne dépend **pas** de cette identité.
+
 **Pas urgent — on peut faire sans pour l'instant.** Mais c'est important. À faire **après** la
 refonte admin (épic [`0060`](0060-admin-ux-ui-refresh.md)) et la fiche [`0107`](0107-vue-compte-droits-sur-place.md).
 

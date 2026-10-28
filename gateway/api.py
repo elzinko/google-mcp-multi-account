@@ -265,28 +265,41 @@ def _transactional_gate(
     if act is not None and service == "gmail" and category in ("read", "labels"):
         return _gmail_label_act_gate(alias, sid, email, mode, scope, service, category, act)
 
-    # (2) Garde-fou partage EN PREMIER : seul le mode manuel connaît la grâce
-    # « pour la session », et seule une catégorie whitelistée y est éligible.
-    # Garde (a) ADR-0013 lot 6, fix P1 : une sous-session déléguée n'est
-    # jamais éligible — ni au lookup ni à l'écriture — pour ne jamais tenter
+    # auto-par-service (fiche 20261028101608608) : comme manuel, mais la grâce
+    # « pour la session » est AUTOMATIQUE et à l'échelle service×catégorie
+    # (ressource vide), posée dès le premier geste. Un geste par service-catégorie,
+    # puis libre pour cette session. Le partage reste exclu (catégorie « share »
+    # hors whitelist → toujours signé). Entre manuel et auto.
+    aps = mode == "auto-par-service"
+    # (2) Garde-fou partage EN PREMIER : seuls les modes manuel et auto-par-service
+    # connaissent la grâce « pour la session », et seule une catégorie whitelistée
+    # y est éligible. Garde (a) ADR-0013 lot 6, fix P1 : une sous-session déléguée
+    # n'est jamais éligible — ni au lookup ni à l'écriture — pour ne jamais tenter
     # une écriture de grâce qu'elle n'a pas le droit de faire.
     grace_eligible = (
-        mode == "manuel"
+        (mode == "manuel" or aps)
         and category in _GRACE_ELIGIBLE_CATEGORIES
         and not _is_delegated_session(sid)
     )
+    # En auto-par-service, la grâce couvre TOUT le service×catégorie (ressource
+    # vide) : un 2ᵉ appel du même service-catégorie passe sans geste. En manuel,
+    # elle reste scopée à la ressource exacte (choix par acte).
+    grace_res = "" if aps else resource
     # ADR-0013 (Codex #150 P2) : ne SIGNER/afficher que la portée réellement
-    # applicable. Hors éligibilité (mode auto, partage, catégorie non whitelistée,
-    # sous-session déléguée), « session » n'écrit aucune grâce — la normaliser à
-    # « once » pour que le reçu Touch ID ne promette pas ce qui n'aura pas lieu.
+    # applicable. En auto-par-service, la portée EST la session dès que la grâce
+    # est éligible (c'est le mode, pas un choix d'acte). Hors éligibilité (mode
+    # auto, partage, catégorie non whitelistée, sous-session déléguée), « session »
+    # n'écrit aucune grâce — la normaliser à « once » pour un reçu Touch ID honnête.
+    if aps:
+        scope = "session" if grace_eligible else "once"
     if scope == "session" and not grace_eligible:
         scope = "once"
 
-    # (3) Grâce déjà accordée pour ce périmètre exact → aucun geste.
-    if grace_eligible and session_has_capability(sid, alias, service, category, resource):
+    # (3) Grâce déjà accordée pour ce périmètre → aucun geste.
+    if grace_eligible and session_has_capability(sid, alias, service, category, grace_res):
         return _consented_cap(service, category)
 
-    if op_class == "mutation" or mode == "manuel":
+    if op_class == "mutation" or mode == "manuel" or aps:
         prefix = "transactional_mutation" if op_class == "mutation" else "transactional_read"
         try:
             run_elicitation_gate(
@@ -305,15 +318,17 @@ def _transactional_gate(
             )
         except ElicitationError as e:
             raise GatewayError(f"acte refusé — {e}", code="locked") from e
-        # (4) Au succès : « pour la session » écrit la grâce — seulement si
-        # éligible ET ressource dérivable (repli fail-closed sur « une fois »).
-        # Garde (b) ADR-0013 lot 6, fix P1 : mémoriser la grâce ne doit JAMAIS
-        # faire échouer un acte déjà approuvé (Touch ID déjà consommé) — un
-        # échec d'écriture (ex. concurrence, cas non prévu par la garde (a))
-        # retombe silencieusement sur « une fois » plutôt que de remonter.
-        if grace_eligible and scope == "session" and resource:
+        # (4) Au succès : « pour la session » écrit la grâce. En manuel, seulement
+        # si la portée choisie est « session » ET la ressource dérivable (repli
+        # fail-closed sur « une fois »). En auto-par-service, la grâce est
+        # automatique et à l'échelle service×catégorie (ressource vide → toujours
+        # dérivable). Garde (b) ADR-0013 lot 6, fix P1 : mémoriser la grâce ne doit
+        # JAMAIS faire échouer un acte déjà approuvé (Touch ID consommé) — un échec
+        # d'écriture (concurrence, cas non prévu) retombe silencieusement sur
+        # « une fois » plutôt que de remonter.
+        if grace_eligible and scope == "session" and (aps or resource):
             try:
-                session_grant_capability_session_lived(sid, alias, service, category, resource)
+                session_grant_capability_session_lived(sid, alias, service, category, grace_res)
             except GatewayError:
                 pass
         return _consented_cap(service, category)
@@ -364,10 +379,16 @@ def _gmail_label_act_gate(
     (`_transactional_gate`) ne route ici que les catégories gmail read/labels ;
     un modify touchant un libellé système est re-classé delete/update par
     `categorize` AVANT ce point, donc jamais autorisé par le cap `labels`."""
-    grace_eligible = (mode == "manuel" and not _is_delegated_session(sid))
-    # Hors éligibilité (auto, sous-session déléguée), « session » n'écrit aucune
-    # grâce : normaliser à « once » pour que le reçu Touch ID ne promette pas ce
-    # qui n'aura pas lieu (même honnêteté que le gate principal, Codex #150 P2).
+    grace_eligible = (
+        mode in ("manuel", "auto-par-service") and not _is_delegated_session(sid)
+    )
+    # En auto-par-service, la grâce de curation est automatique (c'est le mode, pas
+    # un choix d'acte) : forcer « session » quand elle est éligible. Hors éligibilité
+    # (auto, sous-session déléguée), « session » n'écrit aucune grâce : normaliser à
+    # « once » pour que le reçu Touch ID ne promette pas ce qui n'aura pas lieu
+    # (même honnêteté que le gate principal, Codex #150 P2).
+    if mode == "auto-par-service":
+        scope = "session" if grace_eligible else "once"
     if scope == "session" and not grace_eligible:
         scope = "once"
     # Déjà consenti dans CET acte (un sous-appel précédent a passé le geste ou

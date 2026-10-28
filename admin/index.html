@@ -2397,12 +2397,15 @@ main.ck-main { max-width:1400px; margin:0; }
       <legend>Mode</legend>
       <div class="ck-segmented" role="group" aria-label="Mode de consentement" id="txModeSeg">
         <button type="button" data-mode="manuel" onclick="setTxMode('manuel')" aria-pressed="false">Manuel (défaut)</button>
+        <button type="button" data-mode="auto-par-service" onclick="setTxMode('auto-par-service')" aria-pressed="false">Auto par service</button>
         <button type="button" data-mode="auto" onclick="setTxMode('auto')" aria-pressed="false">Auto</button>
       </div>
       <div class="ck-callout ck-callout--info"><span class="ck-callout__ico" aria-hidden="true">ℹ️</span><span>
       <b>Manuel</b> : un geste par acte ; « pour la session » évite de le répéter pour le même dossier.
+      <b>Auto par service</b> : un geste la première fois qu'une session touche un service (Gmail, Drive…) ;
+      ensuite les appels de ce service passent sans redemander, pour la session.
       <b>Auto</b> : les lectures s'ouvrent en fenêtre groupée ; les écritures restent signées par acte,
-      sans grâce de session. Le partage reste toujours signé, dans les deux modes.</span></div>
+      sans grâce de session. Le partage reste toujours signé, dans les trois modes.</span></div>
     </fieldset>
     <fieldset>
       <legend>Durées</legend>
