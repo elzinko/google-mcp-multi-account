@@ -44,3 +44,9 @@ Exposer en tools MCP les services **déjà déclarés dans la policy** (donc san
 Confort d'adoption, **hors chemin critique** de la généralisation (P3) : un
 utilisateur peut déjà se servir de Gmail/Drive. La policy déclarant déjà ces
 services, l'essentiel est mécanique. Voir épic [[0017]].
+
+> **Mise à jour — 2026-10-28.** Première tranche carvée et construite :
+> **Calendar en lecture** (lister les agendas + les événements), fiche
+> `20261028120332000_mcp-calendar-lecture-agendas-evenements.md`. L'épic reste
+> ouvert pour le reste : Tasks / Sheets / Docs en lecture, puis les écritures au
+> cas par cas.
