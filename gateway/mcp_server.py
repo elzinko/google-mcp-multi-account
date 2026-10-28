@@ -603,6 +603,100 @@ TOOLS: list[dict[str, Any]] = [
             "additionalProperties": False,
         },
     },
+    {
+        "name": "tasks_tasklists_list",
+        "description": (
+            "Liste les listes de tâches du compte alias (lecture). Sert à "
+            "découvrir l'id d'une liste à passer à tasks_tasks_list. N'écrit "
+            "rien, ne crée aucune liste."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "alias": {"type": "string", "description": "Profil mag (ex. perso)"},
+                "max_results": {"type": "integer", "description": "1–100", "default": 50},
+                "page_token": {
+                    "type": "string",
+                    "description": "Jeton de page suivante (nextPageToken du résultat précédent)",
+                },
+                "session": _SESSION_PROPERTY,
+            },
+            "required": ["alias", "session"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "tasks_tasks_list",
+        "description": (
+            "Liste les tâches d'une liste (lecture). tasklist par défaut "
+            "« @default » (liste par défaut du compte). Par défaut seules les "
+            "tâches ouvertes sont montrées. N'écrit rien — ne crée, modifie ni "
+            "supprime aucune tâche."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "alias": {"type": "string", "description": "Profil mag (ex. perso)"},
+                "tasklist": {
+                    "type": "string",
+                    "description": "Id de liste (défaut @default ; voir tasks_tasklists_list)",
+                    "default": "@default",
+                },
+                "show_completed": {
+                    "type": "boolean",
+                    "description": "Inclure les tâches terminées (défaut : non)",
+                    "default": False,
+                },
+                "max_results": {"type": "integer", "description": "1–100", "default": 50},
+                "page_token": {
+                    "type": "string",
+                    "description": "Jeton de page suivante (nextPageToken du résultat précédent)",
+                },
+                "session": _SESSION_PROPERTY,
+            },
+            "required": ["alias", "session"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "sheets_values_read",
+        "description": (
+            "Lit une plage de valeurs d'une feuille Google Sheets (lecture). "
+            "spreadsheet_id et range (ex. « Feuille1!A1:D10 ») requis. N'écrit "
+            "rien — ne modifie aucune cellule."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "alias": {"type": "string", "description": "Profil mag (ex. perso)"},
+                "spreadsheet_id": {"type": "string", "description": "Id du classeur"},
+                "range": {
+                    "type": "string",
+                    "description": "Plage en notation A1 (ex. « Feuille1!A1:D10 » ou « Feuille1 »)",
+                },
+                "session": _SESSION_PROPERTY,
+            },
+            "required": ["alias", "spreadsheet_id", "range", "session"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "docs_get",
+        "description": (
+            "Récupère le contenu d'un document Google Docs (lecture). "
+            "document_id requis. N'écrit rien — ne modifie pas le document."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "alias": {"type": "string", "description": "Profil mag (ex. perso)"},
+                "document_id": {"type": "string", "description": "Id du document"},
+                "session": _SESSION_PROPERTY,
+            },
+            "required": ["alias", "document_id", "session"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 # Tool masqué par défaut — n'apparaît dans tools/list que si le réglage opt-in
@@ -823,6 +917,31 @@ DISPATCH: dict[str, Callable] = {
         time_min=kw.get("time_min") or "",
         time_max=kw.get("time_max") or "",
         page_token=kw.get("page_token") or "",
+        session=kw.get("session") or "",
+    ),
+    "tasks_tasklists_list": lambda **kw: api.tasks_tasklists_list(
+        alias=kw["alias"],
+        max_results=int(kw.get("max_results") or 50),
+        page_token=kw.get("page_token") or "",
+        session=kw.get("session") or "",
+    ),
+    "tasks_tasks_list": lambda **kw: api.tasks_tasks_list(
+        alias=kw["alias"],
+        tasklist=kw.get("tasklist") or "@default",
+        show_completed=bool(kw.get("show_completed") or False),
+        max_results=int(kw.get("max_results") or 50),
+        page_token=kw.get("page_token") or "",
+        session=kw.get("session") or "",
+    ),
+    "sheets_values_read": lambda **kw: api.sheets_values_read(
+        alias=kw["alias"],
+        spreadsheet_id=kw.get("spreadsheet_id") or "",
+        range=kw.get("range") or "",
+        session=kw.get("session") or "",
+    ),
+    "docs_get": lambda **kw: api.docs_get(
+        alias=kw["alias"],
+        document_id=kw.get("document_id") or "",
         session=kw.get("session") or "",
     ),
     "access_request": lambda **kw: api.access_request(

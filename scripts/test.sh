@@ -1040,6 +1040,139 @@ else
   FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m Calendar lecture (fiche 20261028120332000)\n'
 fi
 
+section "Gateway — Tasks/Sheets/Docs lecture : tools exposés et routés (fiche 20261028170000000)"
+if python3 - <<'PY'
+import json
+
+import gateway.api as api
+import gateway.mcp_server as mcp
+from gateway.categorize import categorize, norm_service
+from gateway.errors import GatewayError
+
+CALLS = []
+
+
+def fake_run(alias, args, timeout=60, **kw):
+    CALLS.append((args, kw))
+    return {"stub": True}
+
+
+api._run = fake_run
+
+
+def flags(args):
+    return {a: args[i + 1] for i, a in enumerate(args) if a.startswith("--")}
+
+
+alias = "testprof"
+sid = "deadbeefdeadbeef"
+
+# 1. tasks_tasklists_list → gws tasks tasklists list ; session portée ; structure.
+out = api.tasks_tasklists_list(alias, session=sid)
+args, kw = CALLS[-1]
+assert args[:3] == ["tasks", "tasklists", "list"], args
+assert kw.get("session") == sid, kw
+assert out == {"ok": True, "alias": alias, "result": {"stub": True}}, out
+
+# 2. tasks_tasks_list → gws tasks tasks list ; tasklist défaut "@default" dans --params.
+out = api.tasks_tasks_list(alias, session=sid)
+args, kw = CALLS[-1]
+assert args[:3] == ["tasks", "tasks", "list"], args
+params = json.loads(flags(args)["--params"])
+assert params["tasklist"] == "@default", params
+assert kw.get("session") == sid, kw
+assert out["ok"] is True and out["alias"] == alias, out
+
+# 3. tasklist explicite honoré.
+api.tasks_tasks_list(alias, tasklist="MYLISTID", session=sid)
+params = json.loads(flags(CALLS[-1][0])["--params"])
+assert params["tasklist"] == "MYLISTID", params
+
+# 3bis. tasklist non-texte coercé proprement (pas d'AttributeError) ; l'appel part.
+api.tasks_tasks_list(alias, tasklist=123, session=sid)
+params = json.loads(flags(CALLS[-1][0])["--params"])
+assert params["tasklist"] == "123", params
+
+# 4. sheets_values_read → gws sheets spreadsheets values get ; spreadsheetId + range.
+out = api.sheets_values_read(alias, "SHEET123", "Feuille1!A1:D10", session=sid)
+args, kw = CALLS[-1]
+assert args[:4] == ["sheets", "spreadsheets", "values", "get"], args
+params = json.loads(flags(args)["--params"])
+assert params["spreadsheetId"] == "SHEET123", params
+assert params["range"] == "Feuille1!A1:D10", params
+assert out["ok"] is True, out
+
+# 4bis. spreadsheet_id ET range sont requis (fail-closed, pas d'appel gws à blanc) —
+#       vide ET type non-texte (un entier détourné ne doit pas filer vers gws).
+for bad in (("", "A1:B2"), ("SHEET123", ""), (123, "A1:B2"), ("SHEET123", 123)):
+    n = len(CALLS)
+    try:
+        api.sheets_values_read(alias, bad[0], bad[1], session=sid)
+    except GatewayError:
+        pass
+    else:
+        raise AssertionError(f"sheets_values_read aurait dû refuser {bad!r}")
+    assert len(CALLS) == n, "aucun appel gws ne doit partir si un argument requis manque"
+
+# 5. docs_get → gws docs documents get ; documentId requis dans --params.
+out = api.docs_get(alias, "DOC123", session=sid)
+args, kw = CALLS[-1]
+assert args[:3] == ["docs", "documents", "get"], args
+params = json.loads(flags(args)["--params"])
+assert params["documentId"] == "DOC123", params
+assert out["ok"] is True, out
+
+for bad_doc in ("", 123):
+    n = len(CALLS)
+    try:
+        api.docs_get(alias, bad_doc, session=sid)
+    except GatewayError:
+        pass
+    else:
+        raise AssertionError(f"docs_get aurait dû refuser {bad_doc!r}")
+    assert len(CALLS) == n, "aucun appel gws à blanc"
+
+# 6. Les 4 ops restent classées "read" par le gate — aucune écriture déguisée.
+for service, resources, method in (
+    ("tasks", ["tasklists"], "list"),
+    ("tasks", ["tasks"], "list"),
+    ("sheets", ["spreadsheets", "values"], "get"),
+    ("docs", ["documents"], "get"),
+):
+    cat = categorize(norm_service(service), resources, method)
+    assert cat == "read", (service, resources, method, cat)
+
+# 7. Les 4 tools sont EXPOSÉS (tools/list) et routés par DISPATCH.
+names = {t["name"] for t in mcp.TOOLS}
+want = {"tasks_tasklists_list", "tasks_tasks_list", "sheets_values_read", "docs_get"}
+assert want <= names, sorted(want - names)
+for n_ in want:
+    assert n_ in mcp.DISPATCH, (n_, sorted(mcp.DISPATCH))
+
+# 8. Le dispatch route réellement vers l'api (défauts fournis par le lambda).
+CALLS.clear()
+mcp.DISPATCH["sheets_values_read"](
+    alias=alias, spreadsheet_id="SHEET123", range="A1:B2", session=sid
+)
+args, kw = CALLS[-1]
+assert args[:4] == ["sheets", "spreadsheets", "values", "get"] and kw.get("session") == sid, (args, kw)
+
+# 9. Tranche LECTURE SEULE : aucun tool d'écriture Tasks/Sheets/Docs exposé.
+WRITE_VERBS = ("insert", "create", "update", "patch", "delete", "move",
+               "append", "batchupdate", "clear", "write")
+writes = {n_ for n_ in names
+          if n_.split("_", 1)[0] in ("tasks", "sheets", "docs")
+          and any(v in n_ for v in WRITE_VERBS)}
+assert not writes, writes
+
+print("ok")
+PY
+then
+  PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m Tasks/Sheets/Docs lecture — 4 tools exposés et routés\n'
+else
+  FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m Tasks/Sheets/Docs lecture (fiche 20261028170000000)\n'
+fi
+
 section "Gateway — gmail_labels_modify : pose/retrait curaté, jamais destructif (fiche 20260929235257000)"
 if python3 - <<'PY'
 import json

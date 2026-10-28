@@ -641,6 +641,110 @@ def calendar_events_list(
     return {"ok": True, "alias": alias, "result": data}
 
 
+def tasks_tasklists_list(
+    alias: str,
+    max_results: int = 50,
+    page_token: str = "",
+    session: str = "",
+) -> dict[str, Any]:
+    """Liste les listes de tâches du compte (tasklists.list) — LECTURE SEULE.
+
+    Sert à découvrir l'`id` d'une liste, à passer ensuite à tasks_tasks_list.
+    Passe par le point unique `_run` : la policy `tasks.read` l'autorise, la
+    catégorie reste `read`. Aucune création ni modification de liste."""
+    validate_alias(alias)
+    max_results = max(1, min(int(max_results), 100))
+    params: dict[str, Any] = {"maxResults": max_results}
+    if page_token:
+        params["pageToken"] = page_token
+    data = _run(
+        alias,
+        ["tasks", "tasklists", "list", "--params", json.dumps(params)],
+        session=session,
+    )
+    return {"ok": True, "alias": alias, "result": data}
+
+
+def tasks_tasks_list(
+    alias: str,
+    tasklist: str = "@default",
+    show_completed: bool = False,
+    max_results: int = 50,
+    page_token: str = "",
+    session: str = "",
+) -> dict[str, Any]:
+    """Liste les tâches d'une liste (tasks.list) — LECTURE SEULE.
+
+    `tasklist` vaut `@default` (la liste par défaut du compte) ; son id précis
+    vient de tasks_tasklists_list. Par défaut on ne montre QUE les tâches
+    ouvertes (`show_completed=False`) : la vue « ce qu'il me reste à faire ».
+    Aucune écriture."""
+    validate_alias(alias)
+    # `str(...)` avant `.strip()` : un tasklist non-texte (ex. un entier) est
+    # coercé proprement au lieu de lever un AttributeError opaque (revue P2).
+    tl = str(tasklist or "@default").strip() or "@default"
+    max_results = max(1, min(int(max_results), 100))
+    params: dict[str, Any] = {
+        "tasklist": tl,
+        "maxResults": max_results,
+        "showCompleted": bool(show_completed),
+    }
+    if page_token:
+        params["pageToken"] = page_token
+    data = _run(
+        alias,
+        ["tasks", "tasks", "list", "--params", json.dumps(params)],
+        session=session,
+    )
+    return {"ok": True, "alias": alias, "result": data}
+
+
+def sheets_values_read(
+    alias: str,
+    spreadsheet_id: str,
+    range: str,
+    session: str = "",
+) -> dict[str, Any]:
+    """Lit une plage de valeurs d'une feuille (spreadsheets.values.get) — LECTURE SEULE.
+
+    `spreadsheet_id` et `range` sont requis (ex. `Feuille1!A1:D10`). Sans l'un
+    des deux, on refuse AVANT tout appel gws (fail-closed). La policy
+    `sheets.read` autorise, la catégorie reste `read`. Aucune écriture."""
+    validate_alias(alias)
+    if not spreadsheet_id or not isinstance(spreadsheet_id, str):
+        raise GatewayError("spreadsheet_id requis", code="error")
+    if not range or not isinstance(range, str):
+        raise GatewayError("range requis (ex. 'Feuille1!A1:D10')", code="error")
+    params = {"spreadsheetId": spreadsheet_id, "range": range}
+    data = _run(
+        alias,
+        ["sheets", "spreadsheets", "values", "get", "--params", json.dumps(params)],
+        session=session,
+    )
+    return {"ok": True, "alias": alias, "result": data}
+
+
+def docs_get(
+    alias: str,
+    document_id: str,
+    session: str = "",
+) -> dict[str, Any]:
+    """Récupère le contenu d'un document (documents.get) — LECTURE SEULE.
+
+    `document_id` est requis ; sans lui, on refuse AVANT tout appel gws. La
+    policy `docs.read` autorise, la catégorie reste `read`. Aucune écriture."""
+    validate_alias(alias)
+    if not document_id or not isinstance(document_id, str):
+        raise GatewayError("document_id requis", code="error")
+    params = {"documentId": document_id}
+    data = _run(
+        alias,
+        ["docs", "documents", "get", "--params", json.dumps(params)],
+        session=session,
+    )
+    return {"ok": True, "alias": alias, "result": data}
+
+
 def gmail_create_draft(
     alias: str,
     to: str,
