@@ -6,9 +6,9 @@ priority: P1
 product: google-mcp-multi-account
 version:
 epic: 0082
-status: ready
+status: shipped
 ready: 2026-10-28
-pr:
+pr: "local (b7c46d2)"
 created: 2026-10-28
 ---
 
@@ -24,11 +24,11 @@ geste.
 C'est le mode du menu de Claude Code transposé à mag. Moins de friction que « manuel », plus
 de contrôle que « auto ».
 
-Cette fiche est **carvée** de la grosse idée [`20261018141856581`](20261018141856581_modes-consentement-et-sessions-par-projet.md)
+Cette fiche est **carvée** de la grosse idée [`20261018141856581`](../20261018141856581_modes-consentement-et-sessions-par-projet.md)
 (§A). On ne prend **que** ce mode, parce que c'est la seule brique de cet axe qui ne dépend
 **pas** d'une identité de conversation portée par le client (limite externe du MCP, voir
-[`0108`](0108-session-demande-sous-ensemble-droits-compte.md) et
-[`0101`](0101-nom-de-session-fourni-par-le-client.md)).
+[`0108`](../0108-session-demande-sous-ensemble-droits-compte.md) et
+[`0101`](../0101-nom-de-session-fourni-par-le-client.md)).
 
 ## Contexte / Problème
 
@@ -53,7 +53,7 @@ grâce. C'est la règle déjà en place dans le modèle livré (garde-fou partag
 
 1. **Troisième valeur de mode** : `manuel` | `auto-par-service` | `auto`. Étend le réglage lu
    par `transactional_lease_mode()` et le sélecteur admin déjà livré
-   ([`20260920141424574`](done/20260920141424574_consentement-une-fois-ou-session.md)).
+   ([`20260920141424574`](20260920141424574_consentement-une-fois-ou-session.md)).
 2. **Grâce par service, scopée à la session.** Au premier acte sur un service `S`, le geste
    normal s'applique (acte signé pour une mutation, bail pour une lecture). Une fois consenti,
    mag pose une **capacité de grâce de session** `(service=S, operation=*, resource="")`,
@@ -102,7 +102,7 @@ Rejouable : `./scripts/test.sh` (section dédiée au mode `auto-par-service`).
 
 ## Notes
 
-- **Pourquoi carvée séparément.** La fiche mère [`20261018141856581`](20261018141856581_modes-consentement-et-sessions-par-projet.md)
+- **Pourquoi carvée séparément.** La fiche mère [`20261018141856581`](../20261018141856581_modes-consentement-et-sessions-par-projet.md)
   demandait aussi « par session » / « par projet » (§C, §D, §E). Ces parties **butent** sur une
   limite externe : le MCP ne transmet pas d'identité de conversation, Claude Desktop partage
   une connexion pour tous ses chats. Elles restent **affichables mais non enforçables**, donc
@@ -112,6 +112,6 @@ Rejouable : `./scripts/test.sh` (section dédiée au mode `auto-par-service`).
   d'abus par service s'ouvre (prompt injection). Décision produit **déjà prise** par Thomas en
   demandant ce mode (fiche mère, 2026-10-18). La borne « partage toujours signé » limite le
   pire cas, comme pour le mode `auto`.
-- **Socle.** [ADR-0007](../docs/adr/ADR-0007-per-session-rights.md) (intersection policy ∩
-  capacités), [ADR-0013](../docs/adr/ADR-0013-consent-once-or-session.md) (grâce `expires_at=0`
+- **Socle.** [ADR-0007](../../docs/adr/ADR-0007-per-session-rights.md) (intersection policy ∩
+  capacités), [ADR-0013](../../docs/adr/ADR-0013-consent-once-or-session.md) (grâce `expires_at=0`
   scopée, dont on élargit la portée).
