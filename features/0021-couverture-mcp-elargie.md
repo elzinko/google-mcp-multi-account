@@ -50,3 +50,11 @@ services, l'essentiel est mécanique. Voir épic [[0017]].
 > `20261028120332000_mcp-calendar-lecture-agendas-evenements.md`. L'épic reste
 > ouvert pour le reste : Tasks / Sheets / Docs en lecture, puis les écritures au
 > cas par cas.
+>
+> **Mise à jour — 2026-10-28 (suite).** Deuxième tranche lecture livrée :
+> **Tasks / Sheets / Docs en lecture**, fiche
+> `20261028170000000_mcp-tasks-sheets-docs-lecture.md` (4 tools :
+> `tasks_tasklists_list`, `tasks_tasks_list`, `sheets_values_read`, `docs_get`).
+> Le « lecture d'abord » de l'épic est donc complet (Calendar + Tasks + Sheets +
+> Docs). Reste à faire : les **écritures** au cas par cas, et aligner le README
+> sur les services réellement exposés.
